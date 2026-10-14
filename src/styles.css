@@ -3117,3 +3117,152 @@ button.on,
     display: none;
   }
 }
+
+/* ----- AI assistants (MCP) ----- */
+
+.modal.ai-dialog {
+  width: 680px;
+  max-height: 88vh;
+}
+
+.ai-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ai-body p {
+  margin: 0;
+}
+
+.ai-body .small {
+  font-size: 12.5px;
+}
+
+.ai-body a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ai-body code {
+  font: 12.5px var(--mono);
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border-radius: 5px;
+}
+
+.ai-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.ai-steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.snippet {
+  margin-top: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.snippet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.snippet pre {
+  margin: 0;
+  padding: 10px 12px;
+  font: 12.5px/1.5 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ai-pair {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-pair input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font: 13px var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+}
+
+.ai-pair input:focus {
+  border-color: var(--accent);
+}
+
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.ai-status > span {
+  flex: 1;
+}
+
+.ai-status i,
+.ai-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.ai-status.connected i,
+.ai-chip.connected i {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.ai-status.connecting i,
+.ai-status.lost i,
+.ai-chip.connecting i,
+.ai-chip.lost i {
+  background: var(--warning);
+  animation: pulse 1s infinite alternate;
+}
+
+.ai-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.ai-chip.connected {
+  color: var(--success);
+}

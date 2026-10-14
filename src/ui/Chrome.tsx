@@ -27,6 +27,7 @@ import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
+import { AiChip } from './AiConnect'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -130,6 +131,7 @@ export function TopLeft() {
               <MenuItem label="Download file" keys="Ctrl S" onClick={run(ui.download)} />
             )}
             <MenuItem label="Share read-only link…" onClick={run(ui.openShare)} />
+            <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
             {!ws.readOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             <hr />
             {!ws.readOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
@@ -149,6 +151,7 @@ export function TopRight() {
   const [themes, setThemes] = useState(false)
   return (
     <div className="island top-right no-canvas">
+      <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <button className="search-pill" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />
         <span>Search or run a command</span>

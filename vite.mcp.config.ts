@@ -1,0 +1,14 @@
+import { defineConfig } from 'vite'
+
+// Bundles the MCP server and the board code it shares into one dependency-free Node script.
+export default defineConfig({
+  build: {
+    ssr: 'mcp/server.ts',
+    outDir: 'dist',
+    emptyOutDir: false,
+    target: 'node20',
+    minify: false,
+    rollupOptions: { output: { entryFileNames: 'braincraft-mcp.mjs', banner: '#!/usr/bin/env node' } },
+  },
+  ssr: { noExternal: true },
+})

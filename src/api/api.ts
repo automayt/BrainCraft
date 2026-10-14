@@ -6,35 +6,11 @@
 import type { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { center } from '../model/geom'
-import { toMermaid } from '../model/mermaid'
-import { toOutline } from '../model/mindmap'
-import { objectLabel, plainNote } from '../model/notes'
-import { search } from '../model/search'
-import { toCsv } from '../model/table'
-import type { Board, Id, Item, Kind } from '../model/types'
+import type { Board, Id, Kind } from '../model/types'
 import { OPS, type Op, type OpResult, applyOps } from './ops'
+import { type ObjectDetail, type ObjectSummary, findObjects, getObject, listObjects, mermaidOf } from './queries'
 
-export interface ObjectSummary {
-  id: Id
-  kind: Kind
-  label: string
-  x: number
-  y: number
-  w: number
-  h: number
-  commentCount: number
-}
-
-const summary = (i: Item): ObjectSummary => ({
-  id: i.id,
-  kind: i.kind,
-  label: objectLabel(i),
-  x: Math.round(i.x),
-  y: Math.round(i.y),
-  w: Math.round(i.w),
-  h: Math.round(i.h),
-  commentCount: i.notes?.length ?? 0,
-})
+export type { ObjectSummary }
 
 export class BrainCraftAPI {
   readonly version = 1
@@ -69,29 +45,22 @@ export class BrainCraftAPI {
 
   /** Every object, optionally of one kind. */
   list(kind?: Kind): ObjectSummary[] {
-    return this.editor.board.items.filter((i) => !kind || i.kind === kind).map(summary)
+    return listObjects(this.editor.board, kind)
   }
 
   /** One object with its content and comments. */
-  get(id: Id): (ObjectSummary & { text: string; comments: { text: string; at: string; author?: string }[]; data?: unknown }) | null {
-    const i = B.getItem(this.editor.board, id)
-    if (!i) return null
-    return {
-      ...summary(i),
-      text: i.text,
-      comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
-      data: i.table ? { csv: toCsv(i.table) } : (i.kanban ?? i.timeline ?? (i.kind === 'mind' ? { outline: toOutline(this.editor.board, i.id) } : undefined)),
-    }
+  get(id: Id): ObjectDetail | null {
+    return getObject(this.editor.board, id)
   }
 
   /** Searches text, comments, cells, cards and labels. */
   find(query: string) {
-    return search(this.editor.board, query).map((r) => ({ id: r.id, kind: r.kind, label: r.title, where: r.where, snippet: r.snippet }))
+    return findObjects(this.editor.board, query)
   }
 
   /** The selection's (or every flowchart's) Mermaid source. */
   exportMermaid(ids?: Id[]): string {
-    return toMermaid(this.editor.board, ids ? new Set(ids) : undefined)
+    return mermaidOf(this.editor.board, ids)
   }
 
   select(ids: Id[]) {

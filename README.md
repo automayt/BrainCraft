@@ -108,14 +108,32 @@ These become interactive once selected; drag them by their title strip.
   timeline events and line labels, filtered by type. With an empty query it
   lists every object, so it doubles as the object lookup.
 
-### API for scripts and AI
+### Boards, files and sharing
 
-Boards can be built from JSON operations: paste them, call
-`window.BrainCraft.apply([...])`, or later post them to the hosted API. See
-[docs/API.md](docs/API.md), which includes a ready-made prompt for AI
-assistants.
+- **Your boards (Ctrl+O)** lists every board in this browser with a live
+  thumbnail. Rename, duplicate or delete them, or start a new one from a
+  template: blank, brainstorm, process map, sprint plan or retrospective.
+- Boards **autosave** as you work; the dot next to the title shows when
+  they're saved.
+- **Version history** keeps a version every ten minutes plus any you name
+  ("Before the reorg"). Preview any version and restore it in one undoable
+  step; the board being replaced is kept as a version too.
+- **Ctrl+S saves to a `.braincraft` file.** In Chrome and Edge it writes
+  back to the same file each time; elsewhere it downloads a copy. Open
+  files with **Open file…** or by dropping them on the window.
+- **Share read-only link** packs the whole board, compressed, into the
+  link itself. Nothing is uploaded. People who open it see the board
+  read-only and can save their own copy.
 
-### Whiteboard
+### AI assistants (MCP) and the API
+
+- **Connect Claude, Cursor or any MCP client** to work on your boards live:
+  it reads the board, builds mind maps, flowcharts and Kanban boards, and
+  leaves comments, and every change is one undo step. Or point it at
+  `.braincraft` files with no browser at all. See [docs/MCP.md](docs/MCP.md).
+- Boards can also be built from JSON operations: paste them, or call
+  `window.BrainCraft.apply([...])`. See [docs/API.md](docs/API.md), which
+  includes a ready-made prompt for AI assistants.
 
 ### Whiteboard
 
@@ -131,8 +149,6 @@ assistants.
 - Copy, cut and paste work through the system clipboard. Plain text you
   paste becomes a sticky note. **Paste or drop images** to add them.
 - Undo and redo.
-- Boards autosave in your browser. **Download** saves a `.braincraft.json`
-  file and **Open…** loads one.
 
 Press **?** in the app to see every shortcut.
 
@@ -144,7 +160,8 @@ Requires Node 20 or later.
 npm install
 npm run dev      # dev server at http://localhost:5173
 npm run check    # typecheck, lint and unit tests
-npm run build    # production build in dist/
+npm run build    # production build in dist/, including dist/braincraft-mcp.mjs
+npm run mcp      # run the built MCP server (normally your AI client starts it)
 ```
 
 ## Hosting
@@ -159,16 +176,19 @@ paths. Serve it from any static host, at the domain root or under a sub-path:
   `npm run build` and the output directory to `dist`.
 - **Anything else**: copy `dist/` to any web server.
 
-There's no backend yet. Each board lives in the visitor's browser (images
-included, so very image-heavy boards can hit the browser's storage limit)
-until they download it.
+There's no backend yet. Boards live in each visitor's browser (IndexedDB)
+until they save them to a file or share a link. The build also publishes
+`braincraft-mcp.mjs`, so the app's AI dialog can offer the MCP server for
+download from wherever you host it.
 
 ## Code layout
 
 | Path | Purpose |
 | --- | --- |
 | `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, comments, search, undo history, serialization. Pure functions over immutable data. |
-| `src/api/` | The operations API (`window.BrainCraft`, pasted JSON). |
+| `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
+| `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
+| `mcp/` | The MCP server for AI assistants, bundled into one Node script. |
 | `src/editor/Editor.ts` | Tools, selection, gestures and keyboard commands. Framework-independent and unit-tested. |
 | `src/ui/` | React components: SVG canvas, toolbars, text editing, comments panel, search, dialogs, and the table/Kanban/timeline views. |
 
