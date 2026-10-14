@@ -10,6 +10,7 @@ import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFrom
 import { History } from '../model/history'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
+import * as N from '../model/notes'
 import { clipFromText, clipToText } from '../model/serialize'
 import {
   type Arrowheads,
@@ -27,7 +28,19 @@ import {
   isResizable,
 } from '../model/types'
 
-export type Tool = 'select' | 'hand' | 'sticky' | 'text' | 'rect' | 'ellipse' | 'connector' | 'pen' | 'frame' | 'mind' | 'flow'
+export type Tool =
+  | 'select'
+  | 'hand'
+  | 'sticky'
+  | 'text'
+  | 'rect'
+  | 'ellipse'
+  | 'connector'
+  | 'pen'
+  | 'frame'
+  | 'mind'
+  | 'flow'
+  | 'comment'
 
 export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'select', key: 'v', label: 'Select' },
@@ -38,6 +51,7 @@ export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'ellipse', key: 'o', label: 'Ellipse' },
   { tool: 'mind', key: 'm', label: 'Mind map' },
   { tool: 'flow', key: 'd', label: 'Flowchart' },
+  { tool: 'comment', key: 'c', label: 'Comment' },
   { tool: 'connector', key: 'l', label: 'Connector' },
   { tool: 'pen', key: 'p', label: 'Pen' },
   { tool: 'frame', key: 'f', label: 'Frame' },
@@ -49,6 +63,7 @@ const CREATES: Partial<Record<Tool, Kind>> = {
   rect: 'rect',
   ellipse: 'ellipse',
   frame: 'frame',
+  comment: 'comment',
 }
 
 export type Corner = 'nw' | 'ne' | 'sw' | 'se'
@@ -66,6 +81,7 @@ export type Handle =
   | { kind: 'mindAdd'; id: Id; side?: Side }
   | { kind: 'collapse'; id: Id }
   | { kind: 'flowAdd'; dir: F.FlowDir }
+  | { kind: 'notes'; id: Id }
 
 export type Drag =
   | { type: 'none' }
@@ -121,6 +137,12 @@ export class Editor {
   penWidth = 4
   /** The symbol the flowchart tool places. */
   flowShape: FlowShape = 'process'
+  /** The comments (work notes) panel is showing. */
+  notesOpen = false
+  /** The search / object lookup palette is showing. */
+  searchOpen = false
+  /** Name stamped on new comments. */
+  author = ''
   spaceDown = false
   /** Last pointer position in world space, for pasting. */
   pointer: Vec | null = null
@@ -375,6 +397,52 @@ export class Editor {
     return false
   }
 
+  // ----- comments, search ----------------------------------------------------------
+
+  toggleNotes(open = !this.notesOpen) {
+    this.notesOpen = open
+    this.emit()
+  }
+
+  setAuthor(name: string) {
+    this.author = name
+    this.emit()
+  }
+
+  /** Adds a work note to `id` (one undo step). */
+  addNote(id: Id, text: string) {
+    this.edit((b) => N.addNote(b, id, text, this.author.trim() || undefined))
+  }
+
+  deleteNote(id: Id, noteId: string) {
+    this.edit((b) => N.deleteNote(b, id, noteId))
+  }
+
+  setSearchOpen(open: boolean) {
+    this.searchOpen = open
+    if (open) this.finishEditing()
+    this.emit()
+  }
+
+  /** Selects `id` and brings it into view, zooming in if it would be too small to read. */
+  focusObject(id: Id) {
+    const item = B.getItem(this.board, id)
+    if (!item) return
+    this.finishEditing()
+    // Reveal nodes inside collapsed mind-map branches.
+    let b = this.board
+    for (let p = item.parent; p !== undefined; p = B.getItem(b, p)?.parent) {
+      if (B.getItem(b, p)?.collapsed) b = M.toggleCollapsed(b, p)
+    }
+    if (b !== this.board) this.apply(b)
+    this.selection = new Set([id])
+    this.selectedConnector = null
+    const fitted = fit(B.itemBounds(item), this.viewport, 120)
+    if (this.camera.zoom < 0.5 || this.camera.zoom > fitted.zoom * 1.5) this.camera = fitted
+    else this.camera = centerOn(this.camera, center(item), this.viewport)
+    this.emit()
+  }
+
   // ----- flowcharts ---------------------------------------------------------------
 
   setFlowShape(shape: FlowShape) {
@@ -605,6 +673,10 @@ export class Editor {
         }
         case 'collapse':
           this.toggleCollapsed(handle.id)
+          return
+        case 'notes':
+          this.select([handle.id])
+          this.toggleNotes(true)
           return
         case 'resize': {
           const item = this.single
@@ -852,7 +924,11 @@ export class Editor {
         r = rectFromCenter(start, s.w, s.h)
       }
       const extra: Partial<Item> =
-        kind === 'frame' ? { text: `Frame ${this.board.items.filter((i) => i.kind === 'frame').length + 1}` } : {}
+        kind === 'frame'
+          ? { text: `Frame ${this.board.items.filter((i) => i.kind === 'frame').length + 1}` }
+          : kind === 'comment'
+            ? { createdAt: Date.now() }
+            : {}
       let b: Board
       ;[b, id] = B.addItem(this.board, B.newItem(kind, r, extra))
       // A frame goes beneath whatever it was drawn around.
@@ -927,7 +1003,12 @@ export class Editor {
       else if (k === 'a') this.selectAll()
       else if (k === 'd') this.duplicate()
       else if (k === 's') return 'save'
+      else if (k === 'k' || k === 'f') this.setSearchOpen(true)
       else return false
+      return true
+    }
+    if (mods.shift && k === 'c') {
+      this.toggleNotes()
       return true
     }
     const node = this.single
@@ -972,7 +1053,7 @@ export class Editor {
         this.startEditing(mind.id)
         return true
       }
-      if (k === 'c' && !mods.alt) {
+      if (k === '/') {
         this.toggleCollapsed(mind.id)
         return true
       }
@@ -1025,9 +1106,9 @@ export class Editor {
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single
     if (node?.kind === 'mind')
-      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  C collapse  ·  Del delete'
+      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Shift+C comments'
     if (node?.kind === 'flow')
-      return 'Tab next step  ·  Alt+Arrow add a step that way  ·  Enter edit  ·  Click or drag a blue arrow'
+      return 'Tab next step  ·  Alt+Arrow add a step that way  ·  Enter edit  ·  Drag a blue arrow for shape ideas'
     return null
   }
 

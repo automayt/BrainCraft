@@ -7,7 +7,7 @@ import { toScreen } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
-import { BoardView, ItemShape, inkFor, mindDepths } from './BoardView'
+import { BoardView, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
 import { SelectionToolbar } from './SelectionToolbar'
@@ -29,6 +29,8 @@ function readHandle(target: EventTarget | null): Handle | undefined {
       return { kind, id, side: (el.getAttribute('data-side') as 'left' | 'right' | null) ?? undefined }
     case 'flowAdd':
       return { kind, dir: el.getAttribute('data-dir') as FlowDir }
+    case 'notes':
+      return { kind, id }
     case 'collapse':
       return { kind, id }
   }
@@ -283,6 +285,21 @@ function Overlays({ editor }: { editor: Editor }) {
       out.push(<rect key="multi" {...xywh({ x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 16 })} className="sel-bounds" />)
     }
   }
+  // Comment counts on objects that have work notes.
+  for (const i of editor.board.items) {
+    if (!i.notes?.length || editor.hidden.has(i.id)) continue
+    const r = editor.screenRect(i)
+    if (r.x > editor.viewport.w || r.y > editor.viewport.h || r.x + r.w < 0 || r.y + r.h < 0) continue
+    out.push(
+      <g key={`notes${i.id}`} data-handle="notes" data-id={i.id} className="notes-badge" transform={`translate(${r.x + r.w + 14} ${r.y - 4})`}>
+        <title>{`${i.notes.length} comment${i.notes.length === 1 ? '' : 's'} — click to open`}</title>
+        <path d="M-10 -12h20a4 4 0 0 1 4 4v9a4 4 0 0 1 -4 4h-11l-5 4v-4h-4a4 4 0 0 1 -4 -4v-9a4 4 0 0 1 4 -4z" />
+        <text x={0} y={-3} dy="0.35em" textAnchor="middle">
+          {i.notes.length > 99 ? '99+' : i.notes.length}
+        </text>
+      </g>,
+    )
+  }
   const single = editor.single
   if (single && !editor.editing && editor.drag.type === 'none') {
     const r = editor.screenRect(single)
@@ -436,6 +453,11 @@ function TextEditor({ editor }: { editor: Editor }) {
       break
     case 'flow':
       box = editor.screenRect(flowTextRect(item))
+      break
+    case 'comment':
+      box = editor.screenRect(commentBodyRect(item))
+      align = 'left'
+      vcenter = false
       break
     case 'mind': {
       const depth = mindDepths(editor.board).get(item.id) ?? 0

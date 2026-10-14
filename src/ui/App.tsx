@@ -4,7 +4,9 @@ import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import { FLOW_SHAPES, INKS } from '../model/types'
 import { Canvas } from './Canvas'
-import { FlowShapeIcon, Logo, RedoIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { CommentsIcon, FlowShapeIcon, Logo, RedoIcon, SearchIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { NotesPanel } from './NotesPanel'
+import { SearchPalette } from './SearchPalette'
 import { measureText } from './measure'
 import { EditorContext, useEditor } from './useEditor'
 
@@ -56,7 +58,13 @@ export function App() {
     requestAnimationFrame(() => editor.zoomToFit())
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return
+      // Search works from anywhere, even while typing.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        editor.setSearchOpen(!editor.searchOpen)
+        return
+      }
+      if (isTyping(e.target) || editor.searchOpen) return
       // Space edits a selected mind-map idea; otherwise holding it pans.
       if (e.key === ' ' && editor.single?.kind !== 'mind') {
         if (!editor.spaceDown) {
@@ -114,7 +122,9 @@ export function App() {
         <div className="workspace">
           <ToolBar />
           <Canvas />
+          <NotesPanel />
         </div>
+        <SearchPalette />
       </div>
     </EditorContext.Provider>
   )
@@ -131,7 +141,7 @@ function TopBar() {
         <span>BrainCraft</span>
       </div>
       <input
-        className="title"
+        className="board-title"
         value={editor.board.title}
         aria-label="Board title"
         onChange={(e) => editor.setTitle(e.target.value)}
@@ -192,6 +202,19 @@ function TopBar() {
       <div className="status" role="status">
         {editor.status}
       </div>
+      <button className="search-button" title="Search and browse objects (Ctrl+K)" onClick={() => editor.setSearchOpen(true)}>
+        <SearchIcon />
+        <span>Search</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+      <button
+        className={`icon${editor.notesOpen ? ' on' : ''}`}
+        title="Comments (Shift+C)"
+        aria-pressed={editor.notesOpen}
+        onClick={() => editor.toggleNotes()}
+      >
+        <CommentsIcon />
+      </button>
       <button className="help-button" title="Keyboard shortcuts" onClick={() => setHelp(!help)}>
         ?
       </button>
@@ -289,7 +312,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Arrows', 'Move between ideas'],
       ['Alt + ↑ / ↓', 'Reorder an idea'],
       ['Space / F2', 'Edit the idea'],
-      ['C', 'Collapse or expand a branch'],
+      ['/', 'Collapse or expand a branch'],
       ['Drag an idea', 'Drop it on another idea to move the branch'],
       ['Paste an indented list', 'Turns it into a mind map'],
     ],
@@ -304,6 +327,16 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Enter / double-click', 'Edit the text'],
       ['Double-click a line', 'Label it (e.g. Yes / No)'],
       ['Drag', 'Snaps into line with nearby shapes (hold Alt to move freely)'],
+    ],
+  ],
+  [
+    'Comments & search',
+    [
+      ['Shift + C', 'Open comments on the selected object'],
+      ['Enter', 'Post a comment (Shift + Enter for a new line)'],
+      ['@', 'Mention another object in a comment'],
+      ['Ctrl + K / Ctrl + F', 'Search everything, or browse all objects'],
+      ['C then click', 'Place a comment block on the board'],
     ],
   ],
   [
