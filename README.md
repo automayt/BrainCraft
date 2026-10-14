@@ -125,6 +125,21 @@ These become interactive once selected; drag them by their title strip.
   link itself. Nothing is uploaded. People who open it see the board
   read-only and can save their own copy.
 
+### Runbooks: run a flowchart
+
+- **Run flowchart (Shift+R)** turns a flowchart into a live procedure. The
+  panel shows the current step, the shape's comments as instructions, and
+  the ways on from it: one button for a step, one per answer for a decision
+  (or press **1–9**). **Enter** moves on, **Backspace** goes back, and
+  **Esc** stops.
+- The board follows along, highlighting the current step, the route taken
+  so far and the possible next steps.
+- Add a note to any step as you go. Every run is timestamped and kept on the
+  flowchart. **Run history** shows each run, the typical time, and the route
+  runs usually take. Copy any run as a Markdown checklist for a ticket or
+  chat.
+- **Run from this step** starts part-way through.
+
 ### Presenting
 
 - **Present (Shift+P)** turns the board's frames into slides, in reading

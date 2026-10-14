@@ -19,6 +19,7 @@ import * as TL from '../model/timeline'
 import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
 import { clipFromText, clipToText } from '../model/serialize'
 import * as S from '../model/slides'
+import * as R from '../model/runbook'
 import {
   type Arrowheads,
   type Board,
@@ -156,6 +157,21 @@ export interface Presenting {
   wasReadOnly: boolean
 }
 
+export interface Running {
+  /** The flowchart's start shape, where the finished run is recorded. */
+  start: Id
+  startedAt: number
+  /** Steps reached so far; the last is the current one. */
+  steps: R.RunStep[]
+  wasReadOnly: boolean
+}
+
+/** A run that just ended, shown as a summary until dismissed. */
+export interface FinishedRun {
+  start: Id
+  record: R.RunRecord
+}
+
 /** Slides can zoom in this far, so small frames fill the screen. */
 const SLIDE_MAX_ZOOM = 4
 const FLIGHT_MS = 520
@@ -199,6 +215,9 @@ export class Editor {
   readOnly = false
   /** Presentation mode: frames shown one at a time, full screen. */
   presenting: Presenting | null = null
+  /** Runbook mode: walking a flowchart step by step. */
+  running: Running | null = null
+  finishedRun: FinishedRun | null = null
   private flight = 0
 
   readonly measure: M.Measure
@@ -384,6 +403,146 @@ export class Editor {
       if (t < 1) raf(step)
     }
     raf(step)
+  }
+
+  // ----- runbook mode -------------------------------------------------------------
+
+  /** Starts walking the flowchart containing `id` (default: the selection) from its start, or from `id` itself. */
+  startRun(id: Id | undefined = this.single?.id, fromHere = false): boolean {
+    const item = id !== undefined ? B.getItem(this.board, id) : undefined
+    if (item?.kind !== 'flow') {
+      this.setStatus('Select a flowchart shape to run its flowchart')
+      return false
+    }
+    const start = R.runStart(this.board, item.id)
+    if (start === null) return false
+    const first = fromHere ? item.id : start
+    this.finishEditing()
+    this.notesOpen = false
+    this.searchOpen = false
+    this.shapePicker = null
+    this.finishedRun = null
+    const now = Date.now()
+    this.running = { start, startedAt: now, steps: [{ node: first, text: this.stepText(first), at: now }], wasReadOnly: this.readOnly }
+    // Shapes can't change under a run in progress.
+    this.readOnly = true
+    this.selection = new Set()
+    this.selectedConnector = null
+    this.followRun()
+    return true
+  }
+
+  private stepText(id: Id): string {
+    const i = B.getItem(this.board, id)
+    return i?.text.trim() || flowShapeInfo(i?.shape).label
+  }
+
+  get runStep(): Id | null {
+    return this.running?.steps.at(-1)?.node ?? null
+  }
+
+  get runOptions(): R.RunOption[] {
+    const at = this.runStep
+    return at === null ? [] : R.options(this.board, at)
+  }
+
+  /** Keeps the current step in view, left of the run panel. */
+  private followRun() {
+    const at = this.runStep
+    const item = at !== null ? B.getItem(this.board, at) : undefined
+    if (!item) return this.emit()
+    const zoom = Math.max(0.75, Math.min(1.25, this.camera.zoom))
+    const panel = this.viewport.w > 900 ? 200 : 0
+    const c = center(item)
+    this.flyTo({ zoom, x: (this.viewport.w - panel) / 2 - c.x * zoom, y: this.viewport.h / 2 - c.y * zoom })
+  }
+
+  /** Takes option `n` (0-based) out of the current step; with one way out, `n` can be left out. */
+  runChoose(n?: number) {
+    const r = this.running
+    const opts = this.runOptions
+    const pick = n ?? (opts.length === 1 ? 0 : -1)
+    const opt = opts[pick]
+    if (!r || !opt) return
+    const steps = r.steps.slice()
+    steps[steps.length - 1] = { ...steps[steps.length - 1], choice: opt.labelled ? opt.label : undefined }
+    steps.push({ node: opt.to.id, text: this.stepText(opt.to.id), at: Date.now() })
+    this.running = { ...r, steps }
+    this.followRun()
+  }
+
+  /** Goes back a step (its time and note are dropped). */
+  runBack() {
+    const r = this.running
+    if (!r || r.steps.length < 2) return
+    const steps = r.steps.slice(0, -1)
+    const last = { ...steps[steps.length - 1] }
+    delete last.choice
+    steps[steps.length - 1] = last
+    this.running = { ...r, steps }
+    this.followRun()
+  }
+
+  setRunNote(note: string) {
+    const r = this.running
+    if (!r) return
+    const steps = r.steps.slice()
+    const last = steps[steps.length - 1]
+    const next: R.RunStep = { ...last, note }
+    if (!note.trim()) delete next.note
+    steps[steps.length - 1] = next
+    this.running = { ...r, steps }
+    this.emit()
+  }
+
+  /**
+   * Ends the run. Finished runs, and stopped runs that got past the first step, are recorded
+   * on the flowchart (one undoable change) and summarised until `dismissRun`.
+   */
+  endRun(status: R.RunRecord['status']) {
+    const r = this.running
+    if (!r) return
+    this.running = null
+    this.readOnly = r.wasReadOnly
+    const steps = r.steps.map((s) => (s.note ? { ...s, note: s.note.trim() } : s))
+    if (status === 'stopped' && steps.length < 2) return this.emit()
+    const record = R.newRun(steps, status, r.startedAt, Date.now(), this.author || undefined)
+    if (!this.readOnly) this.edit((b) => R.recordRun(b, r.start, record))
+    this.finishedRun = { start: r.start, record }
+    this.emit()
+  }
+
+  dismissRun() {
+    this.finishedRun = null
+    this.emit()
+  }
+
+  deleteRun(start: Id, runId: string) {
+    this.edit((b) => R.deleteRun(b, start, runId))
+  }
+
+  /** Keys while running; true when handled. */
+  runKey(key: string): boolean {
+    if (!this.running) return false
+    const n = Number(key)
+    if (key === 'Enter' || key === 'ArrowRight' || key === ' ') {
+      if (this.runOptions.length === 0) this.endRun('done')
+      else this.runChoose()
+      return true
+    }
+    if (n >= 1 && n <= 9) {
+      this.runChoose(n - 1)
+      return true
+    }
+    if (key === 'Backspace' || key === 'ArrowLeft') {
+      this.runBack()
+      return true
+    }
+    if (key === 'Escape') {
+      this.endRun('stopped')
+      return true
+    }
+    return false
   }
 
   // ----- presenting --------------------------------------------------------------
@@ -1406,6 +1565,10 @@ export class Editor {
     }
     if (mods.shift && k === 'c') {
       this.toggleNotes()
+      return true
+    }
+    if (mods.shift && k === 'r' && this.single?.kind === 'flow') {
+      this.startRun()
       return true
     }
     const node = this.single

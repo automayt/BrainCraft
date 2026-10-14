@@ -3,6 +3,7 @@ import { BrainCraftAPI } from '../api/api'
 import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
 import { Presenter } from './Present'
+import { RunPanel, RunsDialog } from './RunPanel'
 import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { FILE_EXT, Workspace } from '../store/workspace'
@@ -51,9 +52,10 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}`)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
+  const [runsFor, setRunsFor] = useState<number | null>(null)
   const [bridge] = useState(() => new Bridge(ws))
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -79,6 +81,7 @@ function App({ ws }: { ws: Workspace }) {
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
     openAi: () => setDialog('ai'),
+    openRuns: (id) => setRunsFor(id),
     present: () => {
       setDialog(null)
       setMenu(null)
@@ -139,6 +142,13 @@ function App({ ws }: { ws: Workspace }) {
       if (editor.presenting) {
         if (editor.presentKey(e.key)) e.preventDefault()
         return
+      }
+      // While running a flowchart, keys walk it (except in the step's note box).
+      if (editor.running && !isTyping(e.target)) {
+        if (editor.runKey(e.key)) {
+          e.preventDefault()
+          return
+        }
       }
       // Search works from anywhere, even while typing.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -242,7 +252,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}`}
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -265,6 +275,8 @@ function App({ ws }: { ws: Workspace }) {
           <SearchPalette />
           <ReadOnlyBanner />
           <Presenter />
+          <RunPanel />
+          {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
           {dialog === 'help' && <Help onClose={close} />}
           {dialog === 'import' && <ImportExport onClose={close} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}

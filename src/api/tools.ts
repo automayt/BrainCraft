@@ -80,7 +80,7 @@ export const TOOL_DEFS: ToolDef[] = [
     name: 'get_object',
     title: 'Get object',
     description:
-      'One object in full: its text, its comments, and its data (a table as CSV, a Kanban board\'s columns and cards, a timeline\'s lanes and entries, or a mind map\'s outline).',
+      'One object in full: its text, its comments, and its data (a table as CSV, a Kanban board\'s columns and cards, a timeline\'s lanes and entries, a mind map\'s outline, or the recorded runs of a flowchart that starts at this shape).',
     inputSchema: { type: 'object', properties: { id: { type: 'number' }, ...fileProp }, required: ['id'] },
     readOnly: true,
   },

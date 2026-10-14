@@ -26,6 +26,28 @@ export interface Note {
   author?: string
 }
 
+/** One step of a flowchart run (runbook mode). */
+export interface RunStep {
+  node: Id
+  /** The shape's text when the step was taken, so history reads right after edits. */
+  text: string
+  /** When the step was reached. */
+  at: number
+  /** The way taken out of this step (a decision's answer). */
+  choice?: string
+  note?: string
+}
+
+/** A finished (or stopped) walk through a flowchart. */
+export interface RunRecord {
+  id: string
+  startedAt: number
+  endedAt: number
+  status: 'done' | 'stopped'
+  steps: RunStep[]
+  by?: string
+}
+
 export interface TableColumn {
   id: string
   name: string
@@ -136,6 +158,8 @@ export interface Item extends Rect {
   src?: string
   /** When a comment block was written. */
   createdAt?: number
+  /** Runs of the flowchart this shape starts (runbook mode), oldest first. */
+  runs?: RunRecord[]
   table?: TableData
   kanban?: KanbanData
   timeline?: TimelineData

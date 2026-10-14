@@ -1,3 +1,4 @@
+import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
@@ -52,6 +53,13 @@ export function ContextMenu() {
         entries.push({ label: single.collapsed ? 'Expand branch' : 'Collapse branch', keys: '/', run: () => editor.toggleCollapsed(single.id) })
     }
     if (single?.kind === 'flow') {
+      const runs = runsOf(editor.board, single.id)?.runs.length ?? 0
+      entries.push(
+        'sep',
+        { label: 'Run flowchart', keys: 'Shift R', run: () => editor.startRun(single.id) },
+        { label: 'Run from this step', run: () => editor.startRun(single.id, true) },
+        { label: runs ? `Run history (${runs})` : 'Run history', run: () => ui.openRuns(single.id) },
+      )
       entries.push('sep', { label: 'Add next step', keys: 'Tab', run: () => editor.addFlowStep(single.id) }, { heading: 'Change shape' })
       for (const f of FLOW_SHAPES) if (f.shape !== single.shape) entries.push({ label: f.label, run: () => editor.setShape(f.shape) })
     }

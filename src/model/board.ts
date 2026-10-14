@@ -338,6 +338,8 @@ export function paste(b: Board, clip: Clip, dx: number, dy: number): [Board, Set
   for (const i of clip.items) mapping.set(i.id, next++)
   const items: Item[] = clip.items.map((i) => {
     const copyItem: Item = { ...translateItem(i, dx, dy), id: mapping.get(i.id)! }
+    // A copied flowchart starts with no run history: those runs happened on the original.
+    delete copyItem.runs
     if (i.kind === 'mind') {
       const parent = i.parent !== undefined ? mapping.get(i.parent) : undefined
       copyItem.parent = parent

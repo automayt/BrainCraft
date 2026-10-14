@@ -378,3 +378,57 @@ describe('presenting', () => {
     expect(e.status).toMatch(/frame/)
   })
 })
+
+describe('runbook mode', () => {
+  it('walks a flowchart, records the run and can undo the record', async () => {
+    const { applyOps } = await import('../api/ops')
+    const e = editor()
+    e.setViewport(1200, 800)
+    const { board } = applyOps(emptyBoard(), [{ op: 'createFlowchart', mermaid: 'flowchart TD\n  A([In]) --> B{Urgent?}\n  B -->|Yes| C[Page]\n  B -->|No| D[Queue]\n  C --> E([Done])\n  D --> E' }], { measure: fakeMeasure })
+    e.load(board)
+    const id = (t: string) => e.board.items.find((i) => i.text === t)!.id
+    e.select([id('Queue')])
+    expect(e.startRun()).toBe(true)
+    expect(e.runStep).toBe(id('In'))
+    expect(e.readOnly).toBe(true)
+    e.runKey('Enter')
+    expect(e.runStep).toBe(id('Urgent?'))
+    expect(e.runOptions.map((o) => o.label)).toEqual(['Yes', 'No'])
+    e.runKey('Enter') // two ways out: Enter alone doesn't pick one
+    expect(e.runStep).toBe(id('Urgent?'))
+    e.runKey('2')
+    expect(e.runStep).toBe(id('Queue'))
+    e.runBack()
+    e.runKey('1')
+    e.setRunNote('Customer is down')
+    e.runKey('Enter')
+    expect(e.runStep).toBe(id('Done'))
+    e.runKey('Enter')
+    expect(e.running).toBeNull()
+    expect(e.readOnly).toBe(false)
+    const runs = B.getItem(e.board, id('In'))!.runs!
+    expect(runs).toHaveLength(1)
+    expect(runs[0].status).toBe('done')
+    expect(runs[0].steps.map((s) => [s.text, s.choice ?? null])).toEqual([
+      ['In', null],
+      ['Urgent?', 'Yes'],
+      ['Page', null],
+      ['Done', null],
+    ])
+    expect(runs[0].steps[2].note).toBe('Customer is down')
+    expect(e.finishedRun?.record.id).toBe(runs[0].id)
+    e.undo()
+    expect(B.getItem(e.board, id('In'))!.runs).toBeUndefined()
+  })
+
+  it('drops a run stopped on its first step and refuses non-flowchart shapes', async () => {
+    const { applyOps } = await import('../api/ops')
+    const e = editor()
+    const { board } = applyOps(emptyBoard(), [{ op: 'createFlowchart', mermaid: 'flowchart TD\n  A[One] --> B[Two]' }, { op: 'createNote', text: 'x' }], { measure: fakeMeasure })
+    e.load(board)
+    e.startRun(e.board.items[0].id)
+    e.runKey('Escape')
+    expect(e.finishedRun).toBeNull()
+    expect(e.startRun(e.board.items[2].id)).toBe(false)
+  })
+})

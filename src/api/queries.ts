@@ -47,7 +47,11 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
     ...summary(i),
     text: i.text,
     comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
-    data: i.table ? { csv: toCsv(i.table) } : (i.kanban ?? i.timeline ?? (i.kind === 'mind' ? { outline: toOutline(b, i.id) } : undefined)),
+    data: i.table
+      ? { csv: toCsv(i.table) }
+      : (i.kanban ??
+        i.timeline ??
+        (i.kind === 'mind' ? { outline: toOutline(b, i.id) } : i.runs?.length ? { runs: i.runs.map((r) => ({ ...r, startedAt: new Date(r.startedAt).toISOString(), endedAt: new Date(r.endedAt).toISOString() })) } : undefined)),
   }
 }
 
