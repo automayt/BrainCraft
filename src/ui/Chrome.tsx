@@ -216,7 +216,7 @@ const GROUPS: Tool[][] = [
   ['select', 'hand'],
   ['sticky', 'text', 'rect', 'ellipse', 'comment'],
   ['mind', 'flow', 'connector', 'pen'],
-  ['table', 'kanban', 'timeline', 'frame'],
+  ['table', 'kanban', 'timeline', 'data', 'frame'],
 ]
 
 export function ToolRail() {

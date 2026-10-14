@@ -1,6 +1,7 @@
 /** Read-only questions about a board, shared by `window.BrainCraft` and the MCP server. */
 
 import * as B from '../model/board'
+import * as D from '../model/dataset'
 import { toMermaid } from '../model/mermaid'
 import { toOutline } from '../model/mindmap'
 import { objectLabel, plainNote } from '../model/notes'
@@ -47,11 +48,28 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
     ...summary(i),
     text: i.text,
     comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
-    data: i.table
+    data: i.view
+      ? dataOf(b, i)
+      : i.table
       ? { csv: toCsv(i.table) }
       : (i.kanban ??
         i.timeline ??
         (i.kind === 'mind' ? { outline: toOutline(b, i.id) } : i.runs?.length ? { runs: i.runs.map((r) => ({ ...r, startedAt: new Date(r.startedAt).toISOString(), endedAt: new Date(r.endedAt).toISOString() })) } : undefined)),
+  }
+}
+
+/** A database view: its settings and every record of its dataset by field name. */
+function dataOf(b: Board, i: Item) {
+  const ds = D.getDataset(b, i.view!.dataset)
+  if (!ds) return undefined
+  const v = i.view!
+  const name = (id?: string) => D.fieldById(ds, id)?.name
+  return {
+    dataset: ds.name,
+    view: { type: v.type, ...(v.groupBy ? { groupBy: name(v.groupBy) } : {}), ...(v.sort ? { sort: `${name(v.sort.field)} ${v.sort.dir}` } : {}), ...(v.query ? { search: v.query } : {}) },
+    fields: ds.fields.map((f) => ({ name: f.name, type: f.type, ...(f.options ? { options: f.options.map((o) => o.name) } : {}) })),
+    records: D.plainRecords(ds),
+    otherViews: D.viewsOf(b, ds.id).filter((x) => x.id !== i.id).map((x) => ({ id: x.id, type: x.view!.type })),
   }
 }
 

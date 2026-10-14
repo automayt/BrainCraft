@@ -48,7 +48,9 @@ createImage {src: https or data URL, w?, h?}
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}
 update {id, text?, color?, x?, y?, w?, h?}
 delete {ids: [...]} — deleting a mind-map idea deletes its branch
-addComment {id, text, author?} — a timestamped work note on an object; mention another object with @[Label](#id)`
+addComment {id, text, author?} — a timestamped work note on an object; mention another object with @[Label](#id)
+createDatabase {title, fields?: [name | {name, type: text|number|date|select|person|checkbox, options?}], records?: [{FieldName: value}], views?: [table|board|timeline], groupBy?} — one set of records shown as linked views that stay in sync (a board groups by a select/person field; a timeline uses the first two date fields). Types are guessed from values when not given. The first field is the record title.
+addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values: {FieldName: value or null}} · deleteRecords {id: view, records: [ids or titles]}`
 
 const fileProp = {
   file: {

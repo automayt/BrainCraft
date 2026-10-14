@@ -9,6 +9,7 @@ import { frameFill, ink, mindRootFill, mindRootText } from './paint'
 import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
+import { DataViewWidget } from './widgets/DataView'
 import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, usesInk } from '../model/types'
 
 export function darken(hex: string, k = 0.72): string {
@@ -109,6 +110,8 @@ export function ItemShape({ item, depth, editing, live = false }: { item: Item; 
       return item.kanban ? <KanbanView item={item} live={live} editingTitle={editing} /> : null
     case 'timeline':
       return item.timeline ? <TimelineView item={item} live={live} editingTitle={editing} /> : null
+    case 'data':
+      return item.view ? <DataViewWidget item={item} live={live} editingTitle={editing} /> : null
     default:
       return null
   }

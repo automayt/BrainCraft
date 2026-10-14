@@ -125,6 +125,24 @@ These become interactive once selected; drag them by their title strip.
   link itself. Nothing is uploaded. People who open it see the board
   read-only and can save their own copy.
 
+### Linked data: one dataset, many views
+
+- **Database (B)** adds a set of records with typed fields: text, number,
+  date, choice, person and checkbox. Show it as a **table**, a **board**
+  (Kanban columns from a choice or person field) or a **timeline** (bars
+  from two date fields), and switch between them in the title bar.
+- **+ View** puts another view of the same records next to it. Every view
+  stays in sync. Change a status in the table and the card moves on the
+  board; drag a bar on the timeline and the dates change in the table.
+- Each view has its own search, sort, hidden fields, grouping and date
+  fields. Those never change the data itself.
+- Click a card or bar to open the record and edit every field. Choices get
+  colours; new ones are added as you type them.
+- **Convert to linked data** (right-click) turns an existing table, Kanban
+  board or timeline into a dataset, guessing each column's type.
+- AI assistants can create and update databases by field name (see the
+  [API](docs/API.md)).
+
 ### Runbooks: run a flowchart
 
 - **Run flowchart (Shift+R)** turns a flowchart into a live procedure. The

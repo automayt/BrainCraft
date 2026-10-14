@@ -1,6 +1,7 @@
 /** Board-wide search across every object and the content inside them. */
 
 import { getItem } from './board'
+import { display, getDataset, recordTitle } from './dataset'
 import { objectLabel, plainNote } from './notes'
 import { type Board, type Id, type Item, type Kind, KIND_LABELS } from './types'
 
@@ -23,7 +24,7 @@ interface Field {
 }
 
 /** Every searchable piece of text in an item. */
-function fields(i: Item): Field[] {
+function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
   const out: Field[] = [{ where: i.kind === 'frame' ? 'Title' : 'Text', text: i.text }]
   for (const n of i.notes ?? []) out.push({ where: 'Comment', text: plainNote(n.text) })
   if (i.table) {
@@ -36,6 +37,19 @@ function fields(i: Item): Field[] {
   for (const col of i.kanban?.columns ?? []) {
     out.push({ where: 'Column', text: col.title })
     for (const card of col.cards) out.push({ where: `Card in ${col.title}`, text: card.title })
+  }
+  // A dataset's records are found once, through its first view.
+  const ds = getDataset(b, i.view?.dataset)
+  if (ds && !seenDatasets.has(ds.id)) {
+    seenDatasets.add(ds.id)
+    for (const f of ds.fields) out.push({ where: 'Field', text: f.name })
+    for (const r of ds.records) {
+      const name = recordTitle(ds, r)
+      ds.fields.forEach((f, k) => {
+        const text = display(ds, f, r.values[f.id])
+        if (text && f.type !== 'checkbox') out.push({ where: k === 0 ? 'Record' : `${name} · ${f.name}`, text })
+      })
+    }
   }
   if (i.timeline) {
     for (const l of i.timeline.lanes) out.push({ where: 'Lane', text: l.name })
@@ -71,10 +85,11 @@ export function search(b: Board, query: string, kinds?: ReadonlySet<Kind | 'conn
     score -= Math.min(20, lower.length / 20)
     results.push({ id, kind, title, where: f.where, snippet: snippet(f.text, at, words[0].length), score })
   }
+  const seenDatasets = new Set<string>()
   for (const i of b.items) {
     if (kinds && !kinds.has(i.kind)) continue
     const title = objectLabel(i)
-    fields(i).forEach((f, k) => f.text && consider(i.id, i.kind, title, f, k === 0))
+    fields(b, i, seenDatasets).forEach((f, k) => f.text && consider(i.id, i.kind, title, f, k === 0))
   }
   if (!kinds || kinds.has('connector')) {
     for (const c of b.connectors) {

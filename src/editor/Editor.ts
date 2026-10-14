@@ -20,6 +20,7 @@ import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../mod
 import { clipFromText, clipToText } from '../model/serialize'
 import * as S from '../model/slides'
 import * as R from '../model/runbook'
+import * as D from '../model/dataset'
 import {
   type Arrowheads,
   type Board,
@@ -32,6 +33,10 @@ import {
   type TableData,
   type TimelineData,
   type Side,
+  type Dataset,
+  type DataView,
+  type DataViewType,
+  KIND_LABELS,
   INKS,
   defaultSize,
   flowShapeInfo,
@@ -57,6 +62,7 @@ export type Tool =
   | 'table'
   | 'kanban'
   | 'timeline'
+  | 'data'
 
 export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'select', key: 'v', label: 'Select' },
@@ -71,6 +77,7 @@ export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'table', key: 'g', label: 'Table' },
   { tool: 'kanban', key: 'k', label: 'Kanban board' },
   { tool: 'timeline', key: 'i', label: 'Timeline' },
+  { tool: 'data', key: 'b', label: 'Database' },
   { tool: 'connector', key: 'l', label: 'Connector' },
   { tool: 'pen', key: 'p', label: 'Pen' },
   { tool: 'frame', key: 'f', label: 'Frame' },
@@ -86,6 +93,7 @@ const CREATES: Partial<Record<Tool, Kind>> = {
   table: 'table',
   kanban: 'kanban',
   timeline: 'timeline',
+  data: 'data',
 }
 
 export type Corner = 'nw' | 'ne' | 'sw' | 'se'
@@ -898,6 +906,62 @@ export class Editor {
     })
   }
 
+  // ----- linked data ----------------------------------------------------------------
+
+  /** Changes a dataset (one undo step); every view of it updates. */
+  updateDataset(datasetId: string, f: (d: Dataset) => Dataset) {
+    this.edit((b) => D.updateDataset(b, datasetId, f))
+  }
+
+  /** Changes how one view shows its dataset. */
+  updateView(id: Id, f: (v: DataView) => DataView) {
+    this.updateItem(id, (i) => {
+      if (!i.view) return i
+      const view = f(i.view)
+      return view === i.view ? i : { ...i, view }
+    })
+  }
+
+  /** Adds another view of the same dataset beside `id` (to the right, or below if that's taken). */
+  addDataView(id: Id, type: DataViewType) {
+    const src = B.getItem(this.board, id)
+    if (!src?.view) return
+    const ds = D.getDataset(this.board, src.view.dataset)
+    if (!ds) return
+    const size = D.viewSize(ds, type)
+    let at = { x: src.x + src.w + 60, y: src.y }
+    const free = (p: Vec) => !this.board.items.some((i) => i.kind !== 'frame' && intersects(B.itemBounds(i), { ...p, ...size }))
+    if (!free(at)) at = { x: src.x, y: src.y + src.h + 60 }
+    for (let k = 0; k < 20 && !free(at); k++) at = { x: at.x, y: at.y + 120 }
+    let newId: Id = -1
+    this.edit((b) => {
+      let next: Board
+      ;[next, newId] = B.addItem(b, B.newItem('data', { ...at, ...size }, { text: src.text, view: { ...D.newView(src.view!.dataset, type), groupBy: src.view!.groupBy } }))
+      return next
+    })
+    this.select([newId])
+    this.keepInView(newId)
+  }
+
+  /** Turns a table, Kanban board or timeline into a dataset with a view of the same kind. */
+  convertToData(id: Id) {
+    const i = B.getItem(this.board, id)
+    if (!i || !(i.table || i.kanban || i.timeline)) return
+    const name = i.text || KIND_LABELS[i.kind]
+    const ds = i.table ? D.datasetFromTable(name, i.table) : i.kanban ? D.datasetFromKanban(name, i.kanban) : D.datasetFromTimeline(name, i.timeline!)
+    const type: DataViewType = i.table ? 'table' : i.kanban ? 'board' : 'timeline'
+    this.edit((b) =>
+      B.updateItem(D.addDataset(b, ds), id, (x) => {
+        const next: Item = { ...x, kind: 'data', view: D.newView(ds.id, type), w: Math.max(x.w, type === 'table' ? 700 : x.w), h: Math.max(x.h, 320) }
+        delete next.table
+        delete next.kanban
+        delete next.timeline
+        return next
+      }),
+    )
+    this.setStatus(`Converted to linked data — add a Board or Timeline view from its title bar`)
+  }
+
   updateKanban(id: Id, f: (k: KanbanData) => KanbanData) {
     this.updateItem(id, (i) => (i.kanban ? { ...i, kanban: f(i.kanban) } : i))
   }
@@ -1458,8 +1522,16 @@ export class Editor {
       }
       if (kind === 'table') r = rectFromCenter(start, tableSize(newTable()).w, tableSize(newTable()).h)
       if (kind === 'kanban' && r.w < 500) r = rectFromCenter(start, kanbanWidth(newKanban()), r.h)
+      if (kind === 'data' && r.w < 600) r = rectFromCenter(start, defaultSize('data').w, defaultSize('data').h)
+      let ds: Dataset | undefined
+      if (kind === 'data') {
+        ds = D.newDataset(`Database ${(this.board.datasets?.length ?? 0) + 1}`)
+        r = rectFromCenter(center(r), Math.max(r.w, D.viewSize(ds, 'table').w), Math.max(r.h, D.viewSize(ds, 'table').h))
+      }
       const extra: Partial<Item> =
-        kind === 'table'
+        ds
+          ? { text: ds.name, view: D.newView(ds.id, 'table') }
+          : kind === 'table'
           ? { text: 'Table', table: newTable() }
           : kind === 'kanban'
             ? { text: 'Kanban board', kanban: newKanban() }
@@ -1471,7 +1543,7 @@ export class Editor {
             ? { createdAt: Date.now() }
             : {}
       let b: Board
-      ;[b, id] = B.addItem(this.board, B.newItem(kind, r, extra))
+      ;[b, id] = B.addItem(ds ? D.addDataset(this.board, ds) : this.board, B.newItem(kind, r, extra))
       // A frame goes beneath whatever it was drawn around.
       if (kind === 'frame') b = B.sendToBack(b, new Set([id]))
       this.apply(b)

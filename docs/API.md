@@ -37,6 +37,28 @@ Pasting that produces:
 
 ![A board generated from operations](api-generated.png)
 
+### Linked data example
+
+```json
+{
+  "ops": [
+    {
+      "op": "createDatabase", "ref": "roadmap", "title": "Roadmap",
+      "views": ["table", "board", "timeline"], "groupBy": "Status",
+      "records": [
+        { "Feature": "SSO", "Status": "In progress", "Owner": "Sam", "Start": "2026-10-01", "End": "2026-10-20", "Points": 8 },
+        { "Feature": "Exports", "Status": "To do", "Owner": "Jo", "Start": "2026-10-15", "End": "2026-11-02", "Points": 3 }
+      ]
+    },
+    { "op": "updateRecord", "id": "roadmap", "record": "Exports", "values": { "Status": "In progress" } }
+  ]
+}
+```
+
+That makes one set of records shown three ways. Moving "Exports" to *In
+progress* moves its card on the board and recolours its bar on the
+timeline.
+
 ## Conventions
 
 - **Refs.** Any create operation can take `"ref": "name"`. Later operations in
@@ -69,6 +91,10 @@ Pasting that produces:
 | `update` | `id`, `text?`, `color?`, `x?`, `y?`, `w?`, `h?` | — |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
 | `addComment` | `id`, `text`, `author?` | Timestamped work note on the object. Mention other objects with `@[Label](#id)`. |
+| `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
+| `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
+| `updateRecord` | `id` (any view), `record` (record id or title), `values` | Sets fields by name; `null` or `""` clears one. |
+| `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
 
 Every operation returns a result: `{ "op", "id"?, "ids"?, "ref"? }`. `ids` lists
 everything a multi-object operation (mind map, flowchart) created.

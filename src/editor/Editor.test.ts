@@ -432,3 +432,45 @@ describe('runbook mode', () => {
     expect(e.startRun(e.board.items[2].id)).toBe(false)
   })
 })
+
+describe('linked data', () => {
+  it('converts a Kanban board to linked data and adds a timeline view of it', () => {
+    const e = editor()
+    e.setViewport(1200, 800)
+    let b = emptyBoard()
+    let id: number
+    ;[b, id] = B.addItem(
+      b,
+      B.newItem('kanban', { x: 0, y: 0, w: 600, h: 400 }, { text: 'Sprint', kanban: { columns: [{ id: 'a', title: 'To do', cards: [{ id: 'c', title: 'Spec', start: '2026-10-01', due: '2026-10-09' }] }, { id: 'b', title: 'Done', cards: [] }] } }),
+    )
+    e.load(b)
+    e.convertToData(id)
+    const item = B.getItem(e.board, id)!
+    expect(item.kind).toBe('data')
+    expect(item.kanban).toBeUndefined()
+    expect(item.view!.type).toBe('board')
+    expect(e.board.datasets![0].records).toHaveLength(1)
+    e.addDataView(id, 'timeline')
+    const views = e.board.items.filter((i) => i.view)
+    expect(views.map((v) => v.view!.type)).toEqual(['board', 'timeline'])
+    expect(views[1].x).toBeGreaterThan(item.x + item.w)
+    // One dataset edit, every view sees it.
+    const ds = e.board.datasets![0]
+    e.updateDataset(ds.id, (d) => ({ ...d, name: 'Renamed' }))
+    expect(e.board.datasets![0].name).toBe('Renamed')
+    e.undo()
+    expect(e.board.datasets![0].name).toBe('Sprint')
+  })
+
+  it('deleting the last view drops the dataset, and undo brings both back', () => {
+    const e = editor()
+    e.setTool('data')
+    e.pointerDown({ x: 300, y: 300 }, 0, {})
+    e.pointerUp({ x: 300, y: 300 })
+    expect(e.board.datasets).toHaveLength(1)
+    e.deleteSelection()
+    expect(e.board.datasets ?? []).toHaveLength(0)
+    e.undo()
+    expect(e.board.datasets).toHaveLength(1)
+  })
+})

@@ -16,6 +16,7 @@ export type Kind =
   | 'table'
   | 'kanban'
   | 'timeline'
+  | 'data'
 
 /** A timestamped work note attached to an object. */
 export interface Note {
@@ -24,6 +25,58 @@ export interface Note {
   /** Milliseconds since the epoch. */
   at: number
   author?: string
+}
+
+// ----- linked data: one dataset, many views ------------------------------------------
+
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'person' | 'checkbox'
+
+export interface SelectOption {
+  id: string
+  name: string
+  color: string
+}
+
+export interface Field {
+  id: string
+  name: string
+  type: FieldType
+  /** The choices of a `select` field, in order. */
+  options?: SelectOption[]
+}
+
+/** A field value: text, a number, an ISO date, a select option's id, or a checkbox. */
+export type FieldValue = string | number | boolean
+
+export interface DataRecord {
+  id: string
+  values: Record<string, FieldValue>
+}
+
+/** Records shared by every view that shows them. */
+export interface Dataset {
+  id: string
+  name: string
+  fields: Field[]
+  records: DataRecord[]
+}
+
+export type DataViewType = 'table' | 'board' | 'timeline'
+
+/** How a `data` item shows its dataset. Sorting, filtering and hiding change the view, never the data. */
+export interface DataView {
+  dataset: string
+  type: DataViewType
+  sort?: { field: string; dir: 'asc' | 'desc' }
+  /** Case-insensitive "contains" across every shown field. */
+  query?: string
+  /** Fields hidden in this view. */
+  hidden?: string[]
+  /** Board columns (and timeline lanes) come from this select or person field. */
+  groupBy?: string
+  /** Timeline bars run from `start` to `end` (date fields). */
+  start?: string
+  end?: string
 }
 
 /** One step of a flowchart run (runbook mode). */
@@ -161,6 +214,8 @@ export interface Item extends Rect {
   /** Runs of the flowchart this shape starts (runbook mode), oldest first. */
   runs?: RunRecord[]
   table?: TableData
+  /** A view of one of the board's datasets (`data` items). */
+  view?: DataView
   kanban?: KanbanData
   timeline?: TimelineData
 }
@@ -185,6 +240,8 @@ export interface Board {
   items: Item[]
   connectors: Connector[]
   nextId: Id
+  /** Records shown by `data` items; several items can show the same dataset. */
+  datasets?: Dataset[]
 }
 
 export const FORMAT_VERSION = 1
@@ -232,7 +289,7 @@ export const usesInk = (k: Kind) => k === 'text' || k === 'pen'
 export const hasText = (k: Kind) => k !== 'pen' && k !== 'image'
 export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table'
 /** Objects with their own interactive content (live once selected). */
-export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline'
+export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline' || k === 'data'
 /** Height of the draggable title strip on widgets. */
 export const WIDGET_TITLE_H = 40
 
@@ -262,6 +319,8 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 860, h: 460 }
     case 'timeline':
       return { w: 1000, h: 320 }
+    case 'data':
+      return { w: 760, h: 360 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -287,6 +346,7 @@ export function defaultColor(k: Kind): string {
     case 'image':
     case 'table':
     case 'timeline':
+    case 'data':
       return '#ffffff'
     case 'text':
     case 'pen':
@@ -307,6 +367,7 @@ export function defaultFontSize(k: Kind): number {
     case 'table':
     case 'kanban':
     case 'timeline':
+    case 'data':
       return 18
     default:
       return 22
@@ -327,4 +388,5 @@ export const KIND_LABELS: Record<Kind, string> = {
   table: 'Table',
   kanban: 'Kanban board',
   timeline: 'Timeline',
+  data: 'Database view',
 }

@@ -107,6 +107,13 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
       <path d="M7 3v18M17 3v18M3 7h18M3 17h18" />
     </Svg>
   ),
+  data: (
+    <Svg>
+      <ellipse cx="12" cy="6" rx="7" ry="2.6" />
+      <path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6" />
+      <path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6" />
+    </Svg>
+  ),
 }
 
 export const UndoIcon = () => (
