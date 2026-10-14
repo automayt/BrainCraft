@@ -1,5 +1,5 @@
 import * as B from '../model/board'
-import { BRANCHES, FILLS, INKS, MIND_ROOT_COLOR, usesInk } from '../model/types'
+import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, usesInk } from '../model/types'
 import { useEditor } from './useEditor'
 
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
@@ -14,9 +14,9 @@ export function SelectionToolbar() {
 
   if (editor.selectedConnector !== null) {
     const c = B.getConnector(board, editor.selectedConnector)
-    const ends = c && B.connectorEndpoints(board, c)
-    if (!ends) return null
-    const s = editor.screenRect({ x: (ends[0].x + ends[1].x) / 2, y: (ends[0].y + ends[1].y) / 2, w: 0, h: 0 })
+    const r = c && B.connectorRoute(board, c)
+    if (!r) return null
+    const s = editor.screenRect({ x: r.mid.x, y: r.mid.y, w: 0, h: 0 })
     anchor = { x: s.x, y: s.y - 24 }
     palette = INKS
   } else if (items.length) {
@@ -29,6 +29,8 @@ export function SelectionToolbar() {
     } else palette = items.every((i) => usesInk(i.kind)) ? INKS : FILLS
   } else return null
 
+  const connector = editor.selectedConnector !== null ? B.getConnector(board, editor.selectedConnector) : undefined
+  const flows = items.filter((i) => i.kind === 'flow')
   const x = Math.min(Math.max(anchor.x, 220), editor.viewport.w - 220)
   const y = Math.max(anchor.y, 56)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen')
@@ -48,6 +50,60 @@ export function SelectionToolbar() {
           />
         ))}
       </div>
+      {connector && (
+        <>
+          <span className="sep" />
+          {(['straight', 'elbow', 'curved'] as const).map((style) => (
+            <button
+              key={style}
+              className={(connector.style ?? 'straight') === style ? 'on' : ''}
+              title={`${style[0].toUpperCase()}${style.slice(1)} line`}
+              onClick={() => editor.setConnectorStyle(style)}
+            >
+              <LineStyleIcon style={style} />
+            </button>
+          ))}
+          <span className="sep" />
+          {(
+            [
+              ['end', '→', 'Arrow at the end'],
+              ['both', '↔', 'Arrows at both ends'],
+              ['none', '—', 'No arrows'],
+            ] as const
+          ).map(([arrows, glyph, title]) => (
+            <button
+              key={arrows}
+              className={(connector.arrows ?? 'end') === arrows ? 'on' : ''}
+              title={title}
+              onClick={() => editor.setArrowheads(arrows)}
+            >
+              {glyph}
+            </button>
+          ))}
+          <span className="sep" />
+          <button title="Label this line (or double-click it)" onClick={() => editor.startEditingLabel(connector.id)}>
+            Label
+          </button>
+        </>
+      )}
+      {flows.length > 0 && (
+        <>
+          <span className="sep" />
+          <select
+            aria-label="Shape"
+            title="Change shape"
+            value={flows.every((f) => f.shape === flows[0].shape) ? (flows[0].shape ?? 'process') : ''}
+            onChange={(e) => editor.setShape(e.target.value as FlowShape)}
+          >
+            {flows.some((f) => f.shape !== flows[0].shape) && <option value="">Mixed</option>}
+            {FLOW_SHAPES.map((f) => (
+              <option key={f.shape} value={f.shape}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       {hasFontSize && (
         <>
           <span className="sep" />
@@ -105,5 +161,14 @@ export function SelectionToolbar() {
         Delete
       </button>
     </div>
+  )
+}
+
+function LineStyleIcon({ style }: { style: 'straight' | 'elbow' | 'curved' }) {
+  const d = style === 'straight' ? 'M3 15L15 3' : style === 'elbow' ? 'M3 15H9V3H15' : 'M3 15C10 15 8 3 15 3'
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

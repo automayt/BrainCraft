@@ -200,6 +200,7 @@ button.icon svg {
 /* ----- workspace ----- */
 
 .workspace {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
@@ -516,5 +517,153 @@ kbd {
   }
   .topbar {
     overflow-x: auto;
+  }
+}
+
+/* ----- flowcharts ----- */
+
+.item-text.flow {
+  padding: 0;
+}
+
+.flow-add {
+  cursor: pointer;
+}
+
+.flow-add circle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.flow-add path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow-add:hover circle {
+  fill: var(--accent);
+}
+
+.flow-add:hover path {
+  stroke: #fff;
+}
+
+.connector-label {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.connector-label span {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.label-editor textarea {
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-weight: 600;
+}
+
+.flyout {
+  position: absolute;
+  left: 58px;
+  top: 8px;
+  width: 196px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 8;
+}
+
+.flyout-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 2px 6px 6px;
+}
+
+.flyout button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 4px 6px;
+  color: var(--text);
+}
+
+.flyout button.active {
+  background: #e3e8ff;
+  color: var(--accent);
+}
+
+.flyout-tip {
+  margin: 6px 4px 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.selection-toolbar button.on {
+  background: #e3e8ff;
+  color: var(--accent);
+}
+
+.selection-toolbar button svg {
+  display: block;
+}
+
+.selection-toolbar select {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+}
+
+.hint-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 260px);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(30, 30, 36, 0.86);
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@media (max-width: 720px) {
+  .hint-bar {
+    max-width: calc(100% - 24px);
+    bottom: 10px;
   }
 }

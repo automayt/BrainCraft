@@ -23,6 +23,29 @@ It runs entirely in the browser as a static site, so you can host it anywhere.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
   plain indentation) to turn it into a map. **Copy outline** does the reverse.
 
+### Flowcharts
+
+![A flowchart in BrainCraft](docs/flowchart.png)
+
+- Press **D** (or pick the flowchart tool) and choose a symbol: Start/End,
+  Process, Decision, Input/Output, Document, Database or Subprocess.
+- With a shape selected, **Tab** adds the next connected step in the direction
+  the flow is going. **Alt + arrow** adds one in that direction, e.g. the
+  "No" branch of a decision. While you're typing in a shape, **Tab** finishes
+  it and moves on to the next step.
+- Selected shapes show **blue arrows** on each side. Click one to add a step
+  that way, or drag it onto another shape (or onto empty space) to connect.
+- New steps line up and space themselves automatically, sliding past shapes
+  already in the way. Dragged shapes snap into line with their neighbors;
+  hold **Alt** to move freely.
+- Lines attach to the middle of a side and stay attached as you move things.
+  Choose straight, right-angled or curved lines and which ends get arrows.
+  **Double-click a line** to label it ("Yes", "No").
+- Change a shape's symbol from the toolbar at any time.
+
+A hint bar at the bottom of the canvas shows the shortcuts that apply to
+whatever you have selected.
+
 ### Whiteboard
 
 - An infinite canvas with a dot grid. Pan, zoom from 5% to 800%, zoom to fit,

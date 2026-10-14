@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, type PointerEvent as RPointerEvent } from 'react'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
+import type { FlowDir } from '../model/flowchart'
+import { flowTextRect } from '../model/shapes'
 import * as B from '../model/board'
 import { toScreen } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
@@ -25,6 +27,8 @@ function readHandle(target: EventTarget | null): Handle | undefined {
       return { kind }
     case 'mindAdd':
       return { kind, id, side: (el.getAttribute('data-side') as 'left' | 'right' | null) ?? undefined }
+    case 'flowAdd':
+      return { kind, dir: el.getAttribute('data-dir') as FlowDir }
     case 'collapse':
       return { kind, id }
   }
@@ -100,7 +104,7 @@ export function Canvas() {
         return
       }
     }
-    editor.pointerMove(p)
+    editor.pointerMove(p, { alt: e.altKey })
   }
 
   const onPointerUp = (e: RPointerEvent) => {
@@ -157,7 +161,8 @@ export function Canvas() {
           <BoardView
             board={board}
             hidden={editor.hidden}
-            editingId={editor.editing?.id ?? null}
+            editingId={editor.editing && !editor.editing.connector ? editor.editing.id : null}
+            editingLabel={editor.editing?.connector ? editor.editing.id : null}
             selectedConnector={editor.selectedConnector}
             selection={editor.selection}
           />
@@ -170,7 +175,8 @@ export function Canvas() {
           Double-click to add a sticky note, or press <kbd>M</kbd> and click to start a mind map
         </div>
       )}
-      {editor.editing && <TextEditor editor={editor} />}
+      {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
+      {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <SelectionToolbar />
       <Minimap />
     </div>
@@ -188,6 +194,16 @@ function DragPreview({ editor }: { editor: Editor }) {
   const d = editor.drag
   const z = editor.camera.zoom
   switch (d.type) {
+    case 'move': {
+      const v = editor.visibleWorld
+      const style = { stroke: '#e0457b', strokeWidth: 1 / z, strokeDasharray: `${4 / z} ${3 / z}` }
+      return (
+        <g>
+          {d.guides.x !== undefined && <line x1={d.guides.x} x2={d.guides.x} y1={v.y} y2={v.y + v.h} {...style} />}
+          {d.guides.y !== undefined && <line y1={d.guides.y} y2={d.guides.y} x1={v.x} x2={v.x + v.w} {...style} />}
+        </g>
+      )
+    }
     case 'create': {
       if (d.kind === 'mind') return null
       const r = rectFromPoints(d.start, d.current)
@@ -304,6 +320,22 @@ function Overlays({ editor }: { editor: Editor }) {
           </g>,
         )
       }
+    } else if (single.kind === 'flow') {
+      const arrows: [FlowDir, number, number, number][] = [
+        ['up', r.x + r.w / 2, r.y - 22, -90],
+        ['right', r.x + r.w + 22, r.y + r.h / 2, 0],
+        ['down', r.x + r.w / 2, r.y + r.h + 22, 90],
+        ['left', r.x - 22, r.y + r.h / 2, 180],
+      ]
+      for (const [dir, x, y, angle] of arrows) {
+        out.push(
+          <g key={dir} data-handle="flowAdd" data-dir={dir} className="flow-add" transform={`translate(${x} ${y}) rotate(${angle})`}>
+            <title>Click to add the next step, or drag to connect</title>
+            <circle r={11} />
+            <path d="M-4.5 0H4.5M1 -3.5L4.5 0L1 3.5" />
+          </g>,
+        )
+      }
     } else if (single.kind !== 'pen') {
       const p = { x: r.x + r.w + 18, y: r.y + r.h / 2 }
       out.push(
@@ -332,8 +364,9 @@ function parentCenterX(editor: Editor, node: { parent?: number }) {
 function TextEditor({ editor }: { editor: Editor }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const e = editor.editing!
-  const item = B.getItem(editor.board, e.id)
+  const item = e.connector ? undefined : B.getItem(editor.board, e.id)
   const z = editor.camera.zoom
+  const label = e.connector ? B.connectorRoute(editor.board, B.getConnector(editor.board, e.id)!) : null
 
   useEffect(() => {
     const el = ref.current
@@ -350,6 +383,35 @@ function TextEditor({ editor }: { editor: Editor }) {
     el.style.height = `${el.scrollHeight}px`
   })
 
+  if (label) {
+    const m = editor.screenRect({ x: label.mid.x, y: label.mid.y, w: 0, h: 0 })
+    return (
+      <div
+        className="text-editor label-editor no-canvas"
+        style={{ left: m.x - 110, top: m.y - 18, width: 220, height: 36, alignItems: 'center' }}
+        onPointerDown={(ev) => ev.stopPropagation()}
+      >
+        <textarea
+          ref={ref}
+          value={editor.editingText}
+          rows={1}
+          placeholder="Label"
+          style={{ fontSize: Math.max(12, 14 * z), textAlign: 'center', fontFamily: FONT_FAMILY, lineHeight: LINE_HEIGHT }}
+          onChange={(ev) => editor.setEditingText(ev.target.value.replace(/\n/g, ' '))}
+          onKeyDown={(ev) => {
+            ev.stopPropagation()
+            if (ev.key === 'Enter' || ev.key === 'Escape') {
+              ev.preventDefault()
+              editor.finishEditing()
+            }
+          }}
+          onBlur={() => {
+            if (editor.editing?.id === e.id) editor.finishEditing()
+          }}
+        />
+      </div>
+    )
+  }
   if (!item) return null
   const r = editor.screenRect(item)
   let box: Rect
@@ -371,6 +433,9 @@ function TextEditor({ editor }: { editor: Editor }) {
       break
     case 'ellipse':
       box = inset(r, Math.min(r.w, r.h) * 0.15 + 14 * z)
+      break
+    case 'flow':
+      box = editor.screenRect(flowTextRect(item))
       break
     case 'mind': {
       const depth = mindDepths(editor.board).get(item.id) ?? 0
