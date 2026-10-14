@@ -1,0 +1,386 @@
+/**
+ * The BrainCraft operations API: a small JSON language for building boards,
+ * meant for scripts and AI assistants. A batch of operations is applied all
+ * at once (one undo step) or not at all; later operations can refer to
+ * objects made earlier in the batch by the `ref` name given to them.
+ *
+ * See docs/API.md for the full reference.
+ */
+
+import * as B from '../model/board'
+import { type Rect, type Vec, unionAll } from '../model/geom'
+import { newKanban } from '../model/kanban'
+import { insertMermaid, parseMermaid } from '../model/mermaid'
+import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
+import { addNote } from '../model/notes'
+import { tableSize } from '../model/table'
+import { isIsoDay } from '../model/timeline'
+import { uid } from '../model/uid'
+import {
+  type Arrowheads,
+  BRANCHES,
+  type Board,
+  type ConnectorStyle,
+  FILLS,
+  type Id,
+  type Item,
+  type KanbanData,
+  type TableData,
+  type TimelineData,
+} from '../model/types'
+
+/** An object id, or the `ref` name of an object created earlier in the same batch. */
+export type Ref = number | string
+
+interface Placed {
+  /** Name to refer to this object later in the batch. */
+  ref?: string
+  /** Top-left corner on the board. Omit to place it beside existing content. */
+  at?: Vec
+}
+
+export type Op =
+  | ({ op: 'createNote'; text: string; color?: string; w?: number; h?: number } & Placed)
+  | ({ op: 'createText'; text: string; fontSize?: number; w?: number } & Placed)
+  | ({ op: 'createShape'; shape?: 'rect' | 'ellipse'; text?: string; color?: string; w?: number; h?: number } & Placed)
+  | ({ op: 'createComment'; text: string } & Placed)
+  | ({ op: 'createFrame'; title: string; around?: Ref[]; w?: number; h?: number } & Placed)
+  | ({ op: 'createMindMap'; outline?: string; tree?: OutlineNode } & Placed)
+  | ({ op: 'createFlowchart'; mermaid: string } & Placed)
+  | ({ op: 'createTable'; title?: string; columns: string[]; rows?: (string | number)[][] } & Placed)
+  | ({
+      op: 'createKanban'
+      title?: string
+      columns?: { title: string; cards?: (string | { title: string; start?: string; due?: string; color?: string })[] }[]
+    } & Placed)
+  | ({
+      op: 'createTimeline'
+      title?: string
+      lanes?: { name: string; entries?: { title: string; start: string; end?: string; color?: string }[] }[]
+      followKanban?: Ref[]
+      w?: number
+      h?: number
+    } & Placed)
+  | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
+  | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
+  | { op: 'update'; id: Ref; text?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
+  | { op: 'delete'; ids: Ref[] }
+  | { op: 'addComment'; id: Ref; text: string; author?: string }
+
+export interface OpResult {
+  op: Op['op']
+  /** Id of the object or line created (if any). */
+  id?: Id
+  /** Ids of everything created, for multi-object operations like flowcharts and mind maps. */
+  ids?: Id[]
+  ref?: string
+}
+
+export interface ApplyContext {
+  measure: Measure
+  /** Where to start placing objects on an empty board. */
+  origin?: Vec
+  now?: number
+}
+
+export class OpError extends Error {}
+
+const GAP = 80
+
+function fail(index: number, op: { op?: unknown }, message: string): never {
+  throw new OpError(`Operation ${index + 1} (${String(op.op ?? '?')}): ${message}`)
+}
+
+/**
+ * Applies `ops` to `board` and returns the new board. Throws an `OpError`
+ * naming the failing operation, leaving the input untouched.
+ */
+export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: Board; results: OpResult[] } {
+  if (!Array.isArray(ops)) throw new OpError('Expected a list of operations')
+  let b = board
+  const refs = new Map<string, Id>()
+  const results: OpResult[] = []
+  const existing = B.bounds(board)
+  // New objects without a position go in a column to the right of the existing content.
+  const column = { x: existing ? existing.x + existing.w + GAP * 1.5 : (ctx.origin?.x ?? 0), y: existing ? existing.y : (ctx.origin?.y ?? 0) }
+
+  ops.forEach((op, index) => {
+    if (!op || typeof op !== 'object' || typeof op.op !== 'string') fail(index, op ?? {}, 'each operation needs an "op" name')
+
+    const resolve = (ref: Ref | undefined, field: string): Id => {
+      if (typeof ref === 'number' && B.getItem(b, ref)) return ref
+      if (typeof ref === 'string') {
+        const id = refs.get(ref) ?? (/^\d+$/.test(ref) ? Number(ref) : undefined)
+        if (id !== undefined && B.getItem(b, id)) return id
+      }
+      fail(index, op, `"${field}" refers to ${JSON.stringify(ref)}, which isn't an object on the board or an earlier "ref"`)
+    }
+    const text = (v: unknown, field: string, required = true): string => {
+      if (v === undefined && !required) return ''
+      if (typeof v !== 'string' && typeof v !== 'number') fail(index, op, `"${field}" should be text`)
+      return String(v)
+    }
+    const date = (v: unknown, field: string): string | undefined => {
+      if (v === undefined || v === '') return undefined
+      if (typeof v !== 'string' || !isIsoDay(v)) fail(index, op, `"${field}" should be a date like 2026-10-14`)
+      return v
+    }
+
+    /** Adds items, then moves the group to `at` (or the next free spot). */
+    const place = (ids: Id[], at?: Vec) => {
+      b = layoutAll(b, ctx.measure)
+      const box = unionAll(ids.map((id) => B.itemBounds(B.getItem(b, id)!))) as Rect | null
+      if (!box) return
+      const target = at ?? { x: column.x, y: column.y }
+      if (at && (typeof at.x !== 'number' || typeof at.y !== 'number')) fail(index, op, '"at" should be {"x": number, "y": number}')
+      b = B.translate(b, B.movingSet(b, new Set(ids)), target.x - box.x, target.y - box.y)
+      b = layoutAll(b, ctx.measure)
+      if (!at) column.y += box.h + GAP
+    }
+    const add = (item: Omit<Item, 'id'>): Id => {
+      let id: Id
+      ;[b, id] = B.addItem(b, item)
+      return id
+    }
+    const done = (result: Omit<OpResult, 'op'>) => {
+      if ('ref' in op && op.ref) {
+        if (result.id === undefined) fail(index, op, '"ref" needs an operation that creates something')
+        refs.set(op.ref, result.id)
+      }
+      results.push({ op: op.op, ...result, ...('ref' in op && op.ref ? { ref: op.ref } : {}) })
+    }
+    const r0 = (w: number, h: number) => ({ x: 0, y: 0, w, h })
+
+    switch (op.op) {
+      case 'createNote': {
+        const id = add(B.newItem('sticky', r0(op.w ?? 200, op.h ?? 200), { text: text(op.text, 'text'), ...(op.color ? { color: colorByName(op.color)! } : {}) }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createText': {
+        const fontSize = op.fontSize ?? 28
+        const t = text(op.text, 'text')
+        const id = add(B.newItem('text', r0(op.w ?? Math.min(800, Math.max(120, t.length * fontSize * 0.55)), fontSize * 1.4 * t.split('\n').length + 8), { text: t, fontSize }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createShape': {
+        const kind = op.shape === 'ellipse' ? 'ellipse' : 'rect'
+        if (op.shape && op.shape !== 'rect' && op.shape !== 'ellipse') fail(index, op, '"shape" should be "rect" or "ellipse" (use createFlowchart for flowchart symbols)')
+        const id = add(B.newItem(kind, r0(op.w ?? 220, op.h ?? 140), { text: text(op.text, 'text', false), ...(op.color ? { color: colorByName(op.color)! } : {}) }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createComment': {
+        const id = add(B.newItem('comment', r0(260, 150), { text: text(op.text, 'text'), createdAt: ctx.now ?? Date.now() }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createFrame': {
+        const title = text(op.title, 'title')
+        if (op.around?.length) {
+          const inner = op.around.map((r, k) => resolve(r, `around[${k}]`))
+          const box = unionAll(inner.map((id) => B.itemBounds(B.getItem(b, id)!)))!
+          const pad = 40
+          const id = add(B.newItem('frame', { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad }, { text: title }))
+          b = B.sendToBack(b, new Set([id]))
+          done({ id })
+        } else {
+          const id = add(B.newItem('frame', r0(op.w ?? 800, op.h ?? 600), { text: title }))
+          b = B.sendToBack(b, new Set([id]))
+          place([id], op.at)
+          done({ id })
+        }
+        break
+      }
+      case 'createMindMap': {
+        const tree = op.tree ?? (op.outline !== undefined ? parseOutline(text(op.outline, 'outline')) : null)
+        if (!tree || typeof tree.text !== 'string') fail(index, op, 'give "outline" (an indented list, 2+ lines) or "tree" ({"text": …, "children": […]})')
+        const normalize = (n: OutlineNode): OutlineNode => ({ text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] })
+        const before = new Set(b.items.map((i) => i.id))
+        let root: Id
+        ;[b, root] = createMapFromOutline(b, normalize(tree), { x: 0, y: 0 })
+        const ids = b.items.filter((i) => !before.has(i.id)).map((i) => i.id)
+        place(ids, op.at)
+        done({ id: root, ids })
+        break
+      }
+      case 'createFlowchart': {
+        let ids: Id[]
+        try {
+          ;[b, ids] = insertMermaid(b, parseMermaid(text(op.mermaid, 'mermaid')), { x: 0, y: 0 })
+        } catch (err) {
+          if (err instanceof OpError) throw err
+          fail(index, op, (err as Error).message)
+        }
+        place(ids, op.at)
+        done({ id: ids[0], ids })
+        break
+      }
+      case 'createTable': {
+        if (!Array.isArray(op.columns) || !op.columns.length) fail(index, op, '"columns" should be a list of column names')
+        const columns = op.columns.map((name, k) => ({ id: uid(), name: text(name, `columns[${k}]`), width: 150 }))
+        const rows = (op.rows ?? []).map((row, k) => {
+          if (!Array.isArray(row)) fail(index, op, `rows[${k}] should be a list of cell values`)
+          return { id: uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
+        })
+        const table: TableData = { columns, rows }
+        const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: op.title ?? 'Table', table }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createKanban': {
+        const kanban: KanbanData = op.columns
+          ? {
+              columns: op.columns.map((c, k) => ({
+                id: uid(),
+                title: text(c?.title, `columns[${k}].title`),
+                cards: (c.cards ?? []).map((card, j) => {
+                  const f = `columns[${k}].cards[${j}]`
+                  if (typeof card === 'string') return { id: uid(), title: card }
+                  return {
+                    id: uid(),
+                    title: text(card?.title, `${f}.title`),
+                    ...(date(card.start, `${f}.start`) ? { start: card.start } : {}),
+                    ...(date(card.due, `${f}.due`) ? { due: card.due } : {}),
+                    ...(card.color ? { color: card.color } : {}),
+                  }
+                }),
+              })),
+            }
+          : newKanban()
+        const id = add(B.newItem('kanban', r0(Math.max(600, kanban.columns.length * 272 + 200), 460), { text: op.title ?? 'Kanban board', kanban }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createTimeline': {
+        const lanes: TimelineData['lanes'] = []
+        const entries: TimelineData['entries'] = []
+        ;(op.lanes ?? []).forEach((lane, k) => {
+          const id = uid()
+          lanes.push({ id, name: text(lane?.name, `lanes[${k}].name`) })
+          ;(lane.entries ?? []).forEach((e, j) => {
+            const f = `lanes[${k}].entries[${j}]`
+            const start = date(e?.start, `${f}.start`)
+            if (!start) fail(index, op, `"${f}.start" is required`)
+            const end = date(e.end, `${f}.end`)
+            if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
+            entries.push({ id: uid(), lane: id, title: text(e.title, `${f}.title`), start, ...(end ? { end } : {}), color: e.color ?? BRANCHES[entries.length % BRANCHES.length][1] })
+          })
+        })
+        const sources = (op.followKanban ?? []).map((r, k) => {
+          const id = resolve(r, `followKanban[${k}]`)
+          if (B.getItem(b, id)?.kind !== 'kanban') fail(index, op, `followKanban[${k}] isn't a Kanban board`)
+          return id
+        })
+        const timeline: TimelineData = { lanes, entries, ...(sources.length ? { sources } : {}) }
+        const id = add(B.newItem('timeline', r0(op.w ?? 1000, op.h ?? Math.max(220, 120 + (lanes.length + sources.length) * 46)), { text: op.title ?? 'Timeline', timeline }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'createImage': {
+        const src = text(op.src, 'src')
+        if (!/^(data:image\/|https?:\/\/)/.test(src)) fail(index, op, '"src" should be a data:image/… URL or an http(s) URL')
+        const id = add(B.newItem('image', r0(op.w ?? 400, op.h ?? 300), { src }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
+      case 'connect': {
+        const from = resolve(op.from, 'from')
+        const to = resolve(op.to, 'to')
+        const a = B.getItem(b, from)
+        const z = B.getItem(b, to)
+        let id: Id | null
+        ;[b, id] = B.connect(b, from, to, {
+          style: op.style ?? B.defaultStyleBetween(a, z),
+          ...(op.label ? { label: text(op.label, 'label') } : {}),
+          ...(op.arrows ? { arrows: op.arrows } : {}),
+          ...(op.dashed ? { dashed: true } : {}),
+        })
+        if (id === null) fail(index, op, 'those two are already connected (or are the same object)')
+        done({ id })
+        break
+      }
+      case 'update': {
+        const id = resolve(op.id, 'id')
+        b = B.updateItem(b, id, (i) => ({
+          ...i,
+          ...(op.text !== undefined ? { text: text(op.text, 'text') } : {}),
+          ...(op.color ? { color: colorByName(op.color)! } : {}),
+          ...(typeof op.x === 'number' ? { x: op.x } : {}),
+          ...(typeof op.y === 'number' ? { y: op.y } : {}),
+          ...(typeof op.w === 'number' && op.w > 0 ? { w: op.w } : {}),
+          ...(typeof op.h === 'number' && op.h > 0 ? { h: op.h } : {}),
+        }))
+        done({ id })
+        break
+      }
+      case 'delete': {
+        if (!Array.isArray(op.ids)) fail(index, op, '"ids" should be a list')
+        const ids = new Set<Id>()
+        op.ids.forEach((r, k) => {
+          const id = resolve(r, `ids[${k}]`)
+          for (const d of B.getItem(b, id)?.kind === 'mind' ? B.subtree(b, id) : [id]) ids.add(d)
+        })
+        b = B.remove(b, ids)
+        done({ ids: [...ids] })
+        break
+      }
+      case 'addComment': {
+        const id = resolve(op.id, 'id')
+        b = addNote(b, id, text(op.text, 'text'), op.author, ctx.now)
+        done({ id })
+        break
+      }
+      default:
+        fail(index, op, `unknown operation. Known: ${OPS.join(', ')}`)
+    }
+  })
+  return { board: layoutAll(b, ctx.measure), results }
+}
+
+export const OPS: Op['op'][] = [
+  'createNote',
+  'createText',
+  'createShape',
+  'createComment',
+  'createFrame',
+  'createMindMap',
+  'createFlowchart',
+  'createTable',
+  'createKanban',
+  'createTimeline',
+  'createImage',
+  'connect',
+  'update',
+  'delete',
+  'addComment',
+]
+
+/** Pulls a list of operations out of pasted JSON: `{"ops": […]}`, a bare list, or one operation. */
+export function opsFromText(text: string): Op[] | null {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  const list = Array.isArray(raw) ? raw : (raw as { ops?: unknown })?.ops
+  if (Array.isArray(list) && list.length && list.every((o) => o && typeof o === 'object' && typeof (o as Op).op === 'string')) return list as Op[]
+  if (raw && typeof raw === 'object' && typeof (raw as Op).op === 'string') return [raw as Op]
+  return null
+}
+
+// Colours by name, so scripts can say "yellow" instead of a hex code.
+const NAMED = new Map(FILLS.map(([name, hex]) => [name.toLowerCase(), hex]))
+export function colorByName(c: string | undefined): string | undefined {
+  return c ? (NAMED.get(c.toLowerCase()) ?? c) : undefined
+}
