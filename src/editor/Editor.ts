@@ -11,6 +11,7 @@ import { History } from '../model/history'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import * as N from '../model/notes'
+import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
 import { clipFromText, clipToText } from '../model/serialize'
 import {
   type Arrowheads,
@@ -143,6 +144,8 @@ export class Editor {
   searchOpen = false
   /** Name stamped on new comments. */
   author = ''
+  /** A flowchart line dropped on empty space, waiting for the user to pick the next shape. */
+  shapePicker: { from: Id; at: Vec; options: FlowShape[] } | null = null
   spaceDown = false
   /** Last pointer position in world space, for pasting. */
   pointer: Vec | null = null
@@ -461,6 +464,58 @@ export class Editor {
     this.keepInView(newId)
   }
 
+  /** Creates the shape chosen in the shape picker, linked from where the line started. */
+  pickShape(shape: FlowShape) {
+    const p = this.shapePicker
+    if (!p) return
+    this.shapePicker = null
+    const before = this.board
+    const [b, id] = F.addStepAt(this.board, p.from, shape, p.at)
+    this.apply(b)
+    this.startEditing(id, { before, created: true })
+  }
+
+  cancelShapePicker() {
+    this.shapePicker = null
+    this.emit()
+  }
+
+  // ----- images, imports -----------------------------------------------------------
+
+  /** Places an image (natural size `w`×`h`) at the pointer, scaled down to a sensible size. */
+  addImage(src: string, w: number, h: number, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    const scale = Math.min(1, 480 / Math.max(w, h))
+    const size = { w: Math.max(8, w * scale), h: Math.max(8, h * scale) }
+    let id = -1
+    this.edit((b) => {
+      const [next, newId] = B.addItem(b, B.newItem('image', rectFromCenter(at, size.w, size.h), { src }))
+      id = newId
+      return next
+    })
+    this.tool = 'select'
+    this.select([id])
+  }
+
+  /** Inserts a Mermaid flowchart at the pointer (or view centre). Throws if it can't be read. */
+  importMermaid(text: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    const graph = parseMermaid(text)
+    let ids: Id[] = []
+    this.edit((b) => {
+      const [next, newIds] = insertMermaid(b, graph, at)
+      ids = newIds
+      return next
+    })
+    this.select(ids)
+    this.zoomToFit()
+    this.status = `Added a flowchart with ${ids.length} shapes`
+    this.emit()
+  }
+
+  /** Mermaid for the selection, or for every flowchart shape when nothing is selected. */
+  exportMermaid(): string {
+    return toMermaid(this.board, this.selection.size ? this.selection : undefined)
+  }
+
   /** Changes the symbol of the selected flowchart shapes. */
   setShape(shape: FlowShape) {
     this.edit((b) =>
@@ -476,6 +531,11 @@ export class Editor {
   setConnectorStyle(style: ConnectorStyle) {
     const id = this.selectedConnector
     if (id !== null) this.edit((b) => B.updateConnector(b, id, (c) => ({ ...c, style })))
+  }
+
+  setDashed(dashed: boolean) {
+    const id = this.selectedConnector
+    if (id !== null) this.edit((b) => B.updateConnector(b, id, (c) => ({ ...c, dashed })))
   }
 
   setArrowheads(arrows: Arrowheads) {
@@ -614,6 +674,14 @@ export class Editor {
       }))
       return
     }
+    if (looksLikeMermaid(text)) {
+      try {
+        this.importMermaid(text, at)
+      } catch (err) {
+        this.setStatus(`Couldn't read that Mermaid: ${(err as Error).message}`)
+      }
+      return
+    }
     const outline = M.parseOutline(text)
     if (outline) {
       let root = -1
@@ -650,6 +718,7 @@ export class Editor {
 
   pointerDown(screen: Vec, button: number, mods: Modifiers, handle?: Handle) {
     const world = toWorld(this.camera, screen)
+    this.shapePicker = null
     this.pointer = world
     if (button === 1 || this.spaceDown || (button === 0 && this.tool === 'hand')) {
       this.drag = { type: 'pan', last: screen }
@@ -808,6 +877,15 @@ export class Editor {
         const r = rectFromPoints(d.anchor, world)
         r.w = Math.max(r.w, 12)
         r.h = Math.max(r.h, 12)
+        const item = B.getItem(this.board, d.id)
+        // Images keep their proportions; shift-drag to stretch.
+        if (item?.kind === 'image' && !mods.shift) {
+          const ratio = item.w / item.h
+          if (r.w / r.h > ratio) r.w = r.h * ratio
+          else r.h = r.w / ratio
+          if (world.x < d.anchor.x) r.x = d.anchor.x - r.w
+          if (world.y < d.anchor.y) r.y = d.anchor.y - r.h
+        }
         this.apply(B.updateItem(this.board, d.id, (i) => B.setRect(i, r)))
         break
       }
@@ -962,12 +1040,13 @@ export class Editor {
       return
     }
     if (source.kind === 'pen' || source.kind === 'frame') return
-    const item =
-      source.kind === 'flow'
-        ? F.flowItem(F.nextShape(source.shape), world)
-        : B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize })
+    if (source.kind === 'flow') {
+      this.shapePicker = { from, at: world, options: F.recommendShapes(this.board, source.shape) }
+      return
+    }
+    const item = B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize })
     const [b, id] = B.addItem(this.board, item)
-    this.apply(B.connect(b, from, id, { style: B.defaultStyleBetween(source, item as Item) })[0])
+    this.apply(B.connect(b, from, id)[0])
     this.startEditing(id, { before, created: true })
   }
 
@@ -996,6 +1075,13 @@ export class Editor {
   /** Keyboard shortcuts on the canvas (not while typing). */
   keyDown(key: string, mods: Modifiers): KeyResult {
     const k = key.length === 1 ? key.toLowerCase() : key
+    if (this.shapePicker) {
+      const n = Number(k)
+      if (n >= 1 && n <= this.shapePicker.options.length) this.pickShape(this.shapePicker.options[n - 1])
+      else if (k === 'Escape') this.cancelShapePicker()
+      else return false
+      return true
+    }
     if (mods.ctrl) {
       if (k === 'z' && mods.shift) this.redo()
       else if (k === 'z') this.undo()

@@ -151,6 +151,7 @@ export interface Connector {
   style?: ConnectorStyle
   /** Defaults to `end`. */
   arrows?: Arrowheads
+  dashed?: boolean
 }
 
 export interface Board {

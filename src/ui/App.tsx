@@ -4,7 +4,9 @@ import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import { FLOW_SHAPES, INKS } from '../model/types'
 import { Canvas } from './Canvas'
-import { CommentsIcon, FlowShapeIcon, Logo, RedoIcon, SearchIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { CommentsIcon, FlowShapeIcon, ImageIcon, Logo, RedoIcon, SearchIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { imageFiles, readImage } from './images'
+import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
 import { SearchPalette } from './SearchPalette'
 import { measureText } from './measure'
@@ -94,6 +96,18 @@ export function App() {
     }
     const onPaste = (e: ClipboardEvent) => {
       if (isTyping(e.target)) return
+      // Images first: copying from a browser or screenshot tool puts the picture on the clipboard.
+      const images = imageFiles(e.clipboardData?.files)
+      if (images.length) {
+        e.preventDefault()
+        for (const file of images) {
+          readImage(file).then(
+            (img) => editor.addImage(img.src, img.w, img.h),
+            (err) => editor.setStatus(err.message),
+          )
+        }
+        return
+      }
       const text = e.clipboardData?.getData('text/plain')
       if (text) {
         editor.pasteText(text)
@@ -134,6 +148,7 @@ function TopBar() {
   const editor = useEditor()
   const file = useRef<HTMLInputElement>(null)
   const [help, setHelp] = useState(false)
+  const [porting, setPorting] = useState(false)
   return (
     <header className="topbar">
       <div className="brand">
@@ -159,6 +174,9 @@ function TopBar() {
         <button onClick={() => file.current?.click()}>Open…</button>
         <button title="Download as a .braincraft.json file (Ctrl+S)" onClick={() => download(editor)}>
           Download
+        </button>
+        <button title="Import Mermaid, lists or JSON; export Mermaid or JSON" onClick={() => setPorting(true)}>
+          Import / Export
         </button>
         <input
           ref={file}
@@ -219,6 +237,7 @@ function TopBar() {
         ?
       </button>
       {help && <Help onClose={() => setHelp(false)} />}
+      {porting && <ImportExport onClose={() => setPorting(false)} />}
     </header>
   )
 }
@@ -241,6 +260,7 @@ function ToolBar() {
           {TOOL_ICONS[tool]}
         </button>
       ))}
+      <ImageButton />
       {editor.tool === 'flow' && (
         <div className="flyout no-canvas" role="listbox" aria-label="Flowchart shapes">
           <div className="flyout-title">Flowchart</div>
@@ -326,6 +346,8 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Blue arrows', 'Click to add a step, drag to connect'],
       ['Enter / double-click', 'Edit the text'],
       ['Double-click a line', 'Label it (e.g. Yes / No)'],
+      ['Drag a blue arrow to empty space', 'Pick the next shape (1–7), most likely first'],
+      ['Paste Mermaid', 'Builds the flowchart (Import / Export to copy it back out)'],
       ['Drag', 'Snaps into line with nearby shapes (hold Alt to move freely)'],
     ],
   ],
@@ -353,6 +375,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl + A', 'Select all'],
       ['Ctrl + Z / Ctrl + Shift + Z', 'Undo / redo'],
       ['Ctrl + S', 'Download the board'],
+      ['Paste or drop an image', 'Adds it to the board (Shift-drag a corner to stretch)'],
       ['Delete', 'Delete'],
       ['Esc', 'Deselect'],
     ],
@@ -382,5 +405,37 @@ function Help({ onClose }: { onClose: () => void }) {
         </section>
       ))}
     </div>
+  )
+}
+
+/** Uploads image files onto the board. */
+function ImageButton() {
+  const editor = useEditor()
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <button title="Add an image (or paste / drop one)" aria-label="Add an image" onMouseDown={(e) => e.preventDefault()} onClick={() => input.current?.click()}>
+        <ImageIcon />
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={async (e) => {
+          const files = imageFiles(e.target.files)
+          e.target.value = ''
+          for (const file of files) {
+            try {
+              const img = await readImage(file)
+              editor.addImage(img.src, img.w, img.h, undefined)
+            } catch (err) {
+              editor.setStatus((err as Error).message)
+            }
+          }
+        }}
+      />
+    </>
   )
 }

@@ -117,3 +117,26 @@ describe('adding steps', () => {
     expect(getItem(b, c!)).toMatchObject({ w: 300, h: 120 })
   })
 })
+
+describe('shape recommendations', () => {
+  it('follows convention, then what this board does most', () => {
+    let b = emptyBoard()
+    expect(F.recommendShapes(b, 'decision').slice(0, 3)).toEqual(['process', 'decision', 'terminator'])
+    let d: number
+    ;[b, d] = flow(b, 'decision', 0, 0)
+    ;[b] = F.addStep(b, d, 'down', 'terminator')
+    ;[b] = F.addStep(b, d, 'right', 'terminator')
+    expect(F.recommendShapes(b, 'decision')[0]).toBe('terminator')
+    expect(F.recommendShapes(b, 'decision')).toHaveLength(7)
+  })
+
+  it('adds a chosen step where it was dropped', () => {
+    let b = emptyBoard()
+    let a: number, z: number
+    ;[b, a] = flow(b, 'process', 0, 0)
+    ;[b, z] = F.addStepAt(b, a, 'data', { x: 500, y: 400 })
+    expect(getItem(b, z)).toMatchObject({ shape: 'data' })
+    expect(getItem(b, z)!.x + getItem(b, z)!.w / 2).toBe(500)
+    expect(b.connectors).toHaveLength(1)
+  })
+})

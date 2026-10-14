@@ -1107,3 +1107,123 @@ button.icon.on {
     display: none;
   }
 }
+
+/* ----- shape picker, dialogs ----- */
+
+.shape-picker {
+  position: absolute;
+  width: 290px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+  z-index: 12;
+}
+
+.picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 8px 6px;
+  font-size: 12px;
+}
+
+.shape-picker button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 5px 8px;
+}
+
+.shape-picker button.suggested {
+  background: #f3f5ff;
+}
+
+.shape-picker button span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.shape-picker small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shape-picker kbd {
+  font-size: 11px;
+  min-width: 18px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.dialog {
+  width: 720px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.dialog-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-tabs button[role='tab'] {
+  border-radius: 8px 8px 0 0;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+
+.dialog-tabs button.active {
+  background: #eef0ff;
+  color: var(--accent);
+}
+
+.dialog-tabs .icon-close {
+  margin-left: auto;
+}
+
+.dialog textarea {
+  height: 300px;
+  margin: 12px;
+  padding: 10px 12px;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+  outline: none;
+}
+
+.dialog textarea:focus {
+  border-color: var(--accent);
+}
+
+.dialog-options {
+  display: flex;
+  gap: 18px;
+  padding: 12px 14px 0;
+  font-size: 14px;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 12px;
+  font-size: 13px;
+}
+
+.error {
+  color: #c62828;
+}

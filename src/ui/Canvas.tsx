@@ -3,14 +3,16 @@ import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Edito
 import type { FlowDir } from '../model/flowchart'
 import { flowTextRect } from '../model/shapes'
 import * as B from '../model/board'
-import { toScreen } from '../model/camera'
+import { toScreen, toWorld } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
 import { BoardView, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
+import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
+import { ShapePicker } from './ShapePicker'
 import { useEditor } from './useEditor'
 
 const ACCENT = '#4262ff'
@@ -144,6 +146,23 @@ export function Canvas() {
         if (!(e.target as Element).closest('.no-canvas, [data-handle]')) editor.doubleClick(local(e))
       }}
       onContextMenu={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+      }}
+      onDrop={async (e) => {
+        const files = imageFiles(e.dataTransfer.files)
+        if (!files.length) return
+        e.preventDefault()
+        const at = toWorld(editor.camera, local(e))
+        for (const [k, file] of files.entries()) {
+          try {
+            const img = await readImage(file)
+            editor.addImage(img.src, img.w, img.h, { x: at.x + k * 40, y: at.y + k * 40 })
+          } catch (err) {
+            editor.setStatus((err as Error).message)
+          }
+        }
+      }}
     >
       <svg className="board" width="100%" height="100%">
         <defs>
@@ -180,6 +199,7 @@ export function Canvas() {
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <SelectionToolbar />
+      <ShapePicker />
       <Minimap />
     </div>
   )

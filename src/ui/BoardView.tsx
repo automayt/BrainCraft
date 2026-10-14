@@ -291,7 +291,14 @@ export function ConnectorView({
   const head = 12
   return (
     <g>
-      <path d={r.d} fill="none" stroke={color} strokeWidth={selected ? 3 : 2} strokeLinejoin="round" />
+      <path
+        d={r.d}
+        fill="none"
+        stroke={color}
+        strokeWidth={selected ? 3 : 2}
+        strokeLinejoin="round"
+        strokeDasharray={c.dashed ? '7 5' : undefined}
+      />
       {arrows !== 'none' && <Arrowhead tip={r.end} dir={r.endDir} size={head} color={color} />}
       {arrows === 'both' && <Arrowhead tip={r.start} dir={{ x: -r.startDir.x, y: -r.startDir.y }} size={head} color={color} />}
       {c.label && !editing && (
