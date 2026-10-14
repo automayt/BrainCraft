@@ -8,6 +8,7 @@ import * as B from '../model/board'
 import { type Camera, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints } from '../model/geom'
 import { History } from '../model/history'
+import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import * as N from '../model/notes'
@@ -727,6 +728,24 @@ export class Editor {
    */
   pasteText(text: string) {
     const at = this.pointer ?? center(this.visibleWorld)
+    const ops = opsFromText(text)
+    if (ops) {
+      try {
+        let results: OpResult[] = []
+        this.edit((b) => {
+          const out = applyOps(b, ops, { measure: this.measure, origin: at })
+          results = out.results
+          return out.board
+        })
+        const created = results.flatMap((r) => r.ids ?? (r.id !== undefined && r.op.startsWith('create') ? [r.id] : []))
+        this.select(created.filter((id) => B.getItem(this.board, id)))
+        if (created.length) this.zoomToFit()
+        this.setStatus(`Applied ${ops.length} operation${ops.length === 1 ? '' : 's'}`)
+      } catch (err) {
+        this.setStatus((err as Error).message)
+      }
+      return
+    }
     const clip = clipFromText(text)
     if (clip) {
       const box = B.bounds({ ...this.board, items: clip.items })

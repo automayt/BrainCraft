@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { BrainCraftAPI } from '../api/api'
 import { Editor, TOOLS } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
@@ -56,6 +57,8 @@ export function App() {
         }
       }, 400)
     }
+    // Scripts and AI assistants drive the board through window.BrainCraft (see docs/API.md).
+    ;(window as unknown as { BrainCraft: BrainCraftAPI }).BrainCraft = new BrainCraftAPI(editor)
     // Frame the board once the canvas has its size.
     requestAnimationFrame(() => editor.zoomToFit())
 
@@ -354,6 +357,21 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ],
   ],
   [
+    'Tables, Kanban, timelines',
+    [
+      ['Click once', 'Select it; the second click works inside it'],
+      ['Drag the title strip', 'Move it (double-click to rename)'],
+      ['Table: Enter / ↑ ↓', 'Move between rows (Enter on the last row adds one)'],
+      ['Table: header ↕ / ⋯', 'Sort; hide, filter, insert or delete columns'],
+      ['Paste spreadsheet cells', 'Creates a table'],
+      ['Kanban: drag a card', 'Move it to another column'],
+      ['Kanban: + Add card', 'Enter adds another, Esc stops'],
+      ['Timeline: drag / drag ends', 'Reschedule / change length'],
+      ['Timeline: double-click a lane', 'Add an event there'],
+      ['Timeline: Kanban button', 'Show dated cards from Kanban boards'],
+    ],
+  ],
+  [
     'Comments & search',
     [
       ['Shift + C', 'Open comments on the selected object'],
@@ -377,6 +395,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl + A', 'Select all'],
       ['Ctrl + Z / Ctrl + Shift + Z', 'Undo / redo'],
       ['Ctrl + S', 'Download the board'],
+      ['Paste JSON operations', 'Build content from the API (see docs/API.md)'],
       ['Paste or drop an image', 'Adds it to the board (Shift-drag a corner to stretch)'],
       ['Delete', 'Delete'],
       ['Esc', 'Deselect'],
