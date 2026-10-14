@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrainCraftAPI } from '../api/api'
+import { Bridge, pairingFromHash } from '../api/bridge'
+import { AiDialog } from './AiConnect'
 import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { FILE_EXT, Workspace } from '../store/workspace'
@@ -24,7 +26,7 @@ function isTyping(target: EventTarget | null) {
 
 const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -49,6 +51,8 @@ function App({ ws }: { ws: Workspace }) {
   const editor = ws.editor
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
+  const [bridge] = useState(() => new Bridge(ws))
+  const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
@@ -71,6 +75,8 @@ function App({ ws }: { ws: Workspace }) {
     openBoards: () => setDialog('boards'),
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
+    openAi: () => setDialog('ai'),
+    ai: bridge,
     menu,
     openMenu: setMenu,
     closeMenu: () => setMenu(null),
@@ -87,6 +93,21 @@ function App({ ws }: { ws: Workspace }) {
       if (!editor.selection.size) editor.zoomToFit()
     })
   }, [editor])
+
+  useEffect(() => {
+    // Pair with the MCP server from its link (#ai=PORT.TOKEN), or reconnect to the last one.
+    bridge.onChange = () => setBridgeVersion((v) => v + 1)
+    const pairing = pairingFromHash(location.hash)
+    if (pairing) {
+      history.replaceState(null, '', location.pathname + location.search)
+      bridge.connect(pairing)
+      editor.setStatus('Paired with your AI assistant — it can now work on this board')
+    } else {
+      const stored = Bridge.stored()
+      if (stored) bridge.connect(stored)
+    }
+    return () => bridge.disconnect(false)
+  }, [bridge, editor])
 
   useEffect(() => {
     // Autosave happens in the workspace; make sure the last edit lands as the page goes away.
@@ -223,6 +244,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}
           {dialog === 'share' && <ShareDialog onClose={close} />}
+          {dialog === 'ai' && <AiDialog bridge={bridge} onClose={close} />}
           <input
             ref={fileInput}
             type="file"

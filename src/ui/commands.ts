@@ -66,6 +66,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'save-as', label: 'Save as…', group: 'Board', keys: 'Ctrl Shift S', aliases: 'export file copy', run: () => ui.saveFile(true) },
     { id: 'download', label: 'Download a copy', group: 'Board', aliases: 'save export json file', run: ui.download },
     { id: 'share', label: 'Share read-only link…', group: 'Board', aliases: 'link url send view publish', run: ui.openShare },
+    { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude cursor chatgpt llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
     { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },

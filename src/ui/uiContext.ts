@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { Bridge } from '../api/bridge'
 import type { Theme } from './theme'
 
 export interface ContextMenuState {
@@ -22,6 +23,9 @@ export interface Ui {
   openBoards: () => void
   openVersions: () => void
   openShare: () => void
+  openAi: () => void
+  /** The link to AI assistants through the MCP server. */
+  ai: Bridge
   menu: ContextMenuState | null
   openMenu: (m: ContextMenuState) => void
   closeMenu: () => void
