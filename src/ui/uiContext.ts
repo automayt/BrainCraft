@@ -16,7 +16,12 @@ export interface Ui {
   openFile: () => void
   openImage: () => void
   download: () => void
+  /** Saves to the board's file (asking where the first time); `saveAs` always asks. */
+  saveFile: (saveAs?: boolean) => void
   newBoard: () => void
+  openBoards: () => void
+  openVersions: () => void
+  openShare: () => void
   menu: ContextMenuState | null
   openMenu: (m: ContextMenuState) => void
   closeMenu: () => void

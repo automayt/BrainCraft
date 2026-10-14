@@ -91,7 +91,7 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
             )}
           </span>
         ) : (
-          <span className="muted">{live ? 'Click a header to sort · ⋯ for more' : `${t.rows.length} rows`}</span>
+          <span className="muted">{live ? 'Click a header to sort · ⋯ for more' : `${t.rows.length} row${t.rows.length === 1 ? '' : 's'}`}</span>
         )}
         {filters > 0 && <span className="muted">{rows.length} of {t.rows.length} rows match</span>}
       </div>

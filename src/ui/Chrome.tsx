@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { TOOLS, type Tool } from '../editor/Editor'
 import { FLOW_SHAPES, INKS } from '../model/types'
 import {
+  BoardsIcon,
   CheckIcon,
   CommentsIcon,
   FitIcon,
@@ -25,6 +26,7 @@ import { THEMES } from './theme'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
+import { useWorkspace } from './useWorkspace'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -61,9 +63,27 @@ function MenuItem({ label, keys, onClick, checked }: { label: string; keys?: str
   )
 }
 
+const SAVE_LABELS = { saved: 'Saved', saving: 'Saving…', unsaved: 'Saving…', error: 'Not saved' } as const
+
+/** Whether the board is safely stored, and where. */
+function SaveState() {
+  const ws = useWorkspace()
+  if (ws.readOnly) return null
+  const where = ws.persistent ? 'in this browser' : 'nowhere yet — this browser does not keep data'
+  const tip = `${SAVE_LABELS[ws.saveState]} ${where}${ws.fileName ? ` · file: ${ws.fileName}` : ''}`
+  return (
+    <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`} aria-live="polite">
+      <i aria-hidden="true" />
+      <span className="sr-only">{tip}</span>
+      <Tip label={tip} />
+    </span>
+  )
+}
+
 export function TopLeft() {
   const editor = useEditor()
   const ui = useUi()
+  const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   const run = (f: () => void) => () => {
@@ -77,25 +97,42 @@ export function TopLeft() {
         <span className="wordmark">BrainCraft</span>
       </div>
       <span className="divider" />
+      <button className="icon-btn has-tip" aria-label="Your boards" onMouseDown={keepFocus} onClick={ui.openBoards}>
+        <BoardsIcon />
+        <Tip label="Your boards" keys="Ctrl O" />
+      </button>
       <input
         className="board-title"
         value={editor.board.title}
         aria-label="Board title"
         spellCheck={false}
+        readOnly={ws.readOnly}
         onChange={(e) => editor.setTitle(e.target.value)}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
       />
+      <SaveState />
       <div className="anchor">
         <button className={`icon-btn${open ? ' on' : ''}`} aria-label="Board menu" aria-expanded={open} onMouseDown={keepFocus} onClick={() => setOpen(!open)}>
           <MenuIcon />
         </button>
         {open && (
           <Popover onClose={close} className="file-menu">
+            <MenuItem label="Your boards…" keys="Ctrl O" onClick={run(ui.openBoards)} />
             <MenuItem label="New board" onClick={run(ui.newBoard)} />
             <MenuItem label="Open file…" onClick={run(ui.openFile)} />
-            <MenuItem label="Download" keys="Ctrl S" onClick={run(ui.download)} />
             <hr />
-            <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />
+            {ws.canWriteFiles ? (
+              <>
+                <MenuItem label={ws.fileName ? `Save to ${ws.fileName}` : 'Save to file…'} keys="Ctrl S" onClick={run(() => ui.saveFile())} />
+                <MenuItem label="Save as…" keys="Ctrl Shift S" onClick={run(() => ui.saveFile(true))} />
+              </>
+            ) : (
+              <MenuItem label="Download file" keys="Ctrl S" onClick={run(ui.download)} />
+            )}
+            <MenuItem label="Share read-only link…" onClick={run(ui.openShare)} />
+            {!ws.readOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
+            <hr />
+            {!ws.readOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
             <MenuItem label="Export as Mermaid…" onClick={run(ui.openImport)} />
             <hr />
             <MenuItem label="Keyboard shortcuts" keys="?" onClick={run(ui.openHelp)} />
