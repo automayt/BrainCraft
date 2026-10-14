@@ -5,7 +5,7 @@
  */
 
 import * as B from '../model/board'
-import { type Camera, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
+import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints } from '../model/geom'
 import { History } from '../model/history'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
@@ -18,6 +18,7 @@ import { looksTabular, newTable, tableFromText, tableSize } from '../model/table
 import * as TL from '../model/timeline'
 import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
 import { clipFromText, clipToText } from '../model/serialize'
+import * as S from '../model/slides'
 import {
   type Arrowheads,
   type Board,
@@ -144,6 +145,24 @@ export interface Modifiers {
 /** What happened to a key press, so the UI knows whether to `preventDefault`. */
 export type KeyResult = boolean | 'save'
 
+export interface Presenting {
+  slides: S.Slide[]
+  index: number
+  /** Showing the whole board instead of a slide. */
+  overview: boolean
+  laser: boolean
+  notes: boolean
+  /** Whether the board was read-only before presenting, to put back afterwards. */
+  wasReadOnly: boolean
+}
+
+/** Slides can zoom in this far, so small frames fill the screen. */
+const SLIDE_MAX_ZOOM = 4
+const FLIGHT_MS = 520
+
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+const prefersReducedMotion = () => !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
 export class Editor {
   board: Board
   camera: Camera = defaultCamera()
@@ -178,6 +197,9 @@ export class Editor {
   onBoardChange: ((b: Board) => void) | null = null
   /** Shared links and presentations: the board can be looked at, not changed. */
   readOnly = false
+  /** Presentation mode: frames shown one at a time, full screen. */
+  presenting: Presenting | null = null
+  private flight = 0
 
   readonly measure: M.Measure
 
@@ -266,7 +288,8 @@ export class Editor {
 
   setViewport(w: number, h: number) {
     this.viewport = { w, h }
-    this.emit()
+    if (this.presenting) this.showSlide(false)
+    else this.emit()
   }
 
   setTool(tool: Tool) {
@@ -322,6 +345,7 @@ export class Editor {
   // ----- camera ------------------------------------------------------------------
 
   zoomBy(factor: number, anchor: Vec = { x: this.viewport.w / 2, y: this.viewport.h / 2 }) {
+    this.flight++
     this.camera = zoomAt(this.camera, anchor, factor)
     this.emit()
   }
@@ -331,6 +355,7 @@ export class Editor {
   }
 
   pan(dx: number, dy: number) {
+    this.flight++
     this.camera = { ...this.camera, x: this.camera.x + dx, y: this.camera.y + dy }
     this.emit()
   }
@@ -338,6 +363,144 @@ export class Editor {
   centerOn(world: Vec) {
     this.camera = centerOn(this.camera, world, this.viewport)
     this.emit()
+  }
+
+  /** Moves the camera smoothly to `target` (instantly when motion is reduced or there's no animation frame). */
+  flyTo(target: Camera, ms = FLIGHT_MS) {
+    const id = ++this.flight
+    const raf = globalThis.requestAnimationFrame
+    if (!raf || prefersReducedMotion() || ms <= 0) {
+      this.camera = target
+      this.emit()
+      return
+    }
+    const from = this.camera
+    const start = performance.now()
+    const step = (now: number) => {
+      if (id !== this.flight) return
+      const t = Math.min(1, (now - start) / ms)
+      this.camera = t === 1 ? target : between(from, target, easeInOut(t), this.viewport)
+      this.emit()
+      if (t < 1) raf(step)
+    }
+    raf(step)
+  }
+
+  // ----- presenting --------------------------------------------------------------
+
+  /** Starts presenting from the selected frame (or the first); false when there's nothing to show. */
+  startPresenting(): boolean {
+    const slides = S.slides(this.board)
+    if (!slides.length) {
+      this.setStatus('Nothing to present yet — add a frame (F) around each slide')
+      return false
+    }
+    const index = S.startSlide(this.board, slides, this.selection)
+    this.finishEditing()
+    this.shapePicker = null
+    this.searchOpen = false
+    this.selection = new Set()
+    this.selectedConnector = null
+    this.tool = 'select'
+    this.presenting = { slides, index, overview: false, laser: false, notes: false, wasReadOnly: this.readOnly }
+    this.readOnly = true
+    this.showSlide(false)
+    return true
+  }
+
+  stopPresenting() {
+    const p = this.presenting
+    if (!p) return
+    this.presenting = null
+    this.readOnly = p.wasReadOnly
+    this.flight++
+    this.emit()
+  }
+
+  private slideCamera(): Camera | null {
+    const p = this.presenting
+    if (!p) return null
+    const r = p.overview ? B.bounds(this.board) : p.slides[p.index]?.rect
+    return r ? fit(r, this.viewport, p.overview ? 60 : Math.min(48, this.viewport.w * 0.04), SLIDE_MAX_ZOOM) : null
+  }
+
+  /** Frames the current slide; called again when the window changes size. */
+  showSlide(animate = true) {
+    const cam = this.slideCamera()
+    if (!cam) return
+    if (animate) this.flyTo(cam)
+    else {
+      this.flight++
+      this.camera = cam
+      this.emit()
+    }
+  }
+
+  goToSlide(index: number) {
+    const p = this.presenting
+    if (!p) return
+    const next = Math.max(0, Math.min(p.slides.length - 1, index))
+    if (next === p.index && !p.overview) return
+    this.presenting = { ...p, index: next, overview: false }
+    this.showSlide()
+  }
+
+  /** Toggles a presentation option: the whole-board overview, the laser pointer or speaker notes. */
+  togglePresenting(what: 'overview' | 'laser' | 'notes') {
+    const p = this.presenting
+    if (!p) return
+    this.presenting = { ...p, [what]: !p[what] }
+    if (what === 'overview') this.showSlide()
+    else this.emit()
+  }
+
+  /** Keys while presenting; true when handled. */
+  presentKey(key: string): boolean {
+    const p = this.presenting
+    if (!p) return false
+    switch (key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case 'PageDown':
+      case ' ':
+      case 'Enter':
+        this.goToSlide(p.overview ? p.index : p.index + 1)
+        return true
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+      case 'Backspace':
+        this.goToSlide(p.index - 1)
+        return true
+      case 'Home':
+        this.goToSlide(0)
+        return true
+      case 'End':
+        this.goToSlide(p.slides.length - 1)
+        return true
+      case 'Escape':
+        this.stopPresenting()
+        return true
+      case 'o':
+      case 'O':
+        this.togglePresenting('overview')
+        return true
+      case 'l':
+      case 'L':
+        this.togglePresenting('laser')
+        return true
+      case 'n':
+      case 'N':
+        this.togglePresenting('notes')
+        return true
+    }
+    // Number keys jump to that slide.
+    const n = Number(key)
+    if (n >= 1 && n <= 9 && n <= p.slides.length) {
+      this.goToSlide(n - 1)
+      return true
+    }
+    return false
   }
 
   zoomToFit() {
@@ -485,9 +648,8 @@ export class Editor {
     this.selection = new Set([id])
     this.selectedConnector = null
     const fitted = fit(B.itemBounds(item), this.viewport, 120)
-    if (this.camera.zoom < 0.5 || this.camera.zoom > fitted.zoom * 1.5) this.camera = fitted
-    else this.camera = centerOn(this.camera, center(item), this.viewport)
     this.emit()
+    this.flyTo(this.camera.zoom < 0.5 || this.camera.zoom > fitted.zoom * 1.5 ? fitted : centerOn(this.camera, center(item), this.viewport))
   }
 
   // ----- flowcharts ---------------------------------------------------------------
@@ -1213,6 +1375,7 @@ export class Editor {
   }
 
   wheel(screen: Vec, dx: number, dy: number, zoomGesture: boolean) {
+    this.flight++
     if (zoomGesture) this.camera = zoomAt(this.camera, screen, Math.exp(-dy * 0.01))
     else this.camera = { ...this.camera, x: this.camera.x - dx, y: this.camera.y - dy }
     this.emit()

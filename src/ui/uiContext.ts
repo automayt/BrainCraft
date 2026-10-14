@@ -24,6 +24,8 @@ export interface Ui {
   openVersions: () => void
   openShare: () => void
   openAi: () => void
+  /** Presents the board's frames as slides, full screen. */
+  present: () => void
   /** The link to AI assistants through the MCP server. */
   ai: Bridge
   menu: ContextMenuState | null

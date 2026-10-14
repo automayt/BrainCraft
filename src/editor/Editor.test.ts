@@ -316,3 +316,65 @@ describe('flowchart editing', () => {
     expect(e.hint).toMatch(/Tab add the next step/)
   })
 })
+
+describe('presenting', () => {
+  function deck() {
+    const e = editor()
+    e.setViewport(1000, 600)
+    let b = emptyBoard()
+    let one: number, two: number
+    ;[b, one] = B.addItem(b, B.newItem('frame', { x: 0, y: 0, w: 400, h: 300 }, { text: 'One' }))
+    ;[b, two] = B.addItem(b, B.newItem('frame', { x: 600, y: 0, w: 400, h: 300 }, { text: 'Two' }))
+    e.load(b)
+    return { e, one, two }
+  }
+
+  it('walks the frames with the keyboard and stops on Escape', () => {
+    const { e } = deck()
+    expect(e.startPresenting()).toBe(true)
+    expect(e.readOnly).toBe(true)
+    expect(e.presenting!.index).toBe(0)
+    e.presentKey('ArrowRight')
+    expect(e.presenting!.index).toBe(1)
+    e.presentKey(' ')
+    expect(e.presenting!.index).toBe(1)
+    e.presentKey('Home')
+    expect(e.presenting!.index).toBe(0)
+    e.presentKey('2')
+    expect(e.presenting!.index).toBe(1)
+    e.presentKey('Escape')
+    expect(e.presenting).toBeNull()
+    expect(e.readOnly).toBe(false)
+  })
+
+  it('starts from the selected frame and zooms past 100% to fill the screen', () => {
+    const { e, two } = deck()
+    e.select([two])
+    e.startPresenting()
+    expect(e.presenting!.index).toBe(1)
+    expect(e.camera.zoom).toBeGreaterThan(1)
+    // The slide's frame is centred.
+    const mid = toScreen(e.camera, { x: 800, y: 150 })
+    expect(Math.abs(mid.x - 500)).toBeLessThan(2)
+  })
+
+  it('blocks edits while presenting and toggles overview, laser and notes', () => {
+    const { e } = deck()
+    e.startPresenting()
+    e.setTitle('Changed')
+    expect(e.board.title).not.toBe('Changed')
+    e.presentKey('o')
+    expect(e.presenting!.overview).toBe(true)
+    e.presentKey('l')
+    e.presentKey('n')
+    expect(e.presenting).toMatchObject({ laser: true, notes: true })
+    e.presentKey('ArrowRight')
+    expect(e.presenting!.overview).toBe(false)
+  })
+
+  it('says so when there is nothing to present', () => {
+    const e = editor()
+    expect(e.startPresenting()).toBe(false)
+    expect(e.status).toMatch(/frame/)
+  })
+})

@@ -125,6 +125,17 @@ These become interactive once selected; drag them by their title strip.
   link itself. Nothing is uploaded. People who open it see the board
   read-only and can save their own copy.
 
+### Presenting
+
+- **Present (Shift+P)** turns the board's frames into slides, in reading
+  order, full screen. The camera flies from frame to frame and small frames
+  zoom to fill the screen.
+- Arrow keys, Space or a click go forward; number keys jump to a slide.
+- **L** is a laser pointer with a fading trail, **N** shows speaker notes
+  (the frame's comments), and **O** zooms out to the whole board.
+- Start with a frame selected to present from there. A board without frames
+  presents as one slide.
+
 ### AI assistants (MCP) and the API
 
 - **Connect Claude, Cursor or any MCP client** to work on your boards live:
