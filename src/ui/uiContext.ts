@@ -26,6 +26,8 @@ export interface Ui {
   openAi: () => void
   /** Presents the board's frames as slides, full screen. */
   present: () => void
+  /** The recorded runs of the flowchart containing `id`. */
+  openRuns: (id: number) => void
   /** The link to AI assistants through the MCP server. */
   ai: Bridge
   menu: ContextMenuState | null

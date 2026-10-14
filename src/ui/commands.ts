@@ -73,6 +73,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
     { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
   ]
+  if (editor.single?.kind === 'flow') {
+    const id = editor.single.id
+    list.push(
+      { id: 'run', label: 'Run flowchart', group: 'Flowchart', keys: 'Shift R', aliases: 'runbook checklist procedure walk steps play', run: () => editor.startRun(id) },
+      { id: 'run-here', label: 'Run from this step', group: 'Flowchart', aliases: 'runbook checklist procedure walk', run: () => editor.startRun(id, true) },
+      { id: 'run-history', label: 'Run history', group: 'Flowchart', aliases: 'runbook runs log audit past', run: () => ui.openRuns(id) },
+    )
+  }
   if (editor.selection.size) {
     list.push(
       { id: 'duplicate', label: 'Duplicate selection', group: 'Edit', keys: 'Ctrl D', run: () => editor.duplicate() },

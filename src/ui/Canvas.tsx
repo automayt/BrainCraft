@@ -204,6 +204,7 @@ export function Canvas() {
           <DragPreview editor={editor} />
         </g>
         <Overlays editor={editor} />
+        {editor.running && <RunOverlay editor={editor} />}
       </svg>
       {board.items.length === 0 && editor.tool === 'select' && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
@@ -400,6 +401,55 @@ function Overlays({ editor }: { editor: Editor }) {
     out.push(<rect key="marquee" {...xywh(rectFromPoints(a, b))} className="marquee" />)
   }
   return <g>{out}</g>
+}
+
+/** Runbook mode: the route taken so far, the current step and the ways on from it. */
+function RunOverlay({ editor }: { editor: Editor }) {
+  const run = editor.running!
+  const z = editor.camera.zoom
+  const path = (points: { x: number; y: number }[]) =>
+    points.map((p, k) => `${k ? 'L' : 'M'}${toScreen(editor.camera, p).x} ${toScreen(editor.camera, p).y}`).join('')
+  const out: ReactNode[] = []
+  run.steps.forEach((s, k) => {
+    const next = run.steps[k + 1]
+    if (!next) return
+    const c = editor.board.connectors.find((x) => x.from === s.node && x.to === next.node)
+    const r = c && B.connectorRoute(editor.board, c)
+    if (r) out.push(<path key={`r${k}`} d={path(r.points)} className="run-route" />)
+  })
+  const visited = new Set(run.steps.slice(0, -1).map((s) => s.node))
+  for (const id of visited) {
+    const i = B.getItem(editor.board, id)
+    if (!i) continue
+    const r = editor.screenRect(i)
+    out.push(
+      <g key={`v${id}`} className="run-visited" transform={`translate(${r.x + r.w} ${r.y})`}>
+        <circle r={9} />
+        <path d="M-4 0l3 3 5-6" />
+      </g>,
+    )
+  }
+  editor.runOptions.forEach((o, k) => {
+    const r = editor.screenRect(o.to)
+    const pad = 6
+    out.push(<rect key={`o${o.to.id}`} {...xywh({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad })} rx={8} className="run-next" />)
+    if (editor.runOptions.length > 1)
+      out.push(
+        <g key={`n${o.to.id}`} className="run-num" transform={`translate(${r.x - pad} ${r.y - pad})`}>
+          <circle r={10} />
+          <text dy="0.35em" textAnchor="middle">
+            {k + 1}
+          </text>
+        </g>,
+      )
+  })
+  const at = editor.runStep !== null ? B.getItem(editor.board, editor.runStep) : undefined
+  if (at) {
+    const r = editor.screenRect(at)
+    const pad = 8 + 2 * Math.min(1, z)
+    out.push(<rect key="at" {...xywh({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad })} rx={10} className="run-current" />)
+  }
+  return <g className="run-overlay">{out}</g>
 }
 
 function parentCenterX(editor: Editor, node: { parent?: number }) {
