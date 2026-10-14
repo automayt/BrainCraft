@@ -23,6 +23,7 @@ import { flowHit } from './shapes'
 import {
   type Board,
   type Connector,
+  type Dataset,
   type Id,
   type Item,
   type Kind,
@@ -111,11 +112,15 @@ export function updateConnector(b: Board, id: Id, f: (c: Connector) => Connector
 /** Removes items and connectors, plus any connector left dangling. */
 export function remove(b: Board, items: ReadonlySet<Id>, connectors: ReadonlySet<Id> = new Set()): Board {
   if (items.size === 0 && connectors.size === 0) return b
-  return {
+  const next = {
     ...b,
     items: b.items.filter((i) => !items.has(i.id)),
     connectors: b.connectors.filter((c) => !connectors.has(c.id) && !items.has(c.from) && !items.has(c.to)),
   }
+  // A dataset goes with its last view (undo brings both back).
+  if (!next.datasets?.length) return next
+  const used = new Set(next.items.flatMap((i) => (i.view ? [i.view.dataset] : [])))
+  return next.datasets.every((d) => used.has(d.id)) ? next : { ...next, datasets: next.datasets.filter((d) => used.has(d.id)) }
 }
 
 export function translateItem(i: Item, dx: number, dy: number): Item {
@@ -313,6 +318,8 @@ export function sendToBack(b: Board, ids: ReadonlySet<Id>): Board {
 export interface Clip {
   items: Item[]
   connectors: Connector[]
+  /** Datasets the copied views show, so they paste into other boards too. */
+  datasets?: Dataset[]
 }
 
 /** The given items, whole mind-map branches under them, and the connectors among them. */
@@ -322,9 +329,13 @@ export function copy(b: Board, ids: ReadonlySet<Id>): Clip {
     if (getItem(b, id)?.kind === 'mind') for (const d of subtree(b, id)) all.add(d)
     else all.add(id)
   }
+  const items = b.items.filter((i) => all.has(i.id))
+  const used = new Set(items.flatMap((i) => (i.view ? [i.view.dataset] : [])))
+  const datasets = (b.datasets ?? []).filter((d) => used.has(d.id))
   return {
-    items: b.items.filter((i) => all.has(i.id)),
+    items,
     connectors: b.connectors.filter((c) => all.has(c.from) && all.has(c.to)),
+    ...(datasets.length ? { datasets } : {}),
   }
 }
 
@@ -357,8 +368,12 @@ export function paste(b: Board, clip: Clip, dx: number, dy: number): [Board, Set
     const to = mapping.get(c.to)
     if (from !== undefined && to !== undefined) connectors.push({ ...c, id: next++, from, to })
   }
+  // Pasted views share the dataset already on this board, or bring theirs along.
+  const have = new Set((b.datasets ?? []).map((d) => d.id))
+  const incoming = (clip.datasets ?? []).filter((d) => !have.has(d.id))
+  const datasets = incoming.length ? { datasets: [...(b.datasets ?? []), ...incoming] } : {}
   return [
-    { ...b, items: [...b.items, ...items], connectors: [...b.connectors, ...connectors], nextId: next },
+    { ...b, items: [...b.items, ...items], connectors: [...b.connectors, ...connectors], nextId: next, ...datasets },
     new Set(items.map((i) => i.id)),
   ]
 }

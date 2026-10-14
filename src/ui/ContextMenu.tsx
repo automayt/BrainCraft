@@ -77,6 +77,15 @@ export function ContextMenu() {
     )
     if (editor.selectedItems.some((i) => i.kind === 'flow'))
       entries.push({ label: 'Copy as Mermaid', run: () => navigator.clipboard?.writeText(editor.exportMermaid()).then(() => editor.setStatus('Copied Mermaid')) })
+    if (single && (single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline'))
+      entries.push({ label: 'Convert to linked data', run: () => editor.convertToData(single.id) })
+    if (single?.kind === 'data') {
+      entries.push(
+        { label: 'Add a table view', run: () => editor.addDataView(single.id, 'table') },
+        { label: 'Add a board view', run: () => editor.addDataView(single.id, 'board') },
+        { label: 'Add a timeline view', run: () => editor.addDataView(single.id, 'timeline') },
+      )
+    }
     if (single?.kind === 'mind') {
       entries.push({ label: 'Copy as outline', run: () => {
           const o = editor.outlineOfSelection()

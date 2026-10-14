@@ -1,13 +1,13 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { type Board, FILLS, FORMAT_VERSION, type Item } from './types'
+import { type Board, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
 
 export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
 }
 
-const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline'])
+const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data'])
 
 function isItem(x: unknown): x is Item {
   const i = x as Item
@@ -19,6 +19,21 @@ function isItem(x: unknown): x is Item {
     [i.x, i.y, i.w, i.h, i.fontSize].every((n) => typeof n === 'number' && Number.isFinite(n)) &&
     typeof i.color === 'string' &&
     typeof i.text === 'string'
+  )
+}
+
+function isDataset(x: unknown): x is Dataset {
+  const d = x as Dataset
+  return (
+    typeof d === 'object' &&
+    d !== null &&
+    typeof d.id === 'string' &&
+    typeof d.name === 'string' &&
+    Array.isArray(d.fields) &&
+    d.fields.length > 0 &&
+    d.fields.every((f) => f && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.type === 'string') &&
+    Array.isArray(d.records) &&
+    d.records.every((r) => r && typeof r.id === 'string' && typeof r.values === 'object' && r.values !== null)
   )
 }
 
@@ -38,13 +53,19 @@ export function fromJson(json: string): Board {
   const connectors = raw.connectors.filter(
     (c) => c && typeof c.id === 'number' && ids.has(c.from) && ids.has(c.to) && typeof c.color === 'string',
   )
+  const datasets = Array.isArray(raw.datasets) ? raw.datasets.filter(isDataset) : []
+  // A view whose dataset is missing has nothing to show.
+  const known = new Set(datasets.map((d) => d.id))
+  const kept = items.filter((i) => i.kind !== 'data' || (i.view && known.has(i.view.dataset)))
+  const keptIds = new Set(kept.map((i) => i.id))
   const maxId = Math.max(0, ...items.map((i) => i.id), ...connectors.map((c) => c.id))
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
-    items,
-    connectors,
+    items: kept,
+    connectors: connectors.filter((c) => keptIds.has(c.from) && keptIds.has(c.to)),
     nextId: Math.max(typeof raw.nextId === 'number' ? raw.nextId : 0, maxId + 1),
+    ...(datasets.length ? { datasets } : {}),
   }
 }
 
@@ -59,7 +80,8 @@ export function clipFromText(text: string): Clip | null {
     const raw = JSON.parse(text)
     if (raw?.type !== CLIP_TAG || !Array.isArray(raw.items)) return null
     const items = (raw.items as unknown[]).filter(isItem)
-    return { items, connectors: Array.isArray(raw.connectors) ? raw.connectors : [] }
+    const datasets = Array.isArray(raw.datasets) ? (raw.datasets as unknown[]).filter(isDataset) : []
+    return { items, connectors: Array.isArray(raw.connectors) ? raw.connectors : [], ...(datasets.length ? { datasets } : {}) }
   } catch {
     return null
   }

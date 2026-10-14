@@ -28,6 +28,7 @@ const TOOL_VERBS: Record<string, string> = {
   table: 'Add table',
   kanban: 'Add Kanban board',
   timeline: 'Add timeline',
+  data: 'Add database (linked table, board and timeline)',
   connector: 'Connect objects',
   pen: 'Draw with the pen',
   frame: 'Add frame',
@@ -80,6 +81,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       { id: 'run-here', label: 'Run from this step', group: 'Flowchart', aliases: 'runbook checklist procedure walk', run: () => editor.startRun(id, true) },
       { id: 'run-history', label: 'Run history', group: 'Flowchart', aliases: 'runbook runs log audit past', run: () => ui.openRuns(id) },
     )
+  }
+  const single = editor.single
+  if (single && (single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline')) {
+    list.push({ id: 'to-data', label: 'Convert to linked data', group: 'Data', aliases: 'database dataset records views sync link', run: () => editor.convertToData(single.id) })
+  }
+  if (single?.kind === 'data') {
+    for (const t of ['table', 'board', 'timeline'] as const)
+      list.push({ id: `view-${t}`, label: `Add a ${t} view of this data`, group: 'Data', aliases: 'database linked view kanban gantt', run: () => editor.addDataView(single.id, t) })
   }
   if (editor.selection.size) {
     list.push(

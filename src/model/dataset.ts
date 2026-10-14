@@ -1,0 +1,562 @@
+/**
+ * Linked data: a dataset of typed records, kept once on the board and shown by any number of
+ * `data` items as a table, a board (Kanban, grouped by a field) or a timeline (by date fields).
+ * Edit a record anywhere and every view shows the change.
+ */
+
+import { fromDay, isIsoDay, toDay, today } from './timeline'
+import { uid } from './uid'
+import {
+  BRANCHES,
+  type Board,
+  type DataRecord,
+  type DataView,
+  type DataViewType,
+  type Dataset,
+  type Field,
+  type FieldType,
+  type FieldValue,
+  type Item,
+  type KanbanData,
+  type SelectOption,
+  type TableData,
+  type TimelineData,
+} from './types'
+
+export const FIELD_TYPES: { type: FieldType; label: string; icon: string }[] = [
+  { type: 'text', label: 'Text', icon: 'Aa' },
+  { type: 'number', label: 'Number', icon: '#' },
+  { type: 'date', label: 'Date', icon: '◷' },
+  { type: 'select', label: 'Choice', icon: '◉' },
+  { type: 'person', label: 'Person', icon: '☺' },
+  { type: 'checkbox', label: 'Checkbox', icon: '☑' },
+]
+
+export const VIEW_TYPES: { type: DataViewType; label: string }[] = [
+  { type: 'table', label: 'Table' },
+  { type: 'board', label: 'Board' },
+  { type: 'timeline', label: 'Timeline' },
+]
+
+/** Colours handed to new choices, in order. */
+export const OPTION_COLORS = BRANCHES.map(([, c]) => c)
+
+const field = (name: string, type: FieldType, options?: string[]): Field => ({
+  id: uid(),
+  name,
+  type,
+  ...(options ? { options: options.map((o, k) => ({ id: uid(), name: o, color: OPTION_COLORS[k % OPTION_COLORS.length] })) } : {}),
+})
+
+// ----- datasets on the board ------------------------------------------------------------
+
+export function getDataset(b: Board, id: string | undefined): Dataset | undefined {
+  return id ? b.datasets?.find((d) => d.id === id) : undefined
+}
+
+export function addDataset(b: Board, ds: Dataset): Board {
+  return { ...b, datasets: [...(b.datasets ?? []), ds] }
+}
+
+export function updateDataset(b: Board, id: string, f: (d: Dataset) => Dataset): Board {
+  const ds = getDataset(b, id)
+  if (!ds) return b
+  const next = f(ds)
+  return next === ds ? b : { ...b, datasets: b.datasets!.map((d) => (d.id === id ? next : d)) }
+}
+
+/** Datasets no view shows any more (after views are deleted). */
+export function dropUnusedDatasets(b: Board): Board {
+  if (!b.datasets?.length) return b
+  const used = new Set(b.items.flatMap((i) => (i.view ? [i.view.dataset] : [])))
+  const kept = b.datasets.filter((d) => used.has(d.id))
+  return kept.length === b.datasets.length ? b : { ...b, datasets: kept }
+}
+
+/** Every view of a dataset. */
+export const viewsOf = (b: Board, dataset: string): Item[] => b.items.filter((i) => i.view?.dataset === dataset)
+
+// ----- fields ---------------------------------------------------------------------------
+
+export const titleField = (ds: Dataset): Field => ds.fields[0]
+export const fieldById = (ds: Dataset, id: string | undefined) => (id ? ds.fields.find((f) => f.id === id) : undefined)
+export const fieldByName = (ds: Dataset, name: string) => ds.fields.find((f) => f.name.toLowerCase() === name.trim().toLowerCase())
+
+export function addField(ds: Dataset, name: string, type: FieldType): [Dataset, string] {
+  let n = name.trim() || FIELD_TYPES.find((t) => t.type === type)!.label
+  // Keep names unique so operations can refer to fields by name.
+  for (let k = 2; fieldByName(ds, n); k++) n = `${name.trim() || 'Field'} ${k}`
+  const f = field(n, type, type === 'select' ? [] : undefined)
+  return [{ ...ds, fields: [...ds.fields, f] }, f.id]
+}
+
+export function renameField(ds: Dataset, id: string, name: string): Dataset {
+  const n = name.trim()
+  if (!n || ds.fields.some((f) => f.id !== id && f.name.toLowerCase() === n.toLowerCase())) return ds
+  return { ...ds, fields: ds.fields.map((f) => (f.id === id ? { ...f, name: n } : f)) }
+}
+
+/** Removes a field and its values. The first (title) field stays. */
+export function deleteField(ds: Dataset, id: string): Dataset {
+  if (ds.fields[0]?.id === id) return ds
+  return {
+    ...ds,
+    fields: ds.fields.filter((f) => f.id !== id),
+    records: ds.records.map((r) => {
+      if (!(id in r.values)) return r
+      const values = { ...r.values }
+      delete values[id]
+      return { ...r, values }
+    }),
+  }
+}
+
+const TRUE = /^(true|yes|y|x|✓|✔|done|1)$/i
+
+/** Turns a value into what a field of `type` holds, or undefined when it can't. */
+export function coerce(f: Field, v: FieldValue | null | undefined): FieldValue | undefined {
+  if (v === null || v === undefined || v === '') return undefined
+  switch (f.type) {
+    case 'number': {
+      const n = typeof v === 'number' ? v : Number(String(v).replace(/[,\s]/g, ''))
+      return Number.isFinite(n) ? n : undefined
+    }
+    case 'date': {
+      const s = String(v).trim()
+      if (isIsoDay(s)) return s
+      const d = new Date(s)
+      return Number.isNaN(d.getTime()) ? undefined : fromDay(today(d))
+    }
+    case 'checkbox':
+      return typeof v === 'boolean' ? v : TRUE.test(String(v).trim())
+    case 'select': {
+      // Option ids pass through; names are looked up.
+      const s = String(v).trim()
+      const opt = f.options?.find((o) => o.id === s) ?? f.options?.find((o) => o.name.toLowerCase() === s.toLowerCase())
+      return opt?.id
+    }
+    default:
+      return String(v)
+  }
+}
+
+/** Changes a field's type, converting what it can (choices are made from distinct texts). */
+export function changeFieldType(ds: Dataset, id: string, type: FieldType): Dataset {
+  const old = fieldById(ds, id)
+  if (!old || old.type === type) return ds
+  const texts = ds.records.map((r) => display(ds, old, r.values[id]))
+  let next: Field = { ...old, type }
+  delete next.options
+  if (type === 'select') {
+    const names = [...new Set(texts.filter(Boolean))]
+    next = { ...next, options: names.map((n, k) => ({ id: uid(), name: n, color: OPTION_COLORS[k % OPTION_COLORS.length] })) }
+  }
+  return {
+    ...ds,
+    fields: ds.fields.map((f) => (f.id === id ? next : f)),
+    records: ds.records.map((r, k) => {
+      const v = coerce(next, texts[k])
+      const values = { ...r.values }
+      if (v === undefined) delete values[id]
+      else values[id] = v
+      return { ...r, values }
+    }),
+  }
+}
+
+export function addOption(ds: Dataset, fieldId: string, name: string): [Dataset, string | null] {
+  const f = fieldById(ds, fieldId)
+  const n = name.trim()
+  if (!f || f.type !== 'select' || !n) return [ds, null]
+  const existing = f.options?.find((o) => o.name.toLowerCase() === n.toLowerCase())
+  if (existing) return [ds, existing.id]
+  const opt: SelectOption = { id: uid(), name: n, color: OPTION_COLORS[(f.options?.length ?? 0) % OPTION_COLORS.length] }
+  return [{ ...ds, fields: ds.fields.map((x) => (x.id === fieldId ? { ...x, options: [...(x.options ?? []), opt] } : x)) }, opt.id]
+}
+
+export function updateOption(ds: Dataset, fieldId: string, optionId: string, change: Partial<Omit<SelectOption, 'id'>>): Dataset {
+  return {
+    ...ds,
+    fields: ds.fields.map((f) => (f.id === fieldId ? { ...f, options: f.options?.map((o) => (o.id === optionId ? { ...o, ...change } : o)) } : f)),
+  }
+}
+
+/** Removes a choice; records that had it are left without a value. */
+export function deleteOption(ds: Dataset, fieldId: string, optionId: string): Dataset {
+  return {
+    ...ds,
+    fields: ds.fields.map((f) => (f.id === fieldId ? { ...f, options: f.options?.filter((o) => o.id !== optionId) } : f)),
+    records: ds.records.map((r) => {
+      if (r.values[fieldId] !== optionId) return r
+      const values = { ...r.values }
+      delete values[fieldId]
+      return { ...r, values }
+    }),
+  }
+}
+
+// ----- records --------------------------------------------------------------------------
+
+/** Adds a record (after `after`, or at the end); values are keyed by field id. */
+export function addRecord(ds: Dataset, values: Record<string, FieldValue> = {}, after?: string): [Dataset, string] {
+  const r: DataRecord = { id: uid(), values }
+  const at = after ? ds.records.findIndex((x) => x.id === after) + 1 : 0
+  const records = ds.records.slice()
+  records.splice(at > 0 ? at : records.length, 0, r)
+  return [{ ...ds, records }, r.id]
+}
+
+export function setValue(ds: Dataset, recordId: string, fieldId: string, value: FieldValue | null | undefined): Dataset {
+  const f = fieldById(ds, fieldId)
+  if (!f) return ds
+  const v = coerce(f, value)
+  return {
+    ...ds,
+    records: ds.records.map((r) => {
+      if (r.id !== recordId || r.values[fieldId] === v) return r
+      const values = { ...r.values }
+      if (v === undefined) delete values[fieldId]
+      else values[fieldId] = v
+      return { ...r, values }
+    }),
+  }
+}
+
+export function deleteRecord(ds: Dataset, recordId: string): Dataset {
+  return { ...ds, records: ds.records.filter((r) => r.id !== recordId) }
+}
+
+/** Moves a record to sit just before `before` (or last). */
+export function moveRecord(ds: Dataset, recordId: string, before: string | null): Dataset {
+  const r = ds.records.find((x) => x.id === recordId)
+  if (!r || recordId === before) return ds
+  const rest = ds.records.filter((x) => x.id !== recordId)
+  const at = before ? rest.findIndex((x) => x.id === before) : -1
+  rest.splice(at < 0 ? rest.length : at, 0, r)
+  return { ...ds, records: rest }
+}
+
+/** Values keyed by field name (as people and AI assistants write them) → keyed by field id. */
+export function valuesByName(ds: Dataset, named: Record<string, unknown>): { values: Record<string, FieldValue>; unknown: string[]; ds: Dataset } {
+  const values: Record<string, FieldValue> = {}
+  const unknown: string[] = []
+  let next = ds
+  for (const [name, raw] of Object.entries(named)) {
+    const f = fieldByName(next, name)
+    if (!f) {
+      unknown.push(name)
+      continue
+    }
+    if (raw === null || raw === undefined || raw === '') continue
+    if (f.type === 'select') {
+      // New choices are added as they're used.
+      const [withOpt, opt] = addOption(next, f.id, String(raw))
+      next = withOpt
+      if (opt) values[f.id] = opt
+      continue
+    }
+    const v = coerce(f, raw as FieldValue)
+    if (v !== undefined) values[f.id] = v
+  }
+  return { values, unknown, ds: next }
+}
+
+// ----- showing values -------------------------------------------------------------------
+
+export const optionOf = (f: Field, v: FieldValue | undefined) => (f.type === 'select' && typeof v === 'string' ? f.options?.find((o) => o.id === v) : undefined)
+
+export function display(_ds: Dataset, f: Field, v: FieldValue | undefined): string {
+  if (v === undefined || v === '') return ''
+  switch (f.type) {
+    case 'select':
+      return optionOf(f, v)?.name ?? ''
+    case 'checkbox':
+      return v ? 'Yes' : ''
+    case 'number':
+      return typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 6 }) : String(v)
+    default:
+      return String(v)
+  }
+}
+
+export const recordTitle = (ds: Dataset, r: DataRecord) => display(ds, titleField(ds), r.values[titleField(ds).id]) || 'Untitled'
+
+/** Fields a view shows (the title field always). */
+export const shownFields = (ds: Dataset, v: DataView) => ds.fields.filter((f, k) => k === 0 || !v.hidden?.includes(f.id))
+
+function compare(f: Field, a: FieldValue | undefined, z: FieldValue | undefined): number {
+  if (a === undefined && z === undefined) return 0
+  // Empty values sort last either way.
+  if (a === undefined) return 1
+  if (z === undefined) return -1
+  switch (f.type) {
+    case 'number':
+      return Number(a) - Number(z)
+    case 'checkbox':
+      return Number(z) - Number(a)
+    case 'select': {
+      const order = f.options?.map((o) => o.id) ?? []
+      return order.indexOf(String(a)) - order.indexOf(String(z))
+    }
+    default:
+      return String(a).localeCompare(String(z), undefined, { numeric: true, sensitivity: 'base' })
+  }
+}
+
+/** The records a view shows: matching its search, in its sort order (or the dataset's order). */
+export function viewRecords(ds: Dataset, v: DataView): DataRecord[] {
+  let rows = ds.records
+  const q = v.query?.trim().toLowerCase()
+  if (q) {
+    const fields = shownFields(ds, v)
+    rows = rows.filter((r) => fields.some((f) => display(ds, f, r.values[f.id]).toLowerCase().includes(q)))
+  }
+  const sortField = fieldById(ds, v.sort?.field)
+  if (sortField) {
+    const dir = v.sort!.dir === 'desc' ? -1 : 1
+    rows = [...rows].sort((a, z) => {
+      const c = compare(sortField, a.values[sortField.id], z.values[sortField.id])
+      // Keep empties last in both directions.
+      return a.values[sortField.id] === undefined || z.values[sortField.id] === undefined ? c : c * dir
+    })
+  }
+  return rows
+}
+
+// ----- board and timeline views -----------------------------------------------------------
+
+/** The field a board groups by: the view's choice, else the first choice or person field. */
+export function groupField(ds: Dataset, v: DataView): Field | undefined {
+  const chosen = fieldById(ds, v.groupBy)
+  if (chosen && (chosen.type === 'select' || chosen.type === 'person')) return chosen
+  return ds.fields.find((f) => f.type === 'select') ?? ds.fields.find((f) => f.type === 'person')
+}
+
+export interface Group {
+  /** Option id (select), person name, or null for records without a value. */
+  key: string | null
+  name: string
+  color?: string
+  records: DataRecord[]
+}
+
+export function groups(ds: Dataset, v: DataView): Group[] {
+  const f = groupField(ds, v)
+  const rows = viewRecords(ds, v)
+  if (!f) return [{ key: null, name: 'All', records: rows }]
+  const keys: Group[] =
+    f.type === 'select'
+      ? (f.options ?? []).map((o) => ({ key: o.id, name: o.name, color: o.color, records: [] }))
+      : [...new Set(ds.records.map((r) => r.values[f.id]).filter((x): x is string => typeof x === 'string' && !!x))]
+          .sort((a, z) => a.localeCompare(z))
+          .map((p) => ({ key: p, name: p, records: [] }))
+  const none: Group = { key: null, name: `No ${f.name.toLowerCase()}`, records: [] }
+  for (const r of rows) {
+    const val = r.values[f.id]
+    const g = keys.find((k) => k.key === val) ?? none
+    g.records.push(r)
+  }
+  return none.records.length ? [none, ...keys] : keys
+}
+
+/** Moves a record into a board column (setting the grouped field) before `before`. */
+export function moveToGroup(ds: Dataset, v: DataView, recordId: string, key: string | null, before: string | null): Dataset {
+  const f = groupField(ds, v)
+  let next = f ? setValue(ds, recordId, f.id, key) : ds
+  // A sorted view decides its own order; otherwise the drop position is the order.
+  if (!v.sort) next = moveRecord(next, recordId, before)
+  return next
+}
+
+export function dateFields(ds: Dataset, v: DataView): { start?: Field; end?: Field } {
+  const dates = ds.fields.filter((f) => f.type === 'date')
+  const start = fieldById(ds, v.start) ?? dates[0]
+  const end = fieldById(ds, v.end) ?? dates.find((f) => f.id !== start?.id)
+  return { start: start?.type === 'date' ? start : undefined, end: end?.type === 'date' && end.id !== start?.id ? end : undefined }
+}
+
+export interface Bar {
+  record: DataRecord
+  start: number
+  /** Inclusive last day; equal to `start` for one-day items and milestones. */
+  end: number
+  milestone: boolean
+}
+
+/** Records with dates, as bars in days; plus how many have no start date. */
+export function bars(ds: Dataset, v: DataView): { bars: Bar[]; undated: number } {
+  const { start, end } = dateFields(ds, v)
+  if (!start) return { bars: [], undated: ds.records.length }
+  const out: Bar[] = []
+  let undated = 0
+  for (const r of viewRecords(ds, v)) {
+    const s = r.values[start.id]
+    const e = end ? r.values[end.id] : undefined
+    if (typeof s !== 'string' || !isIsoDay(s)) {
+      // A record with only an end date shows as a milestone on that day.
+      if (typeof e === 'string' && isIsoDay(e)) out.push({ record: r, start: toDay(e), end: toDay(e), milestone: true })
+      else undated++
+      continue
+    }
+    const a = toDay(s)
+    const z = typeof e === 'string' && isIsoDay(e) ? Math.max(a, toDay(e)) : a
+    out.push({ record: r, start: a, end: z, milestone: !end || typeof e !== 'string' })
+  }
+  return { bars: out, undated }
+}
+
+/** Shifts a record's dates by whole days (both ends, or just one edge). */
+export function shiftDates(ds: Dataset, v: DataView, recordId: string, days: number, edge?: 'start' | 'end'): Dataset {
+  if (!days) return ds
+  const { start, end } = dateFields(ds, v)
+  const r = ds.records.find((x) => x.id === recordId)
+  if (!r || !start) return ds
+  let next = ds
+  const move = (f: Field | undefined) => {
+    const val = f ? r.values[f.id] : undefined
+    if (f && typeof val === 'string' && isIsoDay(val)) next = setValue(next, recordId, f.id, fromDay(toDay(val) + days))
+  }
+  if (edge !== 'end') move(start)
+  if (edge !== 'start') move(end)
+  // Never let the end come before the start.
+  if (start && end) {
+    const rr = next.records.find((x) => x.id === recordId)!
+    const s = rr.values[start.id]
+    const e = rr.values[end.id]
+    if (typeof s === 'string' && typeof e === 'string' && toDay(e) < toDay(s)) next = setValue(next, recordId, edge === 'start' ? start.id : end.id, edge === 'start' ? e : s)
+  }
+  return next
+}
+
+// ----- making datasets --------------------------------------------------------------------
+
+export function newDataset(name = 'Projects', now = today()): Dataset {
+  const fields = [field('Name', 'text'), field('Status', 'select', ['To do', 'In progress', 'Done']), field('Owner', 'person'), field('Start', 'date'), field('Due', 'date')]
+  const [title, status, owner, start, due] = fields
+  const opt = (k: number) => status.options![k].id
+  const rec = (t: string, s: number, o: string, a: number, z: number): DataRecord => ({
+    id: uid(),
+    values: { [title.id]: t, [status.id]: opt(s), [owner.id]: o, [start.id]: fromDay(now + a), [due.id]: fromDay(now + z) },
+  })
+  return {
+    id: uid(),
+    name,
+    fields,
+    records: [rec('Research', 2, 'Sam', -10, -3), rec('Design', 1, 'Alex', -2, 6), rec('Build', 0, 'Jo', 5, 20), rec('Launch', 0, 'Sam', 21, 21)],
+  }
+}
+
+export function newView(dataset: string, type: DataViewType = 'table'): DataView {
+  return { dataset, type }
+}
+
+const CHOICE_NAME = /^(status|state|stage|phase|priority|severity|type|kind|category|tag|team|lane|area|size|tier|level)$/i
+const PERSON_NAME = /^(owner|assignee|assigned( to)?|person|people|who|lead|author|reporter|responsible|dri)$/i
+
+/** Guesses a column's type from its values (and, for people, its name). */
+export function inferType(values: string[], name = ''): FieldType {
+  const filled = values.map((v) => v.trim()).filter(Boolean)
+  if (PERSON_NAME.test(name.trim()) && !filled.some((v) => /^-?\d/.test(v))) return 'person'
+  if (!filled.length) return 'text'
+  if (filled.every((v) => /^-?[\d,]*\.?\d+$/.test(v))) return 'number'
+  if (filled.every((v) => isIsoDay(v))) return 'date'
+  if (filled.every((v) => /^(true|false|yes|no|y|n|x|✓|✔)$/i.test(v))) return 'checkbox'
+  const distinct = new Set(filled.map((v) => v.toLowerCase()))
+  const short = filled.every((v) => v.length <= 30)
+  if (short && CHOICE_NAME.test(name.trim()) && distinct.size <= 20) return 'select'
+  // Few distinct short values that repeat look like categories.
+  if (short && filled.length >= 3 && distinct.size < filled.length && distinct.size <= Math.max(2, Math.min(12, Math.ceil(filled.length * 0.6)))) return 'select'
+  return 'text'
+}
+
+/** Builds a dataset from columns of text, guessing each column's type. */
+export function datasetFromColumns(name: string, columns: string[], rows: string[][]): Dataset {
+  let ds: Dataset = { id: uid(), name, fields: [], records: [] }
+  const fieldIds: string[] = []
+  columns.forEach((c, k) => {
+    const type = k === 0 ? 'text' : inferType(rows.map((r) => r[k] ?? ''), c)
+    let id: string
+    ;[ds, id] = addField(ds, c || `Column ${k + 1}`, type)
+    fieldIds.push(id)
+  })
+  for (const row of rows) {
+    const named: Record<string, string> = {}
+    columns.forEach((_, k) => (named[ds.fields[k].name] = row[k] ?? ''))
+    const { values, ds: withOpts } = valuesByName(ds, named)
+    ds = addRecord(withOpts, values)[0]
+  }
+  return ds
+}
+
+export function datasetFromTable(name: string, t: TableData): Dataset {
+  return datasetFromColumns(
+    name,
+    t.columns.map((c) => c.name),
+    t.rows.map((r) => t.columns.map((c) => r.cells[c.id] ?? '')),
+  )
+}
+
+export function datasetFromKanban(name: string, k: KanbanData): Dataset {
+  let ds: Dataset = { id: uid(), name, fields: [field('Title', 'text'), field('Status', 'select', k.columns.map((c) => c.title || 'Untitled')), field('Start', 'date'), field('Due', 'date')], records: [] }
+  const [title, status, start, due] = ds.fields
+  k.columns.forEach((c, n) => {
+    for (const card of c.cards) {
+      const values: Record<string, FieldValue> = { [title.id]: card.title, [status.id]: status.options![n].id }
+      if (card.start) values[start.id] = card.start
+      if (card.due) values[due.id] = card.due
+      ds = addRecord(ds, values)[0]
+    }
+  })
+  return ds
+}
+
+export function datasetFromTimeline(name: string, t: TimelineData): Dataset {
+  let ds: Dataset = { id: uid(), name, fields: [field('Title', 'text'), field('Lane', 'select', t.lanes.map((l) => l.name || 'Lane')), field('Start', 'date'), field('End', 'date')], records: [] }
+  const [title, lane, start, end] = ds.fields
+  for (const e of t.entries) {
+    const n = t.lanes.findIndex((l) => l.id === e.lane)
+    const values: Record<string, FieldValue> = { [title.id]: e.title, [start.id]: e.start }
+    if (n >= 0) values[lane.id] = lane.options![n].id
+    if (e.end) values[end.id] = e.end
+    ds = addRecord(ds, values)[0]
+  }
+  return ds
+}
+
+/** The dataset as CSV in a view's order and fields (for copying out and for AI assistants). */
+export function toCsv(ds: Dataset, v?: DataView): string {
+  const fields = v ? shownFields(ds, v) : ds.fields
+  const rows = v ? viewRecords(ds, v) : ds.records
+  const cell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
+  return [fields.map((f) => cell(f.name)), ...rows.map((r) => fields.map((f) => cell(display(ds, f, r.values[f.id]))))].map((l) => l.join(',')).join('\n')
+}
+
+/** The dataset as plain records keyed by field name (for AI assistants). */
+export function plainRecords(ds: Dataset): Record<string, string | number | boolean>[] {
+  return ds.records.map((r) => {
+    const out: Record<string, string | number | boolean> = { id: r.id }
+    for (const f of ds.fields) {
+      const v = r.values[f.id]
+      if (v === undefined) continue
+      out[f.name] = f.type === 'select' ? display(ds, f, v) : v
+    }
+    return out
+  })
+}
+
+const FIELD_W: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76 }
+
+/** A good size for a new view of `ds`. */
+export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: number } {
+  if (type === 'timeline') {
+    const lanes = groupField(ds, { dataset: ds.id, type }) ? groups(ds, { dataset: ds.id, type }).length : 0
+    return { w: 960, h: Math.min(600, Math.max(300, 150 + ds.records.length * 30 + lanes * 26)) }
+  }
+  if (type === 'board') return { w: Math.max(620, Math.min(1400, groups(ds, { dataset: ds.id, type }).length * 248 + 40)), h: 440 }
+  const w = 36 + 40 + ds.fields.reduce((sum, f) => sum + FIELD_W[f.type], 0)
+  return { w: Math.max(560, Math.min(1200, w + 2)), h: Math.min(560, Math.max(260, 120 + ds.records.length * 34)) }
+}
+
+/** A data item's dataset id, for quick lookups. */
+export const datasetOf = (i: Item | undefined): string | undefined => i?.view?.dataset
+

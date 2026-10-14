@@ -9,6 +9,7 @@
 
 import * as B from '../model/board'
 import { type Rect, type Vec, unionAll } from '../model/geom'
+import * as D from '../model/dataset'
 import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid } from '../model/mermaid'
 import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
@@ -21,6 +22,8 @@ import {
   BRANCHES,
   type Board,
   type ConnectorStyle,
+  type DataViewType,
+  type FieldType,
   FILLS,
   type Id,
   type Item,
@@ -62,6 +65,17 @@ export type Op =
       h?: number
     } & Placed)
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
+  | ({
+      op: 'createDatabase'
+      title?: string
+      fields?: (string | { name: string; type?: FieldType; options?: string[] })[]
+      records?: Record<string, unknown>[]
+      views?: DataViewType[]
+      groupBy?: string
+    } & Placed)
+  | { op: 'addRecords'; id: Ref; records: Record<string, unknown>[] }
+  | { op: 'updateRecord'; id: Ref; record: string; values: Record<string, unknown> }
+  | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
   | { op: 'update'; id: Ref; text?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
   | { op: 'delete'; ids: Ref[] }
@@ -334,6 +348,94 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ ids: [...ids] })
         break
       }
+      case 'createDatabase': {
+        const records = op.records ?? []
+        if (!Array.isArray(records) || records.some((r) => !r || typeof r !== 'object')) fail(index, op, '"records" should be a list of objects keyed by field name')
+        const specs = (op.fields ?? []).map((f, k) => (typeof f === 'string' ? { name: f } : f && typeof f === 'object' ? f : fail(index, op, `fields[${k}] should be a name or {"name", "type"}`)))
+        let ds: ReturnType<typeof D.newDataset>
+        if (!specs.length && !records.length) ds = { ...D.newDataset(op.title ?? 'Projects'), name: op.title ?? 'Projects' }
+        else {
+          // Fields come from "fields", else from the records' keys; types are guessed from values unless given.
+          const names = specs.length ? specs.map((f) => text(f.name, 'fields[].name')) : [...new Set(records.flatMap((r) => Object.keys(r)))]
+          const columns = names.map((n) => records.map((r) => (r[n] === undefined || r[n] === null ? '' : String(r[n]))))
+          ds = { id: uid(), name: op.title ?? 'Database', fields: [], records: [] }
+          names.forEach((n, k) => {
+            const spec = specs[k]
+            const grouping = k > 0 && op.groupBy?.trim().toLowerCase() === n.trim().toLowerCase()
+            const guessed = k === 0 ? 'text' : D.inferType(columns[k], n)
+            // A board groups by choices or people, so the groupBy field is one of those.
+            const type: FieldType = spec?.type ?? (grouping && guessed !== 'person' ? 'select' : guessed)
+            if (!D.FIELD_TYPES.some((t) => t.type === type)) fail(index, op, `fields[${k}].type should be one of ${D.FIELD_TYPES.map((t) => t.type).join(', ')}`)
+            let fid: string
+            ;[ds, fid] = D.addField(ds, n, type)
+            for (const o of spec?.options ?? []) ds = D.addOption(ds, fid, String(o))[0]
+          })
+          for (const r of records) {
+            const { values, ds: withOpts } = D.valuesByName(ds, r)
+            ds = D.addRecord(withOpts, values)[0]
+          }
+        }
+        b = D.addDataset(b, ds)
+        const views = op.views?.length ? op.views : ['table' as const]
+        const group = op.groupBy ? D.fieldByName(ds, op.groupBy) : undefined
+        if (op.groupBy && !group) fail(index, op, `"groupBy" names no field. Fields: ${ds.fields.map((f) => f.name).join(', ')}`)
+        const ids: Id[] = []
+        let x = 0
+        for (const type of views) {
+          if (!D.VIEW_TYPES.some((t) => t.type === type)) fail(index, op, `"views" can hold ${D.VIEW_TYPES.map((t) => t.type).join(', ')}`)
+          const view = { ...D.newView(ds.id, type), ...(group ? { groupBy: group.id } : {}) }
+          const size = D.viewSize(ds, type)
+          ids.push(add(B.newItem('data', { x, y: 0, w: size.w, h: size.h }, { text: ds.name, view })))
+          x += size.w + 60
+        }
+        place(ids, op.at)
+        done({ id: ids[0], ids })
+        break
+      }
+      case 'addRecords':
+      case 'updateRecord':
+      case 'deleteRecords': {
+        const id = resolve(op.id, 'id')
+        const dsId = B.getItem(b, id)?.view?.dataset
+        let ds = D.getDataset(b, dsId)
+        if (!ds) fail(index, op, '"id" should be a database view')
+        const findRecord = (q: string, field: string) => {
+          const r = ds!.records.find((x) => x.id === q) ?? ds!.records.find((x) => D.recordTitle(ds!, x).toLowerCase() === String(q).toLowerCase())
+          if (!r) fail(index, op, `"${field}" matches no record by id or ${D.titleField(ds!).name}`)
+          return r
+        }
+        const valuesOf = (named: unknown, field: string) => {
+          if (!named || typeof named !== 'object') fail(index, op, `"${field}" should be an object keyed by field name`)
+          const out = D.valuesByName(ds!, named as Record<string, unknown>)
+          if (out.unknown.length) fail(index, op, `unknown field ${out.unknown.map((u) => `"${u}"`).join(', ')}. Fields: ${ds!.fields.map((f) => f.name).join(', ')}`)
+          ds = out.ds
+          return out.values
+        }
+        if (op.op === 'addRecords') {
+          if (!Array.isArray(op.records)) fail(index, op, '"records" should be a list')
+          op.records.forEach((r, k) => {
+            // Values first: they may add new choices to the dataset.
+            const values = valuesOf(r, `records[${k}]`)
+            ds = D.addRecord(ds!, values)[0]
+          })
+        } else if (op.op === 'updateRecord') {
+          const r = findRecord(op.record, 'record')
+          const values = valuesOf(op.values, 'values')
+          for (const [f, v] of Object.entries(values)) ds = D.setValue(ds!, r.id, f, v)
+          // Fields set to null or "" are cleared.
+          for (const [name, v] of Object.entries(op.values)) {
+            const f = D.fieldByName(ds!, name)
+            if (f && (v === null || v === '')) ds = D.setValue(ds!, r.id, f.id, null)
+          }
+        } else {
+          if (!Array.isArray(op.records)) fail(index, op, '"records" should be a list of record ids or titles')
+          op.records.forEach((q, k) => (ds = D.deleteRecord(ds!, findRecord(String(q), `records[${k}]`).id)))
+        }
+        const final = ds!
+        b = D.updateDataset(b, final.id, () => final)
+        done({ id })
+        break
+      }
       case 'addComment': {
         const id = resolve(op.id, 'id')
         b = addNote(b, id, text(op.text, 'text'), op.author, ctx.now)
@@ -363,6 +465,10 @@ export const OPS: Op['op'][] = [
   'update',
   'delete',
   'addComment',
+  'createDatabase',
+  'addRecords',
+  'updateRecord',
+  'deleteRecords',
 ]
 
 /** Pulls a list of operations out of pasted JSON: `{"ops": […]}`, a bare list, or one operation. */

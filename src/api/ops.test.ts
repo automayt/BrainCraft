@@ -94,3 +94,59 @@ describe('operations API', () => {
     expect(opsFromText('not json')).toBeNull()
   })
 })
+
+describe('database operations', () => {
+  it('creates linked views over one dataset and edits records by name', async () => {
+    const { applyOps } = await import('./ops')
+    const { emptyBoard } = await import('../model/board')
+    const { fakeMeasure } = await import('../model/test-helpers')
+    const D = await import('../model/dataset')
+    let { board, results } = applyOps(
+      emptyBoard(),
+      [
+        {
+          op: 'createDatabase',
+          ref: 'db',
+          title: 'Roadmap',
+          records: [
+            { Feature: 'SSO', Status: 'Doing', Owner: 'Sam', Start: '2026-10-01', End: '2026-10-20', Points: 5 },
+            { Feature: 'Exports', Status: 'To do', Owner: 'Jo', Start: '2026-10-15', End: '2026-11-02', Points: 3 },
+            { Feature: 'Audit log', Status: 'To do', Owner: 'Sam', Start: '2026-11-01', End: '2026-11-30', Points: 8 },
+          ],
+          views: ['table', 'board', 'timeline'],
+          groupBy: 'Status',
+        },
+        { op: 'addRecords', id: 'db', records: [{ Feature: 'Billing', Status: 'Blocked' }] },
+        { op: 'updateRecord', id: 'db', record: 'sso', values: { Status: 'Done', Points: null } },
+        { op: 'deleteRecords', id: 'db', records: ['Exports'] },
+      ],
+      { measure: fakeMeasure },
+    )
+    expect(results[0].ids).toHaveLength(3)
+    expect(board.datasets).toHaveLength(1)
+    const ds = board.datasets![0]
+    expect(ds.fields.map((f) => `${f.name}:${f.type}`)).toEqual(['Feature:text', 'Status:select', 'Owner:person', 'Start:date', 'End:date', 'Points:number'])
+    expect(D.plainRecords(ds).map((r) => [r.Feature, r.Status, r.Points ?? null])).toEqual([
+      ['SSO', 'Done', null],
+      ['Audit log', 'To do', 8],
+      ['Billing', 'Blocked', null],
+    ])
+    const views = board.items.filter((i) => i.kind === 'data')
+    expect(views.map((v) => v.view!.type)).toEqual(['table', 'board', 'timeline'])
+    expect(new Set(views.map((v) => v.view!.dataset)).size).toBe(1)
+    expect(views[1].view!.groupBy).toBe(ds.fields[1].id)
+
+    expect(() => applyOps(board, [{ op: 'addRecords', id: views[0].id, records: [{ Colour: 'red' }] }], { measure: fakeMeasure })).toThrow(/unknown field "Colour"\. Fields: Feature, Status/)
+    ;({ board } = applyOps(board, [{ op: 'delete', ids: views.map((v) => v.id) }], { measure: fakeMeasure }))
+    expect(board.datasets ?? []).toHaveLength(0)
+  })
+
+  it('makes a sample database when given nothing', async () => {
+    const { applyOps } = await import('./ops')
+    const { emptyBoard } = await import('../model/board')
+    const { fakeMeasure } = await import('../model/test-helpers')
+    const { board } = applyOps(emptyBoard(), [{ op: 'createDatabase', title: 'Work' }], { measure: fakeMeasure })
+    expect(board.datasets![0].name).toBe('Work')
+    expect(board.datasets![0].records.length).toBeGreaterThan(0)
+  })
+})
