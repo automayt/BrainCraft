@@ -176,6 +176,8 @@ export class Editor {
   version = 0
   /** Called after every change to the board (for autosave). */
   onBoardChange: ((b: Board) => void) | null = null
+  /** Shared links and presentations: the board can be looked at, not changed. */
+  readOnly = false
 
   readonly measure: M.Measure
 
@@ -205,6 +207,7 @@ export class Editor {
 
   /** Replaces the board, re-running the mind-map layout. Does not record history. */
   private apply(b: Board) {
+    if (this.readOnly) return
     const next = M.layoutAll(b, this.measure)
     if (next === this.board) return
     this.board = next
@@ -222,6 +225,14 @@ export class Editor {
     this.apply(f(this.board))
     this.commit(before)
     this.emit()
+  }
+
+  /** Swaps in a whole new board (e.g. an old version) as one undoable step. */
+  replaceBoard(board: Board, status = '') {
+    this.selection.clear()
+    this.selectedConnector = null
+    this.edit(() => board)
+    this.setStatus(status)
   }
 
   load(board: Board, status = '') {
@@ -259,6 +270,7 @@ export class Editor {
   }
 
   setTool(tool: Tool) {
+    if (this.readOnly && tool !== 'select' && tool !== 'hand') return
     this.finishEditing()
     this.tool = tool
     this.emit()
@@ -299,6 +311,7 @@ export class Editor {
   }
 
   private afterJump(b: Board) {
+    if (this.readOnly) return
     this.board = b
     this.onBoardChange?.(b)
     this.selection = new Set([...this.selection].filter((id) => B.getItem(b, id)))
@@ -340,6 +353,7 @@ export class Editor {
   // ----- text editing ------------------------------------------------------------
 
   startEditing(id: Id, opts: { before?: Board; created?: boolean } = {}) {
+    if (this.readOnly) return
     if (this.editing?.id !== id) this.finishEditing()
     const item = B.getItem(this.board, id)
     if (!item || !hasText(item.kind)) return
@@ -352,7 +366,7 @@ export class Editor {
   /** Starts editing the label of connector `id`. */
   startEditingLabel(id: Id) {
     this.finishEditing()
-    if (!B.getConnector(this.board, id)) return
+    if (this.readOnly || !B.getConnector(this.board, id)) return
     this.selection = new Set()
     this.selectedConnector = id
     this.editing = { id, connector: true, before: this.board, created: false }

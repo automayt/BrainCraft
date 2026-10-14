@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { BrainCraftAPI } from '../api/api'
 import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
-import { fromJson, toJson, welcomeBoard } from '../model/serialize'
+import { FILE_EXT, Workspace } from '../store/workspace'
+import { BoardsDialog, ReadOnlyBanner, ShareDialog, VersionsDialog } from './Boards'
 import { Canvas } from './Canvas'
 import { BottomLeft, Help, ToolRail, Toast, TopLeft, TopRight } from './Chrome'
 import { ContextMenu } from './ContextMenu'
@@ -14,40 +15,40 @@ import { NotesPanel } from './NotesPanel'
 import { SearchPalette } from './SearchPalette'
 import { clearMeasureCache, measureText } from './measure'
 import { EditorContext } from './useEditor'
-
-const STORAGE_KEY = 'braincraft:board'
-
-function loadStored() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return fromJson(raw)
-  } catch {
-    // Unreadable or blocked storage: start fresh.
-  }
-  return welcomeBoard()
-}
+import { WorkspaceContext, useWorkspace } from './useWorkspace'
 
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
 }
 
-function download(editor: Editor) {
-  const name = (editor.board.title || 'board').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'board'
-  const url = URL.createObjectURL(new Blob([toJson(editor.board)], { type: 'application/json' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${name}.braincraft.json`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-  editor.setStatus(`Downloaded ${a.download}`)
+const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
+
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | null
+
+/** Opens the board library first, then the app. */
+export function Root() {
+  const [ws, setWs] = useState<Workspace | null>(null)
+  useEffect(() => {
+    let live = true
+    void Workspace.start(new Editor(emptyBoard(), measureText)).then((w) => live && setWs(w))
+    return () => {
+      live = false
+    }
+  }, [])
+  if (!ws) return <div className="app loading" aria-busy="true" />
+  return (
+    <WorkspaceContext.Provider value={ws}>
+      <App ws={ws} />
+    </WorkspaceContext.Provider>
+  )
 }
 
-export function App() {
-  const [editor] = useState(() => new Editor(loadStored(), measureText))
+function App({ ws }: { ws: Workspace }) {
+  useWorkspace()
+  const editor = ws.editor
   const [theme, setThemeState] = useState<Theme>(storedTheme)
-  const [help, setHelp] = useState(false)
-  const [porting, setPorting] = useState(false)
+  const [dialog, setDialog] = useState<Dialog>(null)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
@@ -58,15 +59,18 @@ export function App() {
       applyTheme(t)
       setThemeState(t)
     },
-    openHelp: () => setHelp(true),
-    openImport: () => setPorting(true),
-    openFile: () => fileInput.current?.click(),
-    openImage: () => imageInput.current?.click(),
-    download: () => download(editor),
-    newBoard: () => {
-      if (editor.board.items.length && !confirm('Start a new board? This replaces the board saved in this browser — download it first to keep a copy.')) return
-      editor.load(emptyBoard(), 'New board')
+    openHelp: () => setDialog('help'),
+    openImport: () => setDialog('import'),
+    openFile: () => {
+      void ws.pickFile().then((picked) => picked || fileInput.current?.click())
     },
+    openImage: () => imageInput.current?.click(),
+    download: () => ws.download(),
+    saveFile: (saveAs) => void ws.saveFile(saveAs),
+    newBoard: () => void ws.newBoard(),
+    openBoards: () => setDialog('boards'),
+    openVersions: () => setDialog('versions'),
+    openShare: () => setDialog('share'),
     menu,
     openMenu: setMenu,
     closeMenu: () => setMenu(null),
@@ -85,18 +89,11 @@ export function App() {
   }, [editor])
 
   useEffect(() => {
-    // Autosave to this browser, debounced.
-    let timer: number | undefined
-    editor.onBoardChange = (b) => {
-      clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        try {
-          localStorage.setItem(STORAGE_KEY, toJson(b))
-        } catch {
-          editor.setStatus('Could not save in this browser — download a copy to keep your work')
-        }
-      }, 400)
-    }
+    // Autosave happens in the workspace; make sure the last edit lands as the page goes away.
+    const onHide = () => ws.rescue()
+    const onVisibility = () => document.visibilityState === 'hidden' && void ws.flush()
+    window.addEventListener('pagehide', onHide)
+    document.addEventListener('visibilitychange', onVisibility)
     // Scripts and AI assistants drive the board through window.BrainCraft (see docs/API.md).
     ;(window as unknown as { BrainCraft: BrainCraftAPI }).BrainCraft = new BrainCraftAPI(editor)
     // Frame the board once the canvas has its size.
@@ -107,6 +104,11 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         editor.setSearchOpen(!editor.searchOpen)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault()
+        setDialog('boards')
         return
       }
       // Keys already handled inside a panel or a live table/board/timeline stay there.
@@ -122,7 +124,7 @@ export function App() {
       }
       if (e.key === '?' && !ctrl) {
         e.preventDefault()
-        setHelp((h) => !h)
+        setDialog((d) => (d === 'help' ? null : 'help'))
         return
       }
       if ((e.target as Element | null)?.closest?.('.no-canvas') && e.key !== 'Escape') return
@@ -136,7 +138,7 @@ export function App() {
         return
       }
       const result = editor.keyDown(e.key, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey })
-      if (result === 'save') download(editor)
+      if (result === 'save') void ws.saveFile(e.shiftKey)
       if (result) e.preventDefault()
     }
     const onKeyUp = (e: KeyboardEvent) => {
@@ -179,19 +181,33 @@ export function App() {
     document.addEventListener('cut', onCopy)
     document.addEventListener('paste', onPaste)
     return () => {
-      editor.onBoardChange = null
+      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       document.removeEventListener('copy', onCopy)
       document.removeEventListener('cut', onCopy)
       document.removeEventListener('paste', onPaste)
     }
-  }, [editor])
+  }, [editor, ws])
 
+  const close = () => setDialog(null)
   return (
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
-        <div className={`app${editor.notesOpen ? ' notes-open' : ''}`}>
+        <div
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}`}
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+          }}
+          onDrop={(e) => {
+            // Images are handled by the canvas; board files open as new boards.
+            const files = Array.from(e.dataTransfer.files).filter(isBoardFile)
+            if (!files.length) return
+            e.preventDefault()
+            for (const f of files) void ws.openFile(f)
+          }}
+        >
           <Canvas />
           <TopLeft />
           <TopRight />
@@ -201,22 +217,21 @@ export function App() {
           <ContextMenu />
           <Toast />
           <SearchPalette />
-          {help && <Help onClose={() => setHelp(false)} />}
-          {porting && <ImportExport onClose={() => setPorting(false)} />}
+          <ReadOnlyBanner />
+          {dialog === 'help' && <Help onClose={close} />}
+          {dialog === 'import' && <ImportExport onClose={close} />}
+          {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
+          {dialog === 'versions' && <VersionsDialog onClose={close} />}
+          {dialog === 'share' && <ShareDialog onClose={close} />}
           <input
             ref={fileInput}
             type="file"
-            accept=".json,application/json"
+            accept={`${FILE_EXT},.json,application/json`}
             hidden
-            onChange={async (e) => {
+            onChange={(e) => {
               const f = e.target.files?.[0]
               e.target.value = ''
-              if (!f) return
-              try {
-                editor.load(fromJson(await f.text()), `Opened ${f.name}`)
-              } catch (err) {
-                editor.setStatus(`Could not open ${f.name}: ${(err as Error).message}`)
-              }
+              if (f) void ws.openFile(f)
             }}
           />
           <input

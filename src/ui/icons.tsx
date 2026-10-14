@@ -221,3 +221,33 @@ export const CheckIcon = () => (
     <path d="M5 12.5l4.5 4.5L19 7.5" />
   </Svg>
 )
+
+export const BoardsIcon = () => (
+  <Svg>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" />
+    <rect x="13" y="4" width="7" height="7" rx="1.5" />
+    <rect x="4" y="13" width="7" height="7" rx="1.5" />
+    <rect x="13" y="13" width="7" height="7" rx="1.5" />
+  </Svg>
+)
+
+export const ShareIcon = () => (
+  <Svg>
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+  </Svg>
+)
+
+export const HistoryIcon = () => (
+  <Svg>
+    <path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6" />
+    <path d="M4 4v4.6h4.6" />
+    <path d="M12 8v4.5l3 2" />
+  </Svg>
+)
+
+export const PlayIcon = () => (
+  <Svg>
+    <path d="M8 5.5v13l10-6.5z" />
+  </Svg>
+)

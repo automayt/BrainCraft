@@ -1,0 +1,388 @@
+/** The board library, version history, share links and the read-only banner. */
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { TEMPLATES, boardFromTemplate } from '../model/templates'
+import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
+import { darken } from './BoardView'
+import { ink, mindRootFill } from './paint'
+import { useEditor } from './useEditor'
+import { useEscape } from './useEscape'
+import { useWorkspace } from './useWorkspace'
+
+export function timeAgo(t: number, now = Date.now()): string {
+  const s = Math.round((now - t) / 1000)
+  if (s < 45) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
+  const d = Math.round(h / 24)
+  if (d === 1) return 'yesterday'
+  if (d < 7) return `${d} days ago`
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d > 300 ? 'numeric' : undefined })
+}
+
+function fillOf([, , , , color, kind]: ThumbRect): string {
+  if (kind === 'text' || kind === 'pen') return ink(color)
+  if (kind === 'table' || kind === 'kanban' || kind === 'timeline') return 'var(--surface-3)'
+  if (kind === 'mind') return mindRootFill(color)
+  return darken(color, 0.85)
+}
+
+/** A miniature of a board: every object as a coloured block. */
+export function Thumb({ thumb, aspect }: { thumb: ThumbRect[]; aspect: number }) {
+  const w = aspect >= 1 ? 1000 : 1000 * aspect
+  const h = aspect >= 1 ? 1000 / aspect : 1000
+  const pad = 60
+  return (
+    <svg className="thumb" viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      {thumb.map((r, k) =>
+        r[5] === 'frame' ? (
+          <rect key={k} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={8} className="thumb-frame" />
+        ) : (
+          <rect key={k} x={r[0]} y={r[1]} width={r[2]} height={Math.max(r[3], 4)} rx={Math.min(6, r[2] / 6)} style={{ fill: fillOf(r) }} />
+        ),
+      )}
+    </svg>
+  )
+}
+
+function Dialog({ label, onClose, className = '', children }: { label: string; onClose: () => void; className?: string; children: React.ReactNode }) {
+  useEscape(onClose)
+  return (
+    <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`modal ${className}`} role="dialog" aria-label={label} onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ----- board library ---------------------------------------------------------------
+
+export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onOpenFile: () => void }) {
+  const ws = useWorkspace()
+  const editor = useEditor()
+  const [query, setQuery] = useState('')
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return q ? ws.boards.filter((b) => b.title.toLowerCase().includes(q)) : ws.boards
+  }, [ws.boards, query])
+
+  const open = (id: string) => {
+    onClose()
+    if (id !== ws.boardId) void ws.switchTo(id)
+  }
+  const create = (t: (typeof TEMPLATES)[number]) => {
+    onClose()
+    void ws.newBoard(boardFromTemplate(t, editor.measure))
+  }
+
+  return (
+    <Dialog label="Your boards" onClose={onClose} className="boards">
+      <header>
+        <h2>Your boards</h2>
+        <input
+          className="boards-search"
+          placeholder="Find a board"
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && shown[0] && open(shown[0].id)}
+        />
+        <button onClick={() => (onClose(), onOpenFile())}>Open file…</button>
+        <button className="icon-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <div className="boards-body">
+        {!query && (
+          <section className="templates" aria-label="Start a new board">
+            {TEMPLATES.map((t) => (
+              <button key={t.id} className="template" onClick={() => create(t)}>
+                <TemplateThumb id={t.id} />
+                <strong>{t.label}</strong>
+                <small>{t.hint}</small>
+              </button>
+            ))}
+          </section>
+        )}
+        {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
+        <div className="board-grid">
+          {shown.map((b) => (
+            <BoardCard
+              key={b.id}
+              meta={b}
+              current={b.id === ws.boardId}
+              renaming={renaming === b.id}
+              confirming={confirming === b.id}
+              onOpen={() => open(b.id)}
+              onRename={(title) => {
+                setRenaming(null)
+                if (title.trim() && title !== b.title) void ws.rename(b.id, title.trim())
+              }}
+              onStartRename={() => setRenaming(b.id)}
+              onDuplicate={() => void ws.duplicate(b.id)}
+              onDelete={() => (confirming === b.id ? (setConfirming(null), void ws.remove(b.id)) : setConfirming(b.id))}
+              onCancelDelete={() => setConfirming(null)}
+            />
+          ))}
+          {!shown.length && <p className="muted empty">No boards match “{query}”.</p>}
+        </div>
+      </div>
+    </Dialog>
+  )
+}
+
+const templateThumbs = new Map<string, ReturnType<typeof thumbnail>>()
+
+function TemplateThumb({ id }: { id: string }) {
+  const editor = useEditor()
+  if (!templateThumbs.has(id)) templateThumbs.set(id, thumbnail(boardFromTemplate(TEMPLATES.find((t) => t.id === id)!, editor.measure)))
+  const t = templateThumbs.get(id)!
+  return t.thumb.length ? <Thumb {...t} /> : <span className="thumb blank-thumb">+</span>
+}
+
+function BoardCard(p: {
+  meta: BoardMeta
+  current: boolean
+  renaming: boolean
+  confirming: boolean
+  onOpen: () => void
+  onRename: (title: string) => void
+  onStartRename: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+  onCancelDelete: () => void
+}) {
+  const { meta } = p
+  return (
+    <div className={`board-card${p.current ? ' current' : ''}`}>
+      <button className="board-open" onClick={p.onOpen} aria-label={`Open ${meta.title}`}>
+        <Thumb thumb={meta.thumb} aspect={meta.aspect} />
+      </button>
+      <div className="board-info">
+        {p.renaming ? (
+          <input
+            autoFocus
+            defaultValue={meta.title}
+            aria-label="Board name"
+            onBlur={(e) => p.onRename(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                p.onRename(meta.title)
+              }
+            }}
+          />
+        ) : (
+          <strong title={meta.title} onDoubleClick={p.onStartRename}>
+            {meta.title}
+          </strong>
+        )}
+        <small>
+          {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} object{meta.items === 1 ? '' : 's'}
+        </small>
+      </div>
+      <div className="board-actions">
+        {p.confirming ? (
+          <>
+            <button className="danger confirm" onClick={p.onDelete}>
+              Delete forever
+            </button>
+            <button onClick={p.onCancelDelete}>Keep</button>
+          </>
+        ) : (
+          <>
+            <button onClick={p.onStartRename}>Rename</button>
+            <button onClick={p.onDuplicate}>Duplicate</button>
+            <button className="danger" onClick={p.onDelete}>
+              Delete
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ----- version history ---------------------------------------------------------------
+
+export function VersionsDialog({ onClose }: { onClose: () => void }) {
+  const ws = useWorkspace()
+  const [versions, setVersions] = useState<VersionMeta[] | null>(null)
+  const [name, setName] = useState('')
+  const [preview, setPreview] = useState<{ v: VersionMeta; thumb: ReturnType<typeof thumbnail> } | null>(null)
+  const reload = () => void ws.versions().then(setVersions)
+  useEffect(reload, [ws])
+
+  const show = async (v: VersionMeta) => {
+    const b = await ws.previewVersion(v)
+    if (b) setPreview({ v, thumb: thumbnail(b) })
+  }
+
+  return (
+    <Dialog label="Version history" onClose={onClose} className="versions">
+      <header>
+        <h2>Version history</h2>
+        <button className="icon-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <form
+        className="version-save"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          await ws.saveVersion(name || 'Saved version')
+          setName('')
+          reload()
+        }}
+      >
+        <input placeholder="Name this version, e.g. “Before the reorg”" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <button className="primary" type="submit">
+          Save version
+        </button>
+      </form>
+      <div className="versions-body">
+        <ol className="version-list">
+          {versions?.map((v) => (
+            <li key={v.at} className={preview?.v.at === v.at ? 'on' : ''}>
+              <button className="version-pick" onClick={() => void show(v)} onFocus={() => void show(v)}>
+                <strong>{v.name ?? 'Autosave'}</strong>
+                <small>
+                  {new Date(v.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {v.items} objects
+                </small>
+              </button>
+            </li>
+          ))}
+          {versions && !versions.length && <li className="muted empty">Versions appear here as you work — one every ten minutes, plus any you name.</li>}
+        </ol>
+        <div className="version-preview">
+          {preview ? (
+            <>
+              <Thumb {...preview.thumb} />
+              <div className="version-preview-foot">
+                <span>
+                  <strong>{preview.v.title}</strong>
+                  <small className="muted"> · {timeAgo(preview.v.at)}</small>
+                </span>
+                <span>
+                  <button
+                    className="danger"
+                    onClick={async () => {
+                      await ws.deleteVersion(preview.v)
+                      setPreview(null)
+                      reload()
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    className="primary"
+                    onClick={async () => {
+                      await ws.restoreVersion(preview.v)
+                      onClose()
+                    }}
+                  >
+                    Restore this version
+                  </button>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="muted">Pick a version to preview it.</p>
+          )}
+        </div>
+      </div>
+    </Dialog>
+  )
+}
+
+// ----- share links -------------------------------------------------------------------
+
+const LONG_LINK = 200_000
+
+export function ShareDialog({ onClose }: { onClose: () => void }) {
+  const ws = useWorkspace()
+  const editor = useEditor()
+  const hasImages = editor.board.items.some((i) => i.kind === 'image')
+  const [images, setImages] = useState(true)
+  const [link, setLink] = useState('')
+  const [copied, setCopied] = useState(false)
+  const field = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    let live = true
+    void ws.shareLink({ images }).then((l) => live && setLink(l))
+    return () => {
+      live = false
+    }
+  }, [ws, images])
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      field.current?.select()
+      document.execCommand('copy')
+    }
+    setCopied(true)
+  }
+
+  const kb = Math.ceil(link.length / 1024)
+  return (
+    <Dialog label="Share a read-only link" onClose={onClose} className="share">
+      <header>
+        <h2>Share a read-only link</h2>
+        <button className="icon-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <div className="share-body">
+        <p className="muted">
+          The whole board travels inside the link, so anyone with it sees this board as it is right now. Nothing is uploaded anywhere. Later changes need a new link.
+        </p>
+        <div className="share-row">
+          <input ref={field} readOnly value={link || 'Making the link…'} onFocus={(e) => e.target.select()} aria-label="Share link" />
+          <button className="primary" disabled={!link} onClick={copy}>
+            {copied ? 'Copied' : 'Copy link'}
+          </button>
+        </div>
+        {hasImages && (
+          <label className="check-row">
+            <input type="checkbox" checked={images} onChange={(e) => (setImages(e.target.checked), setCopied(false))} />
+            Include images (they make the link much longer)
+          </label>
+        )}
+        {link && (
+          <p className={kb * 1024 > LONG_LINK ? 'warning' : 'muted'}>
+            {kb} KB link.{kb * 1024 > LONG_LINK ? ' Some apps cut links this long — send it as a file instead if it doesn’t open.' : ''}
+          </p>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
+// ----- read-only banner -----------------------------------------------------------------
+
+export function ReadOnlyBanner() {
+  const ws = useWorkspace()
+  if (!ws.readOnly) return null
+  return (
+    <div className="readonly-banner island no-canvas" role="status">
+      <span className="readonly-dot" aria-hidden="true" />
+      <span>
+        <strong>Shared board</strong> · view only
+      </span>
+      <button className="primary" onClick={() => void ws.keepCopy()}>
+        Save a copy to edit
+      </button>
+      <button onClick={() => ws.boards[0] && void ws.switchTo(ws.boards[0].id)} disabled={!ws.boards.length}>
+        My boards
+      </button>
+    </div>
+  )
+}
