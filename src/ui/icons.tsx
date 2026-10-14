@@ -58,6 +58,12 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
       <path d="M12 11.5V15" />
     </Svg>
   ),
+  comment: (
+    <Svg>
+      <path d="M4 5h16v11H10l-4 4v-4H4z" />
+      <path d="M8 9h8M8 12h5" />
+    </Svg>
+  ),
   mind: (
     <Svg>
       <rect x="8.5" y="10" width="7" height="4" rx="2" fill="currentColor" stroke="none" />
@@ -120,3 +126,17 @@ export function FlowShapeIcon({ shape, size = 28 }: { shape: FlowShape; size?: n
     </svg>
   )
 }
+
+export const CommentsIcon = () => (
+  <Svg>
+    <path d="M4 5h16v11H10l-4 4v-4H4z" />
+    <path d="M8 9h8M8 12h5" />
+  </Svg>
+)
+
+export const SearchIcon = () => (
+  <Svg>
+    <circle cx="11" cy="11" r="6" />
+    <path d="M20 20l-4.5-4.5" />
+  </Svg>
+)

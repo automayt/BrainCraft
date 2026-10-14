@@ -2,7 +2,96 @@ import type { Rect, Vec } from './geom'
 
 export type Id = number
 
-export type Kind = 'sticky' | 'rect' | 'ellipse' | 'text' | 'frame' | 'pen' | 'mind' | 'flow'
+export type Kind =
+  | 'sticky'
+  | 'rect'
+  | 'ellipse'
+  | 'text'
+  | 'frame'
+  | 'pen'
+  | 'mind'
+  | 'flow'
+  | 'comment'
+  | 'image'
+  | 'table'
+  | 'kanban'
+  | 'timeline'
+
+/** A timestamped work note attached to an object. */
+export interface Note {
+  id: string
+  text: string
+  /** Milliseconds since the epoch. */
+  at: number
+  author?: string
+}
+
+export interface TableColumn {
+  id: string
+  name: string
+  width: number
+  hidden?: boolean
+}
+
+export interface TableRow {
+  id: string
+  cells: Record<string, string>
+  hidden?: boolean
+}
+
+export interface TableData {
+  columns: TableColumn[]
+  rows: TableRow[]
+  sort?: { column: string; dir: 'asc' | 'desc' }
+  /** Case-insensitive "contains" filter per column. */
+  filters?: Record<string, string>
+  showFilters?: boolean
+  /** Show hidden rows and columns (faded) so they can be restored. */
+  showHidden?: boolean
+}
+
+export interface KanbanCard {
+  id: string
+  title: string
+  color?: string
+  /** ISO dates (YYYY-MM-DD). */
+  start?: string
+  due?: string
+}
+
+export interface KanbanColumn {
+  id: string
+  title: string
+  cards: KanbanCard[]
+}
+
+export interface KanbanData {
+  columns: KanbanColumn[]
+}
+
+export interface TimelineLane {
+  id: string
+  name: string
+}
+
+export interface TimelineEntry {
+  id: string
+  lane: string
+  title: string
+  /** ISO dates (YYYY-MM-DD); no `end` means a milestone. */
+  start: string
+  end?: string
+  color: string
+}
+
+export interface TimelineData {
+  lanes: TimelineLane[]
+  entries: TimelineEntry[]
+  /** Kanban boards whose dated cards appear on this timeline. */
+  sources?: Id[]
+  /** Days per screen pixel are derived from this range; omitted means fit the content. */
+  range?: { start: string; end: string }
+}
 
 /** Standard flowchart symbols, drawn by `flow` items. */
 export type FlowShape = 'process' | 'decision' | 'terminator' | 'data' | 'document' | 'database' | 'subroutine'
@@ -41,6 +130,15 @@ export interface Item extends Rect {
   collapsed?: boolean
   /** Flowchart symbol of a `flow` item. */
   shape?: FlowShape
+  /** Work notes (comments) on this object, oldest first. */
+  notes?: Note[]
+  /** Image data URL of an `image` item. */
+  src?: string
+  /** When a comment block was written. */
+  createdAt?: number
+  table?: TableData
+  kanban?: KanbanData
+  timeline?: TimelineData
 }
 
 export interface Connector {
@@ -106,8 +204,12 @@ export const TEXT_ON_FILL = '#1e1e24'
 
 /** Whether the item's colour is an ink (text/line) colour rather than a fill. */
 export const usesInk = (k: Kind) => k === 'text' || k === 'pen'
-export const hasText = (k: Kind) => k !== 'pen'
-export const isResizable = (k: Kind) => k !== 'mind'
+export const hasText = (k: Kind) => k !== 'pen' && k !== 'image'
+export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table'
+/** Objects with their own interactive content (live once selected). */
+export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline'
+/** Height of the draggable title strip on widgets. */
+export const WIDGET_TITLE_H = 40
 
 export function defaultSize(k: Kind): { w: number; h: number } {
   switch (k) {
@@ -125,6 +227,16 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 160, h: 52 }
     case 'flow':
       return { w: 170, h: 84 }
+    case 'comment':
+      return { w: 260, h: 150 }
+    case 'image':
+      return { w: 320, h: 240 }
+    case 'table':
+      return { w: 520, h: 220 }
+    case 'kanban':
+      return { w: 860, h: 460 }
+    case 'timeline':
+      return { w: 1000, h: 320 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -143,6 +255,14 @@ export function defaultColor(k: Kind): string {
       return MIND_ROOT_COLOR
     case 'flow':
       return FLOW_SHAPES[1].color
+    case 'comment':
+      return '#fff4d6'
+    case 'kanban':
+      return '#eef0f5'
+    case 'image':
+    case 'table':
+    case 'timeline':
+      return '#ffffff'
     case 'text':
     case 'pen':
       return INKS[0][1]
@@ -157,6 +277,12 @@ export function defaultFontSize(k: Kind): number {
       return 18
     case 'flow':
       return 17
+    case 'comment':
+      return 16
+    case 'table':
+    case 'kanban':
+    case 'timeline':
+      return 18
     default:
       return 22
   }
@@ -171,4 +297,9 @@ export const KIND_LABELS: Record<Kind, string> = {
   pen: 'Drawing',
   mind: 'Mind map node',
   flow: 'Flowchart shape',
+  comment: 'Comment',
+  image: 'Image',
+  table: 'Table',
+  kanban: 'Kanban board',
+  timeline: 'Timeline',
 }

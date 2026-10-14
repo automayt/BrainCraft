@@ -95,7 +95,55 @@ export function ItemShape({ item, depth, editing }: { item: Item; depth: number;
       return <MindNode item={item} depth={depth} editing={editing} />
     case 'flow':
       return <FlowNode item={item} editing={editing} />
+    case 'comment':
+      return <CommentBlock item={item} editing={editing} />
+    case 'image':
+      return <image href={item.src} x={item.x} y={item.y} width={item.w} height={item.h} preserveAspectRatio="none" />
+    default:
+      return null
   }
+}
+
+/** Where a comment block's text goes. */
+export function commentBodyRect(i: Item) {
+  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46) }
+}
+
+export function formatTime(at: number, now = Date.now()): string {
+  const s = Math.round((now - at) / 1000)
+  if (s < 45) return 'just now'
+  if (s < 3600) return `${Math.round(s / 60)} min ago`
+  const d = new Date(at)
+  const today = new Date(now)
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === today.toDateString()) return `Today ${time}`
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' })} ${time}`
+}
+
+function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
+  const body = commentBodyRect(item)
+  return (
+    <g>
+      <rect x={item.x} y={item.y + 2} width={item.w} height={item.h} rx={10} fill="rgba(0,0,0,0.07)" />
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={10} fill={item.color} stroke={darken(item.color, 0.8)} />
+      <foreignObject x={item.x} y={item.y} width={item.w} height={30}>
+        <div className="comment-head">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5h16v11H10l-4 4v-4H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+          </svg>
+          <span>Comment</span>
+          {item.createdAt && <time>{formatTime(item.createdAt)}</time>}
+        </div>
+      </foreignObject>
+      {!editing && (
+        <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
+          <div className="item-text comment-body" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
+            {item.text || <span className="muted">Write a comment…</span>}
+          </div>
+        </foreignObject>
+      )}
+    </g>
+  )
 }
 
 /** Outline colour for a filled shape; white fills get a neutral grey. */

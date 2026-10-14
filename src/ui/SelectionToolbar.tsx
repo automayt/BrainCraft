@@ -157,6 +157,11 @@ export function SelectionToolbar() {
           Duplicate
         </button>
       )}
+      {editor.single && (
+        <button title="Comments (Shift+C)" onClick={() => editor.toggleNotes(true)}>
+          Comment{editor.single.notes?.length ? ` (${editor.single.notes.length})` : ''}
+        </button>
+      )}
       <button className="danger" title="Delete (Del)" onClick={() => editor.deleteSelection()}>
         Delete
       </button>

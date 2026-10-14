@@ -7,7 +7,7 @@ export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
 }
 
-const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow'])
+const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline'])
 
 function isItem(x: unknown): x is Item {
   const i = x as Item
