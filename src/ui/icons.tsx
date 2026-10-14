@@ -140,3 +140,11 @@ export const SearchIcon = () => (
     <path d="M20 20l-4.5-4.5" />
   </Svg>
 )
+
+export const ImageIcon = () => (
+  <Svg>
+    <rect x="3.5" y="5" width="17" height="14" rx="2" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="M4 17l5-5 4 4 2.5-2.5L20 18" />
+  </Svg>
+)

@@ -247,8 +247,25 @@ describe('flowchart editing', () => {
     e.pointerDown({ x: 400, y: 100 }, 0, {}, { kind: 'flowAdd', dir: 'right' })
     e.pointerMove({ x: 700, y: 400 })
     e.pointerUp({ x: 700, y: 400 })
+    // Dropping on empty space offers the likeliest next shapes; 2 picks the second.
+    expect(e.shapePicker?.options.slice(0, 2)).toEqual(['process', 'data'])
+    expect(e.board.items).toHaveLength(2)
+    e.keyDown('2', {})
+    expect(e.shapePicker).toBeNull()
     expect(e.board.items).toHaveLength(3)
+    expect(e.board.items[2]).toMatchObject({ shape: 'data' })
     expect(e.board.connectors).toHaveLength(2)
+  })
+
+  it('imports and exports Mermaid', () => {
+    const e = editor()
+    e.pasteText('flowchart LR\n  a([Start]) --> b{OK?}\n  b -->|yes| c[Done]')
+    expect(e.board.items.map((i) => i.shape)).toEqual(['terminator', 'decision', 'process'])
+    expect(e.selection.size).toBe(3)
+    expect(e.exportMermaid()).toContain('|"yes"|')
+    e.pasteText('flowchart TD\n  a -->')
+    expect(e.board.items).toHaveLength(3)
+    expect(e.status).toMatch(/Couldn't read/)
   })
 
   it('labels connectors and drops empty labels', () => {

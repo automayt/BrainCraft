@@ -68,3 +68,41 @@ export function addStep(b: Board, fromId: Id, dir: FlowDir, shape?: FlowShape): 
   ;[b] = connect(b, fromId, id, { style: 'elbow' })
   return [b, id]
 }
+
+/** What usually follows each symbol, most likely first. */
+const USUAL_NEXT: Record<FlowShape, FlowShape[]> = {
+  terminator: ['process', 'data', 'decision', 'subroutine', 'document', 'database', 'terminator'],
+  process: ['process', 'decision', 'terminator', 'data', 'subroutine', 'document', 'database'],
+  decision: ['process', 'decision', 'terminator', 'subroutine', 'data', 'document', 'database'],
+  data: ['process', 'decision', 'database', 'document', 'terminator', 'subroutine', 'data'],
+  document: ['process', 'decision', 'terminator', 'data', 'database', 'subroutine', 'document'],
+  database: ['process', 'data', 'decision', 'document', 'terminator', 'subroutine', 'database'],
+  subroutine: ['process', 'decision', 'terminator', 'subroutine', 'data', 'document', 'database'],
+}
+
+/**
+ * Shapes to offer after `from`: those this board already uses most after the
+ * same kind of shape come first, then the usual flowchart conventions.
+ */
+export function recommendShapes(b: Board, from: FlowShape | undefined): FlowShape[] {
+  const source = from ?? 'process'
+  const counts = new Map<FlowShape, number>()
+  for (const c of b.connectors) {
+    const a = getItem(b, c.from)
+    const z = getItem(b, c.to)
+    if (a?.kind === 'flow' && z?.kind === 'flow' && (a.shape ?? 'process') === source) {
+      const s = z.shape ?? 'process'
+      counts.set(s, (counts.get(s) ?? 0) + 1)
+    }
+  }
+  const usual = USUAL_NEXT[source]
+  return [...usual].sort((a, z) => (counts.get(z) ?? 0) - (counts.get(a) ?? 0) || usual.indexOf(a) - usual.indexOf(z))
+}
+
+/** Adds a `shape` step centred on `at`, linked from `fromId`. */
+export function addStepAt(b: Board, fromId: Id, shape: FlowShape, at: Vec): [Board, Id] {
+  let id: Id
+  ;[b, id] = addItem(b, flowItem(shape, at))
+  ;[b] = connect(b, fromId, id, { style: 'elbow' })
+  return [b, id]
+}

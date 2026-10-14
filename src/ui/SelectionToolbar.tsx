@@ -5,7 +5,7 @@ import { useEditor } from './useEditor'
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
 export function SelectionToolbar() {
   const editor = useEditor()
-  if (editor.drag.type !== 'none' || editor.editing) return null
+  if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker) return null
   const { board } = editor
   let anchor: { x: number; y: number }
   let palette: readonly [string, string][]
@@ -33,11 +33,13 @@ export function SelectionToolbar() {
   const flows = items.filter((i) => i.kind === 'flow')
   const x = Math.min(Math.max(anchor.x, 220), editor.viewport.w - 220)
   const y = Math.max(anchor.y, 56)
-  const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen')
+  const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && i.kind !== 'image')
+  const colorable = !items.length || items.some((i) => i.kind !== 'image')
   const current = items[0]?.color
 
   return (
     <div className="selection-toolbar no-canvas" style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
+      {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (
           <button
@@ -50,6 +52,7 @@ export function SelectionToolbar() {
           />
         ))}
       </div>
+      )}
       {connector && (
         <>
           <span className="sep" />
@@ -80,6 +83,13 @@ export function SelectionToolbar() {
               {glyph}
             </button>
           ))}
+ <button
+            className={connector.dashed ? 'on' : ''}
+            title="Dashed line"
+            onClick={() => editor.setDashed(!connector.dashed)}
+          >
+            ┅
+          </button>
           <span className="sep" />
           <button title="Label this line (or double-click it)" onClick={() => editor.startEditingLabel(connector.id)}>
             Label
