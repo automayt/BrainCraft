@@ -5,6 +5,7 @@ import * as B from '../model/board'
 import { type Vec, center } from '../model/geom'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, flowTextRect } from '../model/shapes'
+import { frameFill, ink, mindRootFill, mindRootText } from './paint'
 import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
@@ -46,7 +47,7 @@ export function ItemShape({ item, depth, editing, live = false }: { item: Item; 
       const t = B.frameTitleRect(item)
       return (
         <g>
-          <rect x={item.x} y={item.y} width={item.w} height={item.h} fill={item.color} stroke="#c8c8ce" rx={2} />
+          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} className="frame-rect" style={{ fill: frameFill(item.color) }} />
           {!editing && (
             <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
               <div className="frame-title" style={{ fontSize: item.fontSize }}>
@@ -61,14 +62,14 @@ export function ItemShape({ item, depth, editing, live = false }: { item: Item; 
       return (
         <g>
           <rect x={item.x} y={item.y + 3} width={item.w} height={item.h} rx={4} fill="rgba(0,0,0,0.09)" />
-          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={4} fill={item.color} />
+          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={4} fill={item.color} className="shape" />
           {text && <Text item={item} className="centered" color={TEXT_ON_FILL} />}
         </g>
       )
     case 'rect':
       return (
         <g>
-          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} fill={item.color} stroke={darken(item.color)} strokeWidth={2} />
+          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
           {text && <Text item={item} className="centered" color={TEXT_ON_FILL} />}
         </g>
       )
@@ -76,19 +77,19 @@ export function ItemShape({ item, depth, editing, live = false }: { item: Item; 
       const c = center(item)
       return (
         <g>
-          <ellipse cx={c.x} cy={c.y} rx={item.w / 2} ry={item.h / 2} fill={item.color} stroke={darken(item.color)} strokeWidth={2} />
+          <ellipse cx={c.x} cy={c.y} rx={item.w / 2} ry={item.h / 2} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
           {text && <Text item={item} className="centered ellipse" color={TEXT_ON_FILL} />}
         </g>
       )
     }
     case 'text':
-      return text ? <Text item={item} className="plain" color={item.color} /> : null
+      return text ? <Text item={item} className="plain" color={ink(item.color)} /> : null
     case 'pen':
       return (
         <path
           d={penPath(item.points ?? [])}
           fill="none"
-          stroke={item.color}
+          style={{ stroke: ink(item.color) }}
           strokeWidth={item.strokeWidth ?? 4}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -134,7 +135,7 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
   return (
     <g>
       <rect x={item.x} y={item.y + 2} width={item.w} height={item.h} rx={10} fill="rgba(0,0,0,0.07)" />
-      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={10} fill={item.color} stroke={darken(item.color, 0.8)} />
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={10} fill={item.color} stroke={darken(item.color, 0.8)} className="shape" />
       <foreignObject x={item.x} y={item.y} width={item.w} height={30}>
         <div className="comment-head">
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
@@ -166,7 +167,7 @@ function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
   const t = flowTextRect(item)
   return (
     <g>
-      <path d={flowOutline(item)} fill={item.color} stroke={stroke} strokeWidth={2} strokeLinejoin="round" />
+      <path d={flowOutline(item)} fill={item.color} stroke={stroke} strokeWidth={2} strokeLinejoin="round" className="shape" />
       {detail && <path d={detail} fill="none" stroke={stroke} strokeWidth={2} />}
       {!editing && item.text && (
         <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
@@ -183,11 +184,11 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
   const s = nodeStyle(depth)
   const shape =
     depth === 0 ? (
-      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={14} fill={item.color} />
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={14} className="shape" style={{ fill: mindRootFill(item.color) }} />
     ) : depth === 1 ? (
-      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={10} fill="#fff" stroke={item.color} strokeWidth={2.5} />
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={10} stroke={item.color} strokeWidth={2.5} style={{ fill: 'var(--node-fill)' }} />
     ) : (
-      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={8} fill={item.color} fillOpacity={0.13} />
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={8} fill={item.color} fillOpacity={0.16} className="mind-leaf" />
     )
   return (
     <g>
@@ -200,7 +201,7 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
               fontSize: s.fontSize,
               fontWeight: s.weight,
               padding: `${s.padY}px ${s.padX}px`,
-              color: depth === 0 ? '#fff' : TEXT_ON_FILL,
+              color: depth === 0 ? mindRootText(item.color) : 'var(--ink)',
             }}
           >
             {item.text || placeholderFor(depth)}
@@ -264,7 +265,7 @@ export function CollapseToggles({
         const count = B.subtree(board, n.id).size - 1
         return (
           <g key={n.id} data-handle="collapse" data-id={n.id} className="collapse-toggle">
-            <circle cx={cx} cy={cy} r={10} fill="#fff" stroke={n.color} strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={10} stroke={n.color} strokeWidth={2} style={{ fill: 'var(--node-fill)' }} />
             <text x={cx} y={cy} dy="0.35em" textAnchor="middle" fontSize={n.collapsed ? 10 : 14} fill={n.color} fontWeight={700}>
               {n.collapsed ? count : '−'}
             </text>
@@ -279,7 +280,7 @@ function Arrowhead({ tip, dir, size, color }: { tip: Vec; dir: Vec; size: number
   const bx = tip.x - dir.x * size
   const by = tip.y - dir.y * size
   const w = size * 0.45
-  return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} fill={color} />
+  return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} style={{ fill: color }} />
 }
 
 export function ConnectorView({
@@ -295,7 +296,7 @@ export function ConnectorView({
 }) {
   const r = B.connectorRoute(board, c)
   if (!r || Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
-  const color = selected ? '#4262ff' : c.color
+  const color = selected ? 'var(--accent)' : ink(c.color)
   const arrows = c.arrows ?? 'end'
   const head = 12
   return (
@@ -303,7 +304,8 @@ export function ConnectorView({
       <path
         d={r.d}
         fill="none"
-        stroke={color}
+        className="connector-line"
+        style={{ stroke: color }}
         strokeWidth={selected ? 3 : 2}
         strokeLinejoin="round"
         strokeDasharray={c.dashed ? '7 5' : undefined}
@@ -385,4 +387,4 @@ export const BoardView = memo(function BoardView({
   )
 })
 
-export const inkFor = (i: Item) => (usesInk(i.kind) ? i.color : TEXT_ON_FILL)
+export const inkFor = (i: Item) => (usesInk(i.kind) ? ink(i.color) : TEXT_ON_FILL)

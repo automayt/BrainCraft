@@ -32,7 +32,7 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
   ),
   sticky: (
     <Svg>
-      <path d="M4 4h16v11l-5 5H4z" fill="#fff9b1" />
+      <path d="M4 4h16v11l-5 5H4z" fill="var(--sticky-icon)" />
       <path d="M15 20v-5h5" />
     </Svg>
   ),
@@ -123,11 +123,17 @@ export const RedoIcon = () => (
   </Svg>
 )
 
-export const Logo = () => (
-  <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
-    <rect width="32" height="32" rx="7" fill="#4262ff" />
-    <circle cx="16" cy="16" r="4.5" fill="#fff" />
-    <g stroke="#fff" strokeWidth="2.4" strokeLinecap="round" fill="none">
+export const Logo = ({ size = 26 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="logo">
+    <defs>
+      <linearGradient id="bc-logo" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="var(--logo-a)" />
+        <stop offset="1" stopColor="var(--logo-b)" />
+      </linearGradient>
+    </defs>
+    <rect width="32" height="32" rx="9" fill="url(#bc-logo)" />
+    <circle cx="16" cy="16" r="4.2" fill="#fff" />
+    <g stroke="#fff" strokeWidth="2.3" strokeLinecap="round" fill="none" opacity="0.92">
       <path d="M20 14 C24 10 25 9 27 8" />
       <path d="M20 18 C24 22 25 23 27 24" />
       <path d="M12 14 C8 10 7 9 5 8" />
@@ -142,7 +148,7 @@ export function FlowShapeIcon({ shape, size = 28 }: { shape: FlowShape; size?: n
   const detail = flowDetail(item)
   return (
     <svg width={size} height={size * 0.94} viewBox="0 0 32 30" aria-hidden="true">
-      <path d={flowOutline(item)} fill="#eef0ff" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d={flowOutline(item)} fill="var(--icon-fill)" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
       {detail && <path d={detail} fill="none" stroke="currentColor" strokeWidth="1.6" />}
     </svg>
   )
@@ -167,5 +173,51 @@ export const ImageIcon = () => (
     <rect x="3.5" y="5" width="17" height="14" rx="2" />
     <circle cx="9" cy="10" r="1.6" />
     <path d="M4 17l5-5 4 4 2.5-2.5L20 18" />
+  </Svg>
+)
+
+export const MenuIcon = () => (
+  <Svg>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+)
+
+export const ThemeIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
+export const HelpIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5" />
+    <circle cx="12" cy="16.8" r="0.6" fill="currentColor" />
+  </Svg>
+)
+
+export const FitIcon = () => (
+  <Svg>
+    <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+    <rect x="8.5" y="8.5" width="7" height="7" rx="1.2" />
+  </Svg>
+)
+
+export const PlusIcon = () => (
+  <Svg>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+)
+
+export const MinusIcon = () => (
+  <Svg>
+    <path d="M5 12h14" />
+  </Svg>
+)
+
+export const CheckIcon = () => (
+  <Svg>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
   </Svg>
 )

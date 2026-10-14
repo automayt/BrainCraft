@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { lookup, search } from '../model/search'
 import { type Id, type Kind, KIND_LABELS } from '../model/types'
+import { commands, matchCommands } from './commands'
+import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
 type Filter = { label: string; kinds?: (Kind | 'connector')[] }
@@ -29,15 +31,19 @@ function highlight(text: string, query: string): ReactNode {
 
 interface Row {
   key: string
-  id: Id
+  /** The object to go to, or a command to run. */
+  id?: Id
+  run?: () => void
   title: string
   kind: string
   detail?: ReactNode
+  keys?: string
 }
 
 /** Ctrl+K: search everything on the board, or browse every object when the query is empty. */
 export function SearchPalette() {
   const editor = useEditor()
+  const ui = useUi()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState(0)
   const [active, setActive] = useState(0)
@@ -57,7 +63,16 @@ export function SearchPalette() {
 
   if (!editor.searchOpen) return null
   const kinds = FILTERS[filter].kinds ? new Set(FILTERS[filter].kinds) : undefined
-  const rows: Row[] = query.trim()
+  const commandOnly = query.trimStart().startsWith('>')
+  const cmds: Row[] =
+    filter === 0 && query.trim()
+      ? matchCommands(commands(editor, ui), query)
+          .slice(0, commandOnly ? 40 : 5)
+          .map((c) => ({ key: `cmd:${c.id}`, run: c.run, title: c.label, kind: c.group, keys: c.keys }))
+      : []
+  const objects: Row[] = commandOnly
+    ? []
+    : query.trim()
     ? search(editor.board, query, kinds).map((r, k) => ({
         key: `${k}`,
         id: r.id,
@@ -76,12 +91,14 @@ export function SearchPalette() {
         kind: KIND_LABELS[e.kind],
         detail: e.notes ? <span className="where">{e.notes} comment{e.notes === 1 ? '' : 's'}</span> : undefined,
       }))
+  const rows = [...cmds, ...objects]
 
   const close = () => editor.setSearchOpen(false)
   const go = (row: Row | undefined) => {
     if (!row) return
     close()
-    editor.focusObject(row.id)
+    if (row.run) row.run()
+    else if (row.id !== undefined) editor.focusObject(row.id)
   }
 
   return (
@@ -91,7 +108,7 @@ export function SearchPalette() {
           ref={input}
           autoFocus
           value={query}
-          placeholder="Search notes, comments, tables, cards… or browse all objects"
+          placeholder="Search the board, or run a command (type > for commands only)"
           aria-label="Search"
           onChange={(e) => {
             setQuery(e.target.value)
@@ -126,7 +143,7 @@ export function SearchPalette() {
           ))}
         </div>
         <div className="palette-caption muted">
-          {query.trim() ? `${rows.length} match${rows.length === 1 ? '' : 'es'}` : `All objects (${rows.length})`}
+          {commandOnly ? 'Commands' : query.trim() ? `${objects.length} match${objects.length === 1 ? '' : 'es'}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}` : `All objects (${rows.length}) · type > for commands`}
           <span>↑↓ choose · Enter go · Tab filter · Esc close</span>
         </div>
         <ul ref={list} className="results" role="listbox">
@@ -139,8 +156,11 @@ export function SearchPalette() {
                 onMouseEnter={() => setActive(k)}
                 onClick={() => go(r)}
               >
-                <span className="kind">{r.kind}</span>
-                <span className="result-title">{query.trim() ? highlight(r.title, query) : r.title}</span>
+                <span className={`kind${r.run ? ' command' : ''}`}>{r.kind}</span>
+                <span className="result-title">
+                  <span className="title-text">{query.trim() ? highlight(r.title, query.replace(/^\s*>/, '')) : r.title}</span>
+                  {r.keys && <kbd>{r.keys}</kbd>}
+                </span>
                 {r.detail && <span className="detail">{r.detail}</span>}
               </button>
             </li>

@@ -1,9 +1,33 @@
 # BrainCraft
 
-An infinite whiteboard and mind-mapping tool for brainstorming.
-It runs entirely in the browser as a static site, so you can host it anywhere.
+An infinite whiteboard for brainstorming: mind maps, flowcharts, tables,
+Kanban boards, timelines and comments on one canvas. It runs entirely in the
+browser as a static site, so you can host it anywhere.
 
-![BrainCraft whiteboard](docs/screenshot.png)
+![BrainCraft](docs/board-dark.png)
+
+## Look and feel
+
+BrainCraft defaults to a **dark theme** and has three more: **light**,
+**high contrast dark** and **high contrast light**. Pick one from the theme
+button at the top right, or type "theme" in Ctrl+K. The high-contrast themes
+use pure black and white surfaces, a vivid accent, bold outlines on every
+shape, thicker lines and stronger focus rings. Default board colors (ink,
+lines, frames, mind-map centers) follow the theme, so boards stay readable in
+all four.
+
+The board fills the window and the controls float above it:
+
+- **Board menu** (top left): title, new, open, download, import and export.
+- **Search** (top right): Ctrl+K searches the board *and* runs any command
+  by name. Type `>` to show only commands.
+- **Tool rail** (left): hover any tool to see its shortcut.
+- **Undo, redo and zoom** (bottom left), plus a **minimap** (bottom right).
+- **Right-click** anything for the actions that apply to it.
+
+| Dark | Light | High contrast dark |
+| --- | --- | --- |
+| ![Dark theme](docs/screenshot.png) | ![Light theme](docs/board-light.png) | ![High contrast dark theme](docs/theme-hc-dark.png) |
 
 ## Features
 

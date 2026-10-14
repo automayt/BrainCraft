@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, type PointerEvent a
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import type { FlowDir } from '../model/flowchart'
 import { flowTextRect } from '../model/shapes'
+import { ACCENT, mindRootText } from './paint'
 import { WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
 import { toScreen, toWorld } from '../model/camera'
@@ -11,12 +12,13 @@ import { defaultColor } from '../model/types'
 import { BoardView, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
+import { TOOL_ICONS } from './icons'
 import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
 import { ShapePicker } from './ShapePicker'
+import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
-const ACCENT = '#4262ff'
 
 function readHandle(target: EventTarget | null): Handle | undefined {
   const el = (target as Element | null)?.closest?.('[data-handle]')
@@ -42,6 +44,7 @@ function readHandle(target: EventTarget | null): Handle | undefined {
 
 export function Canvas() {
   const editor = useEditor()
+  const ui = useUi()
   const ref = useRef<HTMLDivElement>(null)
   const touches = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ dist: number; mid: { x: number; y: number } } | null>(null)
@@ -146,7 +149,11 @@ export function Canvas() {
       onDoubleClick={(e) => {
         if (!(e.target as Element).closest('.no-canvas, [data-handle]')) editor.doubleClick(local(e))
       }}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if ((e.target as Element).closest('.no-canvas')) return
+        ui.openMenu(local(e))
+      }}
       // Focusing an input inside a board object makes the browser scroll this
       // clipped container; the camera does all the moving, so undo that.
       onScroll={(e) => {
@@ -181,7 +188,7 @@ export function Canvas() {
             x={camera.x % (step * camera.zoom)}
             y={camera.y % (step * camera.zoom)}
           >
-            <circle cx={1} cy={1} r={Math.min(1.5, Math.max(0.8, camera.zoom))} fill="#cfcfd6" />
+            <circle cx={1} cy={1} r={Math.min(1.5, Math.max(0.8, camera.zoom))} style={{ fill: 'var(--grid)' }} />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
@@ -198,11 +205,7 @@ export function Canvas() {
         </g>
         <Overlays editor={editor} />
       </svg>
-      {board.items.length === 0 && (
-        <div className="empty-hint">
-          Double-click to add a sticky note, or press <kbd>M</kbd> and click to start a mind map
-        </div>
-      )}
+      {board.items.length === 0 && editor.tool === 'select' && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <SelectionToolbar />
@@ -225,7 +228,7 @@ function DragPreview({ editor }: { editor: Editor }) {
   switch (d.type) {
     case 'move': {
       const v = editor.visibleWorld
-      const style = { stroke: '#e0457b', strokeWidth: 1 / z, strokeDasharray: `${4 / z} ${3 / z}` }
+      const style = { style: { stroke: 'var(--guide)' }, strokeWidth: 1 / z, strokeDasharray: `${4 / z} ${3 / z}` }
       return (
         <g>
           {d.guides.x !== undefined && <line x1={d.guides.x} x2={d.guides.x} y1={v.y} y2={v.y + v.h} {...style} />}
@@ -240,7 +243,7 @@ function DragPreview({ editor }: { editor: Editor }) {
       return d.kind === 'ellipse' ? (
         <ellipse cx={r.x + r.w / 2} cy={r.y + r.h / 2} rx={r.w / 2} ry={r.h / 2} fill={fill} opacity={0.6} />
       ) : (
-        <rect {...xywh(r)} fill={fill} opacity={0.6} stroke={ACCENT} strokeWidth={1 / z} />
+        <rect {...xywh(r)} fill={fill} opacity={0.6} style={{ stroke: ACCENT }} strokeWidth={1 / z} />
       )
     }
     case 'draw':
@@ -264,9 +267,9 @@ function DragPreview({ editor }: { editor: Editor }) {
       const start = B.anchorTowards(from, validTarget ? center(validTarget) : d.current)
       return (
         <g>
-          {validTarget && <rect {...xywh(validTarget)} fill="none" stroke={ACCENT} strokeWidth={2 / z} rx={4} />}
-          <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={ACCENT} strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
-          <circle cx={end.x} cy={end.y} r={4 / z} fill={ACCENT} />
+          {validTarget && <rect {...xywh(validTarget)} fill="none" style={{ stroke: ACCENT }} strokeWidth={2 / z} rx={4} />}
+          <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} style={{ stroke: ACCENT }} strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
+          <circle cx={end.x} cy={end.y} r={4 / z} style={{ fill: ACCENT }} />
         </g>
       )
     }
@@ -277,7 +280,7 @@ function DragPreview({ editor }: { editor: Editor }) {
       const target = d.target !== null ? B.getItem(editor.board, d.target) : undefined
       return (
         <g>
-          {target && <rect {...xywh(target)} fill="none" stroke={ACCENT} strokeWidth={3 / z} rx={10} />}
+          {target && <rect {...xywh(target)} fill="none" style={{ stroke: ACCENT }} strokeWidth={3 / z} rx={10} />}
           <g transform={`translate(${d.offset.x} ${d.offset.y})`} opacity={0.55} style={{ pointerEvents: 'none' }}>
             {editor.board.items
               .filter((i) => ids.has(i.id) && !editor.hidden.has(i.id))
@@ -468,7 +471,7 @@ function TextEditor({ editor }: { editor: Editor }) {
     case 'frame':
       box = editor.screenRect(B.frameTitleRect(item))
       align = 'left'
-      color = '#5a5a64'
+      color = 'var(--muted)'
       break
     case 'text':
       box = inset(r, 4 * z)
@@ -500,7 +503,7 @@ function TextEditor({ editor }: { editor: Editor }) {
       box = { x: r.x + s.padX * z, y: r.y + s.padY * z, w: r.w - 2 * s.padX * z, h: r.h - 2 * s.padY * z }
       fontSize = s.fontSize * z
       fontWeight = s.weight
-      color = depth === 0 ? '#fff' : '#1e1e24'
+      color = depth === 0 ? mindRootText(item.color) : 'var(--ink)'
       break
     }
     default:
@@ -525,7 +528,7 @@ function TextEditor({ editor }: { editor: Editor }) {
           color,
           fontFamily: FONT_FAMILY,
           lineHeight: LINE_HEIGHT,
-          caretColor: item.kind === 'mind' && color === '#fff' ? '#fff' : ACCENT,
+          caretColor: item.kind === 'mind' && color !== 'var(--ink)' ? color : ACCENT,
         }}
         onChange={(ev) => editor.setEditingText(ev.target.value)}
         onKeyDown={(ev) => {
@@ -544,3 +547,42 @@ function inset(r: Rect, m: number): Rect {
   return { x: r.x + m, y: r.y + m, w: Math.max(r.w - 2 * m, 1), h: Math.max(r.h - 2 * m, 1) }
 }
 
+
+const STARTERS: { tool: Parameters<Editor['setTool']>[0]; label: string; hint: string }[] = [
+  { tool: 'mind', label: 'Mind map', hint: 'Tab and Enter to branch out' },
+  { tool: 'flow', label: 'Flowchart', hint: 'Tab adds the next step' },
+  { tool: 'sticky', label: 'Sticky notes', hint: 'Quick ideas, anywhere' },
+  { tool: 'kanban', label: 'Kanban board', hint: 'Drag cards across' },
+  { tool: 'table', label: 'Table', hint: 'Sort, filter, hide' },
+  { tool: 'timeline', label: 'Timeline', hint: 'Plan in time' },
+]
+
+/** A blank board offers a few ways to start, each placed in the middle of the view. */
+function EmptyBoard() {
+  const editor = useEditor()
+  const ui = useUi()
+  const start = (tool: (typeof STARTERS)[number]['tool']) => {
+    editor.setTool(tool)
+    const c = { x: editor.viewport.w / 2, y: editor.viewport.h / 2 }
+    editor.pointerDown(c, 0, {})
+    editor.pointerUp(c)
+  }
+  return (
+    <div className="empty-board no-canvas" onPointerDown={(e) => e.stopPropagation()}>
+      <h1>Start with an idea</h1>
+      <p className="muted">Pick a starting point, double-click anywhere for a sticky note, or paste Mermaid, an outline or a spreadsheet.</p>
+      <div className="starters">
+        {STARTERS.map((s) => (
+          <button key={s.tool} onClick={() => start(s.tool)}>
+            <span className="starter-icon">{TOOL_ICONS[s.tool]}</span>
+            <strong>{s.label}</strong>
+            <small>{s.hint}</small>
+          </button>
+        ))}
+      </div>
+      <button className="link" onClick={ui.openImport}>
+        Import Mermaid, an outline or AI-generated JSON…
+      </button>
+    </div>
+  )
+}

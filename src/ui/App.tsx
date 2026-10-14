@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrainCraftAPI } from '../api/api'
-import { Editor, TOOLS } from '../editor/Editor'
+import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
-import { FLOW_SHAPES, INKS } from '../model/types'
 import { Canvas } from './Canvas'
-import { CommentsIcon, FlowShapeIcon, ImageIcon, Logo, RedoIcon, SearchIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { BottomLeft, Help, ToolRail, Toast, TopLeft, TopRight } from './Chrome'
+import { ContextMenu } from './ContextMenu'
+import { type Theme, applyTheme, storedTheme } from './theme'
+import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
 import { SearchPalette } from './SearchPalette'
-import { measureText } from './measure'
-import { EditorContext, useEditor } from './useEditor'
+import { clearMeasureCache, measureText } from './measure'
+import { EditorContext } from './useEditor'
 
 const STORAGE_KEY = 'braincraft:board'
 
@@ -43,6 +45,44 @@ function download(editor: Editor) {
 
 export function App() {
   const [editor] = useState(() => new Editor(loadStored(), measureText))
+  const [theme, setThemeState] = useState<Theme>(storedTheme)
+  const [help, setHelp] = useState(false)
+  const [porting, setPorting] = useState(false)
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const imageInput = useRef<HTMLInputElement>(null)
+
+  const ui: Ui = {
+    theme,
+    setTheme: (t) => {
+      applyTheme(t)
+      setThemeState(t)
+    },
+    openHelp: () => setHelp(true),
+    openImport: () => setPorting(true),
+    openFile: () => fileInput.current?.click(),
+    openImage: () => imageInput.current?.click(),
+    download: () => download(editor),
+    newBoard: () => {
+      if (editor.board.items.length && !confirm('Start a new board? This replaces the board saved in this browser — download it first to keep a copy.')) return
+      editor.load(emptyBoard(), 'New board')
+    },
+    menu,
+    openMenu: setMenu,
+    closeMenu: () => setMenu(null),
+  }
+  const uiRef = useRef(ui)
+  uiRef.current = ui
+
+  // Fonts change text measurements, so lay mind maps out again once Inter has loaded.
+  useEffect(() => {
+    editor.measureCache = clearMeasureCache
+    document.fonts?.ready.then(() => {
+      editor.relayout()
+      // Frame the board again now that text has its real size.
+      if (!editor.selection.size) editor.zoomToFit()
+    })
+  }, [editor])
 
   useEffect(() => {
     // Autosave to this browser, debounced.
@@ -71,6 +111,20 @@ export function App() {
       }
       // Keys already handled inside a panel or a live table/board/timeline stay there.
       if (isTyping(e.target) || editor.searchOpen || e.defaultPrevented) return
+      if (uiRef.current.menu && e.key !== 'Escape') return
+      const ctrl = e.ctrlKey || e.metaKey
+      // Board zoom instead of browser zoom.
+      if (ctrl && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+        e.preventDefault()
+        if (e.key === '0') editor.setZoom(1)
+        else editor.zoomBy(e.key === '-' ? 1 / 1.25 : 1.25)
+        return
+      }
+      if (e.key === '?' && !ctrl) {
+        e.preventDefault()
+        setHelp((h) => !h)
+        return
+      }
       if ((e.target as Element | null)?.closest?.('.no-canvas') && e.key !== 'Escape') return
       // Space edits a selected mind-map idea; otherwise holding it pans.
       if (e.key === ' ' && editor.single?.kind !== 'mind') {
@@ -136,327 +190,56 @@ export function App() {
 
   return (
     <EditorContext.Provider value={editor}>
-      <div className="app">
-        <TopBar />
-        <div className="workspace">
-          <ToolBar />
+      <UiContext.Provider value={ui}>
+        <div className={`app${editor.notesOpen ? ' notes-open' : ''}`}>
           <Canvas />
+          <TopLeft />
+          <TopRight />
+          <ToolRail />
+          <BottomLeft />
           <NotesPanel />
+          <ContextMenu />
+          <Toast />
+          <SearchPalette />
+          {help && <Help onClose={() => setHelp(false)} />}
+          {porting && <ImportExport onClose={() => setPorting(false)} />}
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              try {
+                editor.load(fromJson(await f.text()), `Opened ${f.name}`)
+              } catch (err) {
+                editor.setStatus(`Could not open ${f.name}: ${(err as Error).message}`)
+              }
+            }}
+          />
+          <input
+            ref={imageInput}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={async (e) => {
+              const files = imageFiles(e.target.files)
+              e.target.value = ''
+              for (const file of files) {
+                try {
+                  const img = await readImage(file)
+                  editor.addImage(img.src, img.w, img.h)
+                } catch (err) {
+                  editor.setStatus((err as Error).message)
+                }
+              }
+            }}
+          />
         </div>
-        <SearchPalette />
-      </div>
+      </UiContext.Provider>
     </EditorContext.Provider>
-  )
-}
-
-function TopBar() {
-  const editor = useEditor()
-  const file = useRef<HTMLInputElement>(null)
-  const [help, setHelp] = useState(false)
-  const [porting, setPorting] = useState(false)
-  return (
-    <header className="topbar">
-      <div className="brand">
-        <Logo />
-        <span>BrainCraft</span>
-      </div>
-      <input
-        className="board-title"
-        value={editor.board.title}
-        aria-label="Board title"
-        onChange={(e) => editor.setTitle(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-      />
-      <div className="group">
-        <button
-          onClick={() => {
-            if (editor.board.items.length && !confirm('Start a new board? This replaces the board saved in this browser.')) return
-            editor.load(emptyBoard(), 'New board')
-          }}
-        >
-          New
-        </button>
-        <button onClick={() => file.current?.click()}>Open…</button>
-        <button title="Download as a .braincraft.json file (Ctrl+S)" onClick={() => download(editor)}>
-          Download
-        </button>
-        <button title="Import Mermaid, lists or JSON; export Mermaid or JSON" onClick={() => setPorting(true)}>
-          Import / Export
-        </button>
-        <input
-          ref={file}
-          type="file"
-          accept=".json,application/json"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0]
-            e.target.value = ''
-            if (!f) return
-            try {
-              editor.load(fromJson(await f.text()), `Opened ${f.name}`)
-            } catch (err) {
-              editor.setStatus(`Could not open ${f.name}: ${(err as Error).message}`)
-            }
-          }}
-        />
-      </div>
-      <div className="group">
-        <button className="icon" title="Undo (Ctrl+Z)" disabled={!editor.history.canUndo} onClick={() => editor.undo()}>
-          <UndoIcon />
-        </button>
-        <button className="icon" title="Redo (Ctrl+Shift+Z)" disabled={!editor.history.canRedo} onClick={() => editor.redo()}>
-          <RedoIcon />
-        </button>
-      </div>
-      <div className="group">
-        <button title="Zoom out" onClick={() => editor.zoomBy(1 / 1.25)}>
-          −
-        </button>
-        <button className="zoom" title="Reset to 100%" onClick={() => editor.setZoom(1)}>
-          {Math.round(editor.camera.zoom * 100)}%
-        </button>
-        <button title="Zoom in" onClick={() => editor.zoomBy(1.25)}>
-          +
-        </button>
-        <button title="Zoom to fit the board or selection (Shift+1)" onClick={() => editor.zoomToFit()}>
-          Fit
-        </button>
-      </div>
-      <div className="status" role="status">
-        {editor.status}
-      </div>
-      <button className="search-button" title="Search and browse objects (Ctrl+K)" onClick={() => editor.setSearchOpen(true)}>
-        <SearchIcon />
-        <span>Search</span>
-        <kbd>Ctrl K</kbd>
-      </button>
-      <button
-        className={`icon${editor.notesOpen ? ' on' : ''}`}
-        title="Comments (Shift+C)"
-        aria-pressed={editor.notesOpen}
-        onClick={() => editor.toggleNotes()}
-      >
-        <CommentsIcon />
-      </button>
-      <button className="help-button" title="Keyboard shortcuts" onClick={() => setHelp(!help)}>
-        ?
-      </button>
-      {help && <Help onClose={() => setHelp(false)} />}
-      {porting && <ImportExport onClose={() => setPorting(false)} />}
-    </header>
-  )
-}
-
-function ToolBar() {
-  const editor = useEditor()
-  return (
-    <nav className="toolbar" aria-label="Tools">
-      {TOOLS.map(({ tool, key, label }) => (
-        <button
-          key={tool}
-          className={editor.tool === tool ? 'active' : ''}
-          title={`${label} (${key.toUpperCase()})`}
-          aria-label={label}
-          aria-pressed={editor.tool === tool}
-          // Keep keyboard focus on the board so shortcuts like Tab keep working.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => editor.setTool(tool)}
-        >
-          {TOOL_ICONS[tool]}
-        </button>
-      ))}
-      <ImageButton />
-      {editor.tool === 'flow' && (
-        <div className="flyout no-canvas" role="listbox" aria-label="Flowchart shapes">
-          <div className="flyout-title">Flowchart</div>
-          {FLOW_SHAPES.map((f) => (
-            <button
-              key={f.shape}
-              role="option"
-              aria-selected={editor.flowShape === f.shape}
-              className={editor.flowShape === f.shape ? 'active' : ''}
-              title={f.hint}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => editor.setFlowShape(f.shape)}
-            >
-              <FlowShapeIcon shape={f.shape} />
-              <span>{f.label}</span>
-            </button>
-          ))}
-          <p className="flyout-tip">
-            Place a shape, then press <kbd>Tab</kbd> or click its blue arrows to add the next step.
-          </p>
-        </div>
-      )}
-      {editor.tool === 'pen' && (
-        <div className="pen-options">
-          {INKS.map(([name, color]) => (
-            <button
-              key={color}
-              className={`swatch${editor.penColor === color ? ' active' : ''}`}
-              style={{ background: color }}
-              title={name}
-              aria-label={name}
-              onClick={() => {
-                editor.penColor = color
-                editor.emit()
-              }}
-            />
-          ))}
-          {[2, 4, 8, 14].map((w) => (
-            <button
-              key={w}
-              className={`width${editor.penWidth === w ? ' active' : ''}`}
-              title={`${w}px`}
-              onClick={() => {
-                editor.penWidth = w
-                editor.emit()
-              }}
-            >
-              <span style={{ width: w + 2, height: w + 2 }} />
-            </button>
-          ))}
-        </div>
-      )}
-    </nav>
-  )
-}
-
-const SHORTCUTS: [string, [string, string][]][] = [
-  [
-    'Tools',
-    TOOLS.map((t) => [t.key.toUpperCase(), t.label]),
-  ],
-  [
-    'Mind maps',
-    [
-      ['M then click', 'Start a mind map'],
-      ['Tab', 'Add a child idea'],
-      ['Enter', 'Add a sibling (while typing: finish, then add the next)'],
-      ['Shift + Enter', 'New line while typing'],
-      ['Arrows', 'Move between ideas'],
-      ['Alt + ↑ / ↓', 'Reorder an idea'],
-      ['Space / F2', 'Edit the idea'],
-      ['/', 'Collapse or expand a branch'],
-      ['Drag an idea', 'Drop it on another idea to move the branch'],
-      ['Paste an indented list', 'Turns it into a mind map'],
-    ],
-  ],
-  [
-    'Flowcharts',
-    [
-      ['D then click', 'Place a shape (pick the shape in the panel)'],
-      ['Tab', 'Add the next connected step'],
-      ['Alt + arrow', 'Add a connected step in that direction'],
-      ['Blue arrows', 'Click to add a step, drag to connect'],
-      ['Enter / double-click', 'Edit the text'],
-      ['Double-click a line', 'Label it (e.g. Yes / No)'],
-      ['Drag a blue arrow to empty space', 'Pick the next shape (1–7), most likely first'],
-      ['Paste Mermaid', 'Builds the flowchart (Import / Export to copy it back out)'],
-      ['Drag', 'Snaps into line with nearby shapes (hold Alt to move freely)'],
-    ],
-  ],
-  [
-    'Tables, Kanban, timelines',
-    [
-      ['Click once', 'Select it; the second click works inside it'],
-      ['Drag the title strip', 'Move it (double-click to rename)'],
-      ['Table: Enter / ↑ ↓', 'Move between rows (Enter on the last row adds one)'],
-      ['Table: header ↕ / ⋯', 'Sort; hide, filter, insert or delete columns'],
-      ['Paste spreadsheet cells', 'Creates a table'],
-      ['Kanban: drag a card', 'Move it to another column'],
-      ['Kanban: + Add card', 'Enter adds another, Esc stops'],
-      ['Timeline: drag / drag ends', 'Reschedule / change length'],
-      ['Timeline: double-click a lane', 'Add an event there'],
-      ['Timeline: Kanban button', 'Show dated cards from Kanban boards'],
-    ],
-  ],
-  [
-    'Comments & search',
-    [
-      ['Shift + C', 'Open comments on the selected object'],
-      ['Enter', 'Post a comment (Shift + Enter for a new line)'],
-      ['@', 'Mention another object in a comment'],
-      ['Ctrl + K / Ctrl + F', 'Search everything, or browse all objects'],
-      ['C then click', 'Place a comment block on the board'],
-    ],
-  ],
-  [
-    'Canvas',
-    [
-      ['Scroll / Space + drag / middle-drag', 'Pan'],
-      ['Ctrl + scroll, pinch', 'Zoom'],
-      ['Shift + 1', 'Zoom to fit'],
-      ['Double-click', 'Edit text, or add a sticky note'],
-      ['Drag the blue dot', 'Connect; drop on empty space for a linked note'],
-      ['Shift + click / drag', 'Add to the selection'],
-      ['Arrows (+ Shift)', 'Nudge by 1 (10)'],
-      ['Ctrl + C / X / V / D', 'Copy, cut, paste, duplicate'],
-      ['Ctrl + A', 'Select all'],
-      ['Ctrl + Z / Ctrl + Shift + Z', 'Undo / redo'],
-      ['Ctrl + S', 'Download the board'],
-      ['Paste JSON operations', 'Build content from the API (see docs/API.md)'],
-      ['Paste or drop an image', 'Adds it to the board (Shift-drag a corner to stretch)'],
-      ['Delete', 'Delete'],
-      ['Esc', 'Deselect'],
-    ],
-  ],
-]
-
-function Help({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="help no-canvas" role="dialog" aria-label="Keyboard shortcuts">
-      <div className="help-head">
-        <strong>Shortcuts</strong>
-        <button onClick={onClose} aria-label="Close">
-          ×
-        </button>
-      </div>
-      {SHORTCUTS.map(([title, rows]) => (
-        <section key={title}>
-          <h3>{title}</h3>
-          <dl>
-            {rows.map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ))}
-    </div>
-  )
-}
-
-/** Uploads image files onto the board. */
-function ImageButton() {
-  const editor = useEditor()
-  const input = useRef<HTMLInputElement>(null)
-  return (
-    <>
-      <button title="Add an image (or paste / drop one)" aria-label="Add an image" onMouseDown={(e) => e.preventDefault()} onClick={() => input.current?.click()}>
-        <ImageIcon />
-      </button>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={async (e) => {
-          const files = imageFiles(e.target.files)
-          e.target.value = ''
-          for (const file of files) {
-            try {
-              const img = await readImage(file)
-              editor.addImage(img.src, img.w, img.h, undefined)
-            } catch (err) {
-              editor.setStatus((err as Error).message)
-            }
-          }
-        }}
-      />
-    </>
   )
 }

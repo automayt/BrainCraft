@@ -1,6 +1,6 @@
 import type { Measure } from '../model/mindmap'
 
-export const FONT_FAMILY = 'Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif'
+export const FONT_FAMILY = '"Inter Variable", Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif'
 export const LINE_HEIGHT = 1.3
 
 let ctx: CanvasRenderingContext2D | null = null
@@ -37,4 +37,8 @@ export const measureText: Measure = (text, fontSize, weight, maxWidth) => {
   if (cache.size > 5000) cache.clear()
   cache.set(key, out)
   return out
+}
+
+export function clearMeasureCache() {
+  cache.clear()
 }
