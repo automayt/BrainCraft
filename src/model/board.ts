@@ -8,7 +8,6 @@ import {
   type Rect,
   type Vec,
   boundsOf,
-  center,
   contains,
   containsRect,
   distToSegment,
@@ -19,6 +18,8 @@ import {
   remap,
   unionAll,
 } from './geom'
+import { type Route, route } from './routes'
+import { flowHit } from './shapes'
 import {
   type Board,
   type Connector,
@@ -69,11 +70,22 @@ export function addItem(b: Board, item: Omit<Item, 'id'>): [Board, Id] {
  * Links two distinct existing items. Returns the board unchanged (and no id) for
  * a self-loop, a missing endpoint or a duplicate.
  */
-export function connect(b: Board, from: Id, to: Id, color = INKS[1][1]): [Board, Id | null] {
+export function connect(
+  b: Board,
+  from: Id,
+  to: Id,
+  opts: Partial<Omit<Connector, 'id' | 'from' | 'to'>> = {},
+): [Board, Id | null] {
   if (from === to || !getItem(b, from) || !getItem(b, to)) return [b, null]
   if (b.connectors.some((c) => c.from === from && c.to === to)) return [b, null]
   const id = b.nextId
-  return [{ ...b, connectors: [...b.connectors, { id, from, to, color }], nextId: id + 1 }, id]
+  const c: Connector = { id, from, to, color: INKS[1][1], ...opts }
+  return [{ ...b, connectors: [...b.connectors, c], nextId: id + 1 }, id]
+}
+
+/** Connector style for a new link: flowchart steps get right-angled lines. */
+export function defaultStyleBetween(a: Item | undefined, z: Item | undefined): Connector['style'] {
+  return a?.kind === 'flow' || z?.kind === 'flow' ? 'elbow' : undefined
 }
 
 /** Applies `f` to every item in `ids`. Returns `b` itself when nothing changed. */
@@ -201,6 +213,8 @@ export function hitItem(i: Item, p: Vec, tol: number): boolean {
     }
     case 'frame':
       return contains(expand(i, tol), p) || contains(frameTitleRect(i), p)
+    case 'flow':
+      return flowHit(i, p, tol)
     default:
       return contains(expand(i, tol), p)
   }
@@ -211,11 +225,20 @@ export function anchorTowards(i: Item, toward: Vec): Vec {
   return i.kind === 'ellipse' ? ellipseBorderPoint(i, toward) : rectBorderPoint(i, toward)
 }
 
-export function connectorEndpoints(b: Board, c: Connector): [Vec, Vec] | null {
+export function connectorRoute(b: Board, c: Connector): Route | null {
   const a = getItem(b, c.from)
   const z = getItem(b, c.to)
-  if (!a || !z) return null
-  return [anchorTowards(a, center(z)), anchorTowards(z, center(a))]
+  return a && z ? route(c, a, z) : null
+}
+
+export function connectorEndpoints(b: Board, c: Connector): [Vec, Vec] | null {
+  const r = connectorRoute(b, c)
+  return r ? [r.start, r.end] : null
+}
+
+function nearPolyline(p: Vec, points: Vec[], reach: number): boolean {
+  for (let k = 1; k < points.length; k++) if (distToSegment(p, points[k - 1], points[k]) <= reach) return true
+  return false
 }
 
 export type Hit = { type: 'item'; id: Id } | { type: 'connector'; id: Id }
@@ -232,8 +255,8 @@ export function hitTest(b: Board, p: Vec, tol: number, hidden: ReadonlySet<Id> =
   for (let k = b.connectors.length - 1; k >= 0; k--) {
     const c = b.connectors[k]
     if (hidden.has(c.from) || hidden.has(c.to)) continue
-    const ends = connectorEndpoints(b, c)
-    if (ends && distToSegment(p, ends[0], ends[1]) <= tol + 3) return { type: 'connector', id: c.id }
+    const r = connectorRoute(b, c)
+    if (r && nearPolyline(p, r.points, tol + 3)) return { type: 'connector', id: c.id }
   }
   for (let k = b.items.length - 1; k >= 0; k--) {
     const i = b.items[k]

@@ -2,8 +2,9 @@
 
 import { memo } from 'react'
 import * as B from '../model/board'
-import { center } from '../model/geom'
+import { type Vec, center } from '../model/geom'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
+import { flowDetail, flowOutline, flowTextRect } from '../model/shapes'
 import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, usesInk } from '../model/types'
 
 export function darken(hex: string, k = 0.72): string {
@@ -92,7 +93,33 @@ export function ItemShape({ item, depth, editing }: { item: Item; depth: number;
       )
     case 'mind':
       return <MindNode item={item} depth={depth} editing={editing} />
+    case 'flow':
+      return <FlowNode item={item} editing={editing} />
   }
+}
+
+/** Outline colour for a filled shape; white fills get a neutral grey. */
+export function strokeFor(color: string): string {
+  return color.toLowerCase() === '#ffffff' ? '#6e6e78' : darken(color, 0.6)
+}
+
+function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
+  const detail = flowDetail(item)
+  const stroke = strokeFor(item.color)
+  const t = flowTextRect(item)
+  return (
+    <g>
+      <path d={flowOutline(item)} fill={item.color} stroke={stroke} strokeWidth={2} strokeLinejoin="round" />
+      {detail && <path d={detail} fill="none" stroke={stroke} strokeWidth={2} />}
+      {!editing && item.text && (
+        <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
+          <div className="item-text centered flow" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
+            {item.text}
+          </div>
+        </foreignObject>
+      )}
+    </g>
+  )
 }
 
 function MindNode({ item, depth, editing }: { item: Item; depth: number; editing: boolean }) {
@@ -191,27 +218,41 @@ export function CollapseToggles({
   )
 }
 
-export function ConnectorView({ board, c, selected }: { board: Board; c: Connector; selected: boolean }) {
-  const ends = B.connectorEndpoints(board, c)
-  if (!ends) return null
-  const [a, z] = ends
-  const dx = z.x - a.x
-  const dy = z.y - a.y
-  const l = Math.hypot(dx, dy)
-  if (l < 1) return null
-  const ux = dx / l
-  const uy = dy / l
-  const head = Math.min(14, l / 2)
-  const bx = z.x - ux * head
-  const by = z.y - uy * head
+function Arrowhead({ tip, dir, size, color }: { tip: Vec; dir: Vec; size: number; color: string }) {
+  const bx = tip.x - dir.x * size
+  const by = tip.y - dir.y * size
+  const w = size * 0.45
+  return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} fill={color} />
+}
+
+export function ConnectorView({
+  board,
+  c,
+  selected,
+  editing,
+}: {
+  board: Board
+  c: Connector
+  selected: boolean
+  editing: boolean
+}) {
+  const r = B.connectorRoute(board, c)
+  if (!r || Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
   const color = selected ? '#4262ff' : c.color
+  const arrows = c.arrows ?? 'end'
+  const head = 12
   return (
     <g>
-      <line x1={a.x} y1={a.y} x2={bx} y2={by} stroke={color} strokeWidth={selected ? 3 : 2} />
-      <polygon
-        points={`${z.x},${z.y} ${bx - uy * head * 0.45},${by + ux * head * 0.45} ${bx + uy * head * 0.45},${by - ux * head * 0.45}`}
-        fill={color}
-      />
+      <path d={r.d} fill="none" stroke={color} strokeWidth={selected ? 3 : 2} strokeLinejoin="round" />
+      {arrows !== 'none' && <Arrowhead tip={r.end} dir={r.endDir} size={head} color={color} />}
+      {arrows === 'both' && <Arrowhead tip={r.start} dir={{ x: -r.startDir.x, y: -r.startDir.y }} size={head} color={color} />}
+      {c.label && !editing && (
+        <foreignObject x={r.mid.x - 120} y={r.mid.y - 20} width={240} height={40}>
+          <div className="connector-label">
+            <span style={{ color }}>{c.label}</span>
+          </div>
+        </foreignObject>
+      )}
     </g>
   )
 }
@@ -238,12 +279,14 @@ export const BoardView = memo(function BoardView({
   board,
   hidden,
   editingId,
+  editingLabel,
   selectedConnector,
   selection,
 }: {
   board: Board
   hidden: ReadonlySet<Id>
   editingId: Id | null
+  editingLabel: Id | null
   selectedConnector: Id | null
   selection: ReadonlySet<Id>
 }) {
@@ -266,7 +309,7 @@ export const BoardView = memo(function BoardView({
       {board.connectors
         .filter((c) => !hidden.has(c.from) && !hidden.has(c.to))
         .map((c) => (
-          <ConnectorView key={c.id} board={board} c={c} selected={c.id === selectedConnector} />
+          <ConnectorView key={c.id} board={board} c={c} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
         ))}
     </g>
   )

@@ -2,7 +2,25 @@ import type { Rect, Vec } from './geom'
 
 export type Id = number
 
-export type Kind = 'sticky' | 'rect' | 'ellipse' | 'text' | 'frame' | 'pen' | 'mind'
+export type Kind = 'sticky' | 'rect' | 'ellipse' | 'text' | 'frame' | 'pen' | 'mind' | 'flow'
+
+/** Standard flowchart symbols, drawn by `flow` items. */
+export type FlowShape = 'process' | 'decision' | 'terminator' | 'data' | 'document' | 'database' | 'subroutine'
+
+export const FLOW_SHAPES: { shape: FlowShape; label: string; hint: string; color: string; w: number; h: number }[] = [
+  { shape: 'terminator', label: 'Start / End', hint: 'Where the flow begins or ends', color: '#cdeba5', w: 160, h: 64 },
+  { shape: 'process', label: 'Process', hint: 'A step or action', color: '#aad2fa', w: 170, h: 84 },
+  { shape: 'decision', label: 'Decision', hint: 'A yes/no question that branches', color: '#fff9b1', w: 180, h: 110 },
+  { shape: 'data', label: 'Input / Output', hint: 'Data going in or out', color: '#cdbcff', w: 180, h: 80 },
+  { shape: 'document', label: 'Document', hint: 'A document or report', color: '#ffffff', w: 170, h: 90 },
+  { shape: 'database', label: 'Database', hint: 'Stored data', color: '#aaebe8', w: 140, h: 100 },
+  { shape: 'subroutine', label: 'Subprocess', hint: 'A process defined elsewhere', color: '#aad2fa', w: 180, h: 84 },
+]
+
+export const flowShapeInfo = (s: FlowShape | undefined) => FLOW_SHAPES.find((f) => f.shape === s) ?? FLOW_SHAPES[1]
+
+export type ConnectorStyle = 'straight' | 'elbow' | 'curved'
+export type Arrowheads = 'end' | 'both' | 'none'
 
 export type Side = 'left' | 'right'
 
@@ -21,6 +39,8 @@ export interface Item extends Rect {
   side?: Side
   /** Mind-map node: its children are hidden. */
   collapsed?: boolean
+  /** Flowchart symbol of a `flow` item. */
+  shape?: FlowShape
 }
 
 export interface Connector {
@@ -28,6 +48,11 @@ export interface Connector {
   from: Id
   to: Id
   color: string
+  label?: string
+  /** Defaults to `straight`. */
+  style?: ConnectorStyle
+  /** Defaults to `end`. */
+  arrows?: Arrowheads
 }
 
 export interface Board {
@@ -98,6 +123,8 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 800, h: 600 }
     case 'mind':
       return { w: 160, h: 52 }
+    case 'flow':
+      return { w: 170, h: 84 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -114,6 +141,8 @@ export function defaultColor(k: Kind): string {
       return '#ffffff'
     case 'mind':
       return MIND_ROOT_COLOR
+    case 'flow':
+      return FLOW_SHAPES[1].color
     case 'text':
     case 'pen':
       return INKS[0][1]
@@ -126,6 +155,8 @@ export function defaultFontSize(k: Kind): number {
       return 28
     case 'frame':
       return 18
+    case 'flow':
+      return 17
     default:
       return 22
   }
@@ -139,4 +170,5 @@ export const KIND_LABELS: Record<Kind, string> = {
   frame: 'Frame',
   pen: 'Drawing',
   mind: 'Mind map node',
+  flow: 'Flowchart shape',
 }

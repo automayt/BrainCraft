@@ -1,4 +1,5 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
+import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
 import { type Board, FILLS, FORMAT_VERSION, type Item } from './types'
 
@@ -6,7 +7,7 @@ export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
 }
 
-const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind'])
+const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow'])
 
 function isItem(x: unknown): x is Item {
   const i = x as Item
@@ -77,7 +78,7 @@ export function welcomeBoard(): Board {
     ['Pick a tool on the left, or press N for a sticky note', 0],
     ['Double-click anything to edit its text', 5],
     ['Drag the blue dot to connect ideas', 7],
-    ['Press M for a mind map — Tab adds a child, Enter a sibling', 3],
+    ['Press M for a mind map or D for a flowchart — then Tab adds the next idea', 3],
   ]
   const ids: number[] = []
   notes.forEach(([text, color], n) => {
@@ -100,5 +101,26 @@ export function welcomeBoard(): Board {
     ;[b, branch] = addChild(b, root, undefined, text)
     for (const leaf of leaves) [b] = addChild(b, branch, undefined, leaf)
   }
+
+  // A small flowchart below the mind map.
+  const text = (id: number | null, t: string) => {
+    b = { ...b, items: b.items.map((i) => (i.id === id ? { ...i, text: t } : i)) }
+  }
+  const label = (to: number | null, t: string) => {
+    b = { ...b, connectors: b.connectors.map((c) => (c.to === to ? { ...c, label: t } : c)) }
+  }
+  let start: number, ask: number | null, yes: number | null, no: number | null, done: number | null
+  ;[b, start] = addItem(b, flowItem('terminator', { x: 1700, y: 760 }))
+  text(start, 'New idea')
+  ;[b, ask] = addStep(b, start, 'down', 'decision')
+  text(ask, 'Is it clear yet?')
+  ;[b, yes] = addStep(b, ask!, 'down')
+  text(yes, 'Sketch it out')
+  label(yes, 'Yes')
+  ;[b, no] = addStep(b, ask!, 'right')
+  text(no, 'Mind-map it first')
+  label(no, 'No')
+  ;[b, done] = addStep(b, yes!, 'down', 'terminator')
+  text(done, 'Share with the team')
   return b
 }

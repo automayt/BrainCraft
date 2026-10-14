@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Editor, TOOLS } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
-import { INKS } from '../model/types'
+import { FLOW_SHAPES, INKS } from '../model/types'
 import { Canvas } from './Canvas'
-import { Logo, RedoIcon, TOOL_ICONS, UndoIcon } from './icons'
+import { FlowShapeIcon, Logo, RedoIcon, TOOL_ICONS, UndoIcon } from './icons'
 import { measureText } from './measure'
 import { EditorContext, useEditor } from './useEditor'
 
@@ -211,11 +211,35 @@ function ToolBar() {
           title={`${label} (${key.toUpperCase()})`}
           aria-label={label}
           aria-pressed={editor.tool === tool}
+          // Keep keyboard focus on the board so shortcuts like Tab keep working.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => editor.setTool(tool)}
         >
           {TOOL_ICONS[tool]}
         </button>
       ))}
+      {editor.tool === 'flow' && (
+        <div className="flyout no-canvas" role="listbox" aria-label="Flowchart shapes">
+          <div className="flyout-title">Flowchart</div>
+          {FLOW_SHAPES.map((f) => (
+            <button
+              key={f.shape}
+              role="option"
+              aria-selected={editor.flowShape === f.shape}
+              className={editor.flowShape === f.shape ? 'active' : ''}
+              title={f.hint}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => editor.setFlowShape(f.shape)}
+            >
+              <FlowShapeIcon shape={f.shape} />
+              <span>{f.label}</span>
+            </button>
+          ))}
+          <p className="flyout-tip">
+            Place a shape, then press <kbd>Tab</kbd> or click its blue arrows to add the next step.
+          </p>
+        </div>
+      )}
       {editor.tool === 'pen' && (
         <div className="pen-options">
           {INKS.map(([name, color]) => (
@@ -268,6 +292,18 @@ const SHORTCUTS: [string, [string, string][]][] = [
       ['C', 'Collapse or expand a branch'],
       ['Drag an idea', 'Drop it on another idea to move the branch'],
       ['Paste an indented list', 'Turns it into a mind map'],
+    ],
+  ],
+  [
+    'Flowcharts',
+    [
+      ['D then click', 'Place a shape (pick the shape in the panel)'],
+      ['Tab', 'Add the next connected step'],
+      ['Alt + arrow', 'Add a connected step in that direction'],
+      ['Blue arrows', 'Click to add a step, drag to connect'],
+      ['Enter / double-click', 'Edit the text'],
+      ['Double-click a line', 'Label it (e.g. Yes / No)'],
+      ['Drag', 'Snaps into line with nearby shapes (hold Alt to move freely)'],
     ],
   ],
   [

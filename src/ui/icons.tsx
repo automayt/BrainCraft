@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Tool } from '../editor/Editor'
+import { flowDetail, flowOutline } from '../model/shapes'
+import type { FlowShape, Item } from '../model/types'
 
 const Svg = ({ children }: { children: ReactNode }) => (
   <svg
@@ -47,6 +49,13 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
   ellipse: (
     <Svg>
       <ellipse cx="12" cy="12" rx="8" ry="7" />
+    </Svg>
+  ),
+  flow: (
+    <Svg>
+      <path d="M12 2.5l4.5 4.5-4.5 4.5L7.5 7z" />
+      <rect x="7" y="15" width="10" height="6" rx="1.2" />
+      <path d="M12 11.5V15" />
     </Svg>
   ),
   mind: (
@@ -99,3 +108,15 @@ export const Logo = () => (
     </g>
   </svg>
 )
+
+/** A small drawing of a flowchart symbol, for palettes and menus. */
+export function FlowShapeIcon({ shape, size = 28 }: { shape: FlowShape; size?: number }) {
+  const item = { x: 2, y: 6, w: 28, h: 18, kind: 'flow', shape } as Item
+  const detail = flowDetail(item)
+  return (
+    <svg width={size} height={size * 0.94} viewBox="0 0 32 30" aria-hidden="true">
+      <path d={flowOutline(item)} fill="#eef0ff" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      {detail && <path d={detail} fill="none" stroke="currentColor" strokeWidth="1.6" />}
+    </svg>
+  )
+}

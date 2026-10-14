@@ -6,13 +6,28 @@
 
 import * as B from '../model/board'
 import { type Camera, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
-import { type Rect, type Vec, center, dist, rectFromCenter, rectFromPoints } from '../model/geom'
+import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints } from '../model/geom'
 import { History } from '../model/history'
+import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import { clipFromText, clipToText } from '../model/serialize'
-import { type Board, type Id, type Item, type Kind, type Side, INKS, defaultSize, hasText, isResizable } from '../model/types'
+import {
+  type Arrowheads,
+  type Board,
+  type ConnectorStyle,
+  type FlowShape,
+  type Id,
+  type Item,
+  type Kind,
+  type Side,
+  INKS,
+  defaultSize,
+  flowShapeInfo,
+  hasText,
+  isResizable,
+} from '../model/types'
 
-export type Tool = 'select' | 'hand' | 'sticky' | 'text' | 'rect' | 'ellipse' | 'connector' | 'pen' | 'frame' | 'mind'
+export type Tool = 'select' | 'hand' | 'sticky' | 'text' | 'rect' | 'ellipse' | 'connector' | 'pen' | 'frame' | 'mind' | 'flow'
 
 export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'select', key: 'v', label: 'Select' },
@@ -22,6 +37,7 @@ export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'rect', key: 'r', label: 'Rectangle' },
   { tool: 'ellipse', key: 'o', label: 'Ellipse' },
   { tool: 'mind', key: 'm', label: 'Mind map' },
+  { tool: 'flow', key: 'd', label: 'Flowchart' },
   { tool: 'connector', key: 'l', label: 'Connector' },
   { tool: 'pen', key: 'p', label: 'Pen' },
   { tool: 'frame', key: 'f', label: 'Frame' },
@@ -49,20 +65,35 @@ export type Handle =
   | { kind: 'connect' }
   | { kind: 'mindAdd'; id: Id; side?: Side }
   | { kind: 'collapse'; id: Id }
+  | { kind: 'flowAdd'; dir: F.FlowDir }
 
 export type Drag =
   | { type: 'none' }
   | { type: 'pan'; last: Vec }
-  | { type: 'move'; ids: Set<Id>; last: Vec; before: Board }
+  | { type: 'move'; ids: Set<Id>; start: Vec; applied: Vec; bounds: Rect | null; snap: Snap; guides: Guides; before: Board }
   | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board }
   | { type: 'resize'; id: Id; anchor: Vec; before: Board }
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
   | { type: 'create'; kind: Kind; start: Vec; current: Vec }
   | { type: 'draw'; points: Vec[] }
-  | { type: 'connect'; from: Id; current: Vec }
+  | { type: 'connect'; from: Id; current: Vec; origin: Vec; quick?: F.FlowDir }
+
+/** Alignment lines a moving selection can snap to, in world units. */
+interface Snap {
+  xs: number[]
+  ys: number[]
+}
+
+/** The alignment lines currently snapped to, for drawing. */
+export interface Guides {
+  x?: number
+  y?: number
+}
 
 export interface Editing {
+  /** The item being edited, or the connector when `connector` is set. */
   id: Id
+  connector?: boolean
   /** The board before this edit (and before the item was created, for new items). */
   before: Board
   created: boolean
@@ -88,6 +119,8 @@ export class Editor {
   viewport = { w: 1200, h: 800 }
   penColor = INKS[0][1]
   penWidth = 4
+  /** The symbol the flowchart tool places. */
+  flowShape: FlowShape = 'process'
   spaceDown = false
   /** Last pointer position in world space, for pasting. */
   pointer: Vec | null = null
@@ -261,10 +294,28 @@ export class Editor {
     this.emit()
   }
 
+  /** Starts editing the label of connector `id`. */
+  startEditingLabel(id: Id) {
+    this.finishEditing()
+    if (!B.getConnector(this.board, id)) return
+    this.selection = new Set()
+    this.selectedConnector = id
+    this.editing = { id, connector: true, before: this.board, created: false }
+    this.emit()
+  }
+
+  /** The text being edited. */
+  get editingText(): string {
+    const e = this.editing
+    if (!e) return ''
+    return (e.connector ? B.getConnector(this.board, e.id)?.label : B.getItem(this.board, e.id)?.text) ?? ''
+  }
+
   setEditingText(text: string) {
-    if (!this.editing) return
-    const id = this.editing.id
-    this.apply(B.updateItem(this.board, id, (i) => (i.text === text ? i : { ...i, text })))
+    const e = this.editing
+    if (!e) return
+    if (e.connector) this.apply(B.updateConnector(this.board, e.id, (c) => ({ ...c, label: text })))
+    else this.apply(B.updateItem(this.board, e.id, (i) => (i.text === text ? i : { ...i, text })))
     this.emit()
   }
 
@@ -273,6 +324,15 @@ export class Editor {
     const e = this.editing
     if (!e) return
     this.editing = null
+    if (e.connector) {
+      const c = B.getConnector(this.board, e.id)
+      if (c && !c.label?.trim()) {
+        this.apply(B.updateConnector(this.board, e.id, (x) => ({ ...x, label: undefined })))
+      }
+      this.commit(e.before)
+      this.emit()
+      return
+    }
     const item = B.getItem(this.board, e.id)
     // A new mind-map branch left empty is discarded, as if never added.
     if (e.created && item?.kind === 'mind' && item.parent !== undefined && !item.text.trim()) {
@@ -294,6 +354,11 @@ export class Editor {
       this.finishEditing()
       return true
     }
+    if (item?.kind === 'flow' && key === 'Tab') {
+      this.finishEditing()
+      if (B.getItem(this.board, item.id)) this.addFlowStep(item.id)
+      return true
+    }
     if (item?.kind !== 'mind') return false
     if (key === 'Enter' && !mods.shift) {
       const hadText = !!item.text.trim()
@@ -308,6 +373,61 @@ export class Editor {
       return true
     }
     return false
+  }
+
+  // ----- flowcharts ---------------------------------------------------------------
+
+  setFlowShape(shape: FlowShape) {
+    this.flowShape = shape
+    this.setTool('flow')
+  }
+
+  /** Adds a connected next step after flowchart shape `id` and starts editing it. */
+  addFlowStep(id: Id, dir: F.FlowDir = F.flowDirection(this.board, id)) {
+    this.finishEditing()
+    const before = this.board
+    const [b, newId] = F.addStep(this.board, id, dir)
+    if (newId === null) return
+    this.apply(b)
+    this.startEditing(newId, { before, created: true })
+    this.keepInView(newId)
+  }
+
+  /** Changes the symbol of the selected flowchart shapes. */
+  setShape(shape: FlowShape) {
+    this.edit((b) =>
+      B.updateItems(b, this.selection, (i) => {
+        if (i.kind !== 'flow' || i.shape === shape) return i
+        // Shapes still in their default colour take the new symbol's colour.
+        const color = i.color === flowShapeInfo(i.shape).color ? flowShapeInfo(shape).color : i.color
+        return { ...i, shape, color }
+      }),
+    )
+  }
+
+  setConnectorStyle(style: ConnectorStyle) {
+    const id = this.selectedConnector
+    if (id !== null) this.edit((b) => B.updateConnector(b, id, (c) => ({ ...c, style })))
+  }
+
+  setArrowheads(arrows: Arrowheads) {
+    const id = this.selectedConnector
+    if (id !== null) this.edit((b) => B.updateConnector(b, id, (c) => ({ ...c, arrows })))
+  }
+
+  /** Pans just enough to bring item `id` into view. */
+  keepInView(id: Id) {
+    const i = B.getItem(this.board, id)
+    if (!i) return
+    const r = this.screenRect(i)
+    const m = 40
+    let dx = 0
+    let dy = 0
+    if (r.x < m) dx = m - r.x
+    else if (r.x + r.w > this.viewport.w - m) dx = this.viewport.w - m - (r.x + r.w)
+    if (r.y < m) dy = m - r.y
+    else if (r.y + r.h > this.viewport.h - m) dy = this.viewport.h - m - (r.y + r.h)
+    if (dx || dy) this.pan(dx, dy)
   }
 
   // ----- mind maps ---------------------------------------------------------------
@@ -494,23 +614,27 @@ export class Editor {
           this.emit()
           return
         }
-        case 'connect': {
+        case 'connect':
+        case 'flowAdd': {
           const item = this.single
-          if (item) this.drag = { type: 'connect', from: item.id, current: world }
+          if (item) {
+            const quick = handle.kind === 'flowAdd' ? handle.dir : undefined
+            this.drag = { type: 'connect', from: item.id, current: world, origin: screen, quick }
+          }
           this.emit()
           return
         }
       }
     }
 
-    const kind = CREATES[this.tool]
-    if (kind || this.tool === 'mind') {
-      this.drag = { type: 'create', kind: kind ?? 'mind', start: world, current: world }
+    const kind = CREATES[this.tool] ?? (this.tool === 'mind' ? 'mind' : this.tool === 'flow' ? 'flow' : undefined)
+    if (kind) {
+      this.drag = { type: 'create', kind, start: world, current: world }
     } else if (this.tool === 'pen') {
       this.drag = { type: 'draw', points: [world] }
     } else if (this.tool === 'connector') {
       const hit = this.hitAt(screen)
-      if (hit?.type === 'item') this.drag = { type: 'connect', from: hit.id, current: world }
+      if (hit?.type === 'item') this.drag = { type: 'connect', from: hit.id, current: world, origin: screen }
     } else if (this.tool === 'select') {
       const hit = this.hitAt(screen)
       if (hit?.type === 'item') {
@@ -524,7 +648,7 @@ export class Editor {
           if (node?.kind === 'mind' && node.parent !== undefined) {
             this.drag = { type: 'branch', id: node.id, start: world, offset: { x: 0, y: 0 }, target: null, before: this.board }
           } else {
-            this.drag = { type: 'move', ids: B.movingSet(this.board, this.selection), last: world, before: this.board }
+            this.startMove(world)
           }
         }
       } else if (hit?.type === 'connector') {
@@ -539,7 +663,51 @@ export class Editor {
     this.emit()
   }
 
-  pointerMove(screen: Vec) {
+  /** Begins dragging the selection, collecting the alignment lines it can snap to. */
+  private startMove(world: Vec) {
+    const ids = B.movingSet(this.board, this.selection)
+    const view = this.visibleWorld
+    const snap: Snap = { xs: [], ys: [] }
+    for (const i of this.board.items) {
+      if (ids.has(i.id) || this.hidden.has(i.id) || i.kind === 'pen' || !intersects(i, view)) continue
+      snap.xs.push(i.x, i.x + i.w / 2, i.x + i.w)
+      snap.ys.push(i.y, i.y + i.h / 2, i.y + i.h)
+    }
+    this.drag = {
+      type: 'move',
+      ids,
+      start: world,
+      applied: { x: 0, y: 0 },
+      bounds: B.bounds(this.board, this.selection),
+      snap,
+      guides: {},
+      before: this.board,
+    }
+  }
+
+  /** Nudges `delta` so an edge or centre of `bounds` lands on a nearby line. */
+  private snapDelta(bounds: Rect, delta: Vec, snap: Snap): { delta: Vec; guides: Guides } {
+    const reach = 6 / this.camera.zoom
+    const best = (values: number[], lines: number[]) => {
+      let found: { adjust: number; line: number } | undefined
+      for (const v of values)
+        for (const line of lines) {
+          const adjust = line - v
+          if (Math.abs(adjust) <= reach && (!found || Math.abs(adjust) < Math.abs(found.adjust))) found = { adjust, line }
+        }
+      return found
+    }
+    const x = bounds.x + delta.x
+    const y = bounds.y + delta.y
+    const sx = best([x, x + bounds.w / 2, x + bounds.w], snap.xs)
+    const sy = best([y, y + bounds.h / 2, y + bounds.h], snap.ys)
+    return {
+      delta: { x: delta.x + (sx?.adjust ?? 0), y: delta.y + (sy?.adjust ?? 0) },
+      guides: { x: sx?.line, y: sy?.line },
+    }
+  }
+
+  pointerMove(screen: Vec, mods: Modifiers = {}) {
     const world = toWorld(this.camera, screen)
     this.pointer = world
     const d = this.drag
@@ -550,10 +718,15 @@ export class Editor {
         this.camera = { ...this.camera, x: this.camera.x + screen.x - d.last.x, y: this.camera.y + screen.y - d.last.y }
         d.last = screen
         break
-      case 'move':
-        this.apply(B.translate(this.board, d.ids, world.x - d.last.x, world.y - d.last.y))
-        d.last = world
+      case 'move': {
+        let delta = { x: world.x - d.start.x, y: world.y - d.start.y }
+        d.guides = {}
+        // Alt moves freely; otherwise line up with nearby items.
+        if (d.bounds && !mods.alt) ({ delta, guides: d.guides } = this.snapDelta(d.bounds, delta, d.snap))
+        this.apply(B.translate(this.board, d.ids, delta.x - d.applied.x, delta.y - d.applied.y))
+        d.applied = delta
         break
+      }
       case 'branch': {
         d.offset = { x: world.x - d.start.x, y: world.y - d.start.y }
         d.target = this.branchDropTarget(d.id, world)
@@ -618,7 +791,9 @@ export class Editor {
         break
       }
       case 'connect':
-        this.finishConnect(d.from, world)
+        // A click (not a drag) on a flowchart arrow adds the next step that way.
+        if (d.quick && dist(d.origin, screen) < 5) this.addFlowStep(d.from, d.quick)
+        else this.finishConnect(d.from, world)
         break
     }
     this.emit()
@@ -661,6 +836,15 @@ export class Editor {
       let b: Board
       ;[b, id] = M.createMap(before, start)
       this.apply(b)
+    } else if (kind === 'flow') {
+      const r = rectFromPoints(start, end)
+      const sized = r.w * this.camera.zoom >= 8 && r.h * this.camera.zoom >= 8
+      const item = sized
+        ? { ...F.flowItem(this.flowShape, center(r), { w: r.w, h: r.h }) }
+        : F.flowItem(this.flowShape, start)
+      let b: Board
+      ;[b, id] = B.addItem(this.board, item)
+      this.apply(b)
     } else {
       let r = rectFromPoints(start, end)
       if (r.w * this.camera.zoom < 8 || r.h * this.camera.zoom < 8) {
@@ -691,7 +875,7 @@ export class Editor {
     const target = hit?.type === 'item' ? B.getItem(this.board, hit.id) : undefined
     const before = this.board
     if (target && target.id !== from && target.kind !== 'frame') {
-      this.apply(B.connect(this.board, from, target.id)[0])
+      this.apply(B.connect(this.board, from, target.id, { style: B.defaultStyleBetween(source, target) })[0])
       this.commit(before)
       return
     }
@@ -702,11 +886,12 @@ export class Editor {
       return
     }
     if (source.kind === 'pen' || source.kind === 'frame') return
-    const [b, id] = B.addItem(
-      this.board,
-      B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize }),
-    )
-    this.apply(B.connect(b, from, id)[0])
+    const item =
+      source.kind === 'flow'
+        ? F.flowItem(F.nextShape(source.shape), world)
+        : B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize })
+    const [b, id] = B.addItem(this.board, item)
+    this.apply(B.connect(b, from, id, { style: B.defaultStyleBetween(source, item as Item) })[0])
     this.startEditing(id, { before, created: true })
   }
 
@@ -714,6 +899,8 @@ export class Editor {
     const hit = this.hitAt(screen)
     if (hit?.type === 'item') {
       this.startEditing(hit.id)
+    } else if (hit?.type === 'connector') {
+      this.startEditingLabel(hit.id)
     } else if (!hit && this.tool === 'select') {
       const before = this.board
       const [b, id] = B.addItem(this.board, B.newItem('sticky', rectFromCenter(toWorld(this.camera, screen), 200, 200)))
@@ -759,6 +946,18 @@ export class Editor {
       this.tool = 'select'
       this.select([])
       return true
+    }
+    if (node?.kind === 'flow') {
+      // Tab continues the flow; Alt + arrow branches off in that direction.
+      if (k === 'Tab') {
+        this.addFlowStep(node.id)
+        return true
+      }
+      const dir = ARROWS[k]
+      if (dir && mods.alt) {
+        this.addFlowStep(node.id, dir)
+        return true
+      }
     }
     if (mind) {
       if (k === 'Tab') {
@@ -808,6 +1007,28 @@ export class Editor {
       }
     }
     return false
+  }
+
+  /** A one-line reminder of what the keyboard can do right now. */
+  get hint(): string | null {
+    const e = this.editing
+    if (e) {
+      if (e.connector) return 'Type a label  ·  Esc done'
+      const kind = B.getItem(this.board, e.id)?.kind
+      if (kind === 'mind') return 'Enter next idea  ·  Tab sub-idea  ·  Shift+Enter new line  ·  Esc done'
+      if (kind === 'flow') return 'Tab add the next step  ·  Esc done'
+      return 'Esc done'
+    }
+    if (this.tool === 'mind') return 'Click to place the central idea'
+    if (this.tool === 'flow') return `Click to place a ${flowShapeInfo(this.flowShape).label.toLowerCase()}, or drag to size it`
+    if (this.tool === 'connector') return 'Drag from one item to another'
+    if (this.selectedConnector !== null) return 'Double-click the line to label it'
+    const node = this.single
+    if (node?.kind === 'mind')
+      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  C collapse  ·  Del delete'
+    if (node?.kind === 'flow')
+      return 'Tab next step  ·  Alt+Arrow add a step that way  ·  Enter edit  ·  Click or drag a blue arrow'
+    return null
   }
 
   // ----- render helpers ----------------------------------------------------------
