@@ -1,0 +1,104 @@
+import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
+import { addChild, createMap } from './mindmap'
+import { type Board, FILLS, FORMAT_VERSION, type Item } from './types'
+
+export function toJson(b: Board): string {
+  return JSON.stringify(b, null, 2)
+}
+
+const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind'])
+
+function isItem(x: unknown): x is Item {
+  const i = x as Item
+  return (
+    typeof i === 'object' &&
+    i !== null &&
+    typeof i.id === 'number' &&
+    KINDS.has(i.kind) &&
+    [i.x, i.y, i.w, i.h, i.fontSize].every((n) => typeof n === 'number' && Number.isFinite(n)) &&
+    typeof i.color === 'string' &&
+    typeof i.text === 'string'
+  )
+}
+
+/** Parses a saved board, dropping anything malformed and repairing ids. Throws on non-boards. */
+export function fromJson(json: string): Board {
+  const raw = JSON.parse(json) as Partial<Board>
+  if (!raw || !Array.isArray(raw.items) || !Array.isArray(raw.connectors)) throw new Error('Not a BrainCraft board')
+  const items = raw.items.filter(isItem)
+  const ids = new Set(items.map((i) => i.id))
+  // Mind-map nodes whose parent is missing become roots.
+  for (const i of items) {
+    if (i.parent !== undefined && !ids.has(i.parent)) {
+      delete i.parent
+      delete i.side
+    }
+  }
+  const connectors = raw.connectors.filter(
+    (c) => c && typeof c.id === 'number' && ids.has(c.from) && ids.has(c.to) && typeof c.color === 'string',
+  )
+  const maxId = Math.max(0, ...items.map((i) => i.id), ...connectors.map((c) => c.id))
+  return {
+    version: FORMAT_VERSION,
+    title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
+    items,
+    connectors,
+    nextId: Math.max(typeof raw.nextId === 'number' ? raw.nextId : 0, maxId + 1),
+  }
+}
+
+const CLIP_TAG = 'braincraft/clip'
+
+export function clipToText(clip: Clip): string {
+  return JSON.stringify({ type: CLIP_TAG, ...clip })
+}
+
+export function clipFromText(text: string): Clip | null {
+  try {
+    const raw = JSON.parse(text)
+    if (raw?.type !== CLIP_TAG || !Array.isArray(raw.items)) return null
+    const items = (raw.items as unknown[]).filter(isItem)
+    return { items, connectors: Array.isArray(raw.connectors) ? raw.connectors : [] }
+  } catch {
+    return null
+  }
+}
+
+/** The board shown on first visit. */
+export function welcomeBoard(): Board {
+  let b = emptyBoard('Welcome to BrainCraft')
+  let id: number
+  ;[b] = addItem(b, newItem('frame', { x: -60, y: -40, w: 1180, h: 660 }, { text: 'Welcome to BrainCraft' }))
+  ;[b] = addItem(
+    b,
+    newItem('text', { x: 0, y: 0, w: 760, h: 48 }, { text: 'Brainstorm on an infinite canvas', fontSize: 34 }),
+  )
+  const notes: [string, number][] = [
+    ['Pick a tool on the left, or press N for a sticky note', 0],
+    ['Double-click anything to edit its text', 5],
+    ['Drag the blue dot to connect ideas', 7],
+    ['Press M for a mind map — Tab adds a child, Enter a sibling', 3],
+  ]
+  const ids: number[] = []
+  notes.forEach(([text, color], n) => {
+    ;[b, id] = addItem(b, newItem('sticky', { x: n * 260, y: 110, w: 220, h: 220 }, { text, color: FILLS[color][1] }))
+    ids.push(id)
+  })
+  for (let k = 1; k < ids.length; k++) [b] = connect(b, ids[k - 1], ids[k])
+
+  // A small mind map to the right of the frame.
+  let root: number
+  ;[b, root] = createMap(b, { x: 1700, y: 290 }, 'Product launch')
+  const branches: [string, string[]][] = [
+    ['Audience', ['Early adopters', 'Teams']],
+    ['Channels', ['Blog post', 'Social', 'Newsletter']],
+    ['Risks', ['Timeline', 'Scope creep']],
+    ['Success', ['Sign-ups', 'Retention']],
+  ]
+  for (const [text, leaves] of branches) {
+    let branch: number
+    ;[b, branch] = addChild(b, root, undefined, text)
+    for (const leaf of leaves) [b] = addChild(b, branch, undefined, leaf)
+  }
+  return b
+}
