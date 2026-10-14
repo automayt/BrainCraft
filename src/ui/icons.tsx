@@ -64,6 +64,27 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
       <path d="M8 9h8M8 12h5" />
     </Svg>
   ),
+  table: (
+    <Svg>
+      <rect x="3.5" y="5" width="17" height="14" rx="1.5" />
+      <path d="M3.5 10h17M3.5 14.5h17M9.5 5v14" />
+    </Svg>
+  ),
+  kanban: (
+    <Svg>
+      <rect x="3.5" y="4" width="5" height="12" rx="1" />
+      <rect x="9.5" y="4" width="5" height="8" rx="1" />
+      <rect x="15.5" y="4" width="5" height="15" rx="1" />
+    </Svg>
+  ),
+  timeline: (
+    <Svg>
+      <path d="M3 18h18" />
+      <rect x="4" y="5" width="9" height="3.5" rx="1.5" />
+      <rect x="9" y="11" width="10" height="3.5" rx="1.5" />
+      <path d="M7 18v2M12 18v2M17 18v2" />
+    </Svg>
+  ),
   mind: (
     <Svg>
       <rect x="8.5" y="10" width="7" height="4" rx="2" fill="currentColor" stroke="none" />

@@ -1,5 +1,5 @@
 import * as B from '../model/board'
-import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, usesInk } from '../model/types'
+import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useEditor } from './useEditor'
 
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
@@ -33,8 +33,9 @@ export function SelectionToolbar() {
   const flows = items.filter((i) => i.kind === 'flow')
   const x = Math.min(Math.max(anchor.x, 220), editor.viewport.w - 220)
   const y = Math.max(anchor.y, 56)
-  const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && i.kind !== 'image')
-  const colorable = !items.length || items.some((i) => i.kind !== 'image')
+  const plain = (i: (typeof items)[number]) => i.kind !== 'image' && !isWidget(i.kind)
+  const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
+  const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
 
   return (

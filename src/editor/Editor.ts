@@ -11,6 +11,10 @@ import { History } from '../model/history'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import * as N from '../model/notes'
+import * as K from '../model/kanban'
+import { kanbanWidth, newKanban } from '../model/kanban'
+import { looksTabular, newTable, tableFromText, tableSize } from '../model/table'
+import * as TL from '../model/timeline'
 import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
 import { clipFromText, clipToText } from '../model/serialize'
 import {
@@ -20,13 +24,18 @@ import {
   type FlowShape,
   type Id,
   type Item,
+  type KanbanData,
   type Kind,
+  type TableData,
+  type TimelineData,
   type Side,
   INKS,
   defaultSize,
   flowShapeInfo,
+  WIDGET_TITLE_H,
   hasText,
   isResizable,
+  isWidget,
 } from '../model/types'
 
 export type Tool =
@@ -42,6 +51,9 @@ export type Tool =
   | 'mind'
   | 'flow'
   | 'comment'
+  | 'table'
+  | 'kanban'
+  | 'timeline'
 
 export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'select', key: 'v', label: 'Select' },
@@ -53,6 +65,9 @@ export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'mind', key: 'm', label: 'Mind map' },
   { tool: 'flow', key: 'd', label: 'Flowchart' },
   { tool: 'comment', key: 'c', label: 'Comment' },
+  { tool: 'table', key: 'g', label: 'Table' },
+  { tool: 'kanban', key: 'k', label: 'Kanban board' },
+  { tool: 'timeline', key: 'i', label: 'Timeline' },
   { tool: 'connector', key: 'l', label: 'Connector' },
   { tool: 'pen', key: 'p', label: 'Pen' },
   { tool: 'frame', key: 'f', label: 'Frame' },
@@ -65,6 +80,9 @@ const CREATES: Partial<Record<Tool, Kind>> = {
   ellipse: 'ellipse',
   frame: 'frame',
   comment: 'comment',
+  table: 'table',
+  kanban: 'kanban',
+  timeline: 'timeline',
 }
 
 export type Corner = 'nw' | 'ne' | 'sw' | 'se'
@@ -516,6 +534,52 @@ export class Editor {
     return toMermaid(this.board, this.selection.size ? this.selection : undefined)
   }
 
+  // ----- tables, Kanban boards, timelines -------------------------------------------
+
+  /** Updates an object as one undo step. */
+  updateItem(id: Id, f: (i: Item) => Item) {
+    this.edit((b) => B.updateItem(b, id, f))
+  }
+
+  /** Updates a table, resizing the object to fit it. */
+  updateTable(id: Id, f: (t: TableData) => TableData) {
+    this.updateItem(id, (i) => {
+      if (!i.table) return i
+      const table = f(i.table)
+      if (table === i.table) return i
+      return { ...i, table, ...tableSize(table) }
+    })
+  }
+
+  updateKanban(id: Id, f: (k: KanbanData) => KanbanData) {
+    this.updateItem(id, (i) => (i.kanban ? { ...i, kanban: f(i.kanban) } : i))
+  }
+
+  updateTimeline(id: Id, f: (t: TimelineData) => TimelineData) {
+    this.updateItem(id, (i) => (i.timeline ? { ...i, timeline: f(i.timeline) } : i))
+  }
+
+  /**
+   * Reschedules a timeline entry by `days` (or one of its ends). Entries that
+   * come from Kanban cards update the card itself.
+   */
+  shiftTimelineEntry(timeline: Id, entry: TL.ShownEntry, days: number, edge?: 'start' | 'end') {
+    if (!days) return
+    const next = TL.shiftDates(entry, days, edge)
+    const src = entry.source
+    if (!src) {
+      this.updateTimeline(timeline, (t) => TL.updateEntry(t, entry.id, { start: next.start, end: next.end }))
+      return
+    }
+    this.updateKanban(src.kanban, (k) => {
+      const card = K.findCard(k, src.card)?.card
+      if (!card) return k
+      if (TL.isIsoDay(card.start) && TL.isIsoDay(card.due)) return K.updateCard(k, card.id, { start: next.start, due: next.end ?? next.start })
+      if (TL.isIsoDay(card.due)) return K.updateCard(k, card.id, { due: next.start })
+      return K.updateCard(k, card.id, { start: next.start })
+    })
+  }
+
   /** Changes the symbol of the selected flowchart shapes. */
   setShape(shape: FlowShape) {
     this.edit((b) =>
@@ -549,6 +613,12 @@ export class Editor {
     if (!i) return
     const r = this.screenRect(i)
     const m = 40
+    if (r.w > this.viewport.w - 2 * m || r.h > this.viewport.h - 2 * m) {
+      // Too big to show at this zoom: zoom out to fit it.
+      this.camera = fit(B.itemBounds(i), this.viewport, m)
+      this.emit()
+      return
+    }
     let dx = 0
     let dy = 0
     if (r.x < m) dx = m - r.x
@@ -672,6 +742,20 @@ export class Editor {
         const p = B.getItem(this.board, id)?.parent
         return p === undefined || !ids.has(p)
       }))
+      return
+    }
+    if (looksTabular(text)) {
+      const table = tableFromText(text)
+      const size = tableSize(table)
+      let id = -1
+      this.edit((b) => {
+        const [next, newId] = B.addItem(b, B.newItem('table', rectFromCenter(at, size.w, size.h), { text: 'Table', table }))
+        id = newId
+        return next
+      })
+      this.select([id])
+      this.status = `Pasted a table with ${table.rows.length} rows`
+      this.emit()
       return
     }
     if (looksLikeMermaid(text)) {
@@ -1001,8 +1085,16 @@ export class Editor {
         const s = defaultSize(kind)
         r = rectFromCenter(start, s.w, s.h)
       }
+      if (kind === 'table') r = rectFromCenter(start, tableSize(newTable()).w, tableSize(newTable()).h)
+      if (kind === 'kanban' && r.w < 500) r = rectFromCenter(start, kanbanWidth(newKanban()), r.h)
       const extra: Partial<Item> =
-        kind === 'frame'
+        kind === 'table'
+          ? { text: 'Table', table: newTable() }
+          : kind === 'kanban'
+            ? { text: 'Kanban board', kanban: newKanban() }
+            : kind === 'timeline'
+              ? { text: 'Timeline', timeline: TL.newTimeline() }
+              : kind === 'frame'
           ? { text: `Frame ${this.board.items.filter((i) => i.kind === 'frame').length + 1}` }
           : kind === 'comment'
             ? { createdAt: Date.now() }
@@ -1014,9 +1106,10 @@ export class Editor {
       this.apply(b)
     }
     this.tool = 'select'
-    if (kind === 'frame') {
+    if (kind === 'frame' || isWidget(kind)) {
       this.commit(before)
       this.select([id])
+      if (isWidget(kind)) this.keepInView(id)
     } else {
       this.startEditing(id, { before, created: true })
     }
@@ -1052,7 +1145,12 @@ export class Editor {
 
   doubleClick(screen: Vec) {
     const hit = this.hitAt(screen)
-    if (hit?.type === 'item') {
+    const target = hit?.type === 'item' ? B.getItem(this.board, hit.id) : undefined
+    if (target && isWidget(target.kind)) {
+      // Widgets handle clicks in their body; their title strip renames them.
+      if (toWorld(this.camera, screen).y - target.y <= WIDGET_TITLE_H) this.startEditing(target.id)
+      else this.select([target.id])
+    } else if (hit?.type === 'item') {
       this.startEditing(hit.id)
     } else if (hit?.type === 'connector') {
       this.startEditingLabel(hit.id)
