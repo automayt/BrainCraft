@@ -1,11 +1,21 @@
 import * as B from '../model/board'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
 export function SelectionToolbar() {
   const editor = useEditor()
-  if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker) return null
+  const ui = useUi()
+  const ref = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+  // Measure the bar so it can be kept fully on screen and clear of the tool rail.
+  useLayoutEffect(() => {
+    const w = ref.current?.offsetWidth ?? 0
+    if (w !== width) setWidth(w)
+  })
+  if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker || ui.menu) return null
   const { board } = editor
   let anchor: { x: number; y: number }
   let palette: readonly [string, string][]
@@ -31,15 +41,17 @@ export function SelectionToolbar() {
 
   const connector = editor.selectedConnector !== null ? B.getConnector(board, editor.selectedConnector) : undefined
   const flows = items.filter((i) => i.kind === 'flow')
-  const x = Math.min(Math.max(anchor.x, 220), editor.viewport.w - 220)
-  const y = Math.max(anchor.y, 56)
+  const minX = 68 + width / 2
+  const maxX = editor.viewport.w - 12 - width / 2
+  const x = maxX < minX ? minX : Math.min(Math.max(anchor.x, minX), maxX)
+  const y = Math.max(anchor.y, 72)
   const plain = (i: (typeof items)[number]) => i.kind !== 'image' && !isWidget(i.kind)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
 
   return (
-    <div className="selection-toolbar no-canvas" style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className="selection-toolbar no-canvas" style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
       {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (

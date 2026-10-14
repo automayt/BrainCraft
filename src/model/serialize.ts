@@ -75,9 +75,9 @@ export function welcomeBoard(): Board {
     newItem('text', { x: 0, y: 0, w: 760, h: 48 }, { text: 'Brainstorm on an infinite canvas', fontSize: 34 }),
   )
   const notes: [string, number][] = [
-    ['Pick a tool on the left, or press N for a sticky note', 0],
+    ['Pick a tool on the left, or right-click anywhere', 0],
     ['Double-click anything to edit its text', 5],
-    ['Drag the blue dot to connect ideas', 7],
+    ['Ctrl K searches everything and runs any command', 7],
     ['Press M for a mind map or D for a flowchart — then Tab adds the next idea', 3],
   ]
   const ids: number[] = []

@@ -1,7 +1,8 @@
 import { type PointerEvent, useRef } from 'react'
 import * as B from '../model/board'
 import { expand, union } from '../model/geom'
-import { usesInk } from '../model/types'
+import { isWidget, usesInk } from '../model/types'
+import { ink, mindRootFill } from './paint'
 import { darken } from './BoardView'
 import { useEditor } from './useEditor'
 
@@ -41,7 +42,7 @@ export function Minimap() {
       <g transform={`translate(${ox} ${oy}) scale(${s})`}>
         {editor.board.items.map((i) =>
           editor.hidden.has(i.id) ? null : i.kind === 'frame' ? (
-            <rect key={i.id} x={i.x} y={i.y} width={i.w} height={i.h} fill="#fff" stroke="#b4b4bc" strokeWidth={1 / s} />
+            <rect key={i.id} x={i.x} y={i.y} width={i.w} height={i.h} strokeWidth={1 / s} style={{ fill: 'var(--frame-fill)', stroke: 'var(--frame-stroke)' }} />
           ) : (
             <rect
               key={i.id}
@@ -49,7 +50,7 @@ export function Minimap() {
               y={i.y}
               width={i.w}
               height={i.h}
-              fill={usesInk(i.kind) ? i.color : i.kind === 'mind' ? i.color : darken(i.color, 0.85)}
+              style={{ fill: usesInk(i.kind) ? ink(i.color) : isWidget(i.kind) ? 'var(--surface-2)' : i.kind === 'mind' ? mindRootFill(i.color) : darken(i.color, 0.85) }}
               opacity={usesInk(i.kind) ? 0.5 : 1}
             />
           ),

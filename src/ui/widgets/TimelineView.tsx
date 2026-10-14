@@ -243,7 +243,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
                         style={
                           milestone
                             ? { left: left - 8, top, ['--c' as string]: entry.color }
-                            : { left, top, width: Math.max(6, x(d.end!) - left), background: entry.color }
+                            : { left, top, width: Math.max(6, x(d.end!) - left), background: entry.color, color: textOn(entry.color) }
                         }
                         onPointerDown={(e) => startDrag(e, entry)}
                         onPointerMove={moveDrag}
@@ -298,4 +298,15 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
       </div>
     </Widget>
   )
+}
+
+/** Dark or light text, whichever reads better on `hex`. */
+function textOn(hex: string): string {
+  const n = parseInt(hex.replace('#', ''), 16)
+  if (Number.isNaN(n)) return '#ffffff'
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? '#1e1e24' : '#ffffff'
 }

@@ -237,6 +237,17 @@ export class Editor {
     this.emit()
   }
 
+  /** Measures text again (e.g. once web fonts load) and re-lays out mind maps. */
+  relayout() {
+    this.measureCache?.()
+    const next = M.layoutAll({ ...this.board, items: this.board.items.map((i) => (i.kind === 'mind' ? { ...i, w: 0 } : i)) }, this.measure)
+    this.board = next
+    this.emit()
+  }
+
+  /** Clears the text measurement cache, if the measure function has one. */
+  measureCache: (() => void) | null = null
+
   setStatus(status: string) {
     this.status = status
     this.emit()
@@ -318,7 +329,7 @@ export class Editor {
 
   zoomToFit() {
     const target = B.bounds(this.board, this.selection.size ? this.selection : undefined)
-    this.camera = target ? fit(target, this.viewport) : defaultCamera()
+    this.camera = target ? fit(target, this.viewport, 96) : defaultCamera()
     this.emit()
   }
 
@@ -829,8 +840,14 @@ export class Editor {
       return
     }
     if (button === 2) {
+      this.finishEditing()
       const hit = this.hitAt(screen)
       if (hit?.type === 'item' && !this.selection.has(hit.id)) this.select([hit.id])
+      else if (hit?.type === 'connector') {
+        this.selection = new Set()
+        this.selectedConnector = hit.id
+        this.emit()
+      } else if (!hit) this.select([])
       return
     }
     if (button !== 0) return

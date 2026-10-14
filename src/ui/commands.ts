@@ -1,0 +1,97 @@
+/** Everything the app can do, by name: shared by the command palette and menus. */
+
+import { type Editor, TOOLS } from '../editor/Editor'
+import { KIND_LABELS } from '../model/types'
+import { THEMES } from './theme'
+import type { Ui } from './uiContext'
+
+export interface Command {
+  id: string
+  label: string
+  group: string
+  keys?: string
+  /** Extra words to match on. */
+  aliases?: string
+  run: () => void
+}
+
+const TOOL_VERBS: Record<string, string> = {
+  select: 'Select tool',
+  hand: 'Hand tool (pan)',
+  sticky: 'Add sticky note',
+  text: 'Add text',
+  rect: 'Add rectangle',
+  ellipse: 'Add ellipse',
+  mind: 'Start a mind map',
+  flow: 'Add flowchart shape',
+  comment: 'Add comment block',
+  table: 'Add table',
+  kanban: 'Add Kanban board',
+  timeline: 'Add timeline',
+  connector: 'Connect objects',
+  pen: 'Draw with the pen',
+  frame: 'Add frame',
+}
+
+export function commands(editor: Editor, ui: Ui): Command[] {
+  const list: Command[] = [
+    ...TOOLS.map((t) => ({
+      id: `tool:${t.tool}`,
+      label: TOOL_VERBS[t.tool] ?? t.label,
+      group: 'Create',
+      keys: t.key.toUpperCase(),
+      aliases: `${t.label} new insert create`,
+      run: () => editor.setTool(t.tool),
+    })),
+    { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
+    { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },
+    { id: 'redo', label: 'Redo', group: 'Edit', keys: 'Ctrl Shift Z', run: () => editor.redo() },
+    { id: 'select-all', label: 'Select all', group: 'Edit', keys: 'Ctrl A', run: () => editor.selectAll() },
+    { id: 'comments', label: 'Show comments', group: 'Edit', keys: 'Shift C', aliases: 'notes work notes panel', run: () => editor.toggleNotes(true) },
+    { id: 'zoom-in', label: 'Zoom in', group: 'View', run: () => editor.zoomBy(1.25) },
+    { id: 'zoom-out', label: 'Zoom out', group: 'View', run: () => editor.zoomBy(1 / 1.25) },
+    { id: 'zoom-100', label: 'Zoom to 100%', group: 'View', aliases: 'actual size reset', run: () => editor.setZoom(1) },
+    { id: 'zoom-fit', label: 'Zoom to fit', group: 'View', keys: 'Shift 1', aliases: 'everything overview', run: () => editor.zoomToFit() },
+    ...THEMES.map((t) => ({
+      id: `theme:${t.id}`,
+      label: `Theme: ${t.label}`,
+      group: 'View',
+      aliases: 'appearance colour color mode accessibility contrast',
+      run: () => ui.setTheme(t.id),
+    })),
+    { id: 'new', label: 'New board', group: 'Board', aliases: 'blank clear', run: ui.newBoard },
+    { id: 'open', label: 'Open board file…', group: 'Board', aliases: 'load import json', run: ui.openFile },
+    { id: 'download', label: 'Download board', group: 'Board', keys: 'Ctrl S', aliases: 'save export json', run: ui.download },
+    { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },
+    { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
+    { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
+  ]
+  if (editor.selection.size) {
+    list.push(
+      { id: 'duplicate', label: 'Duplicate selection', group: 'Edit', keys: 'Ctrl D', run: () => editor.duplicate() },
+      { id: 'delete', label: 'Delete selection', group: 'Edit', keys: 'Del', aliases: 'remove', run: () => editor.deleteSelection() },
+      { id: 'front', label: 'Bring to front', group: 'Edit', run: () => editor.bringToFront() },
+      { id: 'back', label: 'Send to back', group: 'Edit', run: () => editor.sendToBack() },
+    )
+  }
+  return list
+}
+
+/** Commands whose label, group or aliases contain every word of `query`, best first. */
+export function matchCommands(list: Command[], query: string): Command[] {
+  const words = query.toLowerCase().replace(/^>/, '').split(/\s+/).filter(Boolean)
+  if (!words.length) return list
+  return list
+    .map((c) => {
+      const label = c.label.toLowerCase()
+      const hay = `${label} ${c.group.toLowerCase()} ${(c.aliases ?? '').toLowerCase()}`
+      if (!words.every((w) => hay.includes(w))) return null
+      const score = (label.startsWith(words[0]) ? 3 : 0) + (label.includes(words[0]) ? 2 : 0) - label.length / 100
+      return { c, score }
+    })
+    .filter((x): x is { c: Command; score: number } => !!x)
+    .sort((a, z) => z.score - a.score)
+    .map((x) => x.c)
+}
+
+export const kindLabel = (k: keyof typeof KIND_LABELS) => KIND_LABELS[k]
