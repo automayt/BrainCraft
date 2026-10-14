@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BrainCraftAPI } from '../api/api'
 import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
+import { Presenter } from './Present'
 import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { FILE_EXT, Workspace } from '../store/workspace'
@@ -49,6 +50,8 @@ export function Root() {
 function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
+  // Re-render only when the panels or modes that shape the layout change, not on every editor update.
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}`)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [bridge] = useState(() => new Bridge(ws))
@@ -76,6 +79,13 @@ function App({ ws }: { ws: Workspace }) {
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
     openAi: () => setDialog('ai'),
+    present: () => {
+      setDialog(null)
+      setMenu(null)
+      if (!editor.startPresenting()) return
+      // Full screen where allowed; leaving full screen (Esc in most browsers) ends the presentation.
+      document.documentElement.requestFullscreen?.().catch(() => {})
+    },
     ai: bridge,
     menu,
     openMenu: setMenu,
@@ -113,6 +123,10 @@ function App({ ws }: { ws: Workspace }) {
     // Autosave happens in the workspace; make sure the last edit lands as the page goes away.
     const onHide = () => ws.rescue()
     const onVisibility = () => document.visibilityState === 'hidden' && void ws.flush()
+    const onFullscreen = () => {
+      if (!document.fullscreenElement && editor.presenting) editor.stopPresenting()
+    }
+    document.addEventListener('fullscreenchange', onFullscreen)
     window.addEventListener('pagehide', onHide)
     document.addEventListener('visibilitychange', onVisibility)
     // Scripts and AI assistants drive the board through window.BrainCraft (see docs/API.md).
@@ -121,6 +135,11 @@ function App({ ws }: { ws: Workspace }) {
     requestAnimationFrame(() => editor.zoomToFit())
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // While presenting, keys drive the slides and nothing else.
+      if (editor.presenting) {
+        if (editor.presentKey(e.key)) e.preventDefault()
+        return
+      }
       // Search works from anywhere, even while typing.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -146,6 +165,11 @@ function App({ ws }: { ws: Workspace }) {
       if (e.key === '?' && !ctrl) {
         e.preventDefault()
         setDialog((d) => (d === 'help' ? null : 'help'))
+        return
+      }
+      if (e.shiftKey && !ctrl && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        uiRef.current.present()
         return
       }
       if ((e.target as Element | null)?.closest?.('.no-canvas') && e.key !== 'Escape') return
@@ -202,6 +226,7 @@ function App({ ws }: { ws: Workspace }) {
     document.addEventListener('cut', onCopy)
     document.addEventListener('paste', onPaste)
     return () => {
+      document.removeEventListener('fullscreenchange', onFullscreen)
       window.removeEventListener('pagehide', onHide)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('keydown', onKeyDown)
@@ -217,7 +242,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}`}
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -239,6 +264,7 @@ function App({ ws }: { ws: Workspace }) {
           <Toast />
           <SearchPalette />
           <ReadOnlyBanner />
+          <Presenter />
           {dialog === 'help' && <Help onClose={close} />}
           {dialog === 'import' && <ImportExport onClose={close} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}

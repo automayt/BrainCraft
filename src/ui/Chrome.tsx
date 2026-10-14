@@ -14,6 +14,7 @@ import {
   Logo,
   MenuIcon,
   MinusIcon,
+  PlayIcon,
   PlusIcon,
   RedoIcon,
   SearchIcon,
@@ -152,6 +153,11 @@ export function TopRight() {
   return (
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
+      <button className="present-btn has-tip" onMouseDown={keepFocus} onClick={ui.present}>
+        <PlayIcon />
+        <span>Present</span>
+        <Tip label="Frames become slides" keys="Shift P" />
+      </button>
       <button className="search-pill" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />
         <span>Search or run a command</span>
@@ -389,7 +395,9 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],
       ['Ctrl C / X / V / D', 'Copy, cut, paste, duplicate'],
       ['Ctrl A', 'Select all'],
-      ['Ctrl S', 'Download the board'],
+      ['Ctrl S · Ctrl Shift S', 'Save to a file · save as'],
+      ['Ctrl O', 'Your boards'],
+      ['Shift P', 'Present (frames become slides)'],
       ['Delete', 'Delete'],
       ['Esc', 'Deselect'],
     ],
@@ -405,6 +413,16 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Shift-click · drag a box', 'Select several'],
       ['Arrows (+ Shift)', 'Nudge by 1 (10)'],
       ['Alt while dragging', 'Move without snapping'],
+    ],
+  ],
+  [
+    'Presenting',
+    [
+      ['→ · Space · click', 'Next slide'],
+      ['← · Shift-click', 'Previous slide'],
+      ['1 – 9 · Home · End', 'Jump to a slide'],
+      ['L · N · O', 'Laser pointer · speaker notes · overview'],
+      ['Esc', 'Stop presenting'],
     ],
   ],
   [

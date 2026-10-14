@@ -48,6 +48,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'redo', label: 'Redo', group: 'Edit', keys: 'Ctrl Shift Z', run: () => editor.redo() },
     { id: 'select-all', label: 'Select all', group: 'Edit', keys: 'Ctrl A', run: () => editor.selectAll() },
     { id: 'comments', label: 'Show comments', group: 'Edit', keys: 'Shift C', aliases: 'notes work notes panel', run: () => editor.toggleNotes(true) },
+    { id: 'present', label: 'Present', group: 'View', keys: 'Shift P', aliases: 'slides slideshow presentation fullscreen frames deck', run: ui.present },
     { id: 'zoom-in', label: 'Zoom in', group: 'View', run: () => editor.zoomBy(1.25) },
     { id: 'zoom-out', label: 'Zoom out', group: 'View', run: () => editor.zoomBy(1 / 1.25) },
     { id: 'zoom-100', label: 'Zoom to 100%', group: 'View', aliases: 'actual size reset', run: () => editor.setZoom(1) },

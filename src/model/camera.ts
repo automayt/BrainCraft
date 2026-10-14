@@ -36,14 +36,28 @@ export function centerOn(c: Camera, world: Vec, viewport: { w: number; h: number
   return { ...c, x: viewport.w / 2 - world.x * c.zoom, y: viewport.h / 2 - world.y * c.zoom }
 }
 
-/** Centres `world` in the viewport, zoomed to fit with a margin, never above 100%. */
-export function fit(world: Rect, viewport: { w: number; h: number }, margin = 60): Camera {
+/** Centres `world` in the viewport, zoomed to fit with a margin, never above `maxZoom` (100%). */
+export function fit(world: Rect, viewport: { w: number; h: number }, margin = 60, maxZoom = 1): Camera {
   const zoom = Math.min(
-    1,
+    maxZoom,
     Math.max(
       MIN_ZOOM,
       Math.min((viewport.w - 2 * margin) / Math.max(world.w, 1), (viewport.h - 2 * margin) / Math.max(world.h, 1)),
     ),
   )
   return centerOn({ x: 0, y: 0, zoom }, { x: world.x + world.w / 2, y: world.y + world.h / 2 }, viewport)
+}
+
+/** The world point at the middle of the viewport. */
+export const viewCenter = (c: Camera, viewport: { w: number; h: number }): Vec => toWorld(c, { x: viewport.w / 2, y: viewport.h / 2 })
+
+/**
+ * A camera part-way (`t` from 0 to 1) between two others. Zoom moves on a log scale and the
+ * view centre moves in world space, so a flight from far out to close in feels even.
+ */
+export function between(a: Camera, z: Camera, t: number, viewport: { w: number; h: number }): Camera {
+  const ca = viewCenter(a, viewport)
+  const cz = viewCenter(z, viewport)
+  const zoom = Math.exp(Math.log(a.zoom) + (Math.log(z.zoom) - Math.log(a.zoom)) * t)
+  return centerOn({ x: 0, y: 0, zoom }, { x: ca.x + (cz.x - ca.x) * t, y: ca.y + (cz.y - ca.y) * t }, viewport)
 }
