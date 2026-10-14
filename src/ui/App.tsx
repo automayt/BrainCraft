@@ -66,7 +66,9 @@ export function App() {
         editor.setSearchOpen(!editor.searchOpen)
         return
       }
-      if (isTyping(e.target) || editor.searchOpen) return
+      // Keys already handled inside a panel or a live table/board/timeline stay there.
+      if (isTyping(e.target) || editor.searchOpen || e.defaultPrevented) return
+      if ((e.target as Element | null)?.closest?.('.no-canvas') && e.key !== 'Escape') return
       // Space edits a selected mind-map idea; otherwise holding it pans.
       if (e.key === ' ' && editor.single?.kind !== 'mind') {
         if (!editor.spaceDown) {

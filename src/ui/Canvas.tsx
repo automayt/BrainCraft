@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, type PointerEvent a
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import type { FlowDir } from '../model/flowchart'
 import { flowTextRect } from '../model/shapes'
+import { WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
 import { toScreen, toWorld } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
@@ -146,6 +147,12 @@ export function Canvas() {
         if (!(e.target as Element).closest('.no-canvas, [data-handle]')) editor.doubleClick(local(e))
       }}
       onContextMenu={(e) => e.preventDefault()}
+      // Focusing an input inside a board object makes the browser scroll this
+      // clipped container; the camera does all the moving, so undo that.
+      onScroll={(e) => {
+        e.currentTarget.scrollTop = 0
+        e.currentTarget.scrollLeft = 0
+      }}
       onDragOver={(e) => {
         if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
       }}
@@ -473,6 +480,14 @@ function TextEditor({ editor }: { editor: Editor }) {
       break
     case 'flow':
       box = editor.screenRect(flowTextRect(item))
+      break
+    case 'table':
+    case 'kanban':
+    case 'timeline':
+      box = editor.screenRect({ x: item.x + 14, y: item.y + 8, w: item.w * 0.5, h: WIDGET_TITLE_H - 16 })
+      align = 'left'
+      fontWeight = 700
+      fontSize = 16 * z
       break
     case 'comment':
       box = editor.screenRect(commentBodyRect(item))

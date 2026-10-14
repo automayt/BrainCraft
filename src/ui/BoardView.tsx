@@ -5,6 +5,9 @@ import * as B from '../model/board'
 import { type Vec, center } from '../model/geom'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, flowTextRect } from '../model/shapes'
+import { KanbanView } from './widgets/KanbanView'
+import { TableView } from './widgets/TableView'
+import { TimelineView } from './widgets/TimelineView'
 import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, usesInk } from '../model/types'
 
 export function darken(hex: string, k = 0.72): string {
@@ -36,7 +39,7 @@ function penPath(points: { x: number; y: number }[]): string {
   return `${d}L${last.x} ${last.y}`
 }
 
-export function ItemShape({ item, depth, editing }: { item: Item; depth: number; editing: boolean }) {
+export function ItemShape({ item, depth, editing, live = false }: { item: Item; depth: number; editing: boolean; live?: boolean }) {
   const text = editing ? null : item.text
   switch (item.kind) {
     case 'frame': {
@@ -99,6 +102,12 @@ export function ItemShape({ item, depth, editing }: { item: Item; depth: number;
       return <CommentBlock item={item} editing={editing} />
     case 'image':
       return <image href={item.src} x={item.x} y={item.y} width={item.w} height={item.h} preserveAspectRatio="none" />
+    case 'table':
+      return item.table ? <TableView item={item} live={live} editingTitle={editing} /> : null
+    case 'kanban':
+      return item.kanban ? <KanbanView item={item} live={live} editingTitle={editing} /> : null
+    case 'timeline':
+      return item.timeline ? <TimelineView item={item} live={live} editingTitle={editing} /> : null
     default:
       return null
   }
@@ -358,7 +367,13 @@ export const BoardView = memo(function BoardView({
       {visible
         .filter((i) => i.kind !== 'frame')
         .map((i) => (
-          <ItemShape key={i.id} item={i} depth={depths.get(i.id) ?? 0} editing={editingId === i.id} />
+          <ItemShape
+            key={i.id}
+            item={i}
+            depth={depths.get(i.id) ?? 0}
+            editing={editingId === i.id}
+            live={selection.size === 1 && selection.has(i.id) && editingId === null}
+          />
         ))}
       <CollapseToggles board={board} hidden={hidden} selection={selection} />
       {board.connectors
