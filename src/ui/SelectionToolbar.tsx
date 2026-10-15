@@ -1,6 +1,7 @@
 import * as B from '../model/board'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
@@ -165,6 +166,12 @@ export function SelectionToolbar() {
         </>
       )}
       <span className="sep" />
+      {items.length > 1 && <AlignMenu count={items.length} />}
+      {items.length > 1 && items.every((i) => i.kind === 'mind' && i.parent !== undefined) && new Set(items.map((i) => i.parent)).size === 1 && (
+        <button title="Put these ideas under a new idea (Ctrl+G)" onClick={() => editor.groupIdeas()}>
+          Group
+        </button>
+      )}
       {items.length > 0 && !mind && (
         <>
           <button title="Bring to front" onClick={() => editor.bringToFront()}>
@@ -189,6 +196,70 @@ export function SelectionToolbar() {
         Delete
       </button>
     </div>
+  )
+}
+
+const ALIGN: { how: B.AlignHow; label: string; d: string }[] = [
+  { how: 'left', label: 'Align left', d: 'M3 2v14M6 5h9M6 11h5' },
+  { how: 'center', label: 'Align centres', d: 'M9 2v14M4 5h10M6 11h6' },
+  { how: 'right', label: 'Align right', d: 'M15 2v14M3 5h9M7 11h5' },
+  { how: 'top', label: 'Align tops', d: 'M2 3h14M5 6v9M11 6v5' },
+  { how: 'middle', label: 'Align middles', d: 'M2 9h14M5 4v10M11 6v6' },
+  { how: 'bottom', label: 'Align bottoms', d: 'M2 15h14M5 3v9M11 7v5' },
+]
+
+/** Align and distribute for a multiple selection. */
+function AlignMenu({ count }: { count: number }) {
+  const editor = useEditor()
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const open = !!at
+  const setOpen = (v: boolean) => !v && setAt(null)
+  const icon = (d: string) => (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+  return (
+    <span className="align-anchor">
+      <button
+        title="Align and distribute"
+        aria-expanded={open}
+        className={open ? 'on' : ''}
+        onClick={(e) => {
+          // The toolbar scrolls sideways on small screens, so the menu lives outside it.
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          setAt(open ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
+        }}
+      >
+        Align
+      </button>
+      {at &&
+        createPortal(
+        <div className="align-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+          {ALIGN.map((a) => (
+            <button
+              key={a.how}
+              role="menuitem"
+              title={a.label}
+              aria-label={a.label}
+              onClick={() => {
+                editor.align(a.how)
+                setOpen(false)
+              }}
+            >
+              {icon(a.d)}
+            </button>
+          ))}
+          <button role="menuitem" title="Space evenly across" aria-label="Distribute horizontally" disabled={count < 3} onClick={() => (editor.distribute('x'), setOpen(false))}>
+            {icon('M2 3v12M16 3v12M7 6h4v6H7z')}
+          </button>
+          <button role="menuitem" title="Space evenly down" aria-label="Distribute vertically" disabled={count < 3} onClick={() => (editor.distribute('y'), setOpen(false))}>
+            {icon('M3 2h12M3 16h12M6 7h6v4H6z')}
+          </button>
+        </div>,
+          document.body,
+        )}
+    </span>
   )
 }
 

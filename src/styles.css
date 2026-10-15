@@ -4861,3 +4861,31 @@ button.on,
 .notes-panel .description textarea:focus {
   border-color: var(--accent);
 }
+
+/* ----- align menu ----- */
+
+.align-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.align-menu {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(4, 34px);
+  gap: 2px;
+  padding: 4px;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.align-menu button {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  padding: 0;
+}

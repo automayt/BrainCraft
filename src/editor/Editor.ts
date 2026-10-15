@@ -118,7 +118,19 @@ export type Handle =
 export type Drag =
   | { type: 'none' }
   | { type: 'pan'; last: Vec }
-  | { type: 'move'; ids: Set<Id>; start: Vec; applied: Vec; bounds: Rect | null; snap: Snap; guides: Guides; before: Board; magnet?: F.Magnet | null }
+  | {
+      type: 'move'
+      ids: Set<Id>
+      start: Vec
+      applied: Vec
+      bounds: Rect | null
+      snap: Snap
+      guides: Guides
+      before: Board
+      magnet?: F.Magnet | null
+      /** Mind-map ideas that move by their offset rather than their position. */
+      heads: Set<Id>
+    }
   | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board }
   | { type: 'resize'; id: Id; anchor: Vec; before: Board }
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
@@ -1168,6 +1180,27 @@ export class Editor {
     this.startEditing(newId, { before, created: true })
   }
 
+  /** Lines up the selected objects. */
+  align(how: B.AlignHow) {
+    this.edit((b) => B.align(b, this.selection, how))
+  }
+
+  /** Spaces the selected objects evenly. */
+  distribute(axis: 'x' | 'y') {
+    this.edit((b) => B.distribute(b, this.selection, axis))
+  }
+
+  /** Puts the selected sibling ideas under a new idea, ready to name. */
+  groupIdeas() {
+    const before = this.board
+    const [b, id] = M.groupUnder(this.board, [...this.selection], 'Group')
+    if (id < 0) return this.setStatus('Select ideas that share a parent to group them')
+    this.finishEditing()
+    this.apply(b)
+    // Named "Group" rather than left empty, so clicking away keeps it (and its ideas).
+    this.startEditing(id, { before })
+  }
+
   /** Puts a hand-arranged mind map back into its automatic layout. */
   tidyMindMap(id: Id) {
     this.edit((b) => M.tidy(b, id))
@@ -1464,6 +1497,7 @@ export class Editor {
       snap,
       guides: {},
       before: this.board,
+      heads: B.offsetHeads(this.board, ids),
     }
   }
 
@@ -1505,16 +1539,21 @@ export class Editor {
         let delta = { x: world.x - d.start.x, y: world.y - d.start.y }
         d.guides = {}
         d.magnet = null
-        // A lone flowchart shape snaps beside a nearby one (and connects on release).
+        // A lone shape or sticky note snaps beside a nearby one (shapes also connect on release).
         const lone = d.ids.size === 1 ? B.getItem(d.before, [...d.ids][0]) : undefined
-        if (lone?.kind === 'flow' && !mods.alt) {
+        const rule = lone && F.MAGNET_RULES[lone.kind]
+        if (lone && rule && !mods.alt) {
           const c = { x: lone.x + lone.w / 2 + delta.x, y: lone.y + lone.h / 2 + delta.y }
-          d.magnet = F.findMagnet(this.board, c, lone, d.ids, this.magnetReach)
+          d.magnet = F.findMagnet(this.board, c, lone, d.ids, this.magnetReach, rule)
           if (d.magnet) delta = { x: d.magnet.at.x - lone.x - lone.w / 2, y: d.magnet.at.y - lone.y - lone.h / 2 }
         }
         // Alt moves freely; otherwise line up with nearby items.
         if (d.bounds && !mods.alt && !d.magnet) ({ delta, guides: d.guides } = this.snapDelta(d.bounds, delta, d.snap))
-        this.apply(B.translate(this.board, d.ids, delta.x - d.applied.x, delta.y - d.applied.y))
+        const step = { x: delta.x - d.applied.x, y: delta.y - d.applied.y }
+        let moved = B.translate(this.board, d.ids, step.x, step.y)
+        // Ideas inside a mind map keep their place through the layout by their offset.
+        if (d.heads.size) moved = B.updateItems(moved, d.heads, (i) => B.nudgeItem(i, step.x, step.y))
+        this.apply(moved)
         d.applied = delta
         break
       }
@@ -1575,7 +1614,8 @@ export class Editor {
       case 'move': {
         const m = d.magnet
         const id = [...d.ids][0]
-        if (m && !F.linked(this.board, m.target, id)) this.apply(B.connect(this.board, m.target, id, { style: 'elbow' })[0])
+        const rule = F.MAGNET_RULES[B.getItem(this.board, id)?.kind ?? 'text']
+        if (m && rule?.connect && !F.linked(this.board, m.target, id)) this.apply(B.connect(this.board, m.target, id, { style: 'elbow' })[0])
         this.commit(d.before)
         break
       }
@@ -1780,6 +1820,19 @@ export class Editor {
       else if (k === 'a') this.selectAll()
       else if (k === 'd') this.duplicate()
       else if (k === 's') return 'save'
+      else if (k === 'g' && this.selection.size > 1 && this.selectedItems.every((i) => i.kind === 'mind')) this.groupIdeas()
+      else if (ARROWS[k] && this.selection.size) {
+        // Ctrl + arrow nudges anything, mind-map ideas included (Shift for bigger steps).
+        const step = mods.shift ? 50 : 10
+        const dir = ARROWS[k]!
+        const dx = dir === 'left' ? -step : dir === 'right' ? step : 0
+        const dy = dir === 'up' ? -step : dir === 'down' ? step : 0
+        this.edit((b) => {
+          // The same as dragging: frames carry their contents, ideas move with their branches.
+          const ids = B.movingSet(b, this.selection)
+          return B.updateItems(B.translate(b, ids, dx, dy), B.offsetHeads(b, ids), (i) => B.nudgeItem(i, dx, dy))
+        })
+      }
       else if (k === 'k' || k === 'f') this.setSearchOpen(true)
       else return false
       return true

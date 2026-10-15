@@ -2,7 +2,7 @@
 
 import { addItem, connect, getItem, hiddenIds, newItem } from './board'
 import { type Rect, type Vec, expand, intersects } from './geom'
-import { type Board, type FlowShape, type Id, type Item, flowShapeInfo } from './types'
+import { type Board, type FlowShape, type Id, type Item, type Kind, flowShapeInfo } from './types'
 
 export type FlowDir = 'up' | 'down' | 'left' | 'right'
 
@@ -107,6 +107,24 @@ export function addStepAt(b: Board, fromId: Id, shape: FlowShape, at: Vec): [Boa
   return [b, id]
 }
 
+/** What a dragged object snaps beside, how far away, and whether it connects. */
+export interface MagnetRule {
+  targets: Kind[]
+  gap: number
+  connect: boolean
+}
+
+/**
+ * Magnets by kind: flowchart symbols and shapes snap one step apart and connect;
+ * sticky notes snap into neat rows and columns without lines (brainstorms stay clean).
+ */
+export const MAGNET_RULES: Partial<Record<Kind, MagnetRule>> = {
+  flow: { targets: ['flow', 'rect', 'ellipse'], gap: FLOW_GAP, connect: true },
+  rect: { targets: ['rect', 'ellipse', 'flow'], gap: FLOW_GAP, connect: true },
+  ellipse: { targets: ['rect', 'ellipse', 'flow'], gap: FLOW_GAP, connect: true },
+  sticky: { targets: ['sticky'], gap: 24, connect: false },
+}
+
 /** A free side of a flowchart shape that a shape being placed or dragged snaps to. */
 export interface Magnet {
   /** The shape it snaps beside. */
@@ -120,16 +138,23 @@ export interface Magnet {
  * The flowchart shape a `size` shape centred near `c` should snap beside: the side whose
  * one-gap-away slot is nearest, if it's within `reach`. Shapes in `exclude` are ignored.
  */
-export function findMagnet(b: Board, c: Vec, size: { w: number; h: number }, exclude: ReadonlySet<Id>, reach: number): Magnet | null {
+export function findMagnet(
+  b: Board,
+  c: Vec,
+  size: { w: number; h: number },
+  exclude: ReadonlySet<Id>,
+  reach: number,
+  rule: MagnetRule = MAGNET_RULES.flow!,
+): Magnet | null {
   const hidden = hiddenIds(b)
   let best: (Magnet & { d: number }) | null = null
   for (const t of b.items) {
-    if (t.kind !== 'flow' || exclude.has(t.id) || hidden.has(t.id)) continue
+    if (!rule.targets.includes(t.kind) || exclude.has(t.id) || hidden.has(t.id)) continue
     for (const dir of ['right', 'down', 'left', 'up'] as FlowDir[]) {
       const s = STEP[dir]
       const at = {
-        x: t.x + t.w / 2 + s.x * (t.w / 2 + FLOW_GAP + size.w / 2),
-        y: t.y + t.h / 2 + s.y * (t.h / 2 + FLOW_GAP + size.h / 2),
+        x: t.x + t.w / 2 + s.x * (t.w / 2 + rule.gap + size.w / 2),
+        y: t.y + t.h / 2 + s.y * (t.h / 2 + rule.gap + size.h / 2),
       }
       const d = Math.hypot(at.x - c.x, at.y - c.y)
       if (d > reach || (best && d >= best.d)) continue

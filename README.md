@@ -46,6 +46,8 @@ The board fills the window and the controls float above it:
   under it, or drag a main branch across the centre to switch sides.
   **Tidy mind map** (right-click) snaps everything back into the automatic
   layout.
+- Select several ideas to move them together (the rest of the map stays
+  put), or press **Ctrl+G** to group sibling ideas under a new one.
 - **Collapse** a branch with **C** or with the toggle next to it.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
   plain indentation) to turn it into a map. **Copy outline** does the reverse.
@@ -214,6 +216,13 @@ These become interactive once selected; drag them by their title strip.
 - **Connectors**: drag the blue dot on a selected item onto another item.
   Drop it on empty space to create a new linked note.
 - Frames carry their contents when you move them.
+- **Magnets:** drag a shape near another and it snaps one step away and
+  connects. Sticky notes snap into neat rows and columns without lines. Hold
+  **Alt** to place freely.
+- **Align and distribute:** select several objects and use **Align** in the
+  toolbar, or search "align" in Ctrl+K.
+- **Ctrl + arrow** nudges anything by 10 (Shift for 50), mind-map ideas
+  included.
 - Select with a click, shift-click or a drag box. Resize from the corners,
   and use the floating toolbar for color, text size, layer order, duplicate
   and delete.

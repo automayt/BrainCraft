@@ -505,3 +505,84 @@ describe('moving mind-map ideas', () => {
     expect(at(idea).offset).toBeUndefined()
   })
 })
+
+describe('feel pass', () => {
+  const sticky = (x: number, y: number, text = '') => B.newItem('sticky', { x, y, w: 100, h: 100 }, { text })
+
+  it('aligns and distributes a selection', () => {
+    const e = editor()
+    let b = emptyBoard()
+    let a: number, c: number, d: number
+    ;[b, a] = B.addItem(b, sticky(0, 0))
+    ;[b, c] = B.addItem(b, sticky(150, 40))
+    ;[b, d] = B.addItem(b, sticky(500, 90))
+    e.load(b)
+    e.select([a, c, d])
+    e.align('top')
+    expect(e.board.items.map((i) => i.y)).toEqual([0, 0, 0])
+    e.distribute('x')
+    expect(e.board.items.map((i) => i.x)).toEqual([0, 250, 500])
+    e.undo()
+    expect(e.board.items.map((i) => i.x)).toEqual([0, 150, 500])
+  })
+
+  it('moves several mind-map ideas together without moving the whole map', () => {
+    const e = editor()
+    let b = emptyBoard()
+    let root: number, x: number, y: number
+    ;[b, root] = M.createMap(b, { x: 0, y: 0 }, 'Root')
+    ;[b, x] = M.addChild(b, root, undefined, 'X')
+    ;[b, y] = M.addChild(b, root, undefined, 'Y')
+    e.load(b)
+    e.camera = { x: 300, y: 300, zoom: 1 }
+    const rootBefore = { ...B.getItem(e.board, root)! }
+    const xBefore = { ...B.getItem(e.board, x)! }
+    e.select([x, y])
+    const start = screenCenter(e, x)
+    e.pointerDown(start, 0, {})
+    e.pointerMove({ x: start.x + 80, y: start.y + 60 }, { alt: true })
+    e.pointerUp({ x: start.x + 80, y: start.y + 60 })
+    expect(B.getItem(e.board, root)!.x).toBe(rootBefore.x)
+    expect(B.getItem(e.board, x)!.x).toBeCloseTo(xBefore.x + 80)
+    expect(B.getItem(e.board, x)!.offset).toEqual({ x: 80, y: 60 })
+    expect(B.getItem(e.board, y)!.offset).toEqual({ x: 80, y: 60 })
+  })
+
+  it('groups sibling ideas under a new idea and nudges ideas with Ctrl+arrow', () => {
+    const e = editor()
+    let b = emptyBoard()
+    let root: number, x: number, y: number
+    ;[b, root] = M.createMap(b, { x: 0, y: 0 }, 'Root')
+    ;[b, x] = M.addChild(b, root, undefined, 'X')
+    ;[b, y] = M.addChild(b, root, undefined, 'Y')
+    e.load(b)
+    e.select([x, y])
+    e.keyDown('g', { ctrl: true })
+    e.finishEditing()
+    const group = B.getItem(e.board, x)!.parent!
+    expect(B.getItem(e.board, group)).toMatchObject({ text: 'Group', parent: root })
+    expect(B.getItem(e.board, y)!.parent).toBe(group)
+    e.select([group])
+    e.keyDown('ArrowDown', { ctrl: true })
+    expect(B.getItem(e.board, group)!.offset).toEqual({ x: 0, y: 10 })
+  })
+
+  it('snaps sticky notes beside each other without connecting them', () => {
+    const e = editor()
+    let b = emptyBoard()
+    let a: number, c: number
+    ;[b, a] = B.addItem(b, sticky(0, 0, 'A'))
+    ;[b, c] = B.addItem(b, sticky(400, 300, 'B'))
+    e.load(b)
+    e.camera = { x: 0, y: 0, zoom: 1 }
+    e.select([c])
+    const start = screenCenter(e, c)
+    // Bring B near the slot right of A (A spans 0–100, gap 24, so B's centre belongs at 174).
+    e.pointerDown(start, 0, {})
+    e.pointerMove({ x: 180, y: 60 })
+    e.pointerUp({ x: 180, y: 60 })
+    expect(B.getItem(e.board, c)).toMatchObject({ x: 124, y: 0 })
+    expect(e.board.connectors).toHaveLength(0)
+    void a
+  })
+})

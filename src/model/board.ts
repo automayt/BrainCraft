@@ -299,14 +299,79 @@ export function movingSet(b: Board, ids: ReadonlySet<Id>): Set<Id> {
   for (const i of b.items) {
     if (i.kind === 'frame' && ids.has(i.id)) for (const id of itemsWithin(b, i, new Set())) out.add(id)
   }
+  // A mind map moves whole when its central idea is moved; any other idea takes just its branch.
   for (const id of Array.from(out)) {
     const i = getItem(b, id)
-    if (i?.kind === 'mind') {
-      const root = rootOf(b, id)
-      if (root) for (const d of subtree(b, root.id)) out.add(d)
-    }
+    if (i?.kind === 'mind') for (const d of subtree(b, id)) out.add(d)
   }
   return out
+}
+
+/** Ideas that move by their offset (the layout places them): non-central ideas whose parent isn't moving too. */
+export function offsetHeads(b: Board, ids: ReadonlySet<Id>): Set<Id> {
+  return new Set(
+    [...ids].filter((id) => {
+      const i = getItem(b, id)
+      return i?.kind === 'mind' && i.parent !== undefined && !ids.has(i.parent)
+    }),
+  )
+}
+
+/** Moves one object by (dx, dy): a mind-map idea through its offset, anything else directly. */
+export function nudgeItem(i: Item, dx: number, dy: number): Item {
+  if (i.kind === 'mind' && i.parent !== undefined) return { ...i, offset: { x: (i.offset?.x ?? 0) + dx, y: (i.offset?.y ?? 0) + dy } }
+  return translateItem(i, dx, dy)
+}
+
+export type AlignHow = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
+/** Lines up objects' edges or centres with the outermost one (or the shared centre). */
+export function align(b: Board, ids: ReadonlySet<Id>, how: AlignHow): Board {
+  const list = b.items.filter((i) => ids.has(i.id))
+  const box = bounds(b, ids)
+  if (list.length < 2 || !box) return b
+  const target = (i: Item) => {
+    switch (how) {
+      case 'left':
+        return { x: box.x - i.x, y: 0 }
+      case 'right':
+        return { x: box.x + box.w - (i.x + i.w), y: 0 }
+      case 'center':
+        return { x: box.x + box.w / 2 - (i.x + i.w / 2), y: 0 }
+      case 'top':
+        return { x: 0, y: box.y - i.y }
+      case 'bottom':
+        return { x: 0, y: box.y + box.h - (i.y + i.h) }
+      case 'middle':
+        return { x: 0, y: box.y + box.h / 2 - (i.y + i.h / 2) }
+    }
+  }
+  return updateItems(b, ids, (i) => {
+    const d = target(i)
+    return d.x || d.y ? nudgeItem(i, d.x, d.y) : i
+  })
+}
+
+/** Spaces three or more objects evenly between the first and last, left to right or top to bottom. */
+export function distribute(b: Board, ids: ReadonlySet<Id>, axis: 'x' | 'y'): Board {
+  const list = b.items.filter((i) => ids.has(i.id)).sort((p, q) => (axis === 'x' ? p.x - q.x : p.y - q.y))
+  if (list.length < 3) return b
+  const size = (i: Item) => (axis === 'x' ? i.w : i.h)
+  const pos = (i: Item) => (axis === 'x' ? i.x : i.y)
+  const first = list[0]
+  const last = list[list.length - 1]
+  const span = pos(last) + size(last) - pos(first)
+  const gap = (span - list.reduce((s, i) => s + size(i), 0)) / (list.length - 1)
+  const want = new Map<Id, number>()
+  let at = pos(first)
+  for (const i of list) {
+    want.set(i.id, at)
+    at += size(i) + gap
+  }
+  return updateItems(b, ids, (i) => {
+    const d = want.get(i.id)! - pos(i)
+    return Math.abs(d) < 0.01 ? i : nudgeItem(i, axis === 'x' ? d : 0, axis === 'y' ? d : 0)
+  })
 }
 
 export function bringToFront(b: Board, ids: ReadonlySet<Id>): Board {
