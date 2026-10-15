@@ -280,22 +280,9 @@ function DragPreview({ editor }: { editor: Editor }) {
       )
     }
     case 'branch': {
-      if (Math.hypot(d.offset.x, d.offset.y) * z < 4) return null
-      const ids = B.subtree(editor.board, d.id)
-      const depths = mindDepths(editor.board)
+      // The idea moves for real while dragged; just show where it would be re-parented.
       const target = d.target !== null ? B.getItem(editor.board, d.target) : undefined
-      return (
-        <g>
-          {target && <rect {...xywh(target)} fill="none" style={{ stroke: ACCENT }} strokeWidth={3 / z} rx={10} />}
-          <g transform={`translate(${d.offset.x} ${d.offset.y})`} opacity={0.55} style={{ pointerEvents: 'none' }}>
-            {editor.board.items
-              .filter((i) => ids.has(i.id) && !editor.hidden.has(i.id))
-              .map((i) => (
-                <ItemShape key={i.id} item={i} depth={depths.get(i.id) ?? 1} editing={false} />
-              ))}
-          </g>
-        </g>
-      )
+      return target ? <rect {...xywh(target)} fill="none" style={{ stroke: ACCENT }} strokeWidth={3 / z} rx={10} /> : null
     }
     default:
       return null

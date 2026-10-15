@@ -1521,6 +1521,9 @@ export class Editor {
       case 'branch': {
         d.offset = { x: world.x - d.start.x, y: world.y - d.start.y }
         d.target = this.branchDropTarget(d.id, world)
+        // The idea itself follows the pointer, its branch and lines with it.
+        const base = B.getItem(d.before, d.id)?.offset ?? { x: 0, y: 0 }
+        this.apply(B.updateItem(d.before, d.id, (i) => ({ ...i, offset: { x: base.x + d.offset.x, y: base.y + d.offset.y } })))
         break
       }
       case 'resize': {
@@ -1614,7 +1617,8 @@ export class Editor {
   }
 
   private dropBranch(d: Extract<Drag, { type: 'branch' }>, world: Vec) {
-    if (dist(d.start, world) * this.camera.zoom < 4) return
+    // A click, not a drag: put back any tiny move.
+    if (dist(d.start, world) * this.camera.zoom < 4) return this.apply(d.before)
     const node = B.getItem(this.board, d.id)
     if (!node) return
     const clearOffset = (i: Item): Item => {
@@ -1634,12 +1638,8 @@ export class Editor {
         // A main branch dropped across its root switches sides.
         this.apply(B.updateItem(this.board, d.id, (i) => ({ ...clearOffset(i), side })))
         this.apply(B.bringToFront(this.board, B.subtree(this.board, d.id)))
-      } else {
-        // Dropped on empty space: the idea (and its branch) stays where it was put.
-        const dx = world.x - d.start.x
-        const dy = world.y - d.start.y
-        this.apply(B.updateItem(this.board, d.id, (i) => ({ ...i, offset: { x: (i.offset?.x ?? 0) + dx, y: (i.offset?.y ?? 0) + dy } })))
       }
+      // Otherwise it was dropped on empty space and already sits where it was put.
     }
     this.commit(d.before)
   }
