@@ -12,7 +12,7 @@ import { toScreen, toWorld } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
-import { BoardView, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
+import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
 import { TOOL_ICONS } from './icons'
@@ -132,6 +132,7 @@ export function Canvas() {
 
   const { camera, board } = editor
   const step = gridStep(camera.zoom)
+  const cull = cullArea(editor)
   const cursor =
     editor.drag.type === 'pan'
       ? 'grabbing'
@@ -205,6 +206,8 @@ export function Canvas() {
             editingLabel={editor.editing?.connector ? editor.editing.id : null}
             selectedConnector={editor.selectedConnector}
             selection={editor.selection}
+            view={cull}
+            coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
           />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
@@ -290,6 +293,26 @@ function DragPreview({ editor }: { editor: Editor }) {
     default:
       return null
   }
+}
+
+/**
+ * The area of the board worth drawing: the view plus half a screen around it, snapped to a
+ * grid so small pans keep the same area (and the board doesn't redraw). Small boards draw
+ * everything.
+ */
+const CULL_FROM = 400
+let lastCull: { key: string; rect: Rect } | null = null
+function cullArea(editor: Editor): Rect | null {
+  if (editor.board.items.length < CULL_FROM) return null
+  const v = editor.visibleWorld
+  const cell = Math.max(v.w, v.h) / 2
+  const snap = (n: number) => Math.floor(n / cell) * cell
+  const x = snap(v.x - cell)
+  const y = snap(v.y - cell)
+  const rect = { x, y, w: snap(v.x + v.w + cell) + cell - x, h: snap(v.y + v.h + cell) + cell - y }
+  const key = `${rect.x}|${rect.y}|${rect.w}|${rect.h}`
+  if (lastCull?.key !== key) lastCull = { key, rect }
+  return lastCull.rect
 }
 
 /** An AI proposal before it's applied: new and changed objects as ghosts, removed ones crossed out. */
@@ -539,13 +562,16 @@ function TextEditor({ editor }: { editor: Editor }) {
     el.setSelectionRange(el.value.length, el.value.length)
   }, [e.id])
 
-  // Grow to fit the text, and keep vertically centred items centred.
+  // Grow to fit the text, and keep vertically centred items centred. Only when something that
+  // changes the height changes: measuring forces a layout of the whole board.
+  const text = editor.editingText
+  const fit = `${text}|${z}|${item?.w}|${item?.h}|${item?.fontSize}`
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = '0px'
     el.style.height = `${el.scrollHeight}px`
-  })
+  }, [fit])
 
   if (label) {
     const m = editor.screenRect({ x: label.mid.x, y: label.mid.y, w: 0, h: 0 })

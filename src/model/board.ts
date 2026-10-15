@@ -53,12 +53,33 @@ export function penItem(points: Vec[], color: string, strokeWidth: number): Omit
   return newItem('pen', b, { color, points, strokeWidth })
 }
 
+/**
+ * Id lookups. Boards are immutable, so an index built for one items (or connectors) array stays
+ * right for as long as that array lives. Small arrays, and arrays looked into only once or
+ * twice (intermediate boards inside an edit), are scanned instead: building the index costs more.
+ */
+const indexes = new WeakMap<readonly { id: Id }[], Map<Id, { id: Id }> | number>()
+
+function lookup<T extends { id: Id }>(list: readonly T[], id: Id): T | undefined {
+  if (list.length < 48) return list.find((x) => x.id === id)
+  const known = indexes.get(list)
+  if (known instanceof Map) return known.get(id) as T | undefined
+  if ((known ?? 0) < 3) {
+    indexes.set(list, (known ?? 0) + 1)
+    return list.find((x) => x.id === id)
+  }
+  const map = new Map<Id, T>()
+  for (const x of list) if (!map.has(x.id)) map.set(x.id, x)
+  indexes.set(list, map)
+  return map.get(id)
+}
+
 export function getItem(b: Board, id: Id): Item | undefined {
-  return b.items.find((i) => i.id === id)
+  return lookup(b.items, id)
 }
 
 export function getConnector(b: Board, id: Id): Connector | undefined {
-  return b.connectors.find((c) => c.id === id)
+  return lookup(b.connectors, id)
 }
 
 /** Adds an item on top of everything else. */
