@@ -118,7 +118,7 @@ export type Handle =
 export type Drag =
   | { type: 'none' }
   | { type: 'pan'; last: Vec }
-  | { type: 'move'; ids: Set<Id>; start: Vec; applied: Vec; bounds: Rect | null; snap: Snap; guides: Guides; before: Board }
+  | { type: 'move'; ids: Set<Id>; start: Vec; applied: Vec; bounds: Rect | null; snap: Snap; guides: Guides; before: Board; magnet?: F.Magnet | null }
   | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board }
   | { type: 'resize'; id: Id; anchor: Vec; before: Board }
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
@@ -202,6 +202,10 @@ export class Editor {
   penWidth = 4
   /** The symbol the flowchart tool places. */
   flowShape: FlowShape = 'process'
+  /** The flowchart shape panel stays open while building a flowchart, until closed or another tool is picked. */
+  flowPalette = false
+  /** A shape being dragged out of the panel: where it would land, and what it would snap to. */
+  paletteDrag: { shape: FlowShape; at: Vec; magnet: F.Magnet | null } | null = null
   /** The comments (work notes) panel is showing. */
   notesOpen = false
   /** The search / object lookup palette is showing. */
@@ -330,6 +334,8 @@ export class Editor {
   setTool(tool: Tool) {
     if (this.readOnly && tool !== 'select' && tool !== 'hand') return
     this.finishEditing()
+    if (tool === 'flow') this.flowPalette = true
+    else if (tool !== 'select' && tool !== 'hand') this.flowPalette = false
     this.tool = tool
     this.emit()
   }
@@ -876,6 +882,48 @@ export class Editor {
   }
 
   // ----- flowcharts ---------------------------------------------------------------
+
+  closeFlowPalette() {
+    this.flowPalette = false
+    if (this.tool === 'flow') this.tool = 'select'
+    this.emit()
+  }
+
+  /** How close (in world units) a shape must come to a free side to snap to it. */
+  private get magnetReach() {
+    return 70 / this.camera.zoom
+  }
+
+  /** A shape from the panel is being dragged over the board (screen point, or null when off it). */
+  paletteDragMove(shape: FlowShape, screen: Vec | null) {
+    if (!screen) {
+      this.paletteDrag = null
+      return this.emit()
+    }
+    const at = toWorld(this.camera, screen)
+    const info = flowShapeInfo(shape)
+    this.paletteDrag = { shape, at, magnet: F.findMagnet(this.board, at, info, new Set(), this.magnetReach) }
+    this.emit()
+  }
+
+  /** Drops a shape from the panel; near another shape it snaps beside it and connects. */
+  paletteDrop(shape: FlowShape, screen: Vec) {
+    this.paletteDragMove(shape, screen)
+    const d = this.paletteDrag
+    this.paletteDrag = null
+    if (!d || this.readOnly) return this.emit()
+    const before = this.board
+    this.finishEditing()
+    let id: Id = -1
+    this.apply(((b) => {
+      let next: Board
+      ;[next, id] = F.dropShape(b, shape, d.at, d.magnet)
+      return next
+    })(this.board))
+    this.flowShape = shape
+    this.tool = 'select'
+    this.startEditing(id, { before, created: true })
+  }
 
   setFlowShape(shape: FlowShape) {
     this.flowShape = shape
@@ -1438,8 +1486,16 @@ export class Editor {
       case 'move': {
         let delta = { x: world.x - d.start.x, y: world.y - d.start.y }
         d.guides = {}
+        d.magnet = null
+        // A lone flowchart shape snaps beside a nearby one (and connects on release).
+        const lone = d.ids.size === 1 ? B.getItem(d.before, [...d.ids][0]) : undefined
+        if (lone?.kind === 'flow' && !mods.alt) {
+          const c = { x: lone.x + lone.w / 2 + delta.x, y: lone.y + lone.h / 2 + delta.y }
+          d.magnet = F.findMagnet(this.board, c, lone, d.ids, this.magnetReach)
+          if (d.magnet) delta = { x: d.magnet.at.x - lone.x - lone.w / 2, y: d.magnet.at.y - lone.y - lone.h / 2 }
+        }
         // Alt moves freely; otherwise line up with nearby items.
-        if (d.bounds && !mods.alt) ({ delta, guides: d.guides } = this.snapDelta(d.bounds, delta, d.snap))
+        if (d.bounds && !mods.alt && !d.magnet) ({ delta, guides: d.guides } = this.snapDelta(d.bounds, delta, d.snap))
         this.apply(B.translate(this.board, d.ids, delta.x - d.applied.x, delta.y - d.applied.y))
         d.applied = delta
         break
@@ -1495,7 +1551,13 @@ export class Editor {
     const d = this.drag
     this.drag = { type: 'none' }
     switch (d.type) {
-      case 'move':
+      case 'move': {
+        const m = d.magnet
+        const id = [...d.ids][0]
+        if (m && !F.linked(this.board, m.target, id)) this.apply(B.connect(this.board, m.target, id, { style: 'elbow' })[0])
+        this.commit(d.before)
+        break
+      }
       case 'resize':
         this.commit(d.before)
         break
@@ -1565,11 +1627,13 @@ export class Editor {
     } else if (kind === 'flow') {
       const r = rectFromPoints(start, end)
       const sized = r.w * this.camera.zoom >= 8 && r.h * this.camera.zoom >= 8
-      const item = sized
-        ? { ...F.flowItem(this.flowShape, center(r), { w: r.w, h: r.h }) }
-        : F.flowItem(this.flowShape, start)
       let b: Board
-      ;[b, id] = B.addItem(this.board, item)
+      if (sized) [b, id] = B.addItem(this.board, F.flowItem(this.flowShape, center(r), { w: r.w, h: r.h }))
+      else {
+        // A click near a shape snaps beside it and connects, like dropping from the panel.
+        const magnet = F.findMagnet(this.board, start, flowShapeInfo(this.flowShape), new Set(), this.magnetReach)
+        ;[b, id] = F.dropShape(this.board, this.flowShape, start, magnet)
+      }
       this.apply(b)
     } else {
       let r = rectFromPoints(start, end)
@@ -1713,6 +1777,8 @@ export class Editor {
       return true
     }
     if (k === 'Escape') {
+      // First Esc deselects; another closes the flowchart shape panel.
+      if (!this.selection.size && this.selectedConnector === null && this.tool === 'select' && this.flowPalette) this.flowPalette = false
       this.drag = { type: 'none' }
       this.tool = 'select'
       this.select([])
@@ -1791,7 +1857,7 @@ export class Editor {
       return 'Esc done'
     }
     if (this.tool === 'mind') return 'Click to place the central idea'
-    if (this.tool === 'flow') return `Click to place a ${flowShapeInfo(this.flowShape).label.toLowerCase()}, or drag to size it`
+    if (this.tool === 'flow') return `Click to place a ${flowShapeInfo(this.flowShape).label.toLowerCase()} (near a shape it snaps on and connects), or drag one from the panel`
     if (this.tool === 'connector') return 'Drag from one item to another'
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single

@@ -4797,3 +4797,29 @@ button.on,
 .app.read-only .widget .tl-entry {
   pointer-events: none;
 }
+
+/* ----- flowchart shape panel ----- */
+
+.flyout-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.flow-palette .flyout-option {
+  cursor: grab;
+  touch-action: none;
+}
+
+.palette-ghost {
+  position: fixed;
+  z-index: 100;
+  color: var(--accent);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
+}
+
+.magnet-target {
+  filter: drop-shadow(0 0 6px var(--accent));
+}

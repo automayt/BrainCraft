@@ -51,8 +51,15 @@ The board fills the window and the controls float above it:
 
 ![A flowchart in BrainCraft](docs/flowchart.png)
 
-- Press **D** (or pick the flowchart tool) and choose a symbol: Start/End,
-  Process, Decision, Input/Output, Document, Database or Subprocess.
+- Press **D** (or pick the flowchart tool) to open the **shape panel**: Start/End,
+  Process, Decision, Input/Output, Document, Database or Subprocess. It stays
+  open while you build; close it with its **×** or **Esc**.
+- **Drag shapes from the panel onto the board**, or click one and then click
+  the board.
+- **Magnets:** drop or drag a shape near another one and it snaps into line
+  beside it, one gap away, and connects with an arrow automatically. The
+  target glows and a dashed line previews the connection. Hold **Alt** to
+  place it freely.
 - With a shape selected, **Tab** adds the next connected step in the direction
   the flow is going. **Alt + arrow** adds one in that direction, e.g. the
   "No" branch of a decision. While you're typing in a shape, **Tab** finishes
