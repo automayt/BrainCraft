@@ -49,7 +49,10 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
   const lastCol = k.columns.length - 1
 
   const onCardDown = (e: PointerEvent, card: KanbanCard) => {
-    if (!live || e.button !== 0 || (e.target as Element).closest('button, input, textarea')) return
+    if (editor.readOnly || e.button !== 0 || (e.target as Element).closest('button, input, textarea')) return
+    // Cards drag on the first press, even before the board is selected (instead of moving the whole board).
+    e.stopPropagation()
+    if (!live) editor.select([item.id])
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     const d = { card: card.id, pointer: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, target: null }
     dragRef.current = d
