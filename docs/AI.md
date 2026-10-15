@@ -77,6 +77,11 @@ anything else, the server:
   `BRAINCRAFT_AI_PASSWORD`. On the public internet, set one, and set a
   monthly spend limit for the key in the Anthropic Console.
 - One question usually takes two to four requests (reading the board, then
-  proposing or answering). Big boards make bigger requests: the whole board
-  outline is sent when Claude reads it.
+  proposing or answering). Each request re-sends the conversation so far, but
+  it's cached: repeated parts are billed at a tenth of the price or less. The
+  message box footer shows the chat's tokens and how much came from cache.
+- Claude reads the board as one short line per object. Boards over 250
+  objects are summarised (the selection, frames, mind-map roots, widgets and
+  what's on screen), and Claude reads other parts by area or searches, so a
+  2,000-object board costs about 5k tokens to read rather than 80k.
 - Boards are sent to Anthropic when you use the assistant, and only then.

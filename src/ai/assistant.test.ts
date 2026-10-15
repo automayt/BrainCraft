@@ -63,7 +63,13 @@ describe('assistant', () => {
     expect(first[0].content[0].text).toContain('[Selected object ids: 1]')
     const third = sent[2].messages as { role: string; content: Block[] }[]
     expect(third.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't2' }] })
-    expect(sent[0]).toMatchObject({ model: 'claude-opus-5-5', fallbacks: 'default', betas: ['server-side-fallback-2026-07-01'] })
+    expect(sent[0]).toMatchObject({ model: 'claude-opus-5-5', fallbacks: 'default', betas: ['server-side-fallback-2026-07-01'], cache_control: { type: 'ephemeral' } })
+    // Tools and system are byte-identical from step to step, so the cached prefix holds.
+    expect(JSON.stringify(sent[2].tools)).toBe(JSON.stringify(sent[0].tools))
+    expect(JSON.stringify(sent[2].system)).toBe(JSON.stringify(sent[0].system))
+    // Claude reads the compact board text.
+    const second = sent[1].messages as { content: Block[] }[]
+    expect(second.at(-1)!.content[0].content).toMatch(/^Board "Ideas": 2 objects/)
   })
 
   it('hands invalid operations back to Claude as an error to fix', async () => {

@@ -97,6 +97,20 @@ function ProposalCard({ p, undone, onApply, onDiscard, onUndo, onHover }: { p: P
   )
 }
 
+type Usage = Assistant['usage']
+const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
+const inputOf = (u: Usage) => u.input + u.cacheRead + u.cacheWrite
+
+/** " · 41k tokens, 78% from cache" once something has been sent. */
+function usageLine(u: Usage) {
+  const total = inputOf(u) + u.output
+  if (!total) return null
+  const cached = inputOf(u) ? Math.round((100 * u.cacheRead) / inputOf(u)) : 0
+  return ` · ${k(total)} tokens${cached ? `, ${cached}% from cache` : ''}`
+}
+
+const usageTitle = (u: Usage) => `This chat so far: ${u.input} input, ${u.cacheRead} read from cache (a tenth of the price or less), ${u.cacheWrite} written to cache, ${u.output} output tokens`
+
 /** One assistant (and its conversation) per board, for this visit. */
 const assistants = new Map<string, { assistant: Assistant; turns: Turn[] }>()
 
@@ -149,7 +163,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     let s = assistants.get(boardKey)
     if (!s || !connection) {
       if (!connection) return null
-      s = { assistant: new Assistant(makeClient(connection), { board: () => editor.board, measure: editor.measure, selection: () => [...editor.selection] }, settings.model), turns: [] }
+      s = { assistant: new Assistant(makeClient(connection), { board: () => editor.board, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }, settings.model), turns: [] }
       assistants.set(boardKey, s)
     }
     s.assistant.model = settings.model
@@ -377,7 +391,10 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               }}
             />
             <div className="ai-compose-foot">
-              <small className="muted">{AI_MODELS.find((m) => m.id === settings.model)?.label}</small>
+              <small className="muted" title={state ? usageTitle(state.assistant.usage) : undefined}>
+                {AI_MODELS.find((m) => m.id === settings.model)?.label}
+                {state && usageLine(state.assistant.usage)}
+              </small>
               {turns.length > 0 && !running && (
                 <button
                   type="button"

@@ -12,7 +12,9 @@ import { OpError, type Op, applyOps } from '../api/ops'
 import { OPS_GUIDE, TOOL_DEFS, type ToolHost, runTool } from '../api/tools'
 import { type Patch, diff } from '../collab/patch'
 import { type Measure, layoutAll } from '../model/mindmap'
-import type { Board, Id } from '../model/types'
+import type { Rect } from '../model/geom'
+import { boardText } from './boardText'
+import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
 
 export const AI_MODELS = [
@@ -53,6 +55,8 @@ export interface AssistantHost {
   board(): Board
   measure: Measure
   selection(): Id[]
+  /** The part of the board on screen. */
+  view?(): Rect
 }
 
 export interface Callbacks {
@@ -64,6 +68,25 @@ export interface Callbacks {
 }
 
 const READ_TOOLS = ['read_board', 'get_object', 'find']
+
+const READ_BOARD: Anthropic.Beta.BetaTool = {
+  name: 'read_board',
+  description:
+    'Describes the board: title, counts, and one line per object (id, kind, position, size, label, extras such as parent or comment count), then the lines between them. Big boards list the selection, frames, mind-map roots, widgets and what is on screen; pass "area" or "kind" to read other parts. Call this first.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', description: 'Only objects of this kind (sticky, text, rect, ellipse, frame, mind, flow, comment, image, pen, table, kanban, timeline, data)' },
+      area: {
+        type: 'object',
+        description: 'Only objects touching this rectangle, in board coordinates',
+        properties: { x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' }, h: { type: 'number' } },
+        required: ['x', 'y', 'w', 'h'],
+      },
+    },
+  },
+  eager_input_streaming: true,
+}
 const MAX_STEPS = 12
 
 const SYSTEM = `You are the assistant inside BrainCraft, an infinite whiteboard with sticky notes, shapes, text, frames, mind maps, flowcharts, tables, Kanban boards, timelines, database views (one dataset shown as table/board/timeline), comments and object descriptions.
@@ -93,8 +116,8 @@ function hostFor(h: AssistantHost): ToolHost {
   }
 }
 
-function tools(): Anthropic.Beta.BetaTool[] {
-  const read: Anthropic.Beta.BetaTool[] = TOOL_DEFS.filter((t) => READ_TOOLS.includes(t.name)).map((t) => {
+function buildTools(): Anthropic.Beta.BetaTool[] {
+  const read: Anthropic.Beta.BetaTool[] = TOOL_DEFS.filter((t) => READ_TOOLS.includes(t.name) && t.name !== 'read_board').map((t) => {
     // The assistant always works on the open board, so the MCP-only "file" argument is left out.
     const properties = Object.fromEntries(Object.entries(t.inputSchema.properties).filter(([k]) => k !== 'file'))
     return {
@@ -105,6 +128,7 @@ function tools(): Anthropic.Beta.BetaTool[] {
     }
   })
   return [
+    READ_BOARD,
     ...read,
     {
       name: 'propose_changes',
@@ -122,6 +146,9 @@ function tools(): Anthropic.Beta.BetaTool[] {
     },
   ]
 }
+
+/** Built once: tools render first in the prompt, so they must stay byte-identical for caching. */
+const TOOLS = buildTools()
 
 const STATUS: Record<string, string> = {
   read_board: 'Reading the board…',
@@ -150,6 +177,8 @@ export function countChanges(before: Board, patches: Patch[]) {
 }
 
 export class Assistant {
+  /** Tokens used by this conversation, to show what caching saves. */
+  usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
   /** The conversation so far, exactly as sent and received (thinking blocks included). */
   messages: Anthropic.Beta.BetaMessageParam[] = []
   model: AiModel
@@ -189,6 +218,20 @@ export class Assistant {
     }
     if (!READ_TOOLS.includes(name)) return { content: `Unknown tool "${name}"`, is_error: true }
     if (!input || typeof input !== 'object') return { content: 'Tool input must be an object', is_error: true }
+    if (name === 'read_board') {
+      const x = input as { kind?: unknown; area?: unknown }
+      const a = x.area as Record<string, unknown> | undefined
+      if (a !== undefined && (typeof a !== 'object' || !['x', 'y', 'w', 'h'].every((k) => typeof a?.[k] === 'number')))
+        return { content: '"area" needs numbers x, y, w and h', is_error: true }
+      if (x.kind !== undefined && typeof x.kind !== 'string') return { content: '"kind" must be text', is_error: true }
+      const text = boardText(this.host.board(), {
+        kind: x.kind as Kind | undefined,
+        area: a as Rect | undefined,
+        focus: this.host.selection(),
+        view: this.host.view?.(),
+      })
+      return { content: text }
+    }
     try {
       const out = await runTool(hostFor(this.host), name, input as Record<string, unknown>)
       return { content: typeof out === 'string' ? out : JSON.stringify(out) }
@@ -214,7 +257,9 @@ export class Assistant {
             thinking: { type: 'adaptive' },
             output_config: { effort: 'medium' },
             system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-            tools: tools(),
+            // The conversation grows each step; automatic caching re-reads all of it at a tenth of the price.
+            cache_control: { type: 'ephemeral' },
+            tools: TOOLS,
             messages: this.messages,
             ...fallbacks,
           },
@@ -228,6 +273,7 @@ export class Assistant {
         try {
           message = await stream.finalMessage()
           jsonRetries = 0
+          this.tally(message.usage)
         } catch (err) {
           // Only a tool input that couldn't be parsed is worth re-asking; API errors go to the person.
           if (err instanceof Anthropic.APIError || signal?.aborted || jsonRetries++ >= 2) throw err
@@ -266,8 +312,17 @@ export class Assistant {
     }
   }
 
+  private tally(u: Anthropic.Beta.BetaUsage | undefined) {
+    if (!u) return
+    this.usage.input += u.input_tokens ?? 0
+    this.usage.cacheRead += u.cache_read_input_tokens ?? 0
+    this.usage.cacheWrite += u.cache_creation_input_tokens ?? 0
+    this.usage.output += u.output_tokens ?? 0
+  }
+
   reset() {
     this.messages = []
+    this.usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
   }
 }
 
