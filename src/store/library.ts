@@ -8,8 +8,20 @@ import type { KV } from './kv'
 /** One object of a board thumbnail: x, y, w, h in 0–1000 of the board's bounds, plus fill and kind. */
 export type ThumbRect = [number, number, number, number, string, Kind]
 
+/** A board shared through a BrainCraft server. */
+export interface LiveInfo {
+  server: string
+  id: string
+  /** The key this browser uses (edit or view). */
+  key: string
+  role: 'edit' | 'view'
+  /** Kept by whoever started the session, to hand out view-only links. */
+  viewKey?: string
+}
+
 export interface BoardMeta {
   id: string
+  live?: LiveInfo
   title: string
   created: number
   updated: number
@@ -110,16 +122,17 @@ export class Library {
   async save(id: string, board: Board): Promise<void> {
     const prev = await this.meta(id)
     const now = this.now()
-    await this.write(id, board, prev?.created ?? now)
+    await this.write(id, board, prev?.created ?? now, prev?.live)
     const versions = await this.versions(id)
     const lastAuto = versions.find((v) => !v.name)
     if (!lastAuto || now - lastAuto.at >= AUTO_VERSION_EVERY) await this.addVersion(id, board)
   }
 
-  private async write(id: string, board: Board, created: number) {
+  private async write(id: string, board: Board, created: number, live?: LiveInfo) {
     const json = toJson(board)
     const meta: BoardMeta = {
       id,
+      ...(live ? { live } : {}),
       title: board.title || 'Untitled board',
       created,
       updated: this.now(),
@@ -130,11 +143,26 @@ export class Library {
     await this.kv.set(metaKey(id), meta)
   }
 
+  async setLive(id: string, live: LiveInfo | undefined) {
+    const meta = await this.meta(id)
+    if (!meta) return
+    const next = { ...meta }
+    if (live) next.live = live
+    else delete next.live
+    await this.kv.set(metaKey(id), next)
+  }
+
+  /** The board in this browser that is a copy of live board `liveId` on `server`. */
+  async findLive(server: string, liveId: string): Promise<BoardMeta | undefined> {
+    return (await this.list()).find((m) => m.live?.id === liveId && m.live.server === server)
+  }
+
   async rename(id: string, title: string) {
     const b = await this.load(id)
     if (b) await this.save(id, { ...b, title })
   }
 
+  /** A copy is a separate board: it doesn't join the original's live session. */
   async duplicate(id: string): Promise<string | null> {
     const b = await this.load(id)
     return b ? this.create({ ...b, title: `${b.title} (copy)` }) : null

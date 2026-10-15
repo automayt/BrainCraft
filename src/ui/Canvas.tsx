@@ -15,6 +15,7 @@ import { Minimap } from './Minimap'
 import { TOOL_ICONS } from './icons'
 import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
+import { PeerLayer } from './Live'
 import { ShapePicker } from './ShapePicker'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
@@ -144,6 +145,7 @@ export function Canvas() {
       style={{ cursor }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onPointerLeave={() => editor.pointerLeave()}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onDoubleClick={(e) => {
@@ -209,6 +211,7 @@ export function Canvas() {
       {board.items.length === 0 && editor.tool === 'select' && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
+      <PeerLayer />
       <SelectionToolbar />
       <ShapePicker />
       <Minimap />

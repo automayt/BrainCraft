@@ -130,10 +130,10 @@ describe('history', () => {
     ;[b] = B.addItem(b, sticky(0, 0))
     expect(h.commit(before, b)).toBe(true)
     expect(h.commit(b, b)).toBe(false)
-    const undone = h.undo(b)!
+    const undone = h.undo()!.before
     expect(undone.items).toHaveLength(0)
-    expect(h.redo(undone)!.items).toHaveLength(1)
-    h.undo(b)
+    expect(h.redo()!.after.items).toHaveLength(1)
+    h.undo()
     h.commit(undone, B.addItem(undone, sticky(5, 5))[0])
     expect(h.canRedo).toBe(false)
   })

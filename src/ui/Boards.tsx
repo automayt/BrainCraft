@@ -8,6 +8,7 @@ import { ink, mindRootFill } from './paint'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
+import { LiveSection } from './Live'
 
 export function timeAgo(t: number, now = Date.now()): string {
   const s = Math.round((now - t) / 1000)
@@ -333,14 +334,16 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
 
   const kb = Math.ceil(link.length / 1024)
   return (
-    <Dialog label="Share a read-only link" onClose={onClose} className="share">
+    <Dialog label="Share" onClose={onClose} className="share">
       <header>
-        <h2>Share a read-only link</h2>
+        <h2>Share</h2>
         <button className="icon-close" aria-label="Close" onClick={onClose}>
           ×
         </button>
       </header>
       <div className="share-body">
+        <LiveSection />
+        <h3 className="share-sub">Snapshot link</h3>
         <p className="muted">
           The whole board travels inside the link, so anyone with it sees this board as it is right now. Nothing is uploaded anywhere. Later changes need a new link.
         </p>

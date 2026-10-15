@@ -158,6 +158,18 @@ These become interactive once selected; drag them by their title strip.
   chat.
 - **Run from this step** starts part-way through.
 
+### Live collaboration
+
+- Run the BrainCraft server (one Node script, or Docker). Then **Share →
+  Start a live session** gives you an edit link and a view-only link.
+- Everyone sees changes as they happen, with named cursors, selections,
+  who's here (avatars in the top bar) and **follow** (click an avatar to see
+  what they see).
+- Edits merge per object. Undo takes back only your own steps, and offline
+  work syncs when the connection returns.
+- The server also provides an **HTTP API**: post operations to a board from
+  scripts, bots or CI. See [docs/SERVER.md](docs/SERVER.md).
+
 ### Presenting
 
 - **Present (Shift+P)** turns the board's frames into slides, in reading
@@ -206,6 +218,7 @@ npm run dev      # dev server at http://localhost:5173
 npm run check    # typecheck, lint and unit tests
 npm run build    # production build in dist/, including dist/braincraft-mcp.mjs
 npm run mcp      # run the built MCP server (normally your AI client starts it)
+npm run serve    # run the BrainCraft server (app + live sessions + HTTP API) on :8080
 ```
 
 ## Hosting
@@ -220,10 +233,19 @@ paths. Serve it from any static host, at the domain root or under a sub-path:
   `npm run build` and the output directory to `dist`.
 - **Anything else**: copy `dist/` to any web server.
 
-There's no backend yet. Boards live in each visitor's browser (IndexedDB)
-until they save them to a file or share a link. The build also publishes
+As a static site, boards live in each visitor's browser (IndexedDB) until
+they save them to a file or share a link. The build also publishes
 `braincraft-mcp.mjs`, so the app's AI dialog can offer the MCP server for
 download from wherever you host it.
+
+For live collaboration, shared boards and the HTTP API, run the BrainCraft
+server instead. It serves the app as well:
+
+```sh
+node dist/braincraft-server.mjs            # or: docker run -p 8080:8080 -v braincraft-data:/data braincraft
+```
+
+See [docs/SERVER.md](docs/SERVER.md).
 
 ## Code layout
 
@@ -232,6 +254,8 @@ download from wherever you host it.
 | `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, comments, search, undo history, serialization. Pure functions over immutable data. |
 | `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
 | `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
+| `src/collab/` | Live collaboration: board patches (also used by undo), the wire protocol, the server's room logic and the browser's live session. |
+| `server/` | The BrainCraft server: hosting, shared boards, WebSockets and the HTTP API, bundled into one Node script. |
 | `mcp/` | The MCP server for AI assistants, bundled into one Node script. |
 | `src/editor/Editor.ts` | Tools, selection, gestures and keyboard commands. Framework-independent and unit-tested. |
 | `src/ui/` | React components: SVG canvas, toolbars, text editing, comments panel, search, dialogs, and the table/Kanban/timeline views. |
