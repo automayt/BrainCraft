@@ -8,7 +8,9 @@ import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
 import { type KV, openKV } from './kv'
-import { type BoardMeta, Library, type VersionMeta } from './library'
+import { LiveSession } from '../collab/live'
+import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
+import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
 
 const CURRENT_KEY = 'braincraft:current'
@@ -17,6 +19,9 @@ const LEGACY_KEY = 'braincraft:board'
 /** A copy of unsaved work written synchronously as the page closes, in case IndexedDB didn't finish. */
 const RESCUE_KEY = 'braincraft:rescue'
 const SAVE_DELAY = 500
+const SERVER_KEY = 'braincraft:server'
+const NAME_KEY = 'braincraft:name'
+const COLOR_KEY = 'braincraft:color'
 
 export const FILE_EXT = '.braincraft'
 
@@ -69,6 +74,11 @@ export class Workspace {
   /** The file the current board was opened from or saved to, when the browser can write files. */
   fileName: string | null = null
 
+  /** The live session of the open board, when it's shared through a server. */
+  live: LiveSession | null = null
+  /** A BrainCraft server this app can use for live sessions (found at start), or null. */
+  server: string | null = null
+
   private timer: ReturnType<typeof setTimeout> | undefined
   private pending: Board | null = null
   private listeners = new Set<() => void>()
@@ -84,6 +94,16 @@ export class Workspace {
   static async start(editor: Editor, kv?: KV, hash = typeof location === 'undefined' ? '' : location.hash): Promise<Workspace> {
     const ws = new Workspace(editor, new Library(kv ?? (await openKV())))
     await ws.recover()
+    ws.server = await findServer()
+    const live = liveFromHash(hash)
+    if (live) {
+      const server = live.server ?? ws.server
+      if (server) {
+        await ws.joinLive(live, server)
+        return ws
+      }
+      editor.setStatus('That live link needs its BrainCraft server, which isn’t reachable from here')
+    }
     const shared = sharedFromHash(hash)
     if (shared) {
       try {
@@ -173,6 +193,7 @@ export class Workspace {
       this.editor.setStatus('That board could not be opened')
       return
     }
+    this.closeLive()
     this.boardId = id
     this.editor.readOnly = false
     safeStorage()?.setItem(CURRENT_KEY, id)
@@ -180,6 +201,8 @@ export class Workspace {
     this.loadQuietly(board)
     this.saveState = 'saved'
     this.clearShareHash()
+    const meta = await this.library.meta(id)
+    if (meta?.live) this.connectLive(meta.live)
     await this.refresh()
   }
 
@@ -193,6 +216,7 @@ export class Workspace {
 
   /** Shows a board read-only, outside the library (a shared link). */
   view(board: Board) {
+    this.closeLive()
     this.boardId = null
     this.editor.readOnly = true
     this.loadQuietly(board, 'Viewing a shared board — read-only')
@@ -241,6 +265,7 @@ export class Workspace {
   // ----- autosave ----------------------------------------------------------------
 
   private changed(b: Board) {
+    this.live?.localChanged()
     if (this.readOnly) return
     this.pending = b
     this.saveState = 'unsaved'
@@ -390,6 +415,130 @@ export class Workspace {
     }
   }
 
+  // ----- live sessions ----------------------------------------------------------
+
+  get liveInfo(): LiveInfo | undefined {
+    return this.boards.find((b) => b.id === this.boardId)?.live
+  }
+
+  /** Your name and colour as others see them. */
+  get me() {
+    const storage = safeStorage()
+    const name = this.editor.author || storage?.getItem(NAME_KEY) || 'Guest'
+    let color = storage?.getItem(COLOR_KEY)
+    if (!color) {
+      color = colorFor(`${name}${Math.random()}`)
+      storage?.setItem(COLOR_KEY, color)
+    }
+    return { name, color }
+  }
+
+  setName(name: string) {
+    const n = name.trim().slice(0, 40)
+    safeStorage()?.setItem(NAME_KEY, n)
+    this.editor.setAuthor(n)
+    this.live?.setMe(this.me)
+    this.emit()
+  }
+
+  private connectLive(info: LiveInfo) {
+    // Reassigned below as the server tells us our role.
+    // eslint-disable-next-line no-param-reassign
+    const session = new LiveSession(this.editor, info.server, { id: info.id, key: info.key }, this.me)
+    session.onChange = () => {
+      // The server decides the role; remember it so the right links are offered.
+      const id = this.boardId
+      if (id && session.state === 'live' && info.role !== session.role) {
+        info = { ...info, role: session.role }
+        void this.library.setLive(id, info).then(() => this.refresh())
+      }
+      this.emit()
+    }
+    this.editor.onPointer = (p) => session.pointer(p)
+    this.editor.onUserCamera = () => session.following && session.follow(null)
+    // Selection and view changes go out with presence.
+    const unsubscribe = this.editor.subscribe(() => session.sendPresence())
+    const close = session.close.bind(session)
+    session.close = () => {
+      unsubscribe()
+      this.editor.onPointer = null
+      this.editor.onUserCamera = null
+      close()
+    }
+    this.live = session
+    this.emit()
+  }
+
+  private closeLive() {
+    if (!this.live) return
+    this.live.flush()
+    this.live.close()
+    this.live = null
+    this.editor.readOnly = false
+  }
+
+  /** Shares the open board through the server: anyone with the edit or view link joins live. */
+  async startLive(server = this.server): Promise<LiveInfo | null> {
+    if (!server || !this.boardId) return null
+    if (this.liveInfo) return this.liveInfo
+    await this.flush()
+    const res = await fetch(new URL('api/boards', server.endsWith('/') ? server : `${server}/`), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ board: this.editor.board }),
+    })
+    if (!res.ok) throw new Error(`The server said ${res.status}`)
+    const { id, editKey, viewKey } = (await res.json()) as { id: string; editKey: string; viewKey: string }
+    const info: LiveInfo = { server, id, key: editKey, role: 'edit', viewKey }
+    await this.library.setLive(this.boardId, info)
+    await this.refresh()
+    this.connectLive(info)
+    return info
+  }
+
+  /** Stops sharing from this browser: the board here becomes a normal board again. */
+  async leaveLive() {
+    if (!this.boardId) return
+    this.closeLive()
+    await this.library.setLive(this.boardId, undefined)
+    await this.refresh()
+  }
+
+  /** Opens a live link: the board joins your library (or reopens if you've been here before). */
+  async joinLive(link: LiveLink, server: string) {
+    const known = await this.library.findLive(server, link.id)
+    let id = known?.id
+    if (!id) {
+      id = await this.library.create(emptyBoard('Shared board'))
+      await this.library.setLive(id, { server, id: link.id, key: link.key, role: 'edit' })
+    } else if (known?.live?.key !== link.key) {
+      await this.library.setLive(id, { ...known!.live!, key: link.key })
+    }
+    await this.switchTo(id)
+  }
+
+  /** A link that joins this board's live session, with edit or view rights. */
+  liveLink(role: 'edit' | 'view'): string | null {
+    const info = this.liveInfo
+    if (!info) return null
+    const key = role === 'edit' ? (info.role === 'edit' ? info.key : null) : (info.viewKey ?? (info.role === 'view' ? info.key : null))
+    if (!key) return null
+    const url = new URL(typeof location === 'undefined' ? 'https://braincraft.invalid/' : location.href)
+    const sameOrigin = typeof location !== 'undefined' && info.server.startsWith(location.origin)
+    url.hash = liveHash({ id: info.id, key, ...(sameOrigin ? {} : { server: info.server }) })
+    return url.toString()
+  }
+
+  /** Remembers a server address to use for live sessions (for apps hosted elsewhere). */
+  async useServer(address: string): Promise<boolean> {
+    const s = address.trim().replace(/\/+$/, '') + '/'
+    if (!(await isServer(s))) return false
+    safeStorage()?.setItem(SERVER_KEY, s)
+    this.server = s
+    this.emit()
+    return true
+  }
+
   // ----- sharing -----------------------------------------------------------------
 
   /** A read-only link holding the whole board. */
@@ -400,8 +549,29 @@ export class Workspace {
   }
 
   private clearShareHash() {
-    if (typeof location !== 'undefined' && sharedFromHash(location.hash)) {
+    if (typeof location !== 'undefined' && (sharedFromHash(location.hash) || liveFromHash(location.hash))) {
       history.replaceState(null, '', location.pathname + location.search)
     }
   }
+}
+
+async function isServer(base: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 2500)
+    const res = await fetch(new URL('api/health', base), { signal: ctrl.signal })
+    clearTimeout(t)
+    return res.ok && ((await res.json()) as { name?: string }).name === 'braincraft'
+  } catch {
+    return false
+  }
+}
+
+/** The server this app came from (when served by the BrainCraft server), or one set by hand. */
+async function findServer(): Promise<string | null> {
+  if (typeof location === 'undefined' || typeof fetch === 'undefined') return null
+  const here = new URL('./', location.href).href
+  if (location.protocol.startsWith('http') && (await isServer(here))) return here
+  const saved = safeStorage()?.getItem(SERVER_KEY)
+  return saved && (await isServer(saved)) ? saved : null
 }

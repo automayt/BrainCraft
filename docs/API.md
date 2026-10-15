@@ -8,7 +8,8 @@ two", "add a comment"). The same operations work in three places:
 | --- | --- |
 | **Paste** | Paste JSON operations anywhere on the board, or use **Import / Export → Import**. |
 | **JavaScript** | `window.BrainCraft.apply([...])` in the page (browser console, extensions, embedding pages). |
-| **HTTP** *(planned)* | The hosted backend will accept the same operations at `POST /api/boards/{id}/ops`. |
+| **HTTP** | `POST /api/boards/{id}/ops` on a [BrainCraft server](SERVER.md), with the board's edit key. Everyone looking at the board sees the result live. |
+| **MCP** | AI assistants call the `apply_ops` tool (see [MCP.md](MCP.md)). |
 
 A batch is applied **all or nothing** and is a **single undo step**: if any
 operation is invalid, nothing changes and the error names the operation and the

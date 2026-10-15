@@ -21,6 +21,8 @@ import { clipFromText, clipToText } from '../model/serialize'
 import * as S from '../model/slides'
 import * as R from '../model/runbook'
 import * as D from '../model/dataset'
+import { type Patch, applyPatches, diff } from '../collab/patch'
+import type { PeerInfo } from '../collab/protocol'
 import {
   type Arrowheads,
   type Board,
@@ -223,6 +225,12 @@ export class Editor {
   readOnly = false
   /** Presentation mode: frames shown one at a time, full screen. */
   presenting: Presenting | null = null
+  /** Other people in a live session, by connection id. */
+  peers = new Map<string, PeerInfo>()
+  /** Pointer moves (for showing your cursor to others); null when it leaves the board. */
+  onPointer: ((world: Vec | null) => void) | null = null
+  /** The person moved the camera themselves (stops following someone). */
+  onUserCamera: (() => void) | null = null
   /** Runbook mode: walking a flowchart step by step. */
   running: Running | null = null
   finishedRun: FinishedRun | null = null
@@ -350,14 +358,60 @@ export class Editor {
 
   undo() {
     this.finishEditing()
-    const prev = this.history.undo(this.board)
-    if (prev) this.afterJump(prev)
+    const step = this.history.undo()
+    if (step) this.afterJump(this.board === step.after ? step.before : this.rebase(step.after, step.before))
   }
 
   redo() {
     this.finishEditing()
-    const next = this.history.redo(this.board)
-    if (next) this.afterJump(next)
+    const step = this.history.redo()
+    if (step) this.afterJump(this.board === step.before ? step.after : this.rebase(step.before, step.after))
+  }
+
+  pointerLeave() {
+    this.onPointer?.(null)
+  }
+
+  // ----- live sessions ---------------------------------------------------------------
+
+  /** Applies changes that came from someone else: not undoable here, and allowed even when read-only. */
+  applyRemote(patches: Patch[]) {
+    if (!patches.length) return
+    const next = M.layoutAll(applyPatches(this.board, patches), this.measure)
+    this.board = next
+    this.selection = new Set([...this.selection].filter((id) => B.getItem(next, id)))
+    if (this.selectedConnector !== null && !B.getConnector(next, this.selectedConnector)) this.selectedConnector = null
+    if (this.editing && !(this.editing.connector ? B.getConnector(next, this.editing.id) : B.getItem(next, this.editing.id))) this.editing = null
+    this.onBoardChange?.(next)
+    this.emit()
+  }
+
+  /**
+   * Takes the server's board on joining (or rejoining) a live session. New ids come from this
+   * connection's own block; the camera stays put unless this is the first look at the board.
+   */
+  resetFromRemote(board: Board, opts: { readOnly: boolean; idBase: number }) {
+    const first = !this.board.items.length
+    const next = M.layoutAll(board, this.measure)
+    this.board = opts.idBase > 0 ? { ...next, nextId: opts.idBase } : next
+    this.readOnly = opts.readOnly
+    this.selection = new Set([...this.selection].filter((id) => B.getItem(this.board, id)))
+    this.editing = null
+    this.onBoardChange?.(this.board)
+    if (first) this.zoomToFit()
+    else this.emit()
+  }
+
+  /** Shows the same part of the board as someone being followed. */
+  follow(view: Rect) {
+    this.flight++
+    this.camera = fit(view, this.viewport, 0, 8)
+    this.emit()
+  }
+
+  /** Applies just the change from `from` to `to` onto the current board (others' edits since stay). */
+  private rebase(from: Board, to: Board): Board {
+    return M.layoutAll(applyPatches(this.board, diff(from, to)), this.measure)
   }
 
   private afterJump(b: Board) {
@@ -373,6 +427,7 @@ export class Editor {
 
   zoomBy(factor: number, anchor: Vec = { x: this.viewport.w / 2, y: this.viewport.h / 2 }) {
     this.flight++
+    this.onUserCamera?.()
     this.camera = zoomAt(this.camera, anchor, factor)
     this.emit()
   }
@@ -383,6 +438,7 @@ export class Editor {
 
   pan(dx: number, dy: number) {
     this.flight++
+    this.onUserCamera?.()
     this.camera = { ...this.camera, x: this.camera.x + dx, y: this.camera.y + dy }
     this.emit()
   }
@@ -1370,6 +1426,7 @@ export class Editor {
   pointerMove(screen: Vec, mods: Modifiers = {}) {
     const world = toWorld(this.camera, screen)
     this.pointer = world
+    this.onPointer?.(world)
     const d = this.drag
     switch (d.type) {
       case 'none':
@@ -1607,6 +1664,7 @@ export class Editor {
 
   wheel(screen: Vec, dx: number, dy: number, zoomGesture: boolean) {
     this.flight++
+    this.onUserCamera?.()
     if (zoomGesture) this.camera = zoomAt(this.camera, screen, Math.exp(-dy * 0.01))
     else this.camera = { ...this.camera, x: this.camera.x - dx, y: this.camera.y - dy }
     this.emit()

@@ -29,6 +29,7 @@ import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
+import { LiveBar } from './Live'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -131,7 +132,7 @@ export function TopLeft() {
             ) : (
               <MenuItem label="Download file" keys="Ctrl S" onClick={run(ui.download)} />
             )}
-            <MenuItem label="Share read-only link…" onClick={run(ui.openShare)} />
+            <MenuItem label="Share…" onClick={run(ui.openShare)} />
             <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
             {!ws.readOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             <hr />
@@ -153,6 +154,7 @@ export function TopRight() {
   return (
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
+      <LiveBar onOpen={ui.openShare} />
       <button className="present-btn has-tip" onMouseDown={keepFocus} onClick={ui.present}>
         <PlayIcon />
         <span>Present</span>

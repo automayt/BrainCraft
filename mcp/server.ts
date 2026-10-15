@@ -19,7 +19,8 @@ import { createInterface } from 'node:readline'
 import { applyOps } from '../src/api/ops'
 import { type BoardInfo, OPS_GUIDE, TOOL_DEFS, type ToolHost, ToolError, runTool } from '../src/api/tools'
 import { emptyBoard } from '../src/model/board'
-import { layoutAll, type Measure } from '../src/model/mindmap'
+import { layoutAll } from '../src/model/mindmap'
+import { approxMeasure as measure } from '../src/model/approxMeasure'
 import { fromJson, toJson } from '../src/model/serialize'
 import { TEMPLATES, boardFromTemplate } from '../src/model/templates'
 
@@ -55,29 +56,6 @@ function loadToken(): string {
 const TOKEN = process.env.BRAINCRAFT_TOKEN ?? loadToken()
 let port = FIRST_PORT
 const pairLink = () => `${APP_URL}#ai=${port}.${TOKEN}`
-
-// ----- text measuring without a browser (close enough for layout) -------------------------
-
-const measure: Measure = (text, fontSize, weight, maxWidth) => {
-  const charW = fontSize * (weight >= 600 ? 0.58 : 0.54)
-  let lines = 0
-  let widest = 0
-  for (const para of text.split('\n')) {
-    let line = 0
-    for (const word of para.split(/\s+/)) {
-      const w = (word.length + 1) * charW
-      if (line && maxWidth > 0 && line + w > maxWidth) {
-        widest = Math.max(widest, line)
-        lines++
-        line = 0
-      }
-      line += w
-    }
-    widest = Math.max(widest, line)
-    lines++
-  }
-  return { w: Math.ceil(widest), h: Math.ceil(lines * fontSize * 1.3) }
-}
 
 // ----- the browser link: Server-Sent Events out, POSTed results back ----------------------
 

@@ -120,7 +120,11 @@ export function remove(b: Board, items: ReadonlySet<Id>, connectors: ReadonlySet
   // A dataset goes with its last view (undo brings both back).
   if (!next.datasets?.length) return next
   const used = new Set(next.items.flatMap((i) => (i.view ? [i.view.dataset] : [])))
-  return next.datasets.every((d) => used.has(d.id)) ? next : { ...next, datasets: next.datasets.filter((d) => used.has(d.id)) }
+  if (next.datasets.every((d) => used.has(d.id))) return next
+  const datasets = next.datasets.filter((d) => used.has(d.id))
+  if (datasets.length) return { ...next, datasets }
+  delete next.datasets
+  return next
 }
 
 export function translateItem(i: Item, dx: number, dy: number): Item {
