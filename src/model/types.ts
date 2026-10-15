@@ -205,6 +205,8 @@ export interface Item extends Rect {
   collapsed?: boolean
   /** Flowchart symbol of a `flow` item. */
   shape?: FlowShape
+  /** Free-text description of the object, shown above its comments. */
+  description?: string
   /** Work notes (comments) on this object, oldest first. */
   notes?: Note[]
   /** Image data URL of an `image` item. */

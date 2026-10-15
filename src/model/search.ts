@@ -26,6 +26,7 @@ interface Field {
 /** Every searchable piece of text in an item. */
 function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
   const out: Field[] = [{ where: i.kind === 'frame' ? 'Title' : 'Text', text: i.text }]
+  if (i.description) out.push({ where: 'Description', text: i.description })
   for (const n of i.notes ?? []) out.push({ where: 'Comment', text: plainNote(n.text) })
   if (i.table) {
     const cols = new Map(i.table.columns.map((c) => [c.id, c.name]))

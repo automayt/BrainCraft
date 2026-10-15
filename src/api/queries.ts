@@ -22,6 +22,7 @@ export interface ObjectSummary {
 
 export interface ObjectDetail extends ObjectSummary {
   text: string
+  description?: string
   comments: { text: string; at: string; author?: string }[]
   data?: unknown
 }
@@ -47,6 +48,7 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
   return {
     ...summary(i),
     text: i.text,
+    ...(i.description ? { description: i.description } : {}),
     comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
     data: i.view
       ? dataOf(b, i)

@@ -849,6 +849,19 @@ export class Editor {
   }
 
   /** Adds a work note to `id` (one undo step). */
+  /** Sets an object's description (one undo step); empty removes it. */
+  setDescription(id: Id, text: string) {
+    const value = text.replace(/\s+$/, '')
+    this.edit((b) =>
+      B.updateItem(b, id, (i) => {
+        if ((i.description ?? '') === value) return i
+        const next: Item = { ...i, description: value }
+        if (!value) delete next.description
+        return next
+      }),
+    )
+  }
+
   addNote(id: Id, text: string) {
     this.edit((b) => N.addNote(b, id, text, this.author.trim() || undefined))
   }

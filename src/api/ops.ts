@@ -77,7 +77,7 @@ export type Op =
   | { op: 'updateRecord'; id: Ref; record: string; values: Record<string, unknown> }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
-  | { op: 'update'; id: Ref; text?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
+  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
 
@@ -328,6 +328,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         b = B.updateItem(b, id, (i) => ({
           ...i,
           ...(op.text !== undefined ? { text: text(op.text, 'text') } : {}),
+          ...(op.description !== undefined ? { description: text(op.description, 'description', false) } : {}),
           ...(op.color ? { color: colorByName(op.color)! } : {}),
           ...(typeof op.x === 'number' ? { x: op.x } : {}),
           ...(typeof op.y === 'number' ? { y: op.y } : {}),

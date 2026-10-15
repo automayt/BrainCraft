@@ -4823,3 +4823,41 @@ button.on,
 .magnet-target {
   filter: drop-shadow(0 0 6px var(--accent));
 }
+
+/* ----- object description (comments panel) ----- */
+
+.notes-panel .description {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-panel .description label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.notes-panel .description textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+}
+
+.notes-panel .description textarea:focus {
+  border-color: var(--accent);
+}
