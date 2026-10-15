@@ -4,8 +4,8 @@ import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
 import * as D from '../model/dataset'
 import { fakeMeasure } from '../model/test-helpers'
-import type { Board } from '../model/types'
-import { applyPatches, diff, keyOf, squash } from './patch'
+import type { Board, Connector } from '../model/types'
+import { type Patch, applyPatches, diff, keyOf, squash } from './patch'
 
 const ops = (b: Board, list: Parameters<typeof applyOps>[1]) => applyOps(b, list, { measure: fakeMeasure }).board
 
@@ -95,5 +95,57 @@ describe('patches', () => {
     ])
     expect(p.map(keyOf)).toEqual(['i:1', 'title'])
     expect(p[1]).toEqual({ k: 'title', v: 'b' })
+  })
+})
+
+describe('applyPatches matches applying one change at a time', () => {
+  // The straightforward version: each change copies the lists.
+  function oneByOne(b: Board, patches: Patch[]): Board {
+    let items = b.items
+    let connectors = b.connectors
+    for (const p of patches) {
+      if (p.k === 'item') {
+        const at = items.findIndex((i) => i.id === p.id)
+        if (p.v === null) items = items.filter((i) => i.id !== p.id)
+        else if (at >= 0) items = items.map((i, k) => (k === at ? p.v! : i))
+        else items = [...items, p.v]
+      } else if (p.k === 'conn') {
+        const at = connectors.findIndex((c) => c.id === p.id)
+        if (p.v === null) connectors = connectors.filter((c) => c.id !== p.id)
+        else if (at >= 0) connectors = connectors.map((c, k) => (k === at ? p.v! : c))
+        else connectors = [...connectors, p.v]
+      } else if (p.k === 'order') {
+        const byId = new Map(items.map((i) => [i.id, i]))
+        const first = [...new Set(p.v)].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
+        items = [...first, ...items.filter((i) => !p.v.includes(i.id))]
+      }
+    }
+    const ids = new Set(items.map((i) => i.id))
+    connectors = connectors.filter((c) => ids.has(c.from) && ids.has(c.to))
+    return { ...b, items, connectors }
+  }
+
+  it('for random mixes of adds, edits, deletes, re-adds and reorders', () => {
+    let seed = 7
+    const rnd = (n: number) => ((seed = (seed * 1103515245 + 12345) % 2147483648), seed % n)
+    for (let round = 0; round < 300; round++) {
+      let b = emptyBoard()
+      for (let k = 0; k < 8; k++) b = B.addItem(b, B.newItem('sticky', { x: k * 10, y: 0, w: 10, h: 10 }))[0]
+      const patches: Patch[] = []
+      for (let k = 0; k < 14; k++) {
+        const id = 1 + rnd(12)
+        const r = rnd(10)
+        if (r < 4) patches.push({ k: 'item', id, v: { ...B.newItem('sticky', { x: rnd(100), y: 0, w: 10, h: 10 }), id, text: `v${k}` } })
+        else if (r < 6) patches.push({ k: 'item', id, v: null })
+        else if (r < 8) patches.push({ k: 'conn', id: 100 + rnd(4), v: rnd(3) ? ({ id: 100 + rnd(4), from: 1 + rnd(12), to: 1 + rnd(12) } as Connector) : null })
+        else patches.push({ k: 'order', v: [1 + rnd(12), 1 + rnd(12), 1 + rnd(12)] })
+      }
+      // Connector patches carry their own id.
+      for (const p of patches) if (p.k === 'conn' && p.v) p.v = { ...p.v, id: p.id }
+      const want = oneByOne(b, patches)
+      const got = applyPatches(b, patches)
+      expect(got.items.map((i) => [i.id, i.text])).toEqual(want.items.map((i) => [i.id, i.text]))
+      expect(got.connectors).toEqual(want.connectors)
+    }
   })
 })

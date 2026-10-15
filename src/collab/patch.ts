@@ -43,6 +43,13 @@ export function keyOf(p: Patch): string {
 
 const same = (a: unknown, z: unknown) => a === z || JSON.stringify(a) === JSON.stringify(z)
 
+/** Same ids in the same order. */
+function sameIds(a: readonly { id: Id }[], z: readonly { id: Id }[]): boolean {
+  if (a.length !== z.length) return false
+  for (let k = 0; k < a.length; k++) if (a[k].id !== z[k].id) return false
+  return true
+}
+
 /** Whether patching `a` into `z` (keeping survivors in place, appending newcomers) gives `z`'s order. */
 function landsInOrder<T>(a: T[], z: T[]): boolean {
   const inZ = new Set(z)
@@ -59,7 +66,13 @@ export function diff(a: Board, z: Board): Patch[] {
   const out: Patch[] = []
   if (a.title !== z.title) out.push({ k: 'title', v: z.title })
 
-  if (a.items !== z.items) {
+  if (a.items !== z.items && sameIds(a.items, z.items)) {
+    // The usual case (objects edited, none added, removed or reordered): compare in step.
+    for (let k = 0; k < z.items.length; k++) {
+      const i = z.items[k]
+      if (a.items[k] !== i && !same(a.items[k], i)) out.push({ k: 'item', id: i.id, v: i })
+    }
+  } else if (a.items !== z.items) {
     const before = new Map(a.items.map((i) => [i.id, i]))
     const after = new Set<Id>()
     for (const i of z.items) {
@@ -75,7 +88,12 @@ export function diff(a: Board, z: Board): Patch[] {
     if (landed.some((id, k) => id !== ids[k])) out.push({ k: 'order', v: ids })
   }
 
-  if (a.connectors !== z.connectors) {
+  if (a.connectors !== z.connectors && sameIds(a.connectors, z.connectors)) {
+    for (let k = 0; k < z.connectors.length; k++) {
+      const c = z.connectors[k]
+      if (a.connectors[k] !== c && !same(a.connectors[k], c)) out.push({ k: 'conn', id: c.id, v: c })
+    }
+  } else if (a.connectors !== z.connectors) {
     const before = new Map(a.connectors.map((c) => [c.id, c]))
     const after = new Set<Id>()
     for (const c of z.connectors) {
@@ -112,34 +130,75 @@ export function diff(a: Board, z: Board): Patch[] {
 }
 
 /** Puts `ids` first in that order; anything else keeps its place after them. */
-function reorder<T>(list: T[], idOf: (t: T) => string | number, ids: (string | number)[]): T[] {
+function reorder<T>(list: readonly T[], idOf: (t: T) => string | number, ids: (string | number)[]): T[] {
   const byId = new Map(list.map((x) => [idOf(x), x]))
-  const first = ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
   const placed = new Set(ids)
+  const first = [...placed].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
   return [...first, ...list.filter((x) => !placed.has(idOf(x)))]
+}
+
+/**
+ * Collects set/delete changes to a list by id and applies them in one pass, with the same
+ * result as applying them one by one: replacements stay in place, new entries go to the end
+ * in the order they were added, and something deleted and added again moves to the end.
+ */
+class ListChanges<T extends { id: Id }> {
+  private changes = new Map<Id, T | null>()
+  private added = new Set<Id>()
+  private moved = new Set<Id>()
+  private had: Set<Id> | null = null
+  private list: readonly T[]
+  constructor(list: readonly T[]) {
+    this.list = list
+  }
+  private present(id: Id) {
+    if (this.changes.has(id)) return this.changes.get(id) !== null
+    this.had ??= new Set(this.list.map((x) => x.id))
+    return this.had.has(id)
+  }
+  set(id: Id, v: T | null) {
+    const was = this.present(id)
+    if (v !== null && !was) {
+      this.added.add(id)
+      this.had ??= new Set(this.list.map((x) => x.id))
+      if (this.had.has(id)) this.moved.add(id)
+    }
+    if (v === null) this.added.delete(id)
+    this.changes.set(id, v)
+  }
+  /** The list with every change so far applied; changes start over from it. */
+  result(): readonly T[] {
+    if (!this.changes.size) return this.list
+    const out: T[] = []
+    for (const x of this.list) {
+      if (this.moved.has(x.id)) continue
+      const c = this.changes.get(x.id)
+      if (c === undefined) out.push(x)
+      else if (c !== null) out.push(c)
+    }
+    for (const id of this.added) out.push(this.changes.get(id)!)
+    this.list = out
+    this.changes.clear()
+    this.added.clear()
+    this.moved.clear()
+    this.had = null
+    return out
+  }
+  /** Starts over from `list` (after a reorder). */
+  reset(list: readonly T[]) {
+    this.result()
+    this.list = list
+  }
 }
 
 /** Applies patches in order. Lines whose ends are gone are dropped, the same way everywhere. */
 export function applyPatches(b: Board, patches: Patch[]): Board {
   if (!patches.length) return b
-  let items = b.items
-  let connectors = b.connectors
+  // Changes are gathered by id and the lists rebuilt once, so a big patch stays linear.
+  const itemList = new ListChanges<Item>(b.items)
+  const connList = new ListChanges<Connector>(b.connectors)
   let datasets = b.datasets
   let title = b.title
-  const setItem = (id: Id, v: Item | null) => {
-    const at = items.findIndex((i) => i.id === id)
-    if (v === null) {
-      if (at >= 0) items = items.filter((i) => i.id !== id)
-    } else if (at >= 0) items = items.map((i, k) => (k === at ? v : i))
-    else items = [...items, v]
-  }
-  const setConn = (id: Id, v: Connector | null) => {
-    const at = connectors.findIndex((c) => c.id === id)
-    if (v === null) {
-      if (at >= 0) connectors = connectors.filter((c) => c.id !== id)
-    } else if (at >= 0) connectors = connectors.map((c, k) => (k === at ? v : c))
-    else connectors = [...connectors, v]
-  }
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -155,13 +214,13 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         title = p.v
         break
       case 'item':
-        setItem(p.id, p.v)
+        itemList.set(p.id, p.v)
         break
       case 'conn':
-        setConn(p.id, p.v)
+        connList.set(p.id, p.v)
         break
       case 'order':
-        items = reorder(items, (i) => i.id, p.v)
+        itemList.reset(reorder(itemList.result(), (i) => i.id, p.v))
         break
       case 'ds': {
         const meta = p.v
@@ -183,6 +242,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
       }
     }
   }
+  const items = itemList.result() as Item[]
+  let connectors = connList.result() as Connector[]
   const ids = new Set(items.map((i) => i.id))
   if (connectors.some((c) => !ids.has(c.from) || !ids.has(c.to))) connectors = connectors.filter((c) => ids.has(c.from) && ids.has(c.to))
   // nextId stays: in a live session each person hands out ids from their own range.

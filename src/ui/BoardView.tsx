@@ -2,7 +2,8 @@
 
 import { memo } from 'react'
 import * as B from '../model/board'
-import { type Vec, center } from '../model/geom'
+import { type Rect, type Vec, center, intersects, union } from '../model/geom'
+import { route } from '../model/routes'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, flowTextRect } from '../model/shapes'
 import { frameFill, ink, mindRootFill, mindRootText } from './paint'
@@ -10,7 +11,7 @@ import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
 import { DataViewWidget } from './widgets/DataView'
-import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, usesInk } from '../model/types'
+import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -41,7 +42,8 @@ function penPath(points: { x: number; y: number }[]): string {
   return `${d}L${last.x} ${last.y}`
 }
 
-export function ItemShape({ item, depth, editing, live = false }: { item: Item; depth: number; editing: boolean; live?: boolean }) {
+/** One object. Memoized: boards are immutable, so an unchanged object keeps the same `item`. */
+export const ItemShape = memo(function ItemShape({ item, depth, editing, live = false }: { item: Item; depth: number; editing: boolean; live?: boolean }) {
   const text = editing ? null : item.text
   switch (item.kind) {
     case 'frame': {
@@ -115,7 +117,7 @@ export function ItemShape({ item, depth, editing, live = false }: { item: Item; 
     default:
       return null
   }
-}
+})
 
 /** Where a comment block's text goes. */
 export function commentBodyRect(i: Item) {
@@ -215,30 +217,25 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
   )
 }
 
+const MindEdge = memo(function MindEdge({ n, p, depth }: { n: Item; p: Item; depth: number }) {
+  const right = n.x >= p.x + p.w / 2
+  const x0 = right ? p.x + p.w : p.x
+  const y0 = p.y + p.h / 2
+  const x1 = right ? n.x : n.x + n.w
+  const y1 = n.y + n.h / 2
+  const mx = (x0 + x1) / 2
+  return <path d={`M${x0} ${y0}C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`} stroke={n.color} strokeWidth={depth === 1 ? 3.5 : 2.2} />
+})
+
 /** Curved branches from each visible mind node to its parent. */
-export function MindEdges({ board, hidden, depths }: { board: Board; hidden: ReadonlySet<Id>; depths: Map<Id, number> }) {
-  const byId = new Map(board.items.map((i) => [i.id, i]))
+export function MindEdges({ board, hidden, depths, inView = () => true }: { board: Board; hidden: ReadonlySet<Id>; depths: Map<Id, number>; inView?: (a: Item, b: Item) => boolean }) {
   return (
     <g fill="none" strokeLinecap="round">
       {board.items.map((n) => {
         if (n.kind !== 'mind' || n.parent === undefined || hidden.has(n.id)) return null
-        const p = byId.get(n.parent)
-        if (!p) return null
-        const right = n.x >= p.x + p.w / 2
-        const x0 = right ? p.x + p.w : p.x
-        const y0 = p.y + p.h / 2
-        const x1 = right ? n.x : n.x + n.w
-        const y1 = n.y + n.h / 2
-        const mx = (x0 + x1) / 2
-        const depth = depths.get(n.id) ?? 1
-        return (
-          <path
-            key={n.id}
-            d={`M${x0} ${y0}C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`}
-            stroke={n.color}
-            strokeWidth={depth === 1 ? 3.5 : 2.2}
-          />
-        )
+        const p = B.getItem(board, n.parent)
+        if (!p || !inView(n, p)) return null
+        return <MindEdge key={n.id} n={n} p={p} depth={depths.get(n.id) ?? 1} />
       })}
     </g>
   )
@@ -261,7 +258,7 @@ export function CollapseToggles({
       {board.items.map((n) => {
         if (n.kind !== 'mind' || hidden.has(n.id) || !childCount.has(n.id) || n.parent === undefined) return null
         if (!n.collapsed && !selection.has(n.id)) return null
-        const parent = board.items.find((i) => i.id === n.parent)
+        const parent = B.getItem(board, n.parent)
         const right = !parent || n.x >= parent.x + parent.w / 2
         const cx = right ? n.x + n.w + 12 : n.x - 12
         const cy = n.y + n.h / 2
@@ -286,18 +283,21 @@ function Arrowhead({ tip, dir, size, color }: { tip: Vec; dir: Vec; size: number
   return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} style={{ fill: color }} />
 }
 
-export function ConnectorView({
-  board,
+/** A line between two objects. Memoized on its two ends, so it only redraws when they move. */
+export const ConnectorView = memo(function ConnectorView({
   c,
+  from,
+  to,
   selected,
   editing,
 }: {
-  board: Board
   c: Connector
+  from: Item
+  to: Item
   selected: boolean
   editing: boolean
 }) {
-  const r = B.connectorRoute(board, c)
+  const r = route(c, from, to)
   if (!r || Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
   const color = selected ? 'var(--accent)' : ink(c.color)
   const arrows = c.arrows ?? 'end'
@@ -324,10 +324,20 @@ export function ConnectorView({
       )}
     </g>
   )
-}
+})
+
+const depthCache = new WeakMap<readonly Item[], Map<Id, number>>()
 
 /** Depth of every mind node (0 for roots). */
 export function mindDepths(board: Board): Map<Id, number> {
+  const cached = depthCache.get(board.items)
+  if (cached) return cached
+  const out = computeDepths(board)
+  depthCache.set(board.items, out)
+  return out
+}
+
+function computeDepths(board: Board): Map<Id, number> {
   const parent = new Map<Id, Id | undefined>()
   for (const i of board.items) if (i.kind === 'mind') parent.set(i.id, i.parent)
   const depths = new Map<Id, number>()
@@ -343,6 +353,28 @@ export function mindDepths(board: Board): Map<Id, number> {
   return depths
 }
 
+/** Below this zoom, text is too small to read: objects are drawn as plain shapes. */
+export const COARSE_ZOOM = 0.22
+
+const KEEP_WHEN_COARSE = new Set<Item['kind']>(['frame', 'pen', 'image'])
+
+/** An object far away: its shape and colour, with bars where its text would be. */
+const CoarseShape = memo(function CoarseShape({ item }: { item: Item }) {
+  const fill = usesInk(item.kind) ? 'none' : isWidget(item.kind) ? 'var(--surface-2)' : item.kind === 'mind' && item.parent === undefined ? mindRootFill(item.color) : item.kind === 'mind' ? 'var(--node-fill)' : item.color
+  const stroke = item.kind === 'mind' && item.parent !== undefined ? item.color : isWidget(item.kind) ? 'var(--border-strong)' : undefined
+  const r = item.kind === 'ellipse' ? Math.min(item.w, item.h) / 2 : item.kind === 'mind' ? Math.min(item.h / 2, 18) : 6
+  const lines = item.text ? Math.max(1, Math.min(3, Math.floor((item.h - 16) / 28))) : 0
+  const bar = usesInk(item.kind) ? ink(item.color) : 'rgba(0, 0, 0, 0.22)'
+  return (
+    <g>
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={r} style={{ fill, stroke }} strokeWidth={stroke ? 3 : 0} />
+      {Array.from({ length: lines }, (_, k) => (
+        <rect key={k} x={item.x + item.w * 0.18} y={item.y + item.h / 2 + (k - (lines - 1) / 2) * 24 - 6} width={item.w * (k === lines - 1 && lines > 1 ? 0.4 : 0.64)} height={12} rx={6} style={{ fill: bar }} />
+      ))}
+    </g>
+  )
+})
+
 /** The whole board: frames, mind-map branches, items, then connectors on top. */
 export const BoardView = memo(function BoardView({
   board,
@@ -351,6 +383,8 @@ export const BoardView = memo(function BoardView({
   editingLabel,
   selectedConnector,
   selection,
+  view = null,
+  coarse = false,
 }: {
   board: Board
   hidden: ReadonlySet<Id>
@@ -358,34 +392,35 @@ export const BoardView = memo(function BoardView({
   editingLabel: Id | null
   selectedConnector: Id | null
   selection: ReadonlySet<Id>
+  /** Only objects touching this area are drawn (null: all of them). */
+  view?: Rect | null
+  /** Far zoom: plain shapes instead of text. */
+  coarse?: boolean
 }) {
   const depths = mindDepths(board)
-  const visible = board.items.filter((i) => !hidden.has(i.id))
+  // The selection and the object being edited always render, wherever they are.
+  const shown = (i: Item) => !hidden.has(i.id) && (!view || intersects(view, i) || selection.has(i.id) || editingId === i.id)
+  const visible = board.items.filter(shown)
+  const pairInView = (a: Item, b: Item) => !view || intersects(view, union(a, b))
+  const shape = (i: Item, depth: number) =>
+    coarse && !KEEP_WHEN_COARSE.has(i.kind) && editingId !== i.id && !selection.has(i.id) ? (
+      <CoarseShape key={i.id} item={i} />
+    ) : (
+      <ItemShape key={i.id} item={i} depth={depth} editing={editingId === i.id} live={selection.size === 1 && selection.has(i.id) && editingId === null} />
+    )
   return (
     <g>
-      {visible
-        .filter((i) => i.kind === 'frame')
-        .map((i) => (
-          <ItemShape key={i.id} item={i} depth={0} editing={editingId === i.id} />
-        ))}
-      <MindEdges board={board} hidden={hidden} depths={depths} />
-      {visible
-        .filter((i) => i.kind !== 'frame')
-        .map((i) => (
-          <ItemShape
-            key={i.id}
-            item={i}
-            depth={depths.get(i.id) ?? 0}
-            editing={editingId === i.id}
-            live={selection.size === 1 && selection.has(i.id) && editingId === null}
-          />
-        ))}
-      <CollapseToggles board={board} hidden={hidden} selection={selection} />
-      {board.connectors
-        .filter((c) => !hidden.has(c.from) && !hidden.has(c.to))
-        .map((c) => (
-          <ConnectorView key={c.id} board={board} c={c} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
-        ))}
+      {visible.filter((i) => i.kind === 'frame').map((i) => shape(i, 0))}
+      <MindEdges board={board} hidden={hidden} depths={depths} inView={pairInView} />
+      {visible.filter((i) => i.kind !== 'frame').map((i) => shape(i, depths.get(i.id) ?? 0))}
+      {!coarse && <CollapseToggles board={board} hidden={hidden} selection={selection} />}
+      {board.connectors.map((c) => {
+        if (hidden.has(c.from) || hidden.has(c.to)) return null
+        const from = B.getItem(board, c.from)
+        const to = B.getItem(board, c.to)
+        if (!from || !to || !pairInView(from, to)) return null
+        return <ConnectorView key={c.id} c={c} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
+      })}
     </g>
   )
 })

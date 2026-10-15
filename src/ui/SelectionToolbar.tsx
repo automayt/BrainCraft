@@ -1,6 +1,6 @@
 import * as B from '../model/board'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
@@ -9,13 +9,17 @@ import { useEditor } from './useEditor'
 export function SelectionToolbar() {
   const editor = useEditor()
   const ui = useUi()
-  const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
-  // Measure the bar so it can be kept fully on screen and clear of the tool rail.
-  useLayoutEffect(() => {
-    const w = ref.current?.offsetWidth ?? 0
-    if (w !== width) setWidth(w)
-  })
+  // Measure the bar so it can be kept fully on screen and clear of the tool rail. A resize
+  // observer, not a read after every render: that would force a layout of the whole board.
+  const observer = useRef<ResizeObserver | null>(null)
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    observer.current?.disconnect()
+    observer.current = null
+    if (!el || typeof ResizeObserver === 'undefined') return
+    observer.current = new ResizeObserver(([e]) => setWidth(Math.round(e.borderBoxSize?.[0]?.inlineSize ?? el.offsetWidth)))
+    observer.current.observe(el)
+  }, [])
   if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker || ui.menu) return null
   const { board } = editor
   let anchor: { x: number; y: number }

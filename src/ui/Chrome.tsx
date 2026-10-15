@@ -1,6 +1,7 @@
 /** The floating controls around the canvas. */
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { preloadAi } from './lazyAi'
 import { createPortal } from 'react-dom'
 import { TOOLS, type Tool } from '../editor/Editor'
 import { FLOW_SHAPES, type FlowShape, INKS } from '../model/types'
@@ -156,7 +157,14 @@ export function TopRight() {
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <LiveBar onOpen={ui.openShare} />
-      <button className={`ask-btn has-tip${ui.assistant ? ' on' : ''}`} aria-pressed={ui.assistant} onMouseDown={keepFocus} onClick={ui.toggleAssistant}>
+      <button
+        className={`ask-btn has-tip${ui.assistant ? ' on' : ''}`}
+        aria-pressed={ui.assistant}
+        onPointerEnter={() => void preloadAi()}
+        onFocus={() => void preloadAi()}
+        onMouseDown={keepFocus}
+        onClick={ui.toggleAssistant}
+      >
         <span aria-hidden="true">✦</span>
         <span>Ask AI</span>
         <Tip label="Chat with this board" keys="Ctrl J" />

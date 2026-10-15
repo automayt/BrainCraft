@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { BrainCraftAPI } from '../api/api'
 import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
@@ -16,7 +16,7 @@ import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
-import { AiPanel } from './AiPanel'
+import { LazyAiPanel } from './lazyAi'
 import { SearchPalette } from './SearchPalette'
 import { clearMeasureCache, measureText } from './measure'
 import { EditorContext } from './useEditor'
@@ -291,7 +291,11 @@ function App({ ws }: { ws: Workspace }) {
           <ToolRail />
           <BottomLeft />
           <NotesPanel />
-          {assistant && !editor.presenting && <AiPanel onClose={() => setAssistant(false)} />}
+          {assistant && !editor.presenting && (
+            <Suspense fallback={<aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
+              <LazyAiPanel onClose={() => setAssistant(false)} />
+            </Suspense>
+          )}
           <ContextMenu />
           <Toast />
           <SearchPalette />
