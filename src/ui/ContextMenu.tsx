@@ -51,6 +51,7 @@ export function ContextMenu() {
       if (single.parent !== undefined) entries.push({ label: 'Add idea below', keys: 'Enter', run: () => editor.addMindNode(single.id, 'sibling') })
       if (editor.board.items.some((i) => i.parent === single.id))
         entries.push({ label: single.collapsed ? 'Expand branch' : 'Collapse branch', keys: '/', run: () => editor.toggleCollapsed(single.id) })
+      entries.push({ label: 'Tidy mind map', run: () => editor.tidyMindMap(single.id) })
     }
     if (single?.kind === 'flow') {
       const runs = runsOf(editor.board, single.id)?.runs.length ?? 0

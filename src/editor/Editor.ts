@@ -1168,6 +1168,11 @@ export class Editor {
     this.startEditing(newId, { before, created: true })
   }
 
+  /** Puts a hand-arranged mind map back into its automatic layout. */
+  tidyMindMap(id: Id) {
+    this.edit((b) => M.tidy(b, id))
+  }
+
   toggleCollapsed(id: Id) {
     this.edit((b) => M.toggleCollapsed(b, id))
   }
@@ -1612,19 +1617,28 @@ export class Editor {
     if (dist(d.start, world) * this.camera.zoom < 4) return
     const node = B.getItem(this.board, d.id)
     if (!node) return
+    const clearOffset = (i: Item): Item => {
+      const next = { ...i }
+      delete next.offset
+      return next
+    }
     if (d.target !== null) {
+      // Dropped on another idea: it becomes a child there, laid out normally.
       const target = B.getItem(this.board, d.target)!
       const side: Side = world.x < target.x + target.w / 2 ? 'left' : 'right'
-      this.apply(M.reparent(this.board, d.id, d.target, side))
+      this.apply(B.updateItem(M.reparent(this.board, d.id, d.target, side), d.id, clearOffset))
     } else {
-      // A main branch dropped across its root switches sides.
       const parent = node.parent !== undefined ? B.getItem(this.board, node.parent) : undefined
-      if (parent && parent.parent === undefined) {
-        const side: Side = world.x < parent.x + parent.w / 2 ? 'left' : 'right'
-        if (side !== (node.side ?? 'right')) {
-          this.apply(B.updateItem(this.board, d.id, (i) => ({ ...i, side })))
-          this.apply(B.bringToFront(this.board, B.subtree(this.board, d.id)))
-        }
+      const side: Side | undefined = parent && parent.parent === undefined ? (world.x < parent.x + parent.w / 2 ? 'left' : 'right') : undefined
+      if (side && side !== (node.side ?? 'right')) {
+        // A main branch dropped across its root switches sides.
+        this.apply(B.updateItem(this.board, d.id, (i) => ({ ...clearOffset(i), side })))
+        this.apply(B.bringToFront(this.board, B.subtree(this.board, d.id)))
+      } else {
+        // Dropped on empty space: the idea (and its branch) stays where it was put.
+        const dx = world.x - d.start.x
+        const dy = world.y - d.start.y
+        this.apply(B.updateItem(this.board, d.id, (i) => ({ ...i, offset: { x: (i.offset?.x ?? 0) + dx, y: (i.offset?.y ?? 0) + dy } })))
       }
     }
     this.commit(d.before)

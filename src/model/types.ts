@@ -201,6 +201,8 @@ export interface Item extends Rect {
   parent?: Id
   /** Mind-map node directly under the root: which side of the root it grows on. */
   side?: Side
+  /** Mind-map node moved by hand: how far it (and its branch) sits from where the layout would put it. */
+  offset?: Vec
   /** Mind-map node: its children are hidden. */
   collapsed?: boolean
   /** Flowchart symbol of a `flow` item. */
