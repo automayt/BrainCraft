@@ -162,6 +162,48 @@ function Composer({ target }: { target: Item }) {
   )
 }
 
+/** The object's description: free text that saves when you click away (Ctrl+Enter also saves). */
+function Description({ id, value }: { id: Id; value: string }) {
+  const editor = useEditor()
+  const [text, setText] = useState(value)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  // Someone else (undo, a collaborator) changed it: show the new text unless mid-edit.
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setText(value)
+  }, [value])
+  // Grow with the text.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`
+  }, [text])
+  const save = () => text !== value && editor.setDescription(id, text)
+  return (
+    <section className="description">
+      <label htmlFor={`desc-${id}`}>Description</label>
+      <textarea
+        id={`desc-${id}`}
+        ref={ref}
+        value={text}
+        rows={2}
+        readOnly={editor.readOnly}
+        placeholder={editor.readOnly ? 'No description' : 'What is this? Add context, links, decisions…'}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) (e.target as HTMLTextAreaElement).blur()
+          if (e.key === 'Escape') {
+            setText(value)
+            requestAnimationFrame(() => ref.current?.blur())
+          }
+        }}
+      />
+    </section>
+  )
+}
+
 /** Work notes for the selected object, sliding in from the right. */
 export function NotesPanel() {
   const editor = useEditor()
@@ -204,6 +246,8 @@ export function NotesPanel() {
           ×
         </button>
       </header>
+
+      {target && <Description key={target.id} id={target.id} value={target.description ?? ''} />}
 
       {target && target.kind !== 'pen' && <Composer target={target} />}
 

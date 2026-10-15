@@ -89,7 +89,7 @@ timeline.
 | `createTimeline` | `lanes?` (`[{"name", "entries": [{"title", "start", "end?", "color?"}]}]`), `followKanban?` (Kanban ids/refs), `title?`, `w?`, `h?` | Timeline. An entry without `end` is a milestone. Followed Kanban boards show their dated cards live. |
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |
 | `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?` | Line between two objects. Lines to flowchart shapes default to `elbow`. |
-| `update` | `id`, `text?`, `color?`, `x?`, `y?`, `w?`, `h?` | — |
+| `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?` | — (`description` is the free text above an object's comments) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
 | `addComment` | `id`, `text`, `author?` | Timestamped work note on the object. Mention other objects with `@[Label](#id)`. |
 | `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
