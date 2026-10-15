@@ -89,3 +89,49 @@ describe('workspace', () => {
     expect(ws.boards).toHaveLength(1)
   })
 })
+
+describe('tabs', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 120))
+
+  it('keeps two tabs on the same board in step, both ways', async () => {
+    const kv = new MemoryKV()
+    const a = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    const b = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    await b.switchTo(a.boardId!)
+    await settle()
+    a.editor.setTitle('Edited in tab A')
+    await settle()
+    expect(b.editor.board.title).toBe('Edited in tab A')
+    const first = b.editor.board.items[0].id
+    b.editor.updateItem(first, (i) => ({ ...i, text: 'From B' }))
+    await settle()
+    expect(a.editor.board.items.find((i) => i.id === first)!.text).toBe('From B')
+    // Each tab's undo stays its own.
+    expect(b.editor.history.canUndo).toBe(true)
+    a.dispose()
+    b.dispose()
+  })
+
+  it('catches a newly opened tab up on changes not saved yet', async () => {
+    const kv = new MemoryKV()
+    const a = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    a.editor.setTitle('Not saved yet')
+    const b = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    await b.switchTo(a.boardId!)
+    await settle()
+    expect(b.editor.board.title).toBe('Not saved yet')
+    a.dispose()
+    b.dispose()
+  })
+
+  it('refreshes the board list when another tab adds a board', async () => {
+    const kv = new MemoryKV()
+    const a = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    const b = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    await a.newBoard(emptyBoard('Made in A'))
+    await settle()
+    expect(b.boards.map((x) => x.title)).toContain('Made in A')
+    a.dispose()
+    b.dispose()
+  })
+})

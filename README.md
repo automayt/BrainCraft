@@ -105,6 +105,9 @@ These become interactive once selected; drag them by their title strip.
 
 ### Comments and search
 
+- **Every object has a description**: free text at the top of its comments
+  panel for context, links or decisions. It's searchable, and AI assistants
+  can read and set it.
 - **Every object has comments.** Select it and press **Shift+C** (or click
   *Comment*) to open the panel on the right. Notes are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention another object; the
@@ -122,6 +125,8 @@ These become interactive once selected; drag them by their title strip.
   template: blank, brainstorm, process map, sprint plan or retrospective.
 - Boards **autosave** as you work; the dot next to the title shows when
   they're saved.
+- **Open the same board in several tabs** and they stay in step live, no
+  server needed. Each tab keeps its own undo.
 - **Version history** keeps a version every ten minutes plus any you name
   ("Before the reorg"). Preview any version and restore it in one undoable
   step; the board being replaced is kept as a version too.
