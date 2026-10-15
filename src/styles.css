@@ -4780,3 +4780,20 @@ button.on,
   background: var(--surface-2);
   border-radius: 5px;
 }
+
+/* Cards and bars take a drag on the first press, before their widget is selected. */
+.widget .kanban-card,
+.widget .dv-card,
+.widget .dv-span,
+.widget .dv-mile,
+.widget .tl-entry {
+  pointer-events: auto;
+}
+
+.app.read-only .widget .kanban-card,
+.app.read-only .widget .dv-card,
+.app.read-only .widget .dv-span,
+.app.read-only .widget .dv-mile,
+.app.read-only .widget .tl-entry {
+  pointer-events: none;
+}

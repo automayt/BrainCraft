@@ -40,8 +40,10 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
   const kanbans = TL.kanbanBoards(editor.board)
 
   const startDrag = (e: PointerEvent, entry: TL.ShownEntry, edge?: 'start' | 'end') => {
-    if (!live || e.button !== 0) return
+    if (editor.readOnly || e.button !== 0) return
+    // Bars drag on the first press, even before the timeline is selected.
     e.stopPropagation()
+    if (!live) editor.select([item.id])
     setSelected(entry.id)
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     // Measure on screen so this works at any canvas zoom.

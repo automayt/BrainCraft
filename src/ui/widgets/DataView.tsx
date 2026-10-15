@@ -29,6 +29,10 @@ interface Ctx {
   edit: (f: (d: Dataset) => Dataset) => void
   setView: (f: (v: View) => View) => void
   openRecord: (id: string) => void
+  /** The board is open for editing (this view may not be selected yet). */
+  editable: boolean
+  /** Selects this view (a card or bar pressed before the view was selected). */
+  select: () => void
 }
 
 /** A choice shown as a coloured pill. */
@@ -296,6 +300,8 @@ function TableBody({ c }: { c: Ctx }) {
 
 interface CardDrag {
   id: string
+  /** The view wasn't selected when the press began: a plain click only selects it. */
+  fresh: boolean
   pointer: number
   x: number
   y: number
@@ -335,9 +341,12 @@ function BoardBody({ c }: { c: Ctx }) {
     )
 
   const down = (e: PointerEvent, r: DataRecord) => {
-    if (!c.live || e.button !== 0) return
+    if (!c.editable || e.button !== 0) return
+    // Cards drag on the first press, even before the view is selected.
+    e.stopPropagation()
+    if (!c.live) c.select()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    dragRef.current = { id: r.id, pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false, target: null }
+    dragRef.current = { id: r.id, fresh: !c.live, pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false, target: null }
     setDrag(dragRef.current)
   }
   const move = (e: PointerEvent) => {
@@ -352,7 +361,7 @@ function BoardBody({ c }: { c: Ctx }) {
     if (!d || d.pointer !== e.pointerId) return
     dragRef.current = null
     setDrag(null)
-    if (!d.moved) return c.openRecord(d.id)
+    if (!d.moved) return d.fresh ? undefined : c.openRecord(d.id)
     if (d.target) c.edit((x) => D.moveToGroup(x, c.view, d.id, d.target!.key, d.target!.before))
   }
 
@@ -445,6 +454,7 @@ const ROW_H = 30
 
 interface BarDrag {
   id: string
+  fresh: boolean
   pointer: number
   x: number
   edge?: 'start' | 'end'
@@ -500,10 +510,12 @@ function TimelineBody({ c, width }: { c: Ctx; width: number }) {
   }
 
   const down = (e: PointerEvent, b: D.Bar, edge?: 'start' | 'end') => {
-    if (!c.live || e.button !== 0) return
+    if (!c.editable || e.button !== 0) return
+    // Bars drag on the first press, even before the view is selected.
     e.stopPropagation()
+    if (!c.live) c.select()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    dragRef.current = { id: b.record.id, pointer: e.pointerId, x: e.clientX, edge, days: 0, moved: false }
+    dragRef.current = { id: b.record.id, fresh: !c.live, pointer: e.pointerId, x: e.clientX, edge, days: 0, moved: false }
     setDrag(dragRef.current)
   }
   const move = (e: PointerEvent) => {
@@ -518,7 +530,7 @@ function TimelineBody({ c, width }: { c: Ctx; width: number }) {
     if (!d || d.pointer !== e.pointerId) return
     dragRef.current = null
     setDrag(null)
-    if (!d.moved) return c.openRecord(d.id)
+    if (!d.moved) return d.fresh ? undefined : c.openRecord(d.id)
     if (d.days) c.edit((x) => D.shiftDates(x, c.view, d.id, d.days, d.edge))
   }
 
@@ -628,6 +640,8 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
     edit: (f) => editor.updateDataset(ds.id, f),
     setView: (f) => editor.updateView(item.id, f),
     openRecord: setOpen,
+    editable: !editor.readOnly,
+    select: () => editor.select([item.id]),
   }
   const others = D.viewsOf(editor.board, ds.id).length - 1
   const hidden = (view.hidden ?? []).filter((id) => D.fieldById(ds, id))
