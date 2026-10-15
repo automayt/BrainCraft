@@ -1,9 +1,10 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, type PointerEvent as RPointerEvent } from 'react'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
+import * as F from '../model/flowchart'
 import type { FlowDir } from '../model/flowchart'
 import { flowTextRect } from '../model/shapes'
 import { ACCENT, mindRootText } from './paint'
-import { WIDGET_TITLE_H } from '../model/types'
+import { type Item, WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
 import { toScreen, toWorld } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
@@ -204,6 +205,7 @@ export function Canvas() {
             selection={editor.selection}
           />
           <DragPreview editor={editor} />
+          <MagnetPreview editor={editor} />
         </g>
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
@@ -298,6 +300,41 @@ function DragPreview({ editor }: { editor: Editor }) {
     default:
       return null
   }
+}
+
+/** Flowchart magnets: the shape being placed or dragged snaps beside another and will connect to it. */
+function MagnetPreview({ editor }: { editor: Editor }) {
+  const z = editor.camera.zoom
+  const p = editor.paletteDrag
+  const d = editor.drag
+  const magnet = p ? p.magnet : d.type === 'move' ? d.magnet : null
+  const moving = d.type === 'move' && d.magnet ? B.getItem(editor.board, [...d.ids][0]) : undefined
+  const ghost = p ? (F.flowItem(p.shape, p.magnet?.at ?? p.at) as Item) : undefined
+  const target = magnet ? B.getItem(editor.board, magnet.target) : undefined
+  const other = ghost ?? moving
+  const showLine = target && other && !(moving && F.linked(editor.board, target.id, moving.id))
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      {ghost && (
+        <g opacity={0.6}>
+          <ItemShape item={{ ...ghost, id: -1 }} depth={1} editing={false} />
+        </g>
+      )}
+      {target && <rect {...xywh(target)} fill="none" rx={6} style={{ stroke: ACCENT }} strokeWidth={2.5 / z} className="magnet-target" />}
+      {showLine && (
+        <line
+          {...(() => {
+            const a = B.anchorTowards(target, center(other))
+            const b = B.anchorTowards(other, center(target))
+            return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }
+          })()}
+          style={{ stroke: ACCENT }}
+          strokeWidth={2 / z}
+          strokeDasharray={`${6 / z} ${4 / z}`}
+        />
+      )}
+    </g>
+  )
 }
 
 const xywh = (r: Rect) => ({ x: r.x, y: r.y, width: Math.max(r.w, 0), height: Math.max(r.h, 0) })

@@ -1,8 +1,9 @@
 /** The floating controls around the canvas. */
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { TOOLS, type Tool } from '../editor/Editor'
-import { FLOW_SHAPES, INKS } from '../model/types'
+import { FLOW_SHAPES, type FlowShape, INKS } from '../model/types'
 import {
   BoardsIcon,
   CheckIcon,
@@ -252,25 +253,71 @@ export function ToolRail() {
           )}
         </div>
       ))}
-      {editor.tool === 'flow' && <FlowFlyout />}
+      {editor.flowPalette && <FlowFlyout />}
       {editor.tool === 'pen' && <PenFlyout />}
     </nav>
   )
 }
 
+/** Canvas-local point under the pointer, or null when it isn't over the board. */
+function overCanvas(x: number, y: number) {
+  const el = document.elementFromPoint(x, y)
+  const canvas = el?.closest<HTMLElement>('.canvas')
+  if (!canvas || el?.closest('.no-canvas')) return null
+  const r = canvas.getBoundingClientRect()
+  return { x: x - r.left, y: y - r.top }
+}
+
+/** The flowchart shapes: click one then click the board, or drag one straight onto the board. Stays open while you build. */
 function FlowFlyout() {
   const editor = useEditor()
+  const [ghost, setGhost] = useState<{ shape: FlowShape; x: number; y: number } | null>(null)
+  const drag = useRef<{ shape: FlowShape; x: number; y: number; moved: boolean } | null>(null)
   return (
-    <div className="flyout island" role="listbox" aria-label="Flowchart shapes">
-      <div className="popover-title">Flowchart shape</div>
+    <div className="flyout island flow-palette" role="listbox" aria-label="Flowchart shapes">
+      <div className="popover-title flyout-head">
+        <span>Flowchart shapes</span>
+        <button className="icon-close" aria-label="Close the shape panel" title="Close (Esc)" onMouseDown={keepFocus} onClick={() => editor.closeFlowPalette()}>
+          ×
+        </button>
+      </div>
       {FLOW_SHAPES.map((f, k) => (
         <button
           key={f.shape}
           role="option"
-          aria-selected={editor.flowShape === f.shape}
-          className={`flyout-option${editor.flowShape === f.shape ? ' on' : ''}`}
+          aria-selected={editor.tool === 'flow' && editor.flowShape === f.shape}
+          className={`flyout-option${editor.tool === 'flow' && editor.flowShape === f.shape ? ' on' : ''}`}
+          title="Click, then click the board — or drag it onto the board"
           onMouseDown={keepFocus}
-          onClick={() => editor.setFlowShape(f.shape)}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+            drag.current = { shape: f.shape, x: e.clientX, y: e.clientY, moved: false }
+          }}
+          onPointerMove={(e) => {
+            const d = drag.current
+            if (!d) return
+            if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return
+            d.moved = true
+            const at = overCanvas(e.clientX, e.clientY)
+            editor.paletteDragMove(d.shape, at)
+            setGhost(at ? null : { shape: d.shape, x: e.clientX, y: e.clientY })
+          }}
+          onPointerUp={(e) => {
+            const d = drag.current
+            drag.current = null
+            setGhost(null)
+            if (!d) return
+            if (!d.moved) return editor.setFlowShape(d.shape)
+            const at = overCanvas(e.clientX, e.clientY)
+            if (at) editor.paletteDrop(d.shape, at)
+            else editor.paletteDragMove(d.shape, null)
+          }}
+          onPointerCancel={() => {
+            drag.current = null
+            setGhost(null)
+            editor.paletteDragMove(f.shape, null)
+          }}
         >
           <FlowShapeIcon shape={f.shape} />
           <span>
@@ -281,8 +328,15 @@ function FlowFlyout() {
         </button>
       ))}
       <p className="flyout-tip">
-        Then press <kbd>Tab</kbd> or click a shape's arrows to add the next step.
+        Drag a shape onto the board. Drop it near another shape and it snaps on and connects. <kbd>Tab</kbd> adds the next step.
       </p>
+      {ghost &&
+        createPortal(
+          <div className="palette-ghost" style={{ left: ghost.x, top: ghost.y }} aria-hidden="true">
+            <FlowShapeIcon shape={ghost.shape} size={44} />
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

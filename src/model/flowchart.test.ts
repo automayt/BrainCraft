@@ -140,3 +140,27 @@ describe('shape recommendations', () => {
     expect(b.connectors).toHaveLength(1)
   })
 })
+
+describe('magnets', () => {
+  it('snaps to the nearest free side and connects when dropped', async () => {
+    const { findMagnet, dropShape, FLOW_GAP, flowItem, linked } = await import('./flowchart')
+    const { addItem, emptyBoard, getItem } = await import('./board')
+    let b = emptyBoard()
+    let a: number
+    ;[b, a] = addItem(b, flowItem('process', { x: 0, y: 0 }))
+    const size = { w: 170, h: 84 }
+    // Near the slot below: snaps there, centred under the shape.
+    const below = { x: 15, y: 84 / 2 + FLOW_GAP + 84 / 2 - 20 }
+    const m = findMagnet(b, below, size, new Set(), 80)!
+    expect(m).toMatchObject({ target: a, dir: 'down', at: { x: 0, y: 84 + FLOW_GAP } })
+    // Too far: no magnet.
+    expect(findMagnet(b, { x: 600, y: 600 }, size, new Set(), 80)).toBeNull()
+    let id: number
+    ;[b, id] = dropShape(b, 'decision', below, m)
+    expect(getItem(b, id)!.y + getItem(b, id)!.h / 2).toBe(84 + FLOW_GAP)
+    expect(linked(b, a, id)).toBe(true)
+    // That slot is now taken, so the next magnet is another side.
+    const again = findMagnet(b, below, size, new Set(), 80)
+    expect(again?.dir === 'down' && again.target === a).toBe(false)
+  })
+})

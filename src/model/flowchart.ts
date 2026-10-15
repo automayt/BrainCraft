@@ -106,3 +106,49 @@ export function addStepAt(b: Board, fromId: Id, shape: FlowShape, at: Vec): [Boa
   ;[b] = connect(b, fromId, id, { style: 'elbow' })
   return [b, id]
 }
+
+/** A free side of a flowchart shape that a shape being placed or dragged snaps to. */
+export interface Magnet {
+  /** The shape it snaps beside. */
+  target: Id
+  dir: FlowDir
+  /** Where the snapping shape's centre goes. */
+  at: Vec
+}
+
+/**
+ * The flowchart shape a `size` shape centred near `c` should snap beside: the side whose
+ * one-gap-away slot is nearest, if it's within `reach`. Shapes in `exclude` are ignored.
+ */
+export function findMagnet(b: Board, c: Vec, size: { w: number; h: number }, exclude: ReadonlySet<Id>, reach: number): Magnet | null {
+  const hidden = hiddenIds(b)
+  let best: (Magnet & { d: number }) | null = null
+  for (const t of b.items) {
+    if (t.kind !== 'flow' || exclude.has(t.id) || hidden.has(t.id)) continue
+    for (const dir of ['right', 'down', 'left', 'up'] as FlowDir[]) {
+      const s = STEP[dir]
+      const at = {
+        x: t.x + t.w / 2 + s.x * (t.w / 2 + FLOW_GAP + size.w / 2),
+        y: t.y + t.h / 2 + s.y * (t.h / 2 + FLOW_GAP + size.h / 2),
+      }
+      const d = Math.hypot(at.x - c.x, at.y - c.y)
+      if (d > reach || (best && d >= best.d)) continue
+      // Not onto a slot something else already fills.
+      const slot: Rect = { x: at.x - size.w / 2, y: at.y - size.h / 2, w: size.w, h: size.h }
+      const taken = b.items.some((o) => o.id !== t.id && !exclude.has(o.id) && o.kind !== 'frame' && !hidden.has(o.id) && intersects(expand(slot, -4), o))
+      if (!taken) best = { target: t.id, dir, at, d }
+    }
+  }
+  return best && { target: best.target, dir: best.dir, at: best.at }
+}
+
+/** Whether a line already joins `a` and `z` (either way round). */
+export const linked = (b: Board, a: Id, z: Id) => b.connectors.some((c) => (c.from === a && c.to === z) || (c.from === z && c.to === a))
+
+/** Adds a `shape` at `at`, snapped and connected to a nearby shape when there's a magnet. */
+export function dropShape(b: Board, shape: FlowShape, at: Vec, magnet: Magnet | null): [Board, Id] {
+  let id: Id
+  ;[b, id] = addItem(b, flowItem(shape, magnet?.at ?? at))
+  if (magnet) [b] = connect(b, magnet.target, id, { style: 'elbow' })
+  return [b, id]
+}
