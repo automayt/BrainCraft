@@ -104,6 +104,11 @@ export function layoutAll(b: Board, measure: Measure): Board {
       const sh = heights.get(k.id)!
       kp.y = y + sh / 2 - kp.h / 2
       kp.x = side === 'right' ? p.x + p.w + hGap : p.x - hGap - kp.w
+      // Ideas moved by hand keep their nudge; their own branches follow them.
+      if (k.offset) {
+        kp.x += k.offset.x
+        kp.y += k.offset.y
+      }
       if (!k.collapsed) place(k, kidsOf(k.id), side, depth + 1)
       y += sh + gap
     }
@@ -134,6 +139,24 @@ export function layoutAll(b: Board, measure: Measure): Board {
 }
 
 // ----- editing -------------------------------------------------------------------
+
+/** Puts every idea of the map containing `id` back where the automatic layout wants it. */
+export function tidy(b: Board, id: Id): Board {
+  let root = getItem(b, id)
+  while (root?.parent !== undefined) root = getItem(b, root.parent)
+  if (!root) return b
+  const ids = subtree(b, root.id)
+  if (!b.items.some((i) => ids.has(i.id) && i.offset)) return b
+  return {
+    ...b,
+    items: b.items.map((i) => {
+      if (!ids.has(i.id) || !i.offset) return i
+      const next = { ...i }
+      delete next.offset
+      return next
+    }),
+  }
+}
 
 /** Starts a new map whose root is centred on `at`. */
 export function createMap(b: Board, at: Vec, text = ''): [Board, Id] {

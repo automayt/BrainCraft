@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
+import * as M from '../model/mindmap'
 import { toScreen } from '../model/camera'
 import { fakeMeasure } from '../model/test-helpers'
 import { Editor } from './Editor'
@@ -472,5 +473,35 @@ describe('linked data', () => {
     expect(e.board.datasets ?? []).toHaveLength(0)
     e.undo()
     expect(e.board.datasets).toHaveLength(1)
+  })
+})
+
+describe('moving mind-map ideas', () => {
+  it('keeps an idea (and its branch) where it is dropped, until tidied', () => {
+    const e = editor()
+    let b = emptyBoard()
+    let root: number, idea: number, leaf: number
+    ;[b, root] = M.createMap(b, { x: 0, y: 0 }, 'Root')
+    ;[b, idea] = M.addChild(b, root, undefined, 'Idea')
+    ;[b, leaf] = M.addChild(b, idea, undefined, 'Leaf')
+    e.load(b)
+    e.camera = { x: 0, y: 0, zoom: 1 }
+    const at = (id: number) => B.getItem(e.board, id)!
+    const before = { idea: { ...at(idea) }, leaf: { ...at(leaf) } }
+    const start = screenCenter(e, idea)
+    e.pointerDown(start, 0, {})
+    e.pointerMove({ x: start.x + 120, y: start.y + 200 })
+    e.pointerUp({ x: start.x + 120, y: start.y + 200 })
+    expect(at(idea).x).toBeCloseTo(before.idea.x + 120)
+    expect(at(idea).y).toBeCloseTo(before.idea.y + 200)
+    // Its branch comes along.
+    expect(at(leaf).y).toBeCloseTo(before.leaf.y + 200)
+    // New ideas don't undo the placement.
+    e.select([root])
+    e.addMindNode(root, 'child')
+    e.finishEditing()
+    expect(at(idea).offset).toEqual({ x: 120, y: 200 })
+    e.tidyMindMap(idea)
+    expect(at(idea).offset).toBeUndefined()
   })
 })

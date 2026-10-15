@@ -41,8 +41,11 @@ The board fills the window and the controls float above it:
 - Branches lay themselves out on both sides of the central idea. Each main
   branch gets its own color, and its sub-ideas share it.
 - Use the **arrow keys** to move between ideas and **Alt + ↑/↓** to reorder them.
-- **Drag an idea onto another** to move the whole branch. Drag a main branch
-  across the center to switch sides.
+- **Drag ideas anywhere.** Drop one on empty space and it stays there with its
+  branch, and the lines follow. Drop it onto another idea to move the branch
+  under it, or drag a main branch across the centre to switch sides.
+  **Tidy mind map** (right-click) snaps everything back into the automatic
+  layout.
 - **Collapse** a branch with **C** or with the toggle next to it.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
   plain indentation) to turn it into a map. **Copy outline** does the reverse.
