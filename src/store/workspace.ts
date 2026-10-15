@@ -9,6 +9,7 @@ import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
 import { type KV, openKV } from './kv'
 import { LiveSession } from '../collab/live'
+import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
@@ -20,6 +21,16 @@ const LEGACY_KEY = 'braincraft:board'
 const RESCUE_KEY = 'braincraft:rescue'
 const SAVE_DELAY = 500
 const SERVER_KEY = 'braincraft:server'
+/** Tabs of this app in the same browser talk on this channel. */
+const TAB_CHANNEL = 'braincraft:tabs'
+const TAB_DELAY = 30
+
+/** Between tabs: changes to a board, a request for (and answer with) a board's latest state, or "the board list changed". */
+type TabMessage =
+  | { t: 'patch'; board: string; patches: Patch[]; from: string }
+  | { t: 'want'; board: string; from: string }
+  | { t: 'state'; board: string; data: Board; from: string; to: string }
+  | { t: 'library'; from: string }
 const NAME_KEY = 'braincraft:name'
 const COLOR_KEY = 'braincraft:color'
 
@@ -84,10 +95,79 @@ export class Workspace {
   private listeners = new Set<() => void>()
   version = 0
 
+  // Other tabs with the same board open stay in step through a BroadcastChannel.
+  private channel: BroadcastChannel | null = null
+  private tabId = Math.random().toString(36).slice(2)
+  /** The board as this tab last told the other tabs (or heard from them). */
+  private tabSynced: Board | null = null
+  private tabTimer: ReturnType<typeof setTimeout> | undefined
+  private savedTitle = ''
+
   private constructor(editor: Editor, library: Library) {
     this.editor = editor
     this.library = library
     editor.onBoardChange = (b) => this.changed(b)
+    if (typeof BroadcastChannel !== 'undefined') {
+      this.channel = new BroadcastChannel(TAB_CHANNEL)
+      this.channel.onmessage = (e: MessageEvent<TabMessage>) => this.fromTab(e.data)
+    }
+  }
+
+  // ----- other tabs ----------------------------------------------------------------
+
+  /** Stops listening to other tabs (tests; the app lives as long as its tab). */
+  dispose() {
+    clearTimeout(this.tabTimer)
+    this.channel?.close()
+    this.channel = null
+  }
+
+  private post(m: TabMessage) {
+    this.channel?.postMessage(m)
+  }
+
+  /** Tells other tabs the list of boards changed (new, deleted, renamed…). */
+  private libraryChanged() {
+    this.post({ t: 'library', from: this.tabId })
+  }
+
+  /** Sends this tab's changes to the open board to other tabs, soon. Live sessions sync through the server instead. */
+  private tabChanged() {
+    if (!this.boardId || this.live || this.tabTimer !== undefined) return
+    this.tabTimer = setTimeout(() => this.sendToTabs(), TAB_DELAY)
+  }
+
+  private sendToTabs() {
+    clearTimeout(this.tabTimer)
+    this.tabTimer = undefined
+    if (!this.boardId || this.live || !this.tabSynced) return
+    const patches = diff(this.tabSynced, this.editor.board)
+    this.tabSynced = this.editor.board
+    if (patches.length) this.post({ t: 'patch', board: this.boardId, patches, from: this.tabId })
+  }
+
+  private fromTab(m: TabMessage) {
+    if (!m || m.from === this.tabId) return
+    if (m.t === 'library') {
+      void this.refresh().then(() => {
+        // The board open here was deleted in another tab.
+        if (this.boardId && !this.boards.some((b) => b.id === this.boardId) && this.boards.length) void this.switchTo(this.boards[0].id)
+      })
+      return
+    }
+    if (m.board !== this.boardId || this.live) return
+    if (m.t === 'want') {
+      this.sendToTabs()
+      this.post({ t: 'state', board: m.board, data: this.editor.board, from: this.tabId, to: m.from })
+      return
+    }
+    if (m.t === 'state' && m.to !== this.tabId) return
+    // Ours go out first, then theirs are applied on top.
+    this.sendToTabs()
+    const patches = m.t === 'patch' ? m.patches : diff(this.editor.board, m.data)
+    if (!patches.length) return
+    this.editor.applyRemote(patches)
+    this.tabSynced = this.editor.board
   }
 
   /** Opens the library and loads the right board: a shared link, the last board, or the welcome board. */
@@ -199,6 +279,10 @@ export class Workspace {
     safeStorage()?.setItem(CURRENT_KEY, id)
     this.fileName = (await this.handle(id))?.name ?? null
     this.loadQuietly(board)
+    this.tabSynced = this.editor.board
+    this.savedTitle = board.title
+    // Another tab may have this board open with changes not saved yet.
+    this.post({ t: 'want', board: id, from: this.tabId })
     this.saveState = 'saved'
     this.clearShareHash()
     const meta = await this.library.meta(id)
@@ -217,6 +301,7 @@ export class Workspace {
   /** Shows a board read-only, outside the library (a shared link). */
   view(board: Board) {
     this.closeLive()
+    this.tabSynced = null
     this.boardId = null
     this.editor.readOnly = true
     this.loadQuietly(board, 'Viewing a shared board — read-only')
@@ -226,6 +311,7 @@ export class Workspace {
   async newBoard(board: Board = emptyBoard()) {
     await this.flush()
     const id = await this.library.create(board)
+    this.libraryChanged()
     await this.switchTo(id)
     return id
   }
@@ -240,12 +326,14 @@ export class Workspace {
   async duplicate(id: string) {
     await this.flush()
     const copy = await this.library.duplicate(id)
+    this.libraryChanged()
     await this.refresh()
     return copy
   }
 
   async remove(id: string) {
     await this.library.remove(id)
+    this.libraryChanged()
     if (id === this.boardId) {
       this.boardId = null
       const rest = await this.library.list()
@@ -266,6 +354,7 @@ export class Workspace {
 
   private changed(b: Board) {
     this.live?.localChanged()
+    this.tabChanged()
     if (this.readOnly) return
     this.pending = b
     this.saveState = 'unsaved'
@@ -286,6 +375,11 @@ export class Workspace {
       await this.library.save(id, b)
       this.saveState = this.pending ? 'unsaved' : 'saved'
       this.boards = await this.library.list()
+      // A renamed board shows its new name in other tabs' board lists.
+      if (b.title !== this.savedTitle) {
+        this.savedTitle = b.title
+        this.libraryChanged()
+      }
     } catch {
       this.saveState = 'error'
       this.editor.setStatus('Could not save in this browser — save to a file to keep your work')
@@ -491,6 +585,7 @@ export class Workspace {
     const { id, editKey, viewKey } = (await res.json()) as { id: string; editKey: string; viewKey: string }
     const info: LiveInfo = { server, id, key: editKey, role: 'edit', viewKey }
     await this.library.setLive(this.boardId, info)
+    this.libraryChanged()
     await this.refresh()
     this.connectLive(info)
     return info
