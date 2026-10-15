@@ -586,3 +586,31 @@ describe('feel pass', () => {
     void a
   })
 })
+
+describe('AI changes', () => {
+  it('applies a proposal as one step, then undoes just that change later', async () => {
+    const { applyOps } = await import('../api/ops')
+    const { diff } = await import('../collab/patch')
+    const e = editor()
+    const proposed = applyOps(e.board, [{ op: 'createNote', text: 'From AI' }], { measure: fakeMeasure }).board
+    expect(e.applyAi('p1', 'Add a note', diff(e.board, proposed))).toBe(true)
+    expect(texts(e)).toEqual(['From AI'])
+    expect(e.aiHistory).toMatchObject([{ id: 'p1', summary: 'Add a note', undone: false }])
+    // The next object gets a fresh id, not the AI note's.
+    e.addImage('data:image/png;base64,AA==', 10, 10, { x: 300, y: 0 })
+    expect(new Set(e.board.items.map((i) => i.id)).size).toBe(2)
+    e.toggleAiChange('p1')
+    expect(e.board.items).toHaveLength(1)
+    expect(e.board.items[0].kind).toBe('image')
+    expect(e.aiHistory[0].undone).toBe(true)
+    e.toggleAiChange('p1')
+    expect(texts(e)).toContain('From AI')
+  })
+
+  it('forgets AI history when another board loads', () => {
+    const e = editor()
+    e.aiHistory = [{ id: 'x', at: 0, summary: 's', forward: [], inverse: [], undone: false }]
+    e.load(emptyBoard('Other'))
+    expect(e.aiHistory).toEqual([])
+  })
+})

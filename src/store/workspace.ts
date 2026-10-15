@@ -3,7 +3,7 @@
  * The editor only knows about one board; this is everything around it.
  */
 
-import type { Editor } from '../editor/Editor'
+import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
@@ -74,6 +74,9 @@ const isAbort = (err: unknown) => (err as Error)?.name === 'AbortError'
 
 export type SaveState = 'saved' | 'saving' | 'unsaved' | 'error'
 
+/** Where a board's AI change history is kept. */
+export const aiKey = (id: string) => `ai:${id}`
+
 export class Workspace {
   readonly editor: Editor
   readonly library: Library
@@ -107,6 +110,10 @@ export class Workspace {
     this.editor = editor
     this.library = library
     editor.onBoardChange = (b) => this.changed(b)
+    editor.onAiHistory = (h) => {
+      // The latest 50 AI changes per board, so each can still be undone after a reload.
+      if (this.boardId) void this.library.kv.set(aiKey(this.boardId), h.slice(-50))
+    }
     if (typeof BroadcastChannel !== 'undefined') {
       this.channel = new BroadcastChannel(TAB_CHANNEL)
       this.channel.onmessage = (e: MessageEvent<TabMessage>) => this.fromTab(e.data)
@@ -166,7 +173,7 @@ export class Workspace {
     this.sendToTabs()
     const patches = m.t === 'patch' ? m.patches : diff(this.editor.board, m.data)
     if (!patches.length) return
-    this.editor.applyRemote(patches)
+    this.editor.applyRemote(patches, { sharedIds: true })
     this.tabSynced = this.editor.board
   }
 
@@ -279,6 +286,7 @@ export class Workspace {
     safeStorage()?.setItem(CURRENT_KEY, id)
     this.fileName = (await this.handle(id))?.name ?? null
     this.loadQuietly(board)
+    this.editor.aiHistory = (await this.library.kv.get<AiChange[]>(aiKey(id))) ?? []
     this.tabSynced = this.editor.board
     this.savedTitle = board.title
     // Another tab may have this board open with changes not saved yet.

@@ -24,6 +24,9 @@ export interface Ui {
   openVersions: () => void
   openShare: () => void
   openAi: () => void
+  /** The in-app AI assistant panel (Ctrl+J). */
+  assistant: boolean
+  toggleAssistant: () => void
   /** Presents the board's frames as slides, full screen. */
   present: () => void
   /** The recorded runs of the flowchart containing `id`. */

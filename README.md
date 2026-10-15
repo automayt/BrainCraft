@@ -198,6 +198,24 @@ These become interactive once selected; drag them by their title strip.
 - Start with a frame selected to present from there. A board without frames
   presents as one slide.
 
+### Ask AI: an assistant inside the board
+
+- **Ctrl J** (or **Ask AI**, top right) opens a chat with Claude about the
+  board you're looking at. It reads the board, knows what you've selected,
+  and links every object it mentions so you can click straight to it.
+- **Changes are previewed, never just made.** When you ask for changes
+  ("cluster these stickies into themes", "turn this into a flowchart"), the
+  proposal appears on the board as ghosts: new objects outlined in green,
+  removed ones crossed out in red. **Apply** or **Discard** it.
+- **AI history.** Every applied change is listed under History with its own
+  **Undo** and **Redo**, which work even after you've made other edits. The
+  history is kept with the board.
+- One-click actions: Summarise, Find gaps, Decision log, and with a selection,
+  Cluster into themes, Make a mind map and Make a flowchart.
+- Use the BrainCraft server's key (its owner pays) or paste your own Anthropic
+  API key, which stays in your browser. Claude Opus 5.5 by default; Sonnet 5.5
+  and Haiku 5.5 are options. See [docs/AI.md](docs/AI.md).
+
 ### AI assistants (MCP) and the API
 
 - **Connect Claude, Cursor or any MCP client** to work on your boards live:
@@ -276,10 +294,11 @@ See [docs/SERVER.md](docs/SERVER.md).
 | Path | Purpose |
 | --- | --- |
 | `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, comments, search, undo history, serialization. Pure functions over immutable data. |
+| `src/ai/` | The in-app assistant: the Claude conversation, its tools, proposals and settings. |
 | `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
 | `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
 | `src/collab/` | Live collaboration: board patches (also used by undo), the wire protocol, the server's room logic and the browser's live session. |
-| `server/` | The BrainCraft server: hosting, shared boards, WebSockets and the HTTP API, bundled into one Node script. |
+| `server/` | The BrainCraft server: hosting, shared boards, WebSockets, the HTTP API and the AI proxy, bundled into one Node script. |
 | `mcp/` | The MCP server for AI assistants, bundled into one Node script. |
 | `src/editor/Editor.ts` | Tools, selection, gestures and keyboard commands. Framework-independent and unit-tested. |
 | `src/ui/` | React components: SVG canvas, toolbars, text editing, comments panel, search, dialogs, and the table/Kanban/timeline views. |

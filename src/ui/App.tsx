@@ -16,6 +16,7 @@ import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
+import { AiPanel } from './AiPanel'
 import { SearchPalette } from './SearchPalette'
 import { clearMeasureCache, measureText } from './measure'
 import { EditorContext } from './useEditor'
@@ -59,6 +60,7 @@ function App({ ws }: { ws: Workspace }) {
   const [bridge] = useState(() => new Bridge(ws))
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const [assistant, setAssistant] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
 
@@ -81,6 +83,11 @@ function App({ ws }: { ws: Workspace }) {
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
     openAi: () => setDialog('ai'),
+    assistant,
+    toggleAssistant: () => {
+      if (!assistant && editor.notesOpen) editor.toggleNotes()
+      setAssistant(!assistant)
+    },
     openRuns: (id) => setRunsFor(id),
     present: () => {
       setDialog(null)
@@ -96,6 +103,15 @@ function App({ ws }: { ws: Workspace }) {
   }
   const uiRef = useRef(ui)
   uiRef.current = ui
+
+  // The comments panel and the assistant share the right edge; framing keeps clear of them.
+  useEffect(() => {
+    if (editor.notesOpen) setAssistant(false)
+  }, [editor.notesOpen])
+  useEffect(() => {
+    const wide = editor.viewport.w > 720
+    editor.rightInset = wide && assistant ? 412 : wide && editor.notesOpen ? 388 : 0
+  }, [editor, assistant, editor.notesOpen])
 
   // Fonts change text measurements, so lay mind maps out again once Inter has loaded.
   useEffect(() => {
@@ -154,6 +170,11 @@ function App({ ws }: { ws: Workspace }) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         editor.setSearchOpen(!editor.searchOpen)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        uiRef.current.toggleAssistant()
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
@@ -252,7 +273,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -270,6 +291,7 @@ function App({ ws }: { ws: Workspace }) {
           <ToolRail />
           <BottomLeft />
           <NotesPanel />
+          {assistant && !editor.presenting && <AiPanel onClose={() => setAssistant(false)} />}
           <ContextMenu />
           <Toast />
           <SearchPalette />
