@@ -1,6 +1,8 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, type PointerEvent as RPointerEvent } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
+import * as M from '../model/mindmap'
+import { applyPatches } from '../collab/patch'
 import type { FlowDir } from '../model/flowchart'
 import { flowTextRect } from '../model/shapes'
 import { ACCENT, mindRootText } from './paint'
@@ -206,6 +208,7 @@ export function Canvas() {
           />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
+          {editor.aiPreview && <AiPreview editor={editor} />}
         </g>
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
@@ -287,6 +290,42 @@ function DragPreview({ editor }: { editor: Editor }) {
     default:
       return null
   }
+}
+
+/** An AI proposal before it's applied: new and changed objects as ghosts, removed ones crossed out. */
+function AiPreview({ editor }: { editor: Editor }) {
+  const z = editor.camera.zoom
+  const patches = editor.aiPreview!.patches
+  const ghost = useMemo(() => M.layoutAll(applyPatches(editor.board, patches), editor.measure), [editor.board, patches, editor.measure])
+  const depths = useMemo(() => mindDepths(ghost), [ghost])
+  const out: ReactNode[] = []
+  for (const p of patches) {
+    if (p.k === 'item') {
+      const now = B.getItem(editor.board, p.id)
+      const next = B.getItem(ghost, p.id)
+      if (!next && now) {
+        out.push(
+          <g key={`x${p.id}`} className="ai-removed">
+            <rect {...xywh(now)} rx={6} strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
+            <path d={`M${now.x} ${now.y}L${now.x + now.w} ${now.y + now.h}M${now.x + now.w} ${now.y}L${now.x} ${now.y + now.h}`} strokeWidth={2 / z} />
+          </g>,
+        )
+      } else if (next) {
+        out.push(
+          <g key={`g${p.id}`} className={now ? 'ai-changed' : 'ai-added'}>
+            <g opacity={now ? 0.85 : 0.6}>
+              <ItemShape item={next} depth={depths.get(next.id) ?? 1} editing={false} />
+            </g>
+            <rect {...xywh(next)} rx={6} fill="none" strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
+          </g>,
+        )
+      }
+    } else if (p.k === 'conn' && p.v) {
+      const r = B.connectorRoute(ghost, p.v)
+      if (r) out.push(<path key={`c${p.id}`} d={r.d} className="ai-line" strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />)
+    }
+  }
+  return <g style={{ pointerEvents: 'none' }}>{out}</g>
 }
 
 /** Flowchart magnets: the shape being placed or dragged snaps beside another and will connect to it. */

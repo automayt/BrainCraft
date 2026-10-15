@@ -156,6 +156,11 @@ export function TopRight() {
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <LiveBar onOpen={ui.openShare} />
+      <button className={`ask-btn has-tip${ui.assistant ? ' on' : ''}`} aria-pressed={ui.assistant} onMouseDown={keepFocus} onClick={ui.toggleAssistant}>
+        <span aria-hidden="true">✦</span>
+        <span>Ask AI</span>
+        <Tip label="Chat with this board" keys="Ctrl J" />
+      </button>
       <button className="present-btn has-tip" onMouseDown={keepFocus} onClick={ui.present}>
         <PlayIcon />
         <span>Present</span>
@@ -446,6 +451,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Everywhere',
     [
       ['Ctrl K', 'Search the board or run any command'],
+      ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
       ['Right-click', 'Actions for whatever is under the pointer'],
       ['Shift C', 'Comments on the selected object'],
       ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],

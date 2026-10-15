@@ -6,7 +6,7 @@
 
 import * as B from '../model/board'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
-import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints } from '../model/geom'
+import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
@@ -194,6 +194,24 @@ export interface FinishedRun {
   record: R.RunRecord
 }
 
+/** An AI change that was applied: kept so it can be undone (or redone) on its own, later. */
+/** Keeps new ids clear of any objects or connectors the patches brought in (patches leave nextId alone). */
+function withIdsAfter(b: Board, patches: Patch[]): Board {
+  let next = b.nextId
+  for (const p of patches) if ((p.k === 'item' || p.k === 'conn') && p.v && p.id >= next) next = p.id + 1
+  return next === b.nextId ? b : { ...b, nextId: next }
+}
+
+export interface AiChange {
+  id: string
+  at: number
+  summary: string
+  /** What it changed, and how to take it back. */
+  forward: Patch[]
+  inverse: Patch[]
+  undone: boolean
+}
+
 /** Slides can zoom in this far, so small frames fill the screen. */
 const SLIDE_MAX_ZOOM = 4
 const FLIGHT_MS = 520
@@ -210,6 +228,8 @@ export class Editor {
   editing: Editing | null = null
   drag: Drag = { type: 'none' }
   viewport = { w: 1200, h: 800 }
+  /** Pixels on the right covered by a side panel (comments, assistant); framing keeps clear of them. */
+  rightInset = 0
   penColor = INKS[0][1]
   penWidth = 4
   /** The symbol the flowchart tool places. */
@@ -241,6 +261,12 @@ export class Editor {
   readOnly = false
   /** Presentation mode: frames shown one at a time, full screen. */
   presenting: Presenting | null = null
+  /** An AI proposal shown as a ghost on the board before it's applied. */
+  aiPreview: { id: string; patches: Patch[] } | null = null
+  /** AI changes applied to this board, newest last. */
+  aiHistory: AiChange[] = []
+  /** Called when the AI history changes (for saving it). */
+  onAiHistory: ((h: AiChange[]) => void) | null = null
   /** Other people in a live session, by connection id. */
   peers = new Map<string, PeerInfo>()
   /** Pointer moves (for showing your cursor to others); null when it leaves the board. */
@@ -315,6 +341,9 @@ export class Editor {
     this.editing = null
     this.drag = { type: 'none' }
     this.history.clear()
+    // AI changes belong to the board they were made on.
+    this.aiPreview = null
+    this.aiHistory = []
     this.status = status
     this.zoomToFit()
     this.onBoardChange?.(this.board)
@@ -393,9 +422,11 @@ export class Editor {
   // ----- live sessions ---------------------------------------------------------------
 
   /** Applies changes that came from someone else: not undoable here, and allowed even when read-only. */
-  applyRemote(patches: Patch[]) {
+  applyRemote(patches: Patch[], opts: { sharedIds?: boolean } = {}) {
     if (!patches.length) return
-    const next = M.layoutAll(applyPatches(this.board, patches), this.measure)
+    // Tabs of one browser share the id sequence (live sessions hand each person their own range).
+    const patched = applyPatches(this.board, patches)
+    const next = M.layoutAll(opts.sharedIds ? withIdsAfter(patched, patches) : patched, this.measure)
     this.board = next
     this.selection = new Set([...this.selection].filter((id) => B.getItem(next, id)))
     if (this.selectedConnector !== null && !B.getConnector(next, this.selectedConnector)) this.selectedConnector = null
@@ -425,6 +456,65 @@ export class Editor {
     this.flight++
     this.camera = fit(view, this.viewport, 0, 8)
     this.emit()
+  }
+
+  // ----- AI changes ------------------------------------------------------------------
+
+  /** The part of the canvas not under a side panel. */
+  get openView() {
+    return { w: Math.max(200, this.viewport.w - this.rightInset), h: this.viewport.h }
+  }
+
+  /** Shows a proposal as a preview, bringing it into view when it's off screen; `null` clears it. */
+  previewAi(p: { id: string; patches: Patch[] } | null) {
+    if (this.aiPreview?.id === p?.id) return
+    this.aiPreview = p
+    if (p) {
+      const ghost = applyPatches(this.board, p.patches)
+      const box = unionAll(p.patches.flatMap((x) => (x.k === 'item' ? [B.getItem(ghost, x.id) ?? B.getItem(this.board, x.id)].filter((i) => !!i).map(B.itemBounds) : [])))
+      const seen = rectToWorld(this.camera, { x: 0, y: 0, ...this.openView })
+      if (box && !(box.x >= seen.x && box.y >= seen.y && box.x + box.w <= seen.x + seen.w && box.y + box.h <= seen.y + seen.h)) {
+        const all = unionAll([box, ...p.patches.flatMap((x) => (x.k === 'item' && B.getItem(this.board, x.id) ? [B.itemBounds(B.getItem(this.board, x.id)!)] : []))])!
+        this.flyTo(fit(all, this.openView, 100, this.camera.zoom))
+      }
+    }
+    this.emit()
+  }
+
+  /**
+   * Applies an AI proposal as one undoable step and records it in the AI history.
+   * The patches were made against the board when proposed; edits since then are kept.
+   */
+  applyAi(id: string, summary: string, patches: Patch[]): boolean {
+    if (this.readOnly) return false
+    const before = this.board
+    this.finishEditing()
+    this.aiPreview = null
+    this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
+    if (this.board === before) return false
+    const change: AiChange = { id, at: Date.now(), summary, forward: diff(before, this.board), inverse: diff(this.board, before), undone: false }
+    this.aiHistory = [...this.aiHistory, change]
+    this.onAiHistory?.(this.aiHistory)
+    // Show what arrived.
+    const added = change.forward.flatMap((p) => (p.k === 'item' && p.v ? [p.id] : []))
+    if (added.length) {
+      this.selection = new Set(added.filter((x) => B.getItem(this.board, x)))
+      const box = B.bounds(this.board, this.selection)
+      if (box) this.flyTo(fit(box, this.openView, 120))
+    }
+    this.emit()
+    return true
+  }
+
+  /** Takes back (or puts back) one AI change, whatever happened since; itself undoable. */
+  toggleAiChange(id: string) {
+    const c = this.aiHistory.find((x) => x.id === id)
+    if (!c || this.readOnly) return
+    const patches = c.undone ? c.forward : c.inverse
+    this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
+    this.aiHistory = this.aiHistory.map((x) => (x.id === id ? { ...x, undone: !x.undone } : x))
+    this.onAiHistory?.(this.aiHistory)
+    this.setStatus(c.undone ? `Redid: ${c.summary}` : `Undid: ${c.summary}`)
   }
 
   /** Applies just the change from `from` to `to` onto the current board (others' edits since stay). */
@@ -901,9 +991,9 @@ export class Editor {
     if (b !== this.board) this.apply(b)
     this.selection = new Set([id])
     this.selectedConnector = null
-    const fitted = fit(B.itemBounds(item), this.viewport, 120)
+    const fitted = fit(B.itemBounds(item), this.openView, 120)
     this.emit()
-    this.flyTo(this.camera.zoom < 0.5 || this.camera.zoom > fitted.zoom * 1.5 ? fitted : centerOn(this.camera, center(item), this.viewport))
+    this.flyTo(this.camera.zoom < 0.5 || this.camera.zoom > fitted.zoom * 1.5 ? fitted : centerOn(this.camera, center(item), this.openView))
   }
 
   // ----- flowcharts ---------------------------------------------------------------

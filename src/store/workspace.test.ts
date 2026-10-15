@@ -112,6 +112,23 @@ describe('tabs', () => {
     b.dispose()
   })
 
+  it('never hands out an id another tab just used', async () => {
+    const kv = new MemoryKV()
+    const a = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    const b = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    await b.switchTo(a.boardId!)
+    await settle()
+    a.editor.addImage('data:image/png;base64,AA==', 10, 10, { x: 0, y: 0 })
+    await settle()
+    b.editor.addImage('data:image/png;base64,AA==', 10, 10, { x: 50, y: 0 })
+    await settle()
+    const ids = a.editor.board.items.map((i) => i.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(a.editor.board.items).toHaveLength(b.editor.board.items.length)
+    a.dispose()
+    b.dispose()
+  })
+
   it('catches a newly opened tab up on changes not saved yet', async () => {
     const kv = new MemoryKV()
     const a = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')

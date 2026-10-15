@@ -33,6 +33,9 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `HOST` | `0.0.0.0` | Address to listen on. |
 | `BRAINCRAFT_DATA` | `./braincraft-data` | Where boards are stored, one JSON file each. Back this folder up. |
 | `BRAINCRAFT_STATIC` | the script's folder | The built app to serve. |
+| `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant for everyone using this server, paid from this key. See [AI.md](AI.md). |
+| `BRAINCRAFT_AI_PASSWORD` | — | With a key set: people must enter this password before using the assistant. |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
 
 Put it behind your usual HTTPS proxy (Caddy, nginx, a cloud load balancer).
 WebSockets must be allowed through on `/api/boards/*/live`.
@@ -74,11 +77,12 @@ or as `?key=<key>`.
 
 | Request | Key | Does |
 | --- | --- | --- |
-| `GET /api/health` | — | `{"ok": true, "name": "braincraft", "version"}` |
+| `GET /api/health` | — | `{"ok": true, "name": "braincraft", "version", "ai", "aiPassword"}` |
 | `POST /api/boards` with optional `{"board": …}` | — | Creates a shared board and returns `{"id", "editKey", "viewKey"}` |
 | `GET /api/boards/{id}` | edit or view | `{"id", "role", "version", "board", "people"}` |
 | `POST /api/boards/{id}/ops` with `{"ops": […]}` | edit | Applies [operations](API.md) as one change and returns `{"version", "results"}`. Everyone connected sees it immediately. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
+| `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
 
 Example: post a status update onto a team board from a CI job.
 

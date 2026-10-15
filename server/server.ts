@@ -5,6 +5,8 @@
  *
  * Settings (environment): PORT, HOST, BRAINCRAFT_DATA (where boards are stored),
  * BRAINCRAFT_STATIC (the built app; defaults to this file's folder).
+ * ANTHROPIC_API_KEY turns on the in-app AI assistant for everyone using this server;
+ * BRAINCRAFT_AI_PASSWORD makes them enter a password first (see docs/AI.md).
  *
  * Boards are shared by link, Google-Docs style: each has a secret edit key and a secret
  * view key. Anyone with a key can open the board in that role; nobody can list boards.
@@ -16,18 +18,21 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
+import { AiProxy } from './aiProxy'
 import { OpError, opsFromText } from '../src/api/ops'
 import { type ClientMessage, type ServerMessage } from '../src/collab/protocol'
 import { Room, type RoomData } from '../src/collab/room'
 import { approxMeasure } from '../src/model/approxMeasure'
 import { fromJson } from '../src/model/serialize'
 
-const VERSION = '0.3.0'
+const VERSION = '0.4.0'
 const PORT = Number(process.env.PORT ?? 8080)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const DATA = resolve(process.env.BRAINCRAFT_DATA ?? 'braincraft-data')
 const STATIC = resolve(process.env.BRAINCRAFT_STATIC ?? dirname(fileURLToPath(import.meta.url)))
 const MAX_BODY = 25 * 1024 * 1024
+const AI_KEY = process.env.ANTHROPIC_API_KEY?.trim() || ''
+const AI_PASSWORD = process.env.BRAINCRAFT_AI_PASSWORD?.trim() || ''
 const SAVE_DELAY = 1000
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a)
@@ -111,7 +116,8 @@ function cors(req: IncomingMessage, res: ServerResponse) {
   // Keys travel as bearer tokens, not cookies, so any page may call the API.
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization')
+  // Echo what the caller asks for: the Anthropic SDK sends its own headers to the AI proxy.
+  res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] ?? 'content-type, authorization')
   res.setHeader('Vary', 'Origin')
 }
 
@@ -164,9 +170,18 @@ function serveStatic(url: URL, res: ServerResponse) {
   res.end(readFileSync(file))
 }
 
+const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, password: AI_PASSWORD, equal: safeEqual, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined }) : null
+
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
-  if (parts[1] === 'health') return send(res, 200, { ok: true, name: 'braincraft', version: VERSION })
+  if (parts[1] === 'health') return send(res, 200, { ok: true, name: 'braincraft', version: VERSION, ai: !!aiProxy, aiPassword: !!AI_PASSWORD })
+
+  // POST /api/ai/v1/messages → the Anthropic Messages API, with this server's key.
+  if (parts[1] === 'ai') {
+    if (!aiProxy) return send(res, 404, { error: 'AI is not set up on this server (ANTHROPIC_API_KEY)' })
+    if (url.pathname !== '/api/ai/v1/messages') return send(res, 404, { error: 'Not found' })
+    return aiProxy.handle(req, res, req.method === 'POST' ? await readBody(req) : '')
+  }
 
   if (parts[1] !== 'boards') return send(res, 404, { error: 'Not found' })
 
@@ -269,6 +284,7 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
+  log(aiProxy ? `AI assistant on${AI_PASSWORD ? ' (password required)' : ''}` : 'AI assistant off (set ANTHROPIC_API_KEY to turn it on)')
 })
 
 // Save everything before exiting.
