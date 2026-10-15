@@ -299,7 +299,8 @@ function MagnetPreview({ editor }: { editor: Editor }) {
   const ghost = p ? (F.flowItem(p.shape, p.magnet?.at ?? p.at) as Item) : undefined
   const target = magnet ? B.getItem(editor.board, magnet.target) : undefined
   const other = ghost ?? moving
-  const showLine = target && other && !(moving && F.linked(editor.board, target.id, moving.id))
+  const connects = p ? true : !!(moving && F.MAGNET_RULES[moving.kind]?.connect)
+  const showLine = connects && target && other && !(moving && F.linked(editor.board, target.id, moving.id))
   return (
     <g style={{ pointerEvents: 'none' }}>
       {ghost && (

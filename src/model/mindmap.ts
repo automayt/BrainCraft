@@ -140,6 +140,37 @@ export function layoutAll(b: Board, measure: Measure): Board {
 
 // ----- editing -------------------------------------------------------------------
 
+/**
+ * Puts sibling ideas under a new idea in their place (e.g. "group these three").
+ * Returns the new idea's id, or -1 when the ideas don't share a parent.
+ */
+export function groupUnder(b: Board, ids: Id[], text = ''): [Board, Id] {
+  const nodes = ids.map((id) => getItem(b, id)).filter((i): i is Item => i?.kind === 'mind' && i.parent !== undefined)
+  const parent = nodes[0]?.parent
+  if (!nodes.length || nodes.some((n) => n.parent !== parent)) return [b, -1]
+  let id: Id
+  ;[b, id] = addChild(b, parent!, nodes[0].side, text)
+  // Sit the group where its first idea was.
+  const first = b.items.findIndex((i) => i.id === nodes[0].id)
+  const group = b.items.find((i) => i.id === id)!
+  const rest = b.items.filter((i) => i.id !== id)
+  rest.splice(rest.findIndex((i) => i.id === nodes[0].id) >= 0 ? first : rest.length, 0, group)
+  b = { ...b, items: rest }
+  for (const n of nodes) b = reparent(b, n.id, id, n.side)
+  // Grouped ideas join their group's layout.
+  const moved = new Set(nodes.map((n) => n.id))
+  b = {
+    ...b,
+    items: b.items.map((i) => {
+      if (!moved.has(i.id) || !i.offset) return i
+      const next = { ...i }
+      delete next.offset
+      return next
+    }),
+  }
+  return [b, id]
+}
+
 /** Puts every idea of the map containing `id` back where the automatic layout wants it. */
 export function tidy(b: Board, id: Id): Board {
   let root = getItem(b, id)

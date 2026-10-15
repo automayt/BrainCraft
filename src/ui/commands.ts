@@ -94,6 +94,17 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     for (const t of ['table', 'board', 'timeline'] as const)
       list.push({ id: `view-${t}`, label: `Add a ${t} view of this data`, group: 'Data', aliases: 'database linked view kanban gantt', run: () => editor.addDataView(single.id, t) })
   }
+  if (editor.selection.size > 1) {
+    for (const [how, label] of [['left', 'Align left'], ['center', 'Align centres'], ['right', 'Align right'], ['top', 'Align tops'], ['middle', 'Align middles'], ['bottom', 'Align bottoms']] as const)
+      list.push({ id: `align-${how}`, label, group: 'Arrange', aliases: 'line up arrange', run: () => editor.align(how) })
+    if (editor.selection.size > 2) {
+      list.push(
+        { id: 'distribute-x', label: 'Distribute horizontally', group: 'Arrange', aliases: 'space evenly spacing', run: () => editor.distribute('x') },
+        { id: 'distribute-y', label: 'Distribute vertically', group: 'Arrange', aliases: 'space evenly spacing', run: () => editor.distribute('y') },
+      )
+    }
+    if (editor.selectedItems.every((i) => i.kind === 'mind')) list.push({ id: 'group-ideas', label: 'Group ideas under a new idea', group: 'Mind map', keys: 'Ctrl G', aliases: 'cluster branch', run: () => editor.groupIdeas() })
+  }
   if (editor.selection.size) {
     list.push(
       { id: 'duplicate', label: 'Duplicate selection', group: 'Edit', keys: 'Ctrl D', run: () => editor.duplicate() },
