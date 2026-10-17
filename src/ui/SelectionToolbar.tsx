@@ -79,7 +79,7 @@ export function SelectionToolbar() {
   const fitsBelow = below !== null && below + size.h < editor.viewport.h - (editor.viewport.w > 720 ? 12 : 140)
   const useBelow = fitsBelow && (aboveTop < 64 || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
   const y = useBelow ? below! : Math.max(anchor.y, 64 + size.h)
-  const plain = (i: (typeof items)[number]) => i.kind !== 'image' && !isWidget(i.kind)
+  const plain = (i: (typeof items)[number]) => i.kind !== 'image' && i.kind !== 'link' && !isWidget(i.kind)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color

@@ -56,6 +56,7 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
       ? { csv: toCsv(i.table) }
       : (i.kanban ??
         i.timeline ??
+        i.link ??
         (i.kind === 'mind' ? { outline: toOutline(b, i.id) } : i.runs?.length ? { runs: i.runs.map((r) => ({ ...r, startedAt: new Date(r.startedAt).toISOString(), endedAt: new Date(r.endedAt).toISOString() })) } : undefined)),
   }
 }

@@ -17,6 +17,19 @@ export type Kind =
   | 'kanban'
   | 'timeline'
   | 'data'
+  | 'link'
+
+/** A web address shown as a card. The preview fields come from the page, when a server could read it. */
+export interface LinkCard {
+  url: string
+  title?: string
+  description?: string
+  /** Address of the page's picture. */
+  image?: string
+  site?: string
+  /** Set once a preview was looked for (found or not), so it isn't asked for again. */
+  checked?: boolean
+}
 
 /** A timestamped work note attached to an object. */
 export interface Note {
@@ -222,6 +235,8 @@ export interface Item extends Rect {
   view?: DataView
   kanban?: KanbanData
   timeline?: TimelineData
+  /** The web address and preview of a `link` card. */
+  link?: LinkCard
   /** Emoji reactions: who put each one on. */
   reactions?: Record<string, string[]>
   /** Dot votes, by vote card id (as text), then by person. */
@@ -308,7 +323,7 @@ export const TEXT_ON_FILL = '#1e1e24'
 
 /** Whether the item's colour is an ink (text/line) colour rather than a fill. */
 export const usesInk = (k: Kind) => k === 'text' || k === 'pen'
-export const hasText = (k: Kind) => k !== 'pen' && k !== 'image'
+export const hasText = (k: Kind) => k !== 'pen' && k !== 'image' && k !== 'link'
 export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table'
 /** Objects with their own interactive content (live once selected). */
 export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline' || k === 'data'
@@ -343,6 +358,8 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 1000, h: 320 }
     case 'data':
       return { w: 760, h: 360 }
+    case 'link':
+      return { w: 360, h: 120 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -369,6 +386,7 @@ export function defaultColor(k: Kind): string {
     case 'table':
     case 'timeline':
     case 'data':
+    case 'link':
       return '#ffffff'
     case 'text':
     case 'pen':
@@ -411,4 +429,5 @@ export const KIND_LABELS: Record<Kind, string> = {
   kanban: 'Kanban board',
   timeline: 'Timeline',
   data: 'Database view',
+  link: 'Link',
 }

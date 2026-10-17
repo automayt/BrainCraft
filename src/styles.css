@@ -6188,3 +6188,130 @@ button.on,
   background: var(--accent-soft);
   border-radius: 8px;
 }
+
+/* ----- link cards ----- */
+
+.link-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--node-fill);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.link-media {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  background: #0b0c10;
+}
+
+.link-media img,
+.link-media iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+  user-select: none;
+}
+
+.link-media-blank {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #2b2f3a, #14161c);
+}
+
+.link-media-blank.spotify {
+  background: linear-gradient(135deg, #1db954, #0f5f2b);
+}
+
+.link-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.link-caption {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.link-card.has-media .link-caption {
+  flex: none;
+}
+
+.link-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.link-site {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.link-title,
+.link-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.link-title {
+  font-size: 15px;
+  line-height: 1.3;
+  -webkit-line-clamp: 2;
+}
+
+.link-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+  -webkit-line-clamp: 2;
+}
+
+.link-open {
+  display: grid;
+  flex: none;
+  place-items: center;
+  align-self: flex-start;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+  border-radius: 8px;
+}
+
+.link-open:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}

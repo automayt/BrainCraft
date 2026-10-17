@@ -14,6 +14,7 @@ import * as D from '../model/dataset'
 import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid } from '../model/mermaid'
 import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
+import { linkItem, urlIn } from '../model/linkCard'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
@@ -66,6 +67,7 @@ export type Op =
       h?: number
     } & Placed)
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
+  | ({ op: 'createLink'; url: string; w?: number; h?: number } & Placed)
   | ({
       op: 'createDatabase'
       title?: string
@@ -310,6 +312,15 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'createLink': {
+        const url = urlIn(text(op.url, 'url'))
+        if (!url) fail(index, op, '"url" should be one http(s) web address')
+        const item = linkItem(url, { x: 0, y: 0 })
+        const id = add({ ...item, x: 0, y: 0, ...(op.w ? { w: op.w } : {}), ...(op.h ? { h: op.h } : {}) })
+        place([id], op.at)
+        done({ id })
+        break
+      }
       case 'connect': {
         const from = resolve(op.from, 'from')
         const to = resolve(op.to, 'to')
@@ -490,6 +501,7 @@ export const OPS: Op['op'][] = [
   'createKanban',
   'createTimeline',
   'createImage',
+  'createLink',
   'connect',
   'update',
   'delete',

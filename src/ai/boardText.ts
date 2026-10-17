@@ -20,6 +20,7 @@ export function objectLine(i: Item): string {
   const parts = [`${i.id} ${i.kind}`, `(${Math.round(i.x)},${Math.round(i.y)} ${Math.round(i.w)}x${Math.round(i.h)})`, quote(objectLabel(i))]
   if (i.kind === 'mind' && i.parent !== undefined) parts.push(`parent:${i.parent}`)
   if (i.kind === 'flow' && i.shape) parts.push(`shape:${i.shape}`)
+  if (i.kind === 'link' && i.link) parts.push(`url:${i.link.url}`)
   if (i.notes?.length) parts.push(`comments:${i.notes.length}`)
   if (i.description) parts.push('has-description')
   if (i.reactions) parts.push(`reactions:${Object.entries(i.reactions).map(([e, who]) => `${e}×${who.length}`).join(',')}`)
