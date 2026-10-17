@@ -1,7 +1,7 @@
 /** The AI assistant panel: chat about the board, previewed changes, and the history of AI changes. */
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { AI_MODELS, type AiModel, Assistant, type Proposal, describeError, makeClient } from '../ai/assistant'
+import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeClient } from '../ai/assistant'
 import { type AiSettings, type ServerAi, connectionFor, loadSettings, saveSettings, serverAi } from '../ai/settings'
 import * as B from '../model/board'
 import { objectLabel } from '../model/notes'
@@ -170,10 +170,11 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     return s
   }
 
-  const send = async (text: string) => {
+  const send = async (text: string, images: AiImage[] = [], label?: string) => {
     const s = session()
     if (!s || !text.trim() || running) return
-    s.turns.push({ role: 'user', text: text.trim(), proposals: [] })
+    // A long built-in request shows as its short label in the chat.
+    s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [] })
     const reply: Turn = { role: 'assistant', text: '', proposals: [] }
     s.turns.push(reply)
     setInput('')
@@ -197,6 +198,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           },
         },
         ctrl.signal,
+        images,
       )
     } catch (err) {
       s.turns.push({ role: 'error', text: describeError(err), proposals: [] })
@@ -211,13 +213,14 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   // A question asked from elsewhere (e.g. "Summarise with AI" on the catch-up banner).
   const asked = editor.pendingAiPrompt
   useEffect(() => {
-    if (!asked || running) return
+    // Wait until we know how to reach Claude; without a connection the question waits
+    // (pictures and all) while the setup card shows, and goes out once connected.
+    if (!asked || running || !checked || !connection) return
     editor.pendingAiPrompt = null
-    if (connection) void send(asked)
-    else setInput(asked)
-    // Only when a new question arrives.
+    void send(asked.text, asked.images, asked.label)
+    // Only when a new question arrives or the connection becomes ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asked, !!connection])
+  }, [asked, !!connection, checked, running])
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
   const pending = turns.flatMap((t) => t.proposals).filter((p) => p.status === 'pending')
@@ -297,6 +300,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             />
           )}
           {!checked && <p className="muted">Checking for a server…</p>}
+          {editor.pendingAiPrompt && <p className="ai-waiting">“{editor.pendingAiPrompt.label ?? 'Your question'}” will be sent as soon as the assistant is connected.</p>}
           <label className="ai-model">
             Model
             <select value={settings.model} onChange={(e) => update({ ...settings, model: e.target.value as AiModel })}>

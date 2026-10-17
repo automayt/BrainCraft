@@ -209,3 +209,16 @@ export function pdfOfJpegs(pages: { jpeg: Uint8Array; w: number; h: number }[]):
   push(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`)
   return new Blob(chunks as BlobPart[], { type: 'application/pdf' })
 }
+
+/** The objects as a picture for Claude to look at: at most 1568px on the long side, base64. */
+export async function aiImageOf(editor: Editor, ids: ReadonlySet<Id>, photo: boolean): Promise<{ mediaType: 'image/png' | 'image/jpeg'; data: string } | null> {
+  const pic = await boardSvg(editor, { ids })
+  if (!pic) return null
+  const canvas = await toCanvas(pic, Math.min(2, 1568 / Math.max(pic.w, pic.h)))
+  const mediaType = photo ? 'image/jpeg' : 'image/png'
+  const blob = await blobOf(canvas, mediaType, photo ? 0.88 : undefined)
+  const buf = new Uint8Array(await blob.arrayBuffer())
+  let bin = ''
+  for (let k = 0; k < buf.length; k += 0x8000) bin += String.fromCharCode(...buf.subarray(k, k + 0x8000))
+  return { mediaType, data: btoa(bin) }
+}

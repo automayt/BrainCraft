@@ -1,3 +1,4 @@
+import { hasSketch, sketchToBoard } from './sketch'
 import { copyImage } from './ExportImage'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
@@ -74,6 +75,7 @@ export function ContextMenu() {
       paste,
       { label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() },
       { label: 'Copy as image', run: () => void copyImage(editor, new Set(editor.selection)) },
+      ...(hasSketch(editor) ? [{ label: 'Turn sketch into a board (AI)', run: () => void sketchToBoard(editor) }] : []),
       editor.selectedItems.every((i) => i.locked)
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },

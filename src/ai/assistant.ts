@@ -50,6 +50,13 @@ export interface Proposal {
   status: 'pending' | 'applied' | 'discarded'
 }
 
+/** A picture sent with a message (a sketch or photo from the board). */
+export interface AiImage {
+  mediaType: 'image/png' | 'image/jpeg'
+  /** Base64, without the data: prefix. */
+  data: string
+}
+
 /** What the assistant needs from the app. */
 export interface AssistantHost {
   board(): Board
@@ -241,10 +248,17 @@ export class Assistant {
   }
 
   /** Sends a message and runs the conversation until Claude has answered. */
-  async send(text: string, on: Callbacks, signal?: AbortSignal): Promise<void> {
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = []): Promise<void> {
     const sel = this.host.selection()
     const context = sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'
-    this.messages.push({ role: 'user', content: [{ type: 'text', text: `${context}\n\n${text}` }] })
+    this.messages.push({
+      role: 'user',
+      content: [
+        // Pictures first, then the words about them.
+        ...images.map((img) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.data } })),
+        { type: 'text', text: `${context}\n\n${text}` },
+      ],
+    })
     let jsonRetries = 0
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
