@@ -21,6 +21,7 @@ import { clipFromText, clipToText } from '../model/serialize'
 import * as S from '../model/slides'
 import * as R from '../model/runbook'
 import * as D from '../model/dataset'
+import * as RX from '../model/reactions'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo } from '../collab/protocol'
 import {
@@ -114,6 +115,8 @@ export type Handle =
   | { kind: 'collapse'; id: Id }
   | { kind: 'flowAdd'; dir: F.FlowDir }
   | { kind: 'notes'; id: Id }
+  | { kind: 'react'; id: Id; emoji: string }
+  | { kind: 'vote'; id: Id; poll: Id; delta: 1 | -1 }
 
 export type Drag =
   | { type: 'none' }
@@ -962,6 +965,67 @@ export class Editor {
     this.emit()
   }
 
+  /** A stand-in name for reactions and votes until the person gives theirs (set per browser). */
+  guestName = 'Guest'
+
+  /** Who "I" am on reactions and votes. */
+  get me(): string {
+    return this.author.trim() || this.guestName
+  }
+
+  // ----- reactions and votes ---------------------------------------------------------
+
+  /** Puts my `emoji` on each of `ids` (the selection by default), or takes it off. */
+  toggleReaction(emoji: string, ids: Id[] = [...this.selection]) {
+    if (this.readOnly || !ids.length) return
+    const who = this.me
+    // On several objects at once: add everywhere unless all already have it.
+    const all = ids.every((id) => B.getItem(this.board, id)?.reactions?.[emoji]?.includes(who))
+    this.edit((b) => B.updateItems(b, new Set(ids), (i) => (!!i.reactions?.[emoji]?.includes(who) === !all ? i : RX.toggleReaction(i, emoji, who))))
+  }
+
+  /** Starts a dot vote on the selection; the vote card appears just above it. */
+  startVote(question?: string, each?: number) {
+    const options = [...this.selection].filter((id) => {
+      const i = B.getItem(this.board, id)
+      return i && !i.poll && i.kind !== 'frame'
+    })
+    if (this.readOnly) return
+    if (options.length < 2) return this.setStatus('Select two or more things to vote on, then start the vote')
+    let id: Id = -1
+    this.edit((b) => {
+      const [next, card] = RX.startPoll(b, options, { question, each })
+      id = card
+      return next
+    })
+    this.select([id])
+    this.keepInView(id)
+    const allowance = RX.pollOf(this.board, id)!.poll.each
+    this.setStatus(`Vote started: everyone gets ${allowance === 1 ? 'one vote' : `${allowance} votes`} — click the dots on the options`)
+  }
+
+  vote(poll: Id, option: Id, delta: 1 | -1) {
+    if (this.readOnly) return
+    const p = RX.pollOf(this.board, poll)
+    if (!p || p.poll.ended) return
+    if (delta > 0 && RX.usedVotes(this.board, poll, this.me) >= p.poll.each) {
+      return this.setStatus(`${p.poll.each === 1 ? 'You’ve used your vote' : `You’ve used all ${p.poll.each} votes`} — click − on an option to move one`)
+    }
+    this.edit((b) => RX.castVote(b, poll, option, this.me, delta))
+  }
+
+  revealVote(poll: Id, revealed = true) {
+    if (!this.readOnly) this.edit((b) => RX.setRevealed(b, poll, revealed))
+  }
+
+  endVote(poll: Id) {
+    if (!this.readOnly) this.edit((b) => RX.endPoll(b, poll))
+  }
+
+  sortByVotes(poll: Id) {
+    if (!this.readOnly) this.edit((b) => RX.sortByVotes(b, poll))
+  }
+
   /** Adds a work note to `id` (one undo step). */
   /** Sets an object's description (one undo step); empty removes it. */
   setDescription(id: Id, text: string) {
@@ -1549,6 +1613,12 @@ export class Editor {
         case 'notes':
           this.select([handle.id])
           this.toggleNotes(true)
+          return
+        case 'react':
+          this.toggleReaction(handle.emoji, [handle.id])
+          return
+        case 'vote':
+          this.vote(handle.poll, handle.id, mods.alt ? -1 : handle.delta)
           return
         case 'resize': {
           const item = this.single

@@ -32,6 +32,7 @@ type TabMessage =
   | { t: 'state'; board: string; data: Board; from: string; to: string }
   | { t: 'library'; from: string }
 const NAME_KEY = 'braincraft:name'
+const GUEST_KEY = 'braincraft:guest'
 const COLOR_KEY = 'braincraft:color'
 
 export const FILE_EXT = '.braincraft'
@@ -110,6 +111,15 @@ export class Workspace {
     this.editor = editor
     this.library = library
     editor.onBoardChange = (b) => this.changed(b)
+    // Reactions and votes need a name before the person gives one: a stable guest name per browser.
+    const storage = safeStorage()
+    let guest = storage?.getItem(GUEST_KEY)
+    if (!guest) {
+      guest = `Guest ${Math.floor(1000 + Math.random() * 9000)}`
+      storage?.setItem(GUEST_KEY, guest)
+    }
+    editor.guestName = guest
+    if (!editor.author) editor.author = storage?.getItem(NAME_KEY) ?? storage?.getItem('braincraft:author') ?? ''
     editor.onAiHistory = (h) => {
       // The latest 50 AI changes per board, so each can still be undone after a reload.
       if (this.boardId) void this.library.kv.set(aiKey(this.boardId), h.slice(-50))

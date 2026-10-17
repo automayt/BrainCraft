@@ -50,6 +50,8 @@ update {id, text?, description?, color?, x?, y?, w?, h?} — description is free
 delete {ids: [...]} — deleting a mind-map idea deletes its branch
 addComment {id, text, author?} — a timestamped work note on an object; mention another object with @[Label](#id)
 createDatabase {title, fields?: [name | {name, type: text|number|date|select|person|checkbox, options?}], records?: [{FieldName: value}], views?: [table|board|timeline], groupBy?} — one set of records shown as linked views that stay in sync (a board groups by a select/person field; a timeline uses the first two date fields). Types are guessed from values when not given. The first field is the record title.
+react {ids: [...], emoji: "👍", by?} — an emoji reaction on objects (by defaults to "AI")
+createVote {options: [ids/refs], question?, each?} — a dot vote: a card above the options; each person spreads "each" votes (default about a third of the options, 1–5), counts hidden until someone reveals them
 addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values: {FieldName: value or null}} · deleteRecords {id: view, records: [ids or titles]}`
 
 const fileProp = {

@@ -121,7 +121,8 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
 
 /** Where a comment block's text goes. */
 export function commentBodyRect(i: Item) {
-  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46) }
+  // A vote card keeps its bottom strip for the vote controls.
+  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46 - (i.poll ? 48 : 0)) }
 }
 
 export function formatTime(at: number, now = Date.now()): string {
@@ -144,16 +145,20 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
       <foreignObject x={item.x} y={item.y} width={item.w} height={30}>
         <div className="comment-head">
           <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 5h16v11H10l-4 4v-4H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            {item.poll ? (
+              <path d="M5 11l4 4 10-10M4 19h16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M4 5h16v11H10l-4 4v-4H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+            )}
           </svg>
-          <span>Comment</span>
+          <span>{item.poll ? (item.poll.ended ? 'Vote · closed' : 'Vote') : 'Comment'}</span>
           {item.createdAt && <time>{formatTime(item.createdAt)}</time>}
         </div>
       </foreignObject>
       {!editing && (
         <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
           <div className="item-text comment-body" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
-            {item.text || <span className="muted">Write a comment…</span>}
+            {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : 'Write a comment…'}</span>}
           </div>
         </foreignObject>
       )}

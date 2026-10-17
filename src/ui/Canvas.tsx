@@ -12,6 +12,7 @@ import { toScreen, toWorld } from '../model/camera'
 import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
+import { Social } from './Social'
 import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
@@ -40,6 +41,10 @@ function readHandle(target: EventTarget | null): Handle | undefined {
       return { kind, dir: el.getAttribute('data-dir') as FlowDir }
     case 'notes':
       return { kind, id }
+    case 'react':
+      return { kind, id, emoji: el.getAttribute('data-emoji') ?? '' }
+    case 'vote':
+      return { kind, id, poll: Number(el.getAttribute('data-poll')), delta: el.getAttribute('data-delta') === '-1' ? -1 : 1 }
     case 'collapse':
       return { kind, id }
   }
@@ -241,6 +246,7 @@ export function Canvas() {
             view={cull}
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
           />
+          <Social editor={editor} />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
           {editor.aiPreview && <AiPreview editor={editor} />}

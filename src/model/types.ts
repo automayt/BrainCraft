@@ -222,6 +222,20 @@ export interface Item extends Rect {
   view?: DataView
   kanban?: KanbanData
   timeline?: TimelineData
+  /** Emoji reactions: who put each one on. */
+  reactions?: Record<string, string[]>
+  /** Dot votes, by vote card id (as text), then by person. */
+  votes?: Record<string, Record<string, number>>
+  /** On a vote card: what's being voted on and how. */
+  poll?: Poll
+}
+
+/** A dot vote: each person spreads `each` votes over the options; totals hidden until revealed. */
+export interface Poll {
+  options: Id[]
+  each: number
+  revealed: boolean
+  ended?: boolean
 }
 
 export interface Connector {
