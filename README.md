@@ -51,6 +51,7 @@ The board fills the window and the controls float above it:
 - **Collapse** a branch with **/** or with the toggle next to it.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
   plain indentation) to turn it into a map. **Copy outline** does the reverse.
+  A flat list with no indents becomes sticky notes instead (see below).
 
 ### Flowcharts
 
@@ -327,7 +328,9 @@ These become interactive once selected; drag them by their title strip.
   and use the floating toolbar for color, text size, layer order, duplicate
   and delete.
 - Copy, cut and paste work through the system clipboard. Plain text you
-  paste becomes a sticky note. **Paste or drop images** to add them.
+  paste becomes a sticky note. **Paste a list** (one idea per line, bullets
+  fine) to get a tidy grid of sticky notes, one per line; Ctrl+K → "Add many
+  sticky notes" opens a box to type them in. **Paste or drop images** to add them.
 - **Paste a web address** to get a link card with the page's title, picture
   and site (filled in by the BrainCraft server; without one, the card shows
   the address). **YouTube, Vimeo and Spotify** links play right on the card:

@@ -808,3 +808,18 @@ describe('flip cards', () => {
     expect(B.getItem(e.board, id)!.flipped).toBeFalsy()
   })
 })
+
+describe('pasting a list', () => {
+  it('makes one sticky note per line, but an indented list is still a mind map', () => {
+    const e = editor()
+    e.pasteText('Pizza\nTacos\nCurry')
+    expect(e.board.items.map((i) => [i.kind, i.text])).toEqual([
+      ['sticky', 'Pizza'],
+      ['sticky', 'Tacos'],
+      ['sticky', 'Curry'],
+    ])
+    expect(e.selection.size).toBe(3)
+    e.pasteText('Food\n  Pizza')
+    expect(e.board.items.filter((i) => i.kind === 'mind')).toHaveLength(2)
+  })
+})

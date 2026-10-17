@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useDialog } from './useDialog'
 import { looksLikeMermaid, parseMermaid } from '../model/mermaid'
 import { parseOutline } from '../model/mindmap'
+import { listLines } from '../model/stickyGrid'
 import { toJson } from '../model/serialize'
 import { useEditor } from './useEditor'
 
@@ -26,6 +27,8 @@ function detect(text: string): { label: string; ok: boolean } {
     // Not JSON.
   }
   if (/\t/.test(text) && text.trim().includes('\n')) return { label: 'Table (tab-separated)', ok: true }
+  const lines = listLines(text)
+  if (lines) return { label: `List → ${lines.length} sticky notes (indent it for a mind map)`, ok: true }
   if (parseOutline(text)) return { label: 'Indented list → mind map', ok: true }
   return { label: 'Plain text → sticky note', ok: true }
 }
