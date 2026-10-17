@@ -29,7 +29,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
 ## From the earlier list
 
 - [ ] **More database views:** calendar, gallery and chart.
-- [ ] **Timeline dependencies:** "this can't start until that ends", with
+- [x] **Timeline dependencies:** "this can't start until that ends", with
   arrows and a warning when dates clash.
 - [ ] **Shared space on the server:** a friend group's boards listed behind one
   space key, and images stored on the server instead of inside boards.

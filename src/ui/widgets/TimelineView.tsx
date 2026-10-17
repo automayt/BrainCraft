@@ -35,6 +35,9 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
   const [renaming, setRenaming] = useState<string | null>(null)
   const [laneMenu, setLaneMenu] = useState<string | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [waitMenu, setWaitMenu] = useState(false)
+  const deps = TL.dependencies(t)
+  const late = new Set(deps.filter((d) => d.late).map((d) => d.to))
   const dragRef = useRef<Drag | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
   const kanbans = TL.kanbanBoards(editor.board)
@@ -124,6 +127,11 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
         Fit
       </button>
       <span className="sep" />
+      {late.size > 0 && (
+        <button className="tl-lineup" title="Move events so each starts after what it waits for" onClick={() => update((x) => TL.lineUp(x))}>
+          Line up ({late.size})
+        </button>
+      )}
       <button className={t.sources?.length ? 'on' : ''} title="Show dated cards from Kanban boards" onClick={() => setSourcesOpen(!sourcesOpen)}>
         Kanban{t.sources?.length ? ` (${t.sources.length})` : ''}
       </button>
@@ -145,6 +153,32 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
   )
 
   const todayX = (now - range.start) * pxPerDay
+
+  // Where each bar sits, for the dependency arrows (lanes stack, each with a 1px rule).
+  const laneTop = new Map<string, number>()
+  let y = 0
+  for (const lane of shown.lanes) {
+    laneTop.set(lane.id, y)
+    y += laneRows(lane.id) * ROW_H + LANE_PAD * 2 + 1
+  }
+  const lanesH = y
+  const barY = (e: TL.ShownEntry) => (laneTop.get(e.lane) ?? 0) + LANE_PAD + (rows.get(e.id) ?? 0) * ROW_H + 12
+  const byId = new Map(shown.entries.map((e) => [e.id, e]))
+  const arrows = deps.flatMap((d) => {
+    const a = byId.get(d.from)
+    const z = byId.get(d.to)
+    if (!a || !z) return []
+    const da = datesOf(a)
+    const dz = datesOf(z)
+    const x0 = LABEL_W + x(da.end ?? da.start) + (da.end ? 0 : 8)
+    const x1 = LABEL_W + x(dz.start) - (dz.end ? 2 : 10)
+    const y0 = barY(a)
+    const y1 = barY(z)
+    const bend = Math.max(14, Math.min(40, Math.abs(x1 - x0) / 2))
+    const lateNow = TL.toDay(dz.start) <= TL.toDay(da.end ?? da.start) && (!!da.end || TL.toDay(dz.start) < TL.toDay(da.start))
+    return [{ key: `${d.from}>${d.to}`, d: `M${x0} ${y0}C${x0 + bend} ${y0} ${x1 - bend} ${y1} ${x1} ${y1}`, late: lateNow }]
+  })
+  const ownOthers = sel && !sel.source ? t.entries.filter((e) => e.id !== sel.id && (sel.after?.includes(e.id) || !TL.wouldLoop(t, e.id, sel.id))) : []
   return (
     <Widget item={item} live={live} editingTitle={editingTitle} actions={actions}>
       <div
@@ -167,6 +201,21 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
           ))}
         </div>
         <div className="tl-lanes">
+          {arrows.length > 0 && (
+            <svg className="tl-deps" width={item.w} height={lanesH} aria-hidden="true">
+              <defs>
+                <marker id={`tl-arrow-${item.id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0L8 4L0 8z" className="tl-arrowhead" />
+                </marker>
+                <marker id={`tl-arrow-late-${item.id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0L8 4L0 8z" className="tl-arrowhead late" />
+                </marker>
+              </defs>
+              {arrows.map((a) => (
+                <path key={a.key} d={a.d} className={a.late ? 'late' : ''} markerEnd={`url(#tl-arrow${a.late ? '-late' : ''}-${item.id})`} />
+              ))}
+            </svg>
+          )}
           {todayX >= 0 && todayX <= trackW && (
             <div className="tl-today" style={{ left: LABEL_W + todayX }}>
               <span>Today</span>
@@ -220,8 +269,8 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
                     const left = x(d.start)
                     const top = LANE_PAD + (rows.get(entry.id) ?? 0) * ROW_H
                     const milestone = !d.end
-                    const cls = `tl-entry${milestone ? ' milestone' : ''}${selected === entry.id ? ' selected' : ''}${entry.overdue ? ' overdue' : ''}${entry.done ? ' done' : ''}`
-                    const title = `${entry.title} · ${d.start}${d.end ? ` → ${d.end}` : ''}${entry.source ? ' (Kanban card)' : ''}${entry.overdue ? ' · overdue' : ''}`
+                    const cls = `tl-entry${milestone ? ' milestone' : ''}${selected === entry.id ? ' selected' : ''}${entry.overdue ? ' overdue' : ''}${entry.done ? ' done' : ''}${late.has(entry.id) ? ' late' : ''}`
+                    const title = `${entry.title} · ${d.start}${d.end ? ` → ${d.end}` : ''}${entry.source ? ' (Kanban card)' : ''}${entry.overdue ? ' · overdue' : ''}${late.has(entry.id) ? ' · starts before what it waits for is done' : ''}`
                     if (renaming === entry.id && !entry.source)
                       return (
                         <input
@@ -285,6 +334,22 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
             <button onClick={() => update((x) => TL.updateEntry(x, sel.id, sel.end ? { end: undefined } : { end: TL.fromDay(TL.toDay(sel.start) + 3) }))}>
               {sel.end ? 'Make milestone' : 'Make span'}
             </button>
+            {ownOthers.length > 0 && (
+              <span className="tl-wait-anchor">
+                <button className={sel.after?.length ? 'on' : ''} title="Events that must finish before this one starts" onClick={() => setWaitMenu(!waitMenu)}>
+                  Waits for{sel.after?.length ? ` (${sel.after.length})` : '…'}
+                </button>
+                {waitMenu && (
+                  <Menu
+                    onClose={() => setWaitMenu(false)}
+                    items={ownOthers.map((e) => [
+                      `${sel.after?.includes(e.id) ? '✓ ' : ''}${e.title}`,
+                      () => update((x) => (sel.after?.includes(e.id) ? TL.removeDependency(x, e.id, sel.id) : TL.addDependency(x, e.id, sel.id))),
+                    ])}
+                  />
+                )}
+              </span>
+            )}
             <button onClick={() => setRenaming(sel.id)}>Rename</button>
             <button
               className="danger"
