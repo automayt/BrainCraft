@@ -22,7 +22,7 @@ export interface CatchUp {
 /** Moves smaller than this (in board units) are tidying, not news. */
 const MOVE = 60
 
-const CONTENT_SKIP = new Set(['x', 'y', 'w', 'h', 'offset', 'notes'])
+const CONTENT_SKIP = new Set(['x', 'y', 'w', 'h', 'offset', 'notes', 'by'])
 
 function contentChanged(a: Item, z: Item): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(z)])
@@ -62,6 +62,45 @@ export function catchUp(before: Board, now: Board, since: number): CatchUp | nul
   return { since, added, changed, removed, comments }
 }
 
+/**
+ * Signs `me` on the objects `after` adds or really changes compared with
+ * `before` (not layout shuffles or new comments, which carry their own author).
+ */
+export function stampAuthors(before: Board, after: Board, me: string): Board {
+  if (before === after || before.items === after.items || !me) return after
+  const old = new Map(before.items.map((i) => [i.id, i]))
+  let touched = false
+  const items = after.items.map((z) => {
+    const a = old.get(z.id)
+    if (a === z || z.by === me) return z
+    if (a && !contentChanged(a, z) && !moved(a, z)) return z
+    touched = true
+    return { ...z, by: me }
+  })
+  return touched ? { ...after, items } : after
+}
+
+/** Who made the changes in `c` (that we know of), in order of first appearance. */
+export function catchUpPeople(c: CatchUp, now: Board): string[] {
+  const names = new Set<string>()
+  for (const id of [...c.added, ...c.changed]) {
+    const by = getItem(now, id)?.by
+    if (by) names.add(by)
+  }
+  for (const x of c.comments) {
+    const i = getItem(now, x.id)
+    for (const n of (i?.notes ?? []).slice(-x.count)) if (n.author) names.add(n.author)
+  }
+  return [...names]
+}
+
+/** "Sam", "Sam and Alex", "Sam, Alex and 2 others". */
+export function listNames(names: string[]): string {
+  if (names.length <= 2) return names.join(' and ')
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`
+  return `${names[0]}, ${names[1]} and ${names.length - 2} others`
+}
+
 /** "3 new, 2 changed, 1 removed, 4 comments". */
 export function catchUpSummary(c: CatchUp): string {
   const n = (count: number, word: string, plural = `${word}s`) => (count ? `${count} ${count === 1 ? word : plural}` : '')
@@ -73,7 +112,7 @@ export function catchUpSummary(c: CatchUp): string {
 export function catchUpText(c: CatchUp, now: Board): string {
   const label = (id: Id) => {
     const i = getItem(now, id)
-    return i ? `${objectLabel(i)} (${i.kind}, #${id})` : `#${id}`
+    return i ? `${objectLabel(i)} (${i.kind}, #${id}${i.by ? `, by ${i.by}` : ''})` : `#${id}`
   }
   const lines: string[] = []
   if (c.added.length) lines.push(`Added: ${c.added.map(label).join('; ')}`)

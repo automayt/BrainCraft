@@ -2,7 +2,7 @@
 
 import type { Editor } from '../editor/Editor'
 import * as B from '../model/board'
-import { catchUpSummary, catchUpText } from '../model/catchup'
+import { catchUpPeople, catchUpSummary, catchUpText, listNames } from '../model/catchup'
 import { objectLabel } from '../model/notes'
 import { timeAgo } from './Boards'
 import { useEditor } from './useEditor'
@@ -16,6 +16,7 @@ export function CatchUpBanner() {
     ...c.changed.map((id) => ({ id, what: 'Changed' })),
     ...c.comments.map((x) => ({ id: x.id, what: `${x.count} comment${x.count === 1 ? '' : 's'}` })),
   ].filter((r) => B.getItem(editor.board, r.id))
+  const people = catchUpPeople(c, editor.board).filter((n) => n !== editor.me)
   return (
     <div className="catchup no-canvas" role="status">
       <div className="catchup-head">
@@ -24,6 +25,7 @@ export function CatchUpBanner() {
         </span>
         <span className="catchup-msg">
           <strong>Since you were here</strong> <small>({timeAgo(c.since)})</small>: {catchUpSummary(c)}
+          {people.length > 0 && <span className="catchup-who"> · by {listNames(people)}</span>}
         </span>
         <span className="catchup-actions">
           <button className="primary" onClick={() => editor.showCatchUp()}>
@@ -46,7 +48,8 @@ export function CatchUpBanner() {
             <li key={`${r.what}${r.id}`}>
               <button onClick={() => editor.focusObject(r.id)}>
                 <span className={`catchup-tag ${r.what === 'New' ? 'new' : r.what === 'Changed' ? 'changed' : 'comment'}`}>{r.what}</span>
-                {objectLabel(B.getItem(editor.board, r.id)!)}
+                <span className="catchup-label">{objectLabel(B.getItem(editor.board, r.id)!)}</span>
+                {r.what !== 'Changed' && r.what !== 'New' ? null : B.getItem(editor.board, r.id)!.by && <small className="catchup-by">{B.getItem(editor.board, r.id)!.by}</small>}
               </button>
             </li>
           ))}

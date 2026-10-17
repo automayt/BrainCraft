@@ -39,3 +39,30 @@ describe('since you were here', () => {
     expect(catchUp(before, moved, 0)!.changed).toEqual([a])
   })
 })
+
+describe('who changed it', () => {
+  it('signs real changes, not layout nudges or comments', async () => {
+    const { addItem, newItem, updateItem } = await import('./board')
+    const { stampAuthors, catchUp, catchUpPeople, listNames } = await import('./catchup')
+    let b: import('./types').Board = { version: 1, title: 't', items: [], connectors: [], nextId: 1 }
+    let a: number, z: number
+    ;[b, a] = addItem(b, newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'one' }))
+    ;[b, z] = addItem(b, newItem('sticky', { x: 300, y: 0, w: 100, h: 100 }, { text: 'two' }))
+    const start = b
+    // Sam edits one note and nudges the other a little.
+    let next = updateItem(b, a, (i) => ({ ...i, text: 'one!' }))
+    next = updateItem(next, z, (i) => ({ ...i, x: i.x + 5 }))
+    next = stampAuthors(b, next, 'Sam')
+    expect(next.items.find((i) => i.id === a)!.by).toBe('Sam')
+    expect(next.items.find((i) => i.id === z)!.by).toBeUndefined()
+    // Alex comments on the second one: comments carry their own author.
+    const commented = stampAuthors(next, updateItem(next, z, (i) => ({ ...i, notes: [{ id: 'n1', text: 'hi', at: 1, author: 'Alex' }] })), 'Alex')
+    expect(commented.items.find((i) => i.id === z)!.by).toBeUndefined()
+    const news = catchUp(start, commented, 0)!
+    expect(catchUpPeople(news, commented)).toEqual(['Sam', 'Alex'])
+    expect(listNames(['Sam'])).toBe('Sam')
+    expect(listNames(['Sam', 'Alex', 'Jo', 'Riley'])).toBe('Sam, Alex and 2 others')
+    // Nothing changed: same board back.
+    expect(stampAuthors(commented, commented, 'Sam')).toBe(commented)
+  })
+})

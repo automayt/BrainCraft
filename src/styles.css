@@ -6731,3 +6731,20 @@ button.on,
 .text-editor textarea[style*='pre'] {
   background: #16181d;
 }
+
+.catchup-who {
+  color: var(--muted);
+}
+
+.catchup-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catchup-by {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
