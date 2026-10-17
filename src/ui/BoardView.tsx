@@ -14,6 +14,7 @@ import { DataViewWidget } from './widgets/DataView'
 import { type Board, type Connector, type Id, type Item, type Status, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
 import { LinkCardView } from './LinkCardView'
 import { WheelFace } from './WheelFace'
+import { CodeBlockView } from './CodeBlockView'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -135,6 +136,8 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
       return item.view ? <DataViewWidget item={item} live={live} editingTitle={editing} /> : null
     case 'link':
       return <LinkCardView item={item} live={live} />
+    case 'code':
+      return <CodeBlockView item={item} live={live} editing={editing} />
     default:
       return null
   }

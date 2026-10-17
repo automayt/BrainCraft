@@ -23,7 +23,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
   the tab title and wiki-links, so boards are easy to tell apart.
 - [x] **Many stickies at once.** Type or paste a list, one idea per line, and
   get a tidy grid of sticky notes (pasting a list today makes a mind map).
-- [ ] **Code blocks.** Code with syntax highlighting and a language label, for
+- [x] **Code blocks.** Code with syntax highlighting and a language label, for
   friends who share snippets.
 
 ## From the earlier list

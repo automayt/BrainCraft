@@ -116,6 +116,7 @@ export function ContextMenu() {
       { label: 'Table', keys: 'G', run: place('table') },
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
+      { label: 'Code block', run: () => editor.addCode('', undefined, editor.pointer ?? undefined) },
       { label: 'Private brainstorm', run: () => editor.startBrainstorm() },
       { label: 'Spinner wheel', run: () => editor.addWheel() },
       'sep',

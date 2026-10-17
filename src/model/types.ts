@@ -18,6 +18,7 @@ export type Kind =
   | 'timeline'
   | 'data'
   | 'link'
+  | 'code'
 
 /** A web address shown as a card. The preview fields come from the page, when a server could read it. */
 export interface LinkCard {
@@ -240,6 +241,8 @@ export interface Item extends Rect {
   timeline?: TimelineData
   /** The web address and preview of a `link` card. */
   link?: LinkCard
+  /** A code block's language (an id from model/code; guessed when missing). */
+  lang?: string
   /** Emoji reactions: who put each one on. */
   reactions?: Record<string, string[]>
   /** Dot votes, by vote card id (as text), then by person. */
@@ -379,6 +382,8 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 760, h: 360 }
     case 'link':
       return { w: 360, h: 120 }
+    case 'code':
+      return { w: 460, h: 240 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -407,6 +412,8 @@ export function defaultColor(k: Kind): string {
     case 'data':
     case 'link':
       return '#ffffff'
+    case 'code':
+      return '#16181d'
     case 'text':
     case 'pen':
       return INKS[0][1]
@@ -423,6 +430,8 @@ export function defaultFontSize(k: Kind): number {
       return 17
     case 'comment':
       return 16
+    case 'code':
+      return 14
     case 'table':
     case 'kanban':
     case 'timeline':
@@ -449,4 +458,5 @@ export const KIND_LABELS: Record<Kind, string> = {
   timeline: 'Timeline',
   data: 'Database view',
   link: 'Link',
+  code: 'Code block',
 }

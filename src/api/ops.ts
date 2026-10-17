@@ -17,6 +17,7 @@ import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseO
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
+import { langId } from '../model/code'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
@@ -71,6 +72,7 @@ export type Op =
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
   | ({ op: 'createLink'; url: string; w?: number; h?: number } & Placed)
   | ({ op: 'createSpinner'; options: string[] } & Placed)
+  | ({ op: 'createCode'; code: string; lang?: string; w?: number; h?: number } & Placed)
   | ({
       op: 'createDatabase'
       title?: string
@@ -315,6 +317,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'createCode': {
+        const code = text(op.code, 'code', false)
+        const lang = langId(op.lang)
+        const lines = code.split('\n')
+        const w = op.w ?? Math.min(900, Math.max(360, 60 + Math.max(...lines.map((l) => l.length)) * 8.6))
+        const h = op.h ?? Math.min(700, Math.max(160, 60 + lines.length * 21))
+        const id = add(B.newItem('code', r0(w, h), { text: code, ...(lang ? { lang } : {}) }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
       case 'createSpinner': {
         if (!Array.isArray(op.options) || op.options.filter((o) => typeof o === 'string' && o.trim()).length < 2) fail(index, op, '"options" should list two or more choices')
         let id: Id
@@ -519,6 +532,7 @@ export const OPS: Op['op'][] = [
   'createImage',
   'createLink',
   'createSpinner',
+  'createCode',
   'connect',
   'update',
   'delete',

@@ -331,6 +331,10 @@ These become interactive once selected; drag them by their title strip.
   paste becomes a sticky note. **Paste a list** (one idea per line, bullets
   fine) to get a tidy grid of sticky notes, one per line; Ctrl+K → "Add many
   sticky notes" opens a box to type them in. **Paste or drop images** to add them.
+- **Code blocks:** paste a fenced block from a chat (```lang … ```), or
+  right-click → *Code block*, for code with coloured keywords, strings and
+  comments. The language is guessed, or pick it on the block; **Copy** puts
+  the code on the clipboard, and Tab indents while you edit.
 - **Paste a web address** to get a link card with the page's title, picture
   and site (filled in by the BrainCraft server; without one, the card shows
   the address). **YouTube, Vimeo and Spotify** links play right on the card:

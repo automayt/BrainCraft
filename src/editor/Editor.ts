@@ -30,6 +30,7 @@ import * as BS from '../model/brainstorm'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
+import { fencedCode, langId } from '../model/code'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -1154,6 +1155,31 @@ export class Editor {
     return this.masked.view
   }
 
+  /** Adds a code block at the pointer, sized to its code. */
+  addCode(code = '', lang?: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    if (this.readOnly) return
+    const lines = code.split('\n')
+    const w = Math.min(900, Math.max(360, 60 + Math.max(...lines.map((l) => l.length)) * 8.6))
+    const h = Math.min(700, Math.max(160, 60 + lines.length * 21))
+    let id: Id = -1
+    this.edit((b) => {
+      const [next, newId] = B.addItem(b, B.newItem('code', rectFromCenter(at, w, h), { text: code, ...(langId(lang) ? { lang: langId(lang) } : {}) }))
+      id = newId
+      return next
+    })
+    this.tool = 'select'
+    this.select([id])
+    if (!code) this.startEditing(id, { before: this.board, created: true })
+    return id
+  }
+
+  /** Sets a code block's language (for its colouring and label). */
+  setCodeLang(id: Id, lang: string) {
+    const l = langId(lang)
+    if (!l || this.readOnly) return
+    this.edit((b) => B.updateItem(b, id, (i) => (i.lang === l ? i : { ...i, lang: l })))
+  }
+
   /** Turns flip cards over (the selected ones by default). */
   flipCards(ids: Id[] = [...this.selection]) {
     if (this.readOnly) return
@@ -1831,6 +1857,11 @@ export class Editor {
         const p = B.getItem(this.board, id)?.parent
         return p === undefined || !ids.has(p)
       }))
+      return
+    }
+    const fenced = fencedCode(text)
+    if (fenced) {
+      this.addCode(fenced.code, fenced.lang, at)
       return
     }
     const url = urlIn(text)

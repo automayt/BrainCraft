@@ -823,3 +823,11 @@ describe('pasting a list', () => {
     expect(e.board.items.filter((i) => i.kind === 'mind')).toHaveLength(2)
   })
 })
+
+describe('pasting code', () => {
+  it('turns a fenced block into a code block in its language', () => {
+    const e = editor()
+    e.pasteText('```rust\nfn main() {\n    println!("hi");\n}\n```')
+    expect(e.single).toMatchObject({ kind: 'code', lang: 'rust', text: 'fn main() {\n    println!("hi");\n}' })
+  })
+})

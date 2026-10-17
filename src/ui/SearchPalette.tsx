@@ -20,6 +20,7 @@ const FILTERS: Filter[] = [
   { label: 'Frames', kinds: ['frame'] },
   { label: 'Images', kinds: ['image'] },
   { label: 'Links', kinds: ['link'] },
+  { label: 'Code', kinds: ['code'] },
 ]
 
 /** Wraps each query word found in `text` in <mark>. */
