@@ -188,6 +188,7 @@ function BoardCard(p: {
           />
         ) : (
           <button className="board-name" title={`Open ${meta.title}`} onClick={p.onOpen}>
+            {meta.icon && <span className="board-name-icon">{meta.icon}</span>}
             {meta.title}
           </button>
         )}

@@ -149,3 +149,16 @@ describe('applyPatches matches applying one change at a time', () => {
     }
   })
 })
+
+describe('board icon', () => {
+  it('travels as its own patch and can be taken off again', () => {
+    const a = emptyBoard()
+    const z = { ...a, icon: '🚗' }
+    const p = diff(a, z)
+    expect(p).toEqual([{ k: 'icon', v: '🚗' }])
+    expect(keyOf(p[0])).toBe('icon')
+    expect(applyPatches(a, p).icon).toBe('🚗')
+    const back = applyPatches(z, diff(z, a))
+    expect('icon' in back).toBe(false)
+  })
+})

@@ -496,6 +496,17 @@ export class Editor {
     this.edit((b) => (b.title === title ? b : { ...b, title }))
   }
 
+  /** Sets the board's emoji (null takes it off). */
+  setBoardIcon(icon: string | null) {
+    this.edit((b) => {
+      if ((b.icon ?? null) === icon) return b
+      const next: Board = { ...b }
+      if (icon) next.icon = icon
+      else delete next.icon
+      return next
+    })
+  }
+
   select(ids: Iterable<Id>) {
     this.selection = new Set(ids)
     this.selectedConnector = null

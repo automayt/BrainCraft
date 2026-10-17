@@ -290,6 +290,8 @@ export interface Connector {
 export interface Board {
   version: number
   title: string
+  /** An emoji that marks the board in lists, the tab title and links. */
+  icon?: string
   /** Items in paint order; later items are drawn on top. Mind-map siblings keep this order too. */
   items: Item[]
   connectors: Connector[]

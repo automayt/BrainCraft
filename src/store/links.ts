@@ -7,7 +7,7 @@ import type { BoardMeta, Library } from './library'
 /** The key links use for a board: its live-session id when shared (the same for every friend), else its id here. */
 export const linkKey = (m: Pick<BoardMeta, 'id' | 'live'>) => m.live?.id ?? m.id
 
-export const boardRefs = (boards: readonly BoardMeta[]): BoardRef[] => boards.map((m) => ({ key: linkKey(m), title: m.title }))
+export const boardRefs = (boards: readonly BoardMeta[]): BoardRef[] => boards.map((m) => ({ key: linkKey(m), title: m.title, ...(m.icon ? { icon: m.icon } : {}) }))
 
 /** A link on another board, from object `from` (in a comment, or else its description). */
 export interface CrossLink {

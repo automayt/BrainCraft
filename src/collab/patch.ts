@@ -18,6 +18,7 @@ export type Patch =
   | { k: 'item'; id: Id; v: Item | null }
   | { k: 'conn'; id: Id; v: Connector | null }
   | { k: 'title'; v: string }
+  | { k: 'icon'; v: string | null }
   /** Paint order of the board's items (only sent when the order of existing items changes). */
   | { k: 'order'; v: Id[] }
   | { k: 'ds'; id: string; v: DatasetMeta | null }
@@ -32,6 +33,8 @@ export function keyOf(p: Patch): string {
       return `c:${p.id}`
     case 'title':
       return 'title'
+    case 'icon':
+      return 'icon'
     case 'order':
       return 'order'
     case 'ds':
@@ -65,6 +68,7 @@ export function diff(a: Board, z: Board): Patch[] {
   if (a === z) return []
   const out: Patch[] = []
   if (a.title !== z.title) out.push({ k: 'title', v: z.title })
+  if (a.icon !== z.icon) out.push({ k: 'icon', v: z.icon ?? null })
 
   if (a.items !== z.items && sameIds(a.items, z.items)) {
     // The usual case (objects edited, none added, removed or reordered): compare in step.
@@ -199,6 +203,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   const connList = new ListChanges<Connector>(b.connectors)
   let datasets = b.datasets
   let title = b.title
+  let icon = b.icon
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -212,6 +217,9 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
     switch (p.k) {
       case 'title':
         title = p.v
+        break
+      case 'icon':
+        icon = p.v ?? undefined
         break
       case 'item':
         itemList.set(p.id, p.v)
@@ -248,6 +256,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   if (connectors.some((c) => !ids.has(c.from) || !ids.has(c.to))) connectors = connectors.filter((c) => ids.has(c.from) && ids.has(c.to))
   // nextId stays: in a live session each person hands out ids from their own range.
   const next: Board = { ...b, title, items, connectors }
+  if (icon) next.icon = icon
+  else delete next.icon
   if (datasets?.length) next.datasets = datasets
   else delete next.datasets
   return next

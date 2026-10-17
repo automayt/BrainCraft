@@ -122,6 +122,7 @@ export function fromEditable(text: string, picks: ReadonlyMap<string, string>): 
 export interface BoardRef {
   key: string
   title: string
+  icon?: string
 }
 
 /**
@@ -219,7 +220,7 @@ export function linkCandidates(b: Board, query: string, boards: readonly BoardRe
   const objects = mentionCandidates(b, q, exclude, limit).map((i) => ({ label: objectLabel(i), hint: KIND_LABELS[i.kind], to: { item: i.id } }))
   const named = boards
     .filter((r) => !q || r.title.toLowerCase().includes(q))
-    .map((r) => ({ label: r.title, hint: 'Board', to: { board: r.key } }))
+    .map((r) => ({ label: r.title, hint: r.icon ? `${r.icon} Board` : 'Board', to: { board: r.key } }))
   // Boards first, but never crowding out the objects entirely.
   return [...named.slice(0, Math.max(4, limit - objects.length)), ...objects].slice(0, limit)
 }

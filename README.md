@@ -162,6 +162,9 @@ These become interactive once selected; drag them by their title strip.
 - **Your boards (Ctrl+O)** lists every board in this browser with a live
   thumbnail. Rename, duplicate or delete them, or start a new one from a
   template: blank, brainstorm, process map, sprint plan or retrospective.
+- **Board icons:** click the face next to the board's title to give it an
+  emoji. It shows in the board list, the browser tab and links to the board,
+  and travels with the board in live sessions.
 - **Export image or PDF (Ctrl+Shift+E):** the whole board or the selection
   as PNG or SVG, or straight to the clipboard to paste into a chat. The PDF
   has one page per frame, like the slides. Right-click → **Copy as image**

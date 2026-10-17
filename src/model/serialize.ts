@@ -63,6 +63,7 @@ export function fromJson(json: string): Board {
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
+    ...(typeof raw.icon === 'string' && raw.icon && raw.icon.length <= 16 ? { icon: raw.icon } : {}),
     items: kept,
     connectors: connectors.filter((c) => keptIds.has(c.from) && keptIds.has(c.to)),
     nextId: Math.max(typeof raw.nextId === 'number' ? raw.nextId : 0, maxId + 1),

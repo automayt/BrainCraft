@@ -19,7 +19,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
   picks the film" and "which task first".
 - [x] **Flip cards.** A card with a front and a back; click to flip. Good for
   quizzes, reveals and "answer on the back" games.
-- [ ] **Board icons.** Pick an emoji for each board; it shows in the board list,
+- [x] **Board icons.** Pick an emoji for each board; it shows in the board list,
   the tab title and wiki-links, so boards are easy to tell apart.
 - [ ] **Many stickies at once.** Type or paste a list, one idea per line, and
   get a tidy grid of sticky notes (pasting a list today makes a mind map).
