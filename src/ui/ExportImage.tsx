@@ -8,7 +8,7 @@ import { useDialog } from './useDialog'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 
-const load = () => import('./exportImage')
+const load = () => import('./imageExport')
 
 /** Copies the selection (or the whole board) to the clipboard as a PNG. */
 export async function copyImage(editor: Editor, ids?: ReadonlySet<Id>) {

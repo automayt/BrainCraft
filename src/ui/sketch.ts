@@ -12,7 +12,7 @@ export async function sketchToBoard(editor: Editor) {
   if (!box || !hasSketch(editor)) return editor.setStatus('Select a drawing or a photo first')
   editor.setStatus('Reading the sketch…')
   try {
-    const m = await import('./exportImage')
+    const m = await import('./imageExport')
     const image = await m.aiImageOf(editor, ids, editor.selectedItems.some((i) => i.kind === 'image'))
     if (!image) return editor.setStatus('Nothing to read')
     const at = { x: Math.round(box.x + box.w + 80), y: Math.round(box.y) }
