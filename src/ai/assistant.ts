@@ -212,8 +212,9 @@ export class Assistant {
       if (!patches.length) return 'Those operations change nothing on the board.'
       return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, counts: countChanges(before, patches), status: 'pending' }
     } catch (err) {
+      // Anything an op trips over goes back to Claude to fix, never out of the conversation.
       if (err instanceof OpError) return err.message
-      throw err
+      return `Those operations couldn't be applied: ${(err as Error)?.message ?? String(err)}. Check each field's type.`
     }
   }
 
@@ -316,7 +317,7 @@ export class Assistant {
         const results: Anthropic.Beta.BetaToolResultBlockParam[] = []
         for (const u of uses) {
           on.status(STATUS[u.name] ?? 'Working…')
-          const r = await this.runTool(u.name, u.input, on)
+          const r = await this.runTool(u.name, u.input, on).catch((err: unknown) => ({ content: `That tool failed: ${(err as Error)?.message ?? String(err)}`, is_error: true }))
           results.push({ type: 'tool_result', tool_use_id: u.id, content: r.content, ...(r.is_error ? { is_error: true } : {}) })
         }
         // Every result for one turn goes back in a single message.
@@ -324,8 +325,24 @@ export class Assistant {
       }
       on.text('\n\n_Stopped after too many steps._')
     } finally {
+      this.answerOpenToolCalls()
       on.status(null)
     }
+  }
+
+  /**
+   * A request stopped mid-step (aborted, or an error) can leave Claude's tool calls without
+   * results, which would make every later request invalid; answer them as not run.
+   */
+  private answerOpenToolCalls() {
+    const last = this.messages[this.messages.length - 1]
+    if (last?.role !== 'assistant' || !Array.isArray(last.content)) return
+    const uses = last.content.filter((b) => b.type === 'tool_use')
+    if (!uses.length) return
+    this.messages.push({
+      role: 'user',
+      content: uses.map((u) => ({ type: 'tool_result' as const, tool_use_id: (u as Anthropic.Beta.BetaToolUseBlock).id, is_error: true, content: 'Not run: the request was stopped.' })),
+    })
   }
 
   private tally(u: Anthropic.Beta.BetaUsage | undefined) {

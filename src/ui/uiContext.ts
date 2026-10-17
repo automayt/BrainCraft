@@ -6,6 +6,8 @@ export interface ContextMenuState {
   /** Position in canvas pixels. */
   x: number
   y: number
+  /** Opened from the keyboard (Shift F10 or the Menu key): the first item takes focus. */
+  keyboard?: boolean
 }
 
 /** App-level UI actions that sit outside the editor (dialogs, files, theme). */

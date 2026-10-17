@@ -112,13 +112,13 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
               <span className="col-name">{c.name}</span>
             )}
             {live && (
-              <button className="sort" title="Sort" onClick={() => update((x) => T.cycleSort(x, c.id))}>
+              <button className="sort" title="Sort" aria-label={`Sort by ${c.name}`} onClick={() => update((x) => T.cycleSort(x, c.id))}>
                 {t.sort?.column === c.id ? (t.sort.dir === 'asc' ? '↑' : '↓') : '↕'}
               </button>
             )}
             {!live && t.sort?.column === c.id && <span className="sort">{t.sort.dir === 'asc' ? '↑' : '↓'}</span>}
             {live && (
-              <button className="more" title="Column options" onClick={() => setMenu({ kind: 'col', id: c.id })}>
+              <button className="more" title="Column options" aria-label={`Options for ${c.name}`} onClick={() => setMenu({ kind: 'col', id: c.id })}>
                 ⋯
               </button>
             )}
@@ -146,7 +146,7 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
           <>
             <div className="tf corner">
               {live && filters > 0 && (
-                <button className="link" title="Clear filters" onClick={() => update((x) => ({ ...x, filters: {} }))}>
+                <button className="link" title="Clear filters" aria-label="Clear filters" onClick={() => update((x) => ({ ...x, filters: {} }))}>
                   ×
                 </button>
               )}
@@ -171,7 +171,7 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
           <div key={row.id} className={`tr${row.hidden ? ' hidden-row' : ''}`} role="row" style={{ display: 'contents' }}>
             <div className="td rownum">
               {live ? (
-                <button title="Row options" onClick={() => setMenu({ kind: 'row', id: row.id })}>
+                <button title="Row options" aria-label="Row options" onClick={() => setMenu({ kind: 'row', id: row.id })}>
                   {t.rows.indexOf(row) + 1}
                 </button>
               ) : (

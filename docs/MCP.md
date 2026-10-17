@@ -55,7 +55,8 @@ It works two ways:
 | `connect_browser` | Connection status and the pairing link. |
 
 Every board tool accepts an optional `file`. Relative paths resolve against
-`BRAINCRAFT_DIR`, which defaults to the server's working directory.
+`BRAINCRAFT_DIR`, which defaults to the server's working directory. Only
+`.braincraft` files can be read or written (a path without an extension gets one).
 
 ## Settings
 

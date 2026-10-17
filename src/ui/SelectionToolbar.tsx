@@ -10,6 +10,17 @@ import { createPortal } from 'react-dom'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
+/** A toolbar too wide for the screen scrolls sideways with an ordinary mouse wheel. */
+const scrollSideways = (e: React.WheelEvent<HTMLElement>) => {
+  const el = e.currentTarget
+  if (e.deltaY && el.scrollWidth > el.clientWidth) el.scrollLeft += e.deltaY
+}
+
+/** Clicking a button here leaves the keyboard with the board, so Ctrl Z, Delete and arrows still work. */
+const keepCanvasKeys = (e: React.MouseEvent) => {
+  if ((e.target as Element).closest('button')) e.preventDefault()
+}
+
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
 export function SelectionToolbar() {
   const editor = useEditor()
@@ -44,7 +55,12 @@ export function SelectionToolbar() {
     const r = c && B.connectorRoute(board, c)
     if (!r) return null
     const s = editor.screenRect({ x: r.mid.x, y: r.mid.y, w: 0, h: 0 })
-    anchor = { x: s.x, y: s.y - 24 }
+    // Clear of the whole line, so a second click (to label it) lands on the line, not a button.
+    const xs = r.points.map((p) => p.x)
+    const ys = r.points.map((p) => p.y)
+    const box = editor.screenRect({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) })
+    anchor = { x: s.x, y: box.y - 20 }
+    below = box.y + box.h + 20
     palette = INKS
   } else if (items.length) {
     const bounds = B.bounds(board, editor.selection)
@@ -62,7 +78,8 @@ export function SelectionToolbar() {
   const connector = editor.selectedConnector !== null ? B.getConnector(board, editor.selectedConnector) : undefined
   const flows = items.filter((i) => i.kind === 'flow')
   // Clear of the tool rail on the left (on phones it sits at the bottom instead).
-  const minX = (editor.viewport.w > 720 ? 68 : 12) + width / 2
+  // (and of the flowchart shape panel beside it, when that's open).
+  const minX = (editor.viewport.w > 720 ? (editor.flowPalette ? 224 : 68) : 12) + width / 2
   // ...and clear of the comments panel or assistant on the right.
   const maxX = editor.viewport.w - editor.rightInset - 12 - width / 2
   const x = maxX < minX ? minX : Math.min(Math.max(anchor.x, minX), maxX)
@@ -76,19 +93,26 @@ export function SelectionToolbar() {
     }
     return area
   }
+  // Below the top bar, and below the "Since you were here" news while that's showing.
+  // (The board fills the window, so the news's page position is its position here too.)
+  const stack = editor.catchUp ? document.querySelector('.top-stack')?.getBoundingClientRect() : undefined
+  const topLimit = stack && stack.height ? Math.max(64, stack.bottom + 8) : 64
   const aboveTop = anchor.y - size.h
   // On phones the tool rail and zoom bar take the bottom ~130px.
   // On desktops the status key, hint and zoom bar sit along the bottom; on phones the tool rail too.
-  const fitsBelow = below !== null && below + size.h < editor.viewport.h - (editor.viewport.w > 720 ? 64 : 140)
-  const useBelow = fitsBelow && (aboveTop < 64 || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
-  const y = useBelow ? below! : Math.max(anchor.y, 64 + size.h)
+  // Over the minimap's corner, keep above the minimap (200 × 136, 12px in from the edges).
+  const overMinimap = editor.viewport.w > 720 && x + width / 2 > editor.viewport.w - editor.rightInset - 12 - 200
+  const bottomLimit = editor.viewport.w > 720 ? (overMinimap ? 160 : 64) : 140
+  const fitsBelow = below !== null && below + size.h < editor.viewport.h - bottomLimit
+  const useBelow = fitsBelow && (aboveTop < topLimit || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
+  const y = useBelow ? below! : Math.max(anchor.y, topLimit + size.h)
   const plain = (i: (typeof items)[number]) => i.kind !== 'image' && i.kind !== 'link' && i.kind !== 'code' && !isWidget(i.kind)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
 
   return (
-    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - (editor.viewport.w > 720 ? 80 : 24)) }} onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - (editor.viewport.w > 720 ? 80 : 24)) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys} onWheel={scrollSideways}>
       {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (
@@ -98,6 +122,7 @@ export function SelectionToolbar() {
             style={{ background: color }}
             title={name}
             aria-label={name}
+            aria-pressed={current === color}
             onClick={() => editor.setColor(color)}
           />
         ))}
@@ -111,6 +136,8 @@ export function SelectionToolbar() {
               key={style}
               className={(connector.style ?? 'straight') === style ? 'on' : ''}
               title={`${style[0].toUpperCase()}${style.slice(1)} line`}
+              aria-label={`${style[0].toUpperCase()}${style.slice(1)} line`}
+              aria-pressed={(connector.style ?? 'straight') === style}
               onClick={() => editor.setConnectorStyle(style)}
             >
               <LineStyleIcon style={style} />
@@ -128,6 +155,8 @@ export function SelectionToolbar() {
               key={arrows}
               className={(connector.arrows ?? 'end') === arrows ? 'on' : ''}
               title={title}
+              aria-label={title}
+              aria-pressed={(connector.arrows ?? 'end') === arrows}
               onClick={() => editor.setArrowheads(arrows)}
             >
               {glyph}
@@ -136,6 +165,8 @@ export function SelectionToolbar() {
  <button
             className={connector.dashed ? 'on' : ''}
             title="Dashed line"
+            aria-label="Dashed line"
+            aria-pressed={!!connector.dashed}
             onClick={() => editor.setDashed(!connector.dashed)}
           >
             ┅
@@ -167,10 +198,10 @@ export function SelectionToolbar() {
       {hasFontSize && (
         <>
           <span className="sep" />
-          <button title="Smaller text" onClick={() => editor.scaleFont(1 / 1.2)}>
+          <button title="Smaller text" aria-label="Smaller text" onClick={() => editor.scaleFont(1 / 1.2)}>
             A−
           </button>
-          <button title="Larger text" onClick={() => editor.scaleFont(1.2)}>
+          <button title="Larger text" aria-label="Larger text" onClick={() => editor.scaleFont(1.2)}>
             A+
           </button>
         </>
@@ -178,9 +209,14 @@ export function SelectionToolbar() {
       {mind && (
         <>
           <span className="sep" />
-          <button title="Add idea (Tab)" onClick={() => editor.addMindNode(mind.id, 'child')}>
-            + Idea
+          <button title="Add a sub-idea (Tab)" onClick={() => editor.addMindNode(mind.id, 'child')}>
+            + Sub-idea
           </button>
+          {mind.parent !== undefined && (
+            <button title="Add an idea below this one (Enter)" onClick={() => editor.addMindNode(mind.id, 'sibling')}>
+              + Idea below
+            </button>
+          )}
           {board.items.some((i) => i.parent === mind.id) && (
             <button title="Collapse or expand (/)" onClick={() => editor.toggleCollapsed(mind.id)}>
               {mind.collapsed ? 'Expand' : 'Collapse'}
@@ -265,7 +301,7 @@ export function SelectionToolbar() {
         </button>
       )}
       {editor.single && (
-        <button title="Comments (Shift+C)" onClick={() => editor.toggleNotes(true)}>
+        <button title="Comments (Alt+C)" onClick={() => editor.toggleNotes(true)}>
           Comment{editor.single.notes?.length ? ` (${editor.single.notes.length})` : ''}
         </button>
       )}
@@ -312,7 +348,7 @@ function AlignMenu({ count }: { count: number }) {
       </button>
       {at &&
         createPortal(
-        <div className="align-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+        <div className="align-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
           {ALIGN.map((a) => (
             <button
               key={a.how}
@@ -380,7 +416,7 @@ function StatusMenu() {
       </button>
       {at &&
         createPortal(
-          <div className="align-menu status-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="align-menu status-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
             {STATUSES.map((st) => (
               <button
                 key={st.id}
@@ -441,7 +477,7 @@ function ReactMenu() {
       </button>
       {at &&
         createPortal(
-          <div className="align-menu react-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+          <div className="align-menu react-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
             {RX.REACTIONS.map((emoji) => {
               const on = editor.selectedItems.length > 0 && editor.selectedItems.every((i) => i.reactions?.[emoji]?.includes(me))
               return (

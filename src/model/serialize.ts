@@ -1,51 +1,20 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { cleanIcon, cleanItem } from './sanitize'
-import { type Board, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
+import { cleanConnector, cleanDataset, cleanIcon, cleanItem } from './sanitize'
+import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
 
 export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
-}
-
-const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code'])
-
-function isItem(x: unknown): x is Item {
-  const i = x as Item
-  return (
-    typeof i === 'object' &&
-    i !== null &&
-    typeof i.id === 'number' &&
-    KINDS.has(i.kind) &&
-    [i.x, i.y, i.w, i.h, i.fontSize].every((n) => typeof n === 'number' && Number.isFinite(n)) &&
-    typeof i.color === 'string' &&
-    typeof i.text === 'string' &&
-    (i.kind !== 'link' || typeof i.link?.url === 'string')
-  )
-}
-
-function isDataset(x: unknown): x is Dataset {
-  const d = x as Dataset
-  return (
-    typeof d === 'object' &&
-    d !== null &&
-    typeof d.id === 'string' &&
-    typeof d.name === 'string' &&
-    Array.isArray(d.fields) &&
-    d.fields.length > 0 &&
-    d.fields.every((f) => f && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.type === 'string') &&
-    Array.isArray(d.records) &&
-    d.records.every((r) => r && typeof r.id === 'string' && typeof r.values === 'object' && r.values !== null)
-  )
 }
 
 /** Parses a saved board, dropping anything malformed and repairing ids. Throws on non-boards. */
 export function fromJson(json: string): Board {
   const raw = JSON.parse(json) as Partial<Board>
   if (!raw || !Array.isArray(raw.items) || !Array.isArray(raw.connectors)) throw new Error('Not a BrainCraft board')
-  // Newer optional fields are checked too: a bad one never reaches the screen.
-  const items = raw.items.filter(isItem).map(cleanItem).filter((i): i is Item => !!i)
-  const ids = new Set(items.map((i) => i.id))
+  // Every field is checked: a bad one never reaches the screen. Duplicate ids keep the first.
+  const ids = new Set<number>()
+  const items = raw.items.map(cleanItem).filter((i): i is Item => !!i && !ids.has(i.id) && !!ids.add(i.id))
   // Mind-map nodes whose parent is missing become roots.
   for (const i of items) {
     if (i.parent !== undefined && !ids.has(i.parent)) {
@@ -53,10 +22,8 @@ export function fromJson(json: string): Board {
       delete i.side
     }
   }
-  const connectors = raw.connectors.filter(
-    (c) => c && typeof c.id === 'number' && ids.has(c.from) && ids.has(c.to) && typeof c.color === 'string',
-  )
-  const datasets = Array.isArray(raw.datasets) ? raw.datasets.filter(isDataset) : []
+  const connectors = raw.connectors.map(cleanConnector).filter((c): c is Connector => !!c && ids.has(c.from) && ids.has(c.to))
+  const datasets = Array.isArray(raw.datasets) ? raw.datasets.map(cleanDataset).filter((d): d is Dataset => !!d) : []
   // A view whose dataset is missing has nothing to show.
   const known = new Set(datasets.map((d) => d.id))
   const kept = items.filter((i) => i.kind !== 'data' || (i.view && known.has(i.view.dataset)))
@@ -83,9 +50,11 @@ export function clipFromText(text: string): Clip | null {
   try {
     const raw = JSON.parse(text)
     if (raw?.type !== CLIP_TAG || !Array.isArray(raw.items)) return null
-    const items = (raw.items as unknown[]).filter(isItem)
-    const datasets = Array.isArray(raw.datasets) ? (raw.datasets as unknown[]).filter(isDataset) : []
-    return { items, connectors: Array.isArray(raw.connectors) ? raw.connectors : [], ...(datasets.length ? { datasets } : {}) }
+    // Pasted clips are checked like any other board data.
+    const items = (raw.items as unknown[]).map(cleanItem).filter((i): i is Item => !!i)
+    const datasets = Array.isArray(raw.datasets) ? (raw.datasets as unknown[]).map(cleanDataset).filter((d): d is Dataset => !!d) : []
+    const connectors = Array.isArray(raw.connectors) ? (raw.connectors as unknown[]).map(cleanConnector).filter((c): c is Connector => !!c) : []
+    return { items, connectors, ...(datasets.length ? { datasets } : {}) }
   } catch {
     return null
   }

@@ -208,7 +208,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                   </div>
                 )
               })}
-              {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">No cards yet</p>}
+              {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">{live || editor.readOnly ? 'No cards yet' : 'No cards yet — select the board to add one'}</p>}
               {drag?.moved && drag.target?.column === col.id && drag.target.index >= col.cards.filter((c) => c.id !== drag.card).length && (
                 <div className="drop-line" />
               )}
@@ -219,14 +219,22 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                     autoFocus
                     rows={2}
                     placeholder="Card title — Enter to add another, Esc to stop"
-                    onBlur={() => setAdding(null)}
+                    onBlur={(e) => {
+                      // Clicking away keeps what was typed, as a card.
+                      const title = e.target.value.trim()
+                      if (title) update((x) => K.addCard(x, col.id, title)[0])
+                      setAdding(null)
+                    }}
                     onKeyDown={(e) => {
                       const input = e.target as HTMLTextAreaElement
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
                         if (input.value.trim()) update((x) => K.addCard(x, col.id, input.value.trim())[0])
                         input.value = ''
-                      } else if (e.key === 'Escape') setAdding(null)
+                      } else if (e.key === 'Escape') {
+                        input.value = ''
+                        setAdding(null)
+                      }
                     }}
                   />
                 ) : (

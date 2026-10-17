@@ -426,7 +426,7 @@ export function NotesPanel() {
             <span className="muted">{editor.selection.size > 1 ? 'Select one object to comment on it' : 'All comments on this board'}</span>
           )}
         </div>
-        <button className="icon-close" aria-label="Close comments" title="Close (Shift+C)" onClick={() => editor.toggleNotes(false)}>
+        <button className="icon-close" aria-label="Close comments" title="Close (Alt+C)" onClick={() => editor.toggleNotes(false)}>
           ×
         </button>
       </header>
@@ -551,7 +551,7 @@ function AllNotes({ onOpen }: { onOpen: (id: Id) => void }) {
   const editor = useEditor()
   const notes = allNotes(editor.viewBoard)
   if (!notes.length)
-    return <p className="empty muted">Nothing yet. Select any object and add a comment, or press Shift+C with it selected.</p>
+    return <p className="empty muted">Nothing yet. Select any object and add a comment, or press Alt+C with it selected.</p>
   return (
     <ul className="notes">
       {notes.map(({ item, note }) => (

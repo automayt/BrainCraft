@@ -57,7 +57,13 @@ export function watchLinkPreviews(editor: Editor, server: () => string | null, s
         running--
         if (stopped) return
         if (answer === 'unsupported') unsupported = true
-        else if (answer === 'retry') setTimeout(() => asked.delete(job.key), RETRY_AFTER)
+        else if (answer === 'retry')
+          setTimeout(() => {
+            asked.delete(job.key)
+            // Ask again then, even if nothing on the board has changed meanwhile.
+            last = null
+            check()
+          }, RETRY_AFTER)
         else {
           // Only if the card is still there, still for this address, and nobody filled it meanwhile.
           const now = getItem(editor.board, job.id)?.link

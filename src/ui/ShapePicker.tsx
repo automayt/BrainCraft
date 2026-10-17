@@ -1,4 +1,4 @@
-import { flowShapeInfo } from '../model/types'
+import { FLOW_SHAPES, flowShapeInfo } from '../model/types'
 import { FlowShapeIcon } from './icons'
 import { useEditor } from './useEditor'
 
@@ -14,13 +14,13 @@ export function ShapePicker() {
     <div className="shape-picker no-canvas" style={{ left, top }} role="menu" aria-label="Next shape" onPointerDown={(e) => e.stopPropagation()}>
       <div className="picker-head">
         <strong>Next step</strong>
-        <span className="muted">1–{p.options.length} or click · Esc</span>
+        <span className="muted">Likeliest first · its number or click · Esc</span>
       </div>
       {p.options.map((shape, k) => {
         const info = flowShapeInfo(shape)
         return (
           <button key={shape} role="menuitem" onClick={() => editor.pickShape(shape)} className={k === 0 ? 'suggested' : ''}>
-            <kbd>{k + 1}</kbd>
+            <kbd>{FLOW_SHAPES.findIndex((f) => f.shape === shape) + 1}</kbd>
             <FlowShapeIcon shape={shape} size={30} />
             <span>
               <strong>{info.label}</strong>

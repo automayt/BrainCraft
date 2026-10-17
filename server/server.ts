@@ -19,7 +19,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiProxy } from './aiProxy'
-import { PreviewCache, unfurl, UnfurlError } from './unfurl'
+import { BusyError, PreviewCache, unfurl, UnfurlError } from './unfurl'
 import { OpError, opsFromText } from '../src/api/ops'
 import { type ClientMessage, type ServerMessage } from '../src/collab/protocol'
 import { Room, type RoomData } from '../src/collab/room'
@@ -215,7 +215,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         res,
         200,
         await previews.get(target, async (u) => {
-          if (previewsRunning >= PREVIEWS_AT_ONCE) throw new UnfurlError('The server is busy reading other pages. Try again soon.', true)
+          if (previewsRunning >= PREVIEWS_AT_ONCE) throw new BusyError('The server is busy reading other pages. Try again soon.')
           previewsRunning++
           try {
             return await unfurl(u)
@@ -320,10 +320,13 @@ server.on('upgrade', (req, socket, head) => {
     room.join({ id, role, send: sendTo })
     log('joined', room.data.id, id, role, `(${room.members.size} here)`)
     ws.on('message', (data) => {
+      let msg: ClientMessage | undefined
       try {
-        room.receive(id, JSON.parse(String(data)) as ClientMessage)
+        msg = JSON.parse(String(data)) as ClientMessage
+        room.receive(id, msg)
       } catch {
-        sendTo({ t: 'error', message: 'Bad message' })
+        const seq = msg?.t === 'patch' && typeof msg.seq === 'number' ? msg.seq : undefined
+        sendTo({ t: 'error', message: 'Bad message', seq })
       }
     })
     // Keep connections through proxies that drop idle sockets.

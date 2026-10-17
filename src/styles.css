@@ -25,6 +25,8 @@
   --danger-soft: rgba(255, 112, 136, 0.14);
   --warning: #ffb547;
   --success: #4fd1a5;
+  --warning-text: var(--warning);
+  --success-text: #4fd1a5;
   --ink: #e9ebf2;
   --line: #8b92a5;
   --frame-fill: #13161b;
@@ -74,6 +76,8 @@
   --danger-soft: rgba(217, 45, 75, 0.1);
   --warning: #f29d0b;
   --success: #12a37a;
+  --warning-text: #9a5b00;
+  --success-text: #0b7d5c;
   --ink: #1e1e24;
   --line: #787882;
   --frame-fill: #ffffff;
@@ -119,6 +123,8 @@
   --danger-soft: rgba(255, 154, 154, 0.25);
   --warning: #ffd60a;
   --success: #6dffc4;
+  --warning-text: var(--warning);
+  --success-text: #6dffc4;
   --ink: #ffffff;
   --line: #ffffff;
   --frame-fill: #000000;
@@ -168,6 +174,8 @@
   --danger-soft: rgba(176, 0, 32, 0.12);
   --warning: #a35c00;
   --success: #006b45;
+  --warning-text: var(--warning);
+  --success-text: #006b45;
   --ink: #000000;
   --line: #000000;
   --frame-fill: #ffffff;
@@ -546,7 +554,9 @@ button.on,
   line-height: 14px;
 }
 
-.has-tip:hover > .tip {
+.has-tip:hover > .tip,
+
+.has-tip:focus-visible > .tip {
   opacity: 1;
   transition-delay: 0.35s;
 }
@@ -557,7 +567,9 @@ button.on,
   transform: translate(-4px, -50%);
 }
 
-.tool-rail .has-tip:hover > .tip {
+.tool-rail .has-tip:hover > .tip,
+
+.tool-rail .has-tip:focus-visible > .tip {
   transform: translate(0, -50%);
 }
 
@@ -568,7 +580,9 @@ button.on,
   transform: translate(-50%, -4px);
 }
 
-.top-right .has-tip:hover > .tip {
+.top-right .has-tip:hover > .tip,
+
+.top-right .has-tip:focus-visible > .tip {
   transform: translate(-50%, 0);
 }
 
@@ -588,7 +602,9 @@ button.on,
   transform: translate(-50%, 4px);
 }
 
-.bottom-left .has-tip:hover > .tip {
+.bottom-left .has-tip:hover > .tip,
+
+.bottom-left .has-tip:focus-visible > .tip {
   transform: translate(-50%, 0);
 }
 
@@ -1282,7 +1298,8 @@ button.on,
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   transform: translate(-50%, -100%);
-  scrollbar-width: none;
+  /* A thin bar shows when some buttons are out of sight (the mouse wheel scrolls it too). */
+  scrollbar-width: thin;
 }
 
 .selection-toolbar .swatches {
@@ -1664,11 +1681,11 @@ button.on,
 
 .palette .filters {
   display: flex;
+  /* Every filter in sight: they wrap onto a second line rather than hiding off the edge. */
+  flex-wrap: wrap;
   gap: 4px;
   padding: 10px 14px;
-  overflow-x: auto;
   border-bottom: 1px solid var(--border);
-  scrollbar-width: none;
 }
 
 .palette .filters button {
@@ -2684,7 +2701,9 @@ button.on,
   background: var(--canvas);
 }
 
-.top-left .has-tip:hover > .tip {
+.top-left .has-tip:hover > .tip,
+
+.top-left .has-tip:focus-visible > .tip {
   transform: translate(-50%, 0);
 }
 
@@ -2819,7 +2838,7 @@ button.on,
   margin: 0 0 16px;
   padding: 10px 12px;
   font-size: 13px;
-  color: var(--warning);
+  color: var(--warning-text);
   background: color-mix(in srgb, var(--warning) 12%, transparent);
   border-radius: 9px;
 }
@@ -2973,6 +2992,8 @@ button.on,
   min-height: 0;
   display: grid;
   grid-template-columns: 300px 1fr;
+  /* The row stays the dialog's height; a tall preview shrinks rather than pushing Restore out of view. */
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .version-list {
@@ -3017,6 +3038,8 @@ button.on,
   justify-content: center;
   gap: 14px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 20px;
 }
 
@@ -3085,7 +3108,7 @@ button.on,
 }
 
 .warning {
-  color: var(--warning);
+  color: var(--warning-text);
 }
 
 /* ----- read-only view ----- */
@@ -3291,7 +3314,7 @@ button.on,
 }
 
 .ai-chip.connected {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 /* ----- presenting ----- */
@@ -3574,7 +3597,7 @@ button.on,
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .run-title strong {
@@ -3626,7 +3649,7 @@ button.on,
 .run-summary em {
   font-style: normal;
   font-weight: 700;
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .run-trail em::before,
@@ -4200,7 +4223,7 @@ button.on,
 
 .dv-check {
   font-weight: 700;
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .dv-new {
@@ -4635,7 +4658,7 @@ button.on,
   padding: 0 9px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .live-state i,
@@ -4649,7 +4672,7 @@ button.on,
 
 .live-bar.connecting .live-state,
 .live-bar.offline .live-state {
-  color: var(--warning);
+  color: var(--warning-text);
 }
 
 .live-bar.connecting .live-state i,
@@ -5148,7 +5171,7 @@ button.on,
 }
 
 .ai-proposal.applied {
-  border-color: var(--success);
+  border-color: var(--success-text);
 }
 
 .ai-proposal.discarded {
@@ -5176,7 +5199,7 @@ button.on,
 }
 
 .ai-proposal.applied .ai-proposal-kind {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .ai-proposal-actions,
@@ -5985,7 +6008,7 @@ button.on,
 }
 
 .timer-badge.ending {
-  border-color: var(--warning);
+  border-color: var(--warning-text);
 }
 
 .timer-badge.ending .timer-bar i {
@@ -7016,4 +7039,20 @@ button.on,
 .flip-hint {
   font-size: 12px;
   fill: rgba(30, 30, 36, 0.45);
+}
+
+/* ----- accessibility ----- */
+
+:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.sr-only-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

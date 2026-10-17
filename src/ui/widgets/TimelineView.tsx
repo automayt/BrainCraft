@@ -117,16 +117,16 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
         + Lane
       </button>
       <span className="sep" />
-      <button title="Earlier" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, -Math.max(1, Math.round(days / 4))) }))}>
+      <button title="Earlier" aria-label="Earlier" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, -Math.max(1, Math.round(days / 4))) }))}>
         ‹
       </button>
-      <button title="Zoom in" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 0.6) }))}>
+      <button title="Zoom in" aria-label="Zoom in" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 0.6) }))}>
         +
       </button>
-      <button title="Zoom out" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 1.6) }))}>
+      <button title="Zoom out" aria-label="Zoom out" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 1.6) }))}>
         −
       </button>
-      <button title="Later" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, Math.max(1, Math.round(days / 4))) }))}>
+      <button title="Later" aria-label="Later" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, Math.max(1, Math.round(days / 4))) }))}>
         ›
       </button>
       <button title="Fit to the events" onClick={() => update((x) => ({ ...x, range: undefined }))}>
@@ -242,7 +242,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
                   <span title={lane.linked ? 'Cards from a Kanban board' : undefined}>{lane.name}</span>
                 )}
                 {live && !lane.linked && (
-                  <button className="more" title="Lane options" onClick={() => setLaneMenu(lane.id)}>
+                  <button className="more" title="Lane options" aria-label={`Options for ${lane.name}`} onClick={() => setLaneMenu(lane.id)}>
                     ⋯
                   </button>
                 )}
@@ -323,7 +323,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
               </div>
             </div>
           ))}
-          {shown.lanes.length === 0 && <p className="muted tl-empty">Add a lane to start.</p>}
+          {shown.lanes.length === 0 && <p className="muted tl-empty">Add an event or a lane to start.</p>}
         </div>
         {live && sel && !sel.source && (
           <div className="tl-selected">

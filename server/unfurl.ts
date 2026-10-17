@@ -32,6 +32,13 @@ export class UnfurlError extends Error {
   }
 }
 
+/** The server had no room to read the page just now: says nothing about the page, so never remembered. */
+export class BusyError extends UnfurlError {
+  constructor(message: string) {
+    super(message, true)
+  }
+}
+
 // Addresses that aren't the public internet: private, loopback, link-local,
 // carrier-grade NAT, documentation, multicast, reserved, and IPv6 forms that
 // can carry an IPv4 address inside them.
@@ -293,6 +300,7 @@ export class PreviewCache {
       void job.finally(() => this.pending.delete(url))
     }
     const value = await job
+    if (value instanceof BusyError) throw value
     this.entries.delete(url)
     this.entries.set(url, { at: now, value })
     // Oldest out first (a Map keeps insertion order).

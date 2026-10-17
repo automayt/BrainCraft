@@ -44,7 +44,8 @@ export type ServerMessage =
   | { t: 'ack'; seq: number; version: number }
   | { t: 'presence'; peer: PeerInfo }
   | { t: 'leave'; id: string }
-  | { t: 'error'; message: string }
+  /** Something was refused; `seq` names the patch message, if it was one. */
+  | { t: 'error'; message: string; seq?: number }
 
 export type ClientMessage =
   | { t: 'patch'; seq: number; patches: Patch[] }

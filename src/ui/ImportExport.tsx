@@ -77,7 +77,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
               onChange={(e) => setText(e.target.value)}
             />
             <div className="dialog-foot">
-              <span className={found.ok ? 'muted' : 'error'}>{found.label}</span>
+              <span className={found.ok || !text.trim() ? 'muted' : 'error'}>{found.label}</span>
               <button
                 className="primary"
                 disabled={!found.ok}

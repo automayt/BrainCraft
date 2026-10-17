@@ -44,7 +44,8 @@ export function viewRows(t: TableData): TableRow[] {
 
 /** The widget size that fits the table exactly. */
 export function tableSize(t: TableData): { w: number; h: number } {
-  const w = ROWNUM_W + viewColumns(t).reduce((s, c) => s + c.width, 0)
+  // + 2 for the widget's border, or the last pixels scroll (and bring a second scrollbar with them).
+  const w = ROWNUM_W + viewColumns(t).reduce((s, c) => s + c.width, 0) + 2
   const h = WIDGET_TITLE_H + TOOLBAR_H + HEAD_H + (t.showFilters ? FILTER_H : 0) + Math.max(1, viewRows(t).length) * ROW_H + 2
   return { w: Math.max(w, 360), h }
 }

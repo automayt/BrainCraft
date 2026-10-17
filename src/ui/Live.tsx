@@ -84,9 +84,14 @@ function Copy({ text, label }: { text: string; label: string }) {
       <button
         className="primary"
         onClick={() => {
-          void navigator.clipboard?.writeText(text)
-          setDone(true)
-          setTimeout(() => setDone(false), 1500)
+          // Only say "Copied" when it was (the field stays selectable either way).
+          void navigator.clipboard?.writeText(text).then(
+            () => {
+              setDone(true)
+              setTimeout(() => setDone(false), 1500)
+            },
+            () => undefined,
+          )
         }}
       >
         {done ? 'Copied' : 'Copy'}
@@ -140,7 +145,7 @@ export function LiveSection() {
               />
             </label>
             <button className="danger" onClick={() => void ws.leaveLive()}>
-              Stop syncing here
+              Leave the live session (keep my copy)
             </button>
           </div>
         </>

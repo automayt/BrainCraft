@@ -3,6 +3,7 @@ import { addItem, emptyBoard, getItem, newItem } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
 import { toOutline } from '../model/mindmap'
 import { type Op, OpError, applyOps, opsFromText } from './ops'
+import { fromJson, toJson } from '../model/serialize'
 
 const ctx = { measure: fakeMeasure, now: 1_000 }
 const run = (ops: Op[], board = emptyBoard()) => applyOps(board, ops, ctx)
@@ -148,5 +149,56 @@ describe('database operations', () => {
     const { board } = applyOps(emptyBoard(), [{ op: 'createDatabase', title: 'Work' }], { measure: fakeMeasure })
     expect(board.datasets![0].name).toBe('Work')
     expect(board.datasets![0].records.length).toBeGreaterThan(0)
+  })
+})
+
+describe('operations with fields of the wrong type', () => {
+  // A working example of each operation; every field is then swapped for junk.
+  const base = () => {
+    const b = run([{ op: 'createNote', text: 'one' }, { op: 'createNote', text: 'two' }]).board
+    return run([{ op: 'createKanban', columns: [{ title: 'To do', cards: ['a'] }] }], b).board
+  }
+  const examples: Op[] = [
+    { op: 'createNote', text: 'a', w: 100, h: 100, color: 'yellow', at: { x: 0, y: 0 } },
+    { op: 'createText', text: 'a', fontSize: 20, w: 100 },
+    { op: 'createShape', text: 'a', shape: 'rect', w: 100, h: 50, color: 'blue' },
+    { op: 'createFrame', title: 'f', around: [1, 2] },
+    { op: 'createMindMap', tree: { text: 'r', children: [{ text: 'c', children: [] }] } },
+    { op: 'createTable', title: 't', columns: ['a', 'b'], rows: [['1', '2']] },
+    { op: 'createKanban', title: 'k', columns: [{ title: 'c', cards: ['x', { title: 'y', due: '2026-10-10', color: 'red' }] }] },
+    { op: 'createTimeline', title: 't', lanes: [{ name: 'l', entries: [{ title: 'e', start: '2026-01-01', color: 'red' }] }], followKanban: [3] },
+    { op: 'createImage', src: 'https://example.com/a.png', w: 10, h: 10 },
+    { op: 'createDatabase', title: 'd', fields: ['Name', { name: 'Stage', type: 'select', options: ['a'] }], records: [{ Name: 'x' }], views: ['table'], groupBy: 'Stage' },
+    { op: 'update', id: 1, text: 'b', x: 5, y: 5, w: 50, h: 50, color: 'green', status: 'done' },
+    { op: 'connect', from: 1, to: 2, label: 'l', style: 'elbow' },
+  ] as unknown as Op[]
+  const junk: unknown[] = ['x', 7, {}, null, Number.POSITIVE_INFINITY, [null], true]
+
+  it('either names the mistake or makes objects that survive a save and reload', () => {
+    const b = base()
+    for (const example of examples)
+      for (const field of Object.keys(example).filter((k) => k !== 'op'))
+        for (const value of junk) {
+          const op = { ...example, [field]: value } as Op
+          let out: ReturnType<typeof run> | undefined
+          try {
+            out = run([op], b)
+          } catch (err) {
+            if (!(err instanceof OpError)) throw new Error(`${op.op}.${field} = ${JSON.stringify(value)} threw ${(err as Error).message}`)
+            continue
+          }
+          const back = fromJson(toJson(out.board))
+          expect(back.items.length, `${op.op}.${field} = ${JSON.stringify(value)}`).toBe(out.board.items.length)
+          expect(back.connectors.length, `${op.op}.${field} = ${JSON.stringify(value)}`).toBe(out.board.connectors.length)
+        }
+  })
+})
+
+describe('placing new objects', () => {
+  it('never carries existing objects along with a new frame', () => {
+    const start = run([{ op: 'createNote', text: 'Already here', at: { x: 0, y: 0 } }]).board
+    const before = start.items[0]
+    const { board } = run([{ op: 'createFrame', title: 'Slide A', w: 800, h: 600 }], start)
+    expect(getItem(board, before.id)).toMatchObject({ x: before.x, y: before.y })
   })
 })

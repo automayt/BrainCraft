@@ -18,7 +18,7 @@ export interface StatusInfo {
 export const STATUSES: readonly StatusInfo[] = [
   { id: 'todo', label: 'To do', color: '#8a909c', icon: 'M8 4.5a3.5 3.5 0 1 1 0 7a3.5 3.5 0 1 1 0-7' },
   { id: 'doing', label: 'In progress', color: '#3b82f6', icon: 'M8 3v5l3.5 2' },
-  { id: 'waiting', label: 'Waiting', color: '#d99a06', icon: 'M6 4.5v7M10 4.5v7' },
+  { id: 'waiting', label: 'Waiting', color: '#b07a00', icon: 'M6 4.5v7M10 4.5v7' },
   { id: 'undecided', label: 'Undecided', color: '#8b5cf6', icon: 'M5.8 6a2.3 2.3 0 1 1 3.2 2.1c-.7.3-1 .8-1 1.5v.4M8 12.2v.3' },
   { id: 'done', label: 'Done', color: '#16a34a', icon: 'M4 8.5l2.7 2.7L12 5.6' },
   { id: 'dropped', label: 'Dropped', color: '#dc2626', icon: 'M5 5l6 6M11 5l-6 6' },

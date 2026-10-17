@@ -42,7 +42,8 @@ function liveHost(ws: Workspace): ToolHost {
   }
   return {
     where: () => (ws.readOnly ? `a read-only shared board "${editor.board.title}"` : `the board "${editor.board.title}" open in the browser`),
-    board: () => editor.board,
+    // What this person can see: others' hidden brainstorm notes stay hidden from their browser's AI too.
+    board: () => editor.viewBoard,
     apply: (ops) => {
       if (ws.readOnly) throw new ToolError('The browser is showing a read-only shared board. Ask the person to save a copy first, or open another board.')
       const results = api.apply(ops)

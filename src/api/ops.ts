@@ -22,6 +22,7 @@ import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
 import { uid } from '../model/uid'
+import { cleanConnector, cleanItem } from '../model/sanitize'
 import {
   type Arrowheads,
   BRANCHES,
@@ -130,6 +131,26 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
 
   ops.forEach((op, index) => {
     if (!op || typeof op !== 'object' || typeof op.op !== 'string') fail(index, op ?? {}, 'each operation needs an "op" name')
+    try {
+      run(op, index)
+    } catch (err) {
+      // A field of the wrong shape can trip deeper code; it's still this operation's mistake.
+      if (err instanceof OpError) throw err
+      fail(index, op, `couldn't be applied (${(err as Error)?.message ?? String(err)}); check each field's type`)
+    }
+  })
+
+  // Everything made or changed must survive a save and reload as it is.
+  const old = new Map(board.items.map((i) => [i.id, i]))
+  for (const i of b.items) {
+    if (old.get(i.id) === i) continue
+    if (!cleanItem(i)) throw new OpError(`The operations made an object that isn't valid (${i.kind} ${i.id}); check field types`)
+  }
+  const oldConns = new Set(board.connectors)
+  for (const c of b.connectors) if (!oldConns.has(c) && !cleanConnector(c)) throw new OpError("The operations made a connector that isn't valid; check its style and arrows")
+  return { board: layoutAll(b, ctx.measure), results }
+
+  function run(op: Op, index: number) {
 
     const resolve = (ref: Ref | undefined, field: string): Id => {
       if (typeof ref === 'number' && B.getItem(b, ref)) return ref
@@ -157,7 +178,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       if (!box) return
       const target = at ?? { x: column.x, y: column.y }
       if (at && (typeof at.x !== 'number' || typeof at.y !== 'number')) fail(index, op, '"at" should be {"x": number, "y": number}')
-      b = B.translate(b, B.movingSet(b, new Set(ids)), target.x - box.x, target.y - box.y)
+      // Only what this operation made: a new frame "contains" whatever already sits where it was built.
+      b = B.translate(b, new Set(ids), target.x - box.x, target.y - box.y)
       b = layoutAll(b, ctx.measure)
       if (!at) column.y += box.h + GAP
     }
@@ -176,18 +198,39 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     const r0 = (w: number, h: number) => ({ x: 0, y: 0, w, h })
     /** A width or height given by the caller, if it's a sensible number. */
     const size = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, 20000) : undefined)
+    /** A position given by the caller: a finite number, or left out. */
+    const coord = (v: unknown, field: string): number | undefined => {
+      if (v === undefined) return undefined
+      if (typeof v !== 'number' || !Number.isFinite(v)) fail(index, op, `"${field}" should be a number`)
+      return v
+    }
+    const color = (v: unknown, field = 'color'): { color?: string } => {
+      if (v === undefined || v === null || v === '') return {}
+      if (typeof v !== 'string') fail(index, op, `"${field}" should be a colour name or a hex code like #ffd84d`)
+      return { color: colorByName(v)! }
+    }
+    /** A list field, or [] when left out. */
+    const list = <T,>(v: T[] | undefined, field: string): T[] => {
+      if (v === undefined || v === null) return []
+      if (!Array.isArray(v)) fail(index, op, `"${field}" should be a list`)
+      return v
+    }
+    const obj = <T,>(v: T, field: string): NonNullable<T> => {
+      if (!v || typeof v !== 'object') fail(index, op, `"${field}" should be an object`)
+      return v as NonNullable<T>
+    }
 
     switch (op.op) {
       case 'createNote': {
-        const id = add(B.newItem('sticky', r0(op.w ?? 200, op.h ?? 200), { text: text(op.text, 'text'), ...(op.color ? { color: colorByName(op.color)! } : {}) }))
+        const id = add(B.newItem('sticky', r0(size(op.w) ?? 200, size(op.h) ?? 200), { text: text(op.text, 'text'), ...color(op.color) }))
         place([id], op.at)
         done({ id })
         break
       }
       case 'createText': {
-        const fontSize = op.fontSize ?? 28
+        const fontSize = Math.min(size(op.fontSize) ?? 28, 400)
         const t = text(op.text, 'text')
-        const id = add(B.newItem('text', r0(op.w ?? Math.min(800, Math.max(120, t.length * fontSize * 0.55)), fontSize * 1.4 * t.split('\n').length + 8), { text: t, fontSize }))
+        const id = add(B.newItem('text', r0(size(op.w) ?? Math.min(800, Math.max(120, t.length * fontSize * 0.55)), fontSize * 1.4 * t.split('\n').length + 8), { text: t, fontSize }))
         place([id], op.at)
         done({ id })
         break
@@ -195,7 +238,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createShape': {
         const kind = op.shape === 'ellipse' ? 'ellipse' : 'rect'
         if (op.shape && op.shape !== 'rect' && op.shape !== 'ellipse') fail(index, op, '"shape" should be "rect" or "ellipse" (use createFlowchart for flowchart symbols)')
-        const id = add(B.newItem(kind, r0(op.w ?? 220, op.h ?? 140), { text: text(op.text, 'text', false), ...(op.color ? { color: colorByName(op.color)! } : {}) }))
+        const id = add(B.newItem(kind, r0(size(op.w) ?? 220, size(op.h) ?? 140), { text: text(op.text, 'text', false), ...color(op.color) }))
         place([id], op.at)
         done({ id })
         break
@@ -208,15 +251,16 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       }
       case 'createFrame': {
         const title = text(op.title, 'title')
-        if (op.around?.length) {
-          const inner = op.around.map((r, k) => resolve(r, `around[${k}]`))
+        const around = list(op.around, 'around')
+        if (around.length) {
+          const inner = around.map((r, k) => resolve(r, `around[${k}]`))
           const box = unionAll(inner.map((id) => B.itemBounds(B.getItem(b, id)!)))!
           const pad = 40
           const id = add(B.newItem('frame', { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad }, { text: title }))
           b = B.sendToBack(b, new Set([id]))
           done({ id })
         } else {
-          const id = add(B.newItem('frame', r0(op.w ?? 800, op.h ?? 600), { text: title }))
+          const id = add(B.newItem('frame', r0(size(op.w) ?? 800, size(op.h) ?? 600), { text: title }))
           b = B.sendToBack(b, new Set([id]))
           place([id], op.at)
           done({ id })
@@ -226,7 +270,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createMindMap': {
         const tree = op.tree ?? (op.outline !== undefined ? parseOutline(text(op.outline, 'outline')) : null)
         if (!tree || typeof tree.text !== 'string') fail(index, op, 'give "outline" (an indented list, 2+ lines) or "tree" ({"text": …, "children": […]})')
-        const normalize = (n: OutlineNode): OutlineNode => ({ text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] })
+        const normalize = (n: OutlineNode): OutlineNode =>
+          n && typeof n === 'object' ? { text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] } : { text: String(n ?? ''), children: [] }
         const before = new Set(b.items.map((i) => i.id))
         let root: Id
         ;[b, root] = createMapFromOutline(b, normalize(tree), { x: 0, y: 0 })
@@ -250,12 +295,12 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createTable': {
         if (!Array.isArray(op.columns) || !op.columns.length) fail(index, op, '"columns" should be a list of column names')
         const columns = op.columns.map((name, k) => ({ id: uid(), name: text(name, `columns[${k}]`), width: 150 }))
-        const rows = (op.rows ?? []).map((row, k) => {
+        const rows = list(op.rows, 'rows').map((row, k) => {
           if (!Array.isArray(row)) fail(index, op, `rows[${k}] should be a list of cell values`)
           return { id: uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
         })
         const table: TableData = { columns, rows }
-        const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: op.title ?? 'Table', table }))
+        const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: text(op.title, 'title', false) || 'Table', table }))
         place([id], op.at)
         done({ id })
         break
@@ -263,24 +308,24 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createKanban': {
         const kanban: KanbanData = op.columns
           ? {
-              columns: op.columns.map((c, k) => ({
+              columns: list(op.columns, 'columns').map((c, k) => ({
                 id: uid(),
-                title: text(c?.title, `columns[${k}].title`),
-                cards: (c.cards ?? []).map((card, j) => {
+                title: text(obj(c, `columns[${k}]`).title, `columns[${k}].title`),
+                cards: list(c.cards, `columns[${k}].cards`).map((card, j) => {
                   const f = `columns[${k}].cards[${j}]`
                   if (typeof card === 'string') return { id: uid(), title: card }
                   return {
                     id: uid(),
-                    title: text(card?.title, `${f}.title`),
+                    title: text(obj(card, f).title, `${f}.title`),
                     ...(date(card.start, `${f}.start`) ? { start: card.start } : {}),
                     ...(date(card.due, `${f}.due`) ? { due: card.due } : {}),
-                    ...(card.color ? { color: card.color } : {}),
+                    ...color(card.color, `${f}.color`),
                   }
                 }),
               })),
             }
           : newKanban()
-        const id = add(B.newItem('kanban', r0(Math.max(600, kanban.columns.length * 272 + 200), 460), { text: op.title ?? 'Kanban board', kanban }))
+        const id = add(B.newItem('kanban', r0(Math.max(600, kanban.columns.length * 272 + 200), 460), { text: text(op.title, 'title', false) || 'Kanban board', kanban }))
         place([id], op.at)
         done({ id })
         break
@@ -288,25 +333,25 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createTimeline': {
         const lanes: TimelineData['lanes'] = []
         const entries: TimelineData['entries'] = []
-        ;(op.lanes ?? []).forEach((lane, k) => {
+        list(op.lanes, 'lanes').forEach((lane, k) => {
           const id = uid()
-          lanes.push({ id, name: text(lane?.name, `lanes[${k}].name`) })
-          ;(lane.entries ?? []).forEach((e, j) => {
+          lanes.push({ id, name: text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`) })
+          list(lane.entries, `lanes[${k}].entries`).forEach((e, j) => {
             const f = `lanes[${k}].entries[${j}]`
-            const start = date(e?.start, `${f}.start`)
+            const start = date(obj(e, f).start, `${f}.start`)
             if (!start) fail(index, op, `"${f}.start" is required`)
             const end = date(e.end, `${f}.end`)
             if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
-            entries.push({ id: uid(), lane: id, title: text(e.title, `${f}.title`), start, ...(end ? { end } : {}), color: e.color ?? BRANCHES[entries.length % BRANCHES.length][1] })
+            entries.push({ id: uid(), lane: id, title: text(e.title, `${f}.title`), start, ...(end ? { end } : {}), color: color(e.color, `${f}.color`).color ?? BRANCHES[entries.length % BRANCHES.length][1] })
           })
         })
-        const sources = (op.followKanban ?? []).map((r, k) => {
+        const sources = list(op.followKanban, 'followKanban').map((r, k) => {
           const id = resolve(r, `followKanban[${k}]`)
           if (B.getItem(b, id)?.kind !== 'kanban') fail(index, op, `followKanban[${k}] isn't a Kanban board`)
           return id
         })
         const timeline: TimelineData = { lanes, entries, ...(sources.length ? { sources } : {}) }
-        const id = add(B.newItem('timeline', r0(op.w ?? 1000, op.h ?? Math.max(220, 120 + (lanes.length + sources.length) * 46)), { text: op.title ?? 'Timeline', timeline }))
+        const id = add(B.newItem('timeline', r0(size(op.w) ?? 1000, size(op.h) ?? Math.max(220, 120 + (lanes.length + sources.length) * 46)), { text: text(op.title, 'title', false) || 'Timeline', timeline }))
         place([id], op.at)
         done({ id })
         break
@@ -314,7 +359,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createImage': {
         const src = text(op.src, 'src')
         if (!/^(data:image\/|https?:\/\/)/.test(src)) fail(index, op, '"src" should be a data:image/… URL or an http(s) URL')
-        const id = add(B.newItem('image', r0(op.w ?? 400, op.h ?? 300), { src }))
+        const id = add(B.newItem('image', r0(size(op.w) ?? 400, size(op.h) ?? 300), { src }))
         place([id], op.at)
         done({ id })
         break
@@ -370,11 +415,11 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           ...i,
           ...(op.text !== undefined ? { text: text(op.text, 'text') } : {}),
           ...(op.description !== undefined ? { description: text(op.description, 'description', false) } : {}),
-          ...(op.color ? { color: colorByName(op.color)! } : {}),
-          ...(typeof op.x === 'number' ? { x: op.x } : {}),
-          ...(typeof op.y === 'number' ? { y: op.y } : {}),
-          ...(typeof op.w === 'number' && op.w > 0 ? { w: op.w } : {}),
-          ...(typeof op.h === 'number' && op.h > 0 ? { h: op.h } : {}),
+          ...color(op.color),
+          ...(coord(op.x, 'x') !== undefined ? { x: op.x } : {}),
+          ...(coord(op.y, 'y') !== undefined ? { y: op.y } : {}),
+          ...(size(op.w) ? { w: size(op.w) } : {}),
+          ...(size(op.h) ? { h: size(op.h) } : {}),
           ...(op.locked === true ? { locked: true } : {}),
         }))
         if (op.locked === false)
@@ -405,14 +450,15 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createDatabase': {
         const records = op.records ?? []
         if (!Array.isArray(records) || records.some((r) => !r || typeof r !== 'object')) fail(index, op, '"records" should be a list of objects keyed by field name')
-        const specs = (op.fields ?? []).map((f, k) => (typeof f === 'string' ? { name: f } : f && typeof f === 'object' ? f : fail(index, op, `fields[${k}] should be a name or {"name", "type"}`)))
+        const specs = list(op.fields, 'fields').map((f, k) => (typeof f === 'string' ? { name: f } : f && typeof f === 'object' ? f : fail(index, op, `fields[${k}] should be a name or {"name", "type"}`)))
         let ds: ReturnType<typeof D.newDataset>
-        if (!specs.length && !records.length) ds = { ...D.newDataset(op.title ?? 'Projects'), name: op.title ?? 'Projects' }
+        const title = text(op.title, 'title', false)
+        if (!specs.length && !records.length) ds = { ...D.newDataset(title || 'Projects'), name: title || 'Projects' }
         else {
           // Fields come from "fields", else from the records' keys; types are guessed from values unless given.
           const names = specs.length ? specs.map((f) => text(f.name, 'fields[].name')) : [...new Set(records.flatMap((r) => Object.keys(r)))]
           const columns = names.map((n) => records.map((r) => (r[n] === undefined || r[n] === null ? '' : String(r[n]))))
-          ds = { id: uid(), name: op.title ?? 'Database', fields: [], records: [] }
+          ds = { id: uid(), name: title || 'Database', fields: [], records: [] }
           names.forEach((n, k) => {
             const spec = specs[k]
             const grouping = k > 0 && op.groupBy?.trim().toLowerCase() === n.trim().toLowerCase()
@@ -422,7 +468,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
             if (!D.FIELD_TYPES.some((t) => t.type === type)) fail(index, op, `fields[${k}].type should be one of ${D.FIELD_TYPES.map((t) => t.type).join(', ')}`)
             let fid: string
             ;[ds, fid] = D.addField(ds, n, type)
-            for (const o of spec?.options ?? []) ds = D.addOption(ds, fid, String(o))[0]
+            for (const o of list(spec?.options, `fields[${k}].options`)) ds = D.addOption(ds, fid, String(o))[0]
           })
           for (const r of records) {
             const { values, ds: withOpts } = D.valuesByName(ds, r)
@@ -430,7 +476,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           }
         }
         b = D.addDataset(b, ds)
-        const views = op.views?.length ? op.views : ['table' as const]
+        const views = list(op.views, 'views').length ? op.views! : ['table' as const]
+        if (op.groupBy !== undefined && typeof op.groupBy !== 'string') fail(index, op, '"groupBy" should be a field name')
         const group = op.groupBy ? D.fieldByName(ds, op.groupBy) : undefined
         if (op.groupBy && !group) fail(index, op, `"groupBy" names no field. Fields: ${ds.fields.map((f) => f.name).join(', ')}`)
         const ids: Id[] = []
@@ -517,8 +564,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       default:
         fail(index, op, `unknown operation. Known: ${OPS.join(', ')}`)
     }
-  })
-  return { board: layoutAll(b, ctx.measure), results }
+  }
 }
 
 export const OPS: Op['op'][] = [

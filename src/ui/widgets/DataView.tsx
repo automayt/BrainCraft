@@ -5,6 +5,7 @@
 
 import { type PointerEvent, type ReactNode, useContext, useRef, useState } from 'react'
 import * as D from '../../model/dataset'
+import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
 import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item } from '../../model/types'
 import { textOn } from '../paint'
@@ -499,15 +500,8 @@ function TimelineBody({ c, width }: { c: Ctx; width: number }) {
     }
   } else lanes.push({ key: 'all', name: '', rows: bars })
 
-  // Ticks: days, weeks or months depending on room.
-  const ticks: { x: number; label: string; major: boolean }[] = []
-  const step = per >= 22 ? 1 : per >= 5 ? 7 : 0
-  for (let d = lo; d <= hi; d++) {
-    const date = new Date(d * 86_400_000)
-    const first = date.getUTCDate() === 1
-    if (step === 1 || (step === 7 && date.getUTCDay() === 1) || (step === 0 && first))
-      ticks.push({ x: xOf(d), label: step === 1 && !first ? String(date.getUTCDate()) : date.toLocaleDateString(undefined, { month: 'short', day: step ? 'numeric' : undefined, timeZone: 'UTC' }), major: first })
-  }
+  // Ticks: days, weeks, months or years depending on room (the same ruler as the Timeline widget).
+  const ticks = TL.ticks(lo, hi, per).map((t) => ({ x: xOf(t.day), label: t.label, major: t.major }))
 
   const down = (e: PointerEvent, b: D.Bar, edge?: 'start' | 'end') => {
     if (!c.editable || e.button !== 0) return

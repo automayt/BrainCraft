@@ -166,7 +166,10 @@ function notConnected() {
 
 function filePath(f: string) {
   const p = resolve(DIR, f)
-  return extname(p) ? p : `${p}.braincraft`
+  const path = extname(p) ? p : `${p}.braincraft`
+  // Only board files: a mistaken (or misled) path can't overwrite anything else on this computer.
+  if (extname(path).toLowerCase() !== '.braincraft') throw new ToolError(`"${f}" isn't a .braincraft file. Board files end in .braincraft.`)
+  return path
 }
 
 function writeAtomic(path: string, text: string) {

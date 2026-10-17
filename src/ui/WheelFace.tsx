@@ -28,7 +28,9 @@ export function WheelFace({ item, box }: { item: Item; box: { x: number; y: numb
   const r = Math.max(10, Math.min(box.w, box.h) / 2 - 12)
   const cx = box.x + box.w / 2
   const cy = box.y + box.h / 2 + 6
-  const { angle, done } = wheelAngle(spin, now, spin ? spinStart(spin) : 0)
+  // With reduced motion the wheel just shows where it lands.
+  const still = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  const { angle, done } = still && spin ? { angle: spin.to, done: true } : wheelAngle(spin, now, spin ? spinStart(spin) : 0)
   const seg = 360 / n
   const rad = (deg: number) => ((deg - 90) * Math.PI) / 180
   const at = (deg: number, rr = r) => `${cx + rr * Math.cos(rad(deg))} ${cy + rr * Math.sin(rad(deg))}`

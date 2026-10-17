@@ -18,9 +18,12 @@ all four.
 
 The board fills the window and the controls float above it:
 
-- **Board menu** (top left): title, new, open, download, import and export.
-- **Search** (top right): Ctrl+K searches the board *and* runs any command
-  by name. Type `>` to show only commands.
+- **Board menu** (top left): the board's icon and title, your boards, new,
+  open, download, share, import and export, version history, connecting an AI
+  assistant, and shortcuts.
+- **Top right:** **Share**, **Ask AI**, **Present**, **Search** (Ctrl+K
+  searches the board *and* runs any command by name; type `>` to show only
+  commands), **Comments**, the theme and **Help** (?).
 - **Tool rail** (left): hover any tool to see its shortcut.
 - **Undo, redo and zoom** (bottom left), plus a **minimap** (bottom right).
 - **Right-click** anything for the actions that apply to it.
@@ -36,7 +39,7 @@ The board fills the window and the controls float above it:
 ![A mind map in BrainCraft](docs/mind-map.png)
 
 - Press **M** and click to start a map, then type your central idea.
-- **Tab** adds a child idea and **Enter** adds the next sibling, so you can
+- **Tab** adds a sub-idea and **Enter** adds an idea below, so you can
   brainstorm without touching the mouse. An idea you leave empty is discarded.
 - Branches lay themselves out on both sides of the central idea. Each main
   branch gets its own color, and its sub-ideas share it.
@@ -127,7 +130,7 @@ These become interactive once selected; drag them by their title strip.
   selected the panel lists comments on your other boards that link to this
   one. Links to a shared board use its live-session id, so they work for
   every friend who has that board.
-- **Every object has comments.** Select it and press **Shift+C** (or click
+- **Every object has comments.** Select it and press **Alt+C** (or click
   *Comment*) to open the panel on the right. Notes are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention another object; the
   mention links to it, and the other object lists it under "Linked from".
@@ -192,7 +195,7 @@ These become interactive once selected; drag them by their title strip.
 ### Linked data: one dataset, many views
 
 - **Database (B)** adds a set of records with typed fields: text, number,
-  date, choice, person and checkbox. Show it as a **table**, a **board**
+  date, choice, person and checkbox. Show it as a **table**, a **Kanban**
   (Kanban columns from a choice or person field), a **timeline** (bars
   from two date fields), a **calendar** (a month of days, each record on
   the days it covers; drag one to another day, double-click a day to add
@@ -212,7 +215,7 @@ These become interactive once selected; drag them by their title strip.
 
 ### Runbooks: run a flowchart
 
-- **Run flowchart (Shift+R)** turns a flowchart into a live procedure. The
+- **Run flowchart (Alt+R)** turns a flowchart into a live procedure. The
   panel shows the current step, the shape's comments as instructions, and
   the ways on from it: one button for a step, one per answer for a decision
   (or press **1–9**). **Enter** moves on, **Backspace** goes back, and

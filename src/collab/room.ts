@@ -115,11 +115,17 @@ export class Room {
       return
     }
     if (msg.t === 'patch') {
-      if (m.role !== 'edit') return m.send({ t: 'error', message: 'This link can only view the board' })
-      if (!Array.isArray(msg.patches) || msg.patches.length > MAX_PATCHES) return m.send({ t: 'error', message: 'Bad patch' })
+      // Refusals name the message, so the sender can drop it and reload the board.
+      const seq = typeof msg.seq === 'number' ? msg.seq : undefined
+      if (m.role !== 'edit') return m.send({ t: 'error', message: 'This link can only view the board', seq })
+      if (!Array.isArray(msg.patches) || msg.patches.length > MAX_PATCHES) return m.send({ t: 'error', message: 'Bad patch', seq })
       // Checked before anyone else sees them: a bad field from one person can't crash the rest.
       const patches = cleanPatches(msg.patches)
-      this.data.board = applyPatches(this.data.board, patches)
+      try {
+        this.data.board = applyPatches(this.data.board, patches)
+      } catch {
+        return m.send({ t: 'error', message: 'Bad patch', seq })
+      }
       this.data.version++
       this.changed()
       m.send({ t: 'ack', seq: msg.seq, version: this.data.version })

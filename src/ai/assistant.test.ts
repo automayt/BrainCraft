@@ -119,3 +119,32 @@ describe('pictures', () => {
     expect(content[1]).toMatchObject({ type: 'text' })
   })
 })
+
+describe('assistant after something goes wrong', () => {
+  const quiet = { text: () => {}, status: () => {}, proposal: () => {} }
+
+  it('hands an op that trips over a wrong type back to Claude, and keeps going', async () => {
+    const b = board()
+    const { client, sent } = fakeClient([
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'propose_changes', input: { summary: 'x', ops: [{ op: 'createKanban', columns: 'To do' }] } }] },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Fixed.' }] },
+    ])
+    const a = new Assistant(client, { board: () => b, measure: fakeMeasure, selection: () => [] })
+    await a.send('Make a board', quiet)
+    const second = sent[1].messages as { role: string; content: Block[] }[]
+    expect(second.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true }] })
+  })
+
+  it('answers tool calls left open when a request fails mid-step', async () => {
+    const { client } = fakeClient([{ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'read_board', input: {} }] }])
+    const a = new Assistant(client, { board: board, measure: fakeMeasure, selection: () => [] })
+    const status = (s: string | null) => {
+      if (s === 'Reading the board…') throw new Error('The window closed')
+    }
+    await expect(a.send('Look', { ...quiet, status })).rejects.toThrow('The window closed')
+    // The conversation still ends on a user turn answering every call, so the next request is valid.
+    const last = a.messages.at(-1)!
+    expect(last.role).toBe('user')
+    expect(last.content).toMatchObject([{ type: 'tool_result', tool_use_id: 't1', is_error: true }])
+  })
+})
