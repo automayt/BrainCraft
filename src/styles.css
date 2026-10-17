@@ -6522,3 +6522,54 @@ button.on,
 .wheel-answer strong {
   font-weight: 700;
 }
+
+/* ----- flip cards ----- */
+
+.flip-face {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: flip-turn 0.3s var(--ease, ease-out);
+}
+
+@keyframes flip-turn {
+  from {
+    transform: scaleX(0.04);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-face {
+    animation: none;
+  }
+}
+
+.flip-side {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: rgba(30, 30, 36, 0.45);
+}
+
+.flip-button {
+  cursor: pointer;
+}
+
+.flip-button circle {
+  fill: rgba(30, 30, 36, 0.72);
+}
+
+.flip-button path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flip-button:hover circle {
+  fill: var(--accent);
+}

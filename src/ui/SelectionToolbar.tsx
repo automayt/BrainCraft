@@ -235,6 +235,16 @@ export function SelectionToolbar() {
           </button>
         </>
       )}
+      {items.length > 0 && items.every((i) => i.kind === 'sticky') &&
+        (items.every((i) => typeof i.back === 'string') ? (
+          <button title="Turn over (or click ↻ on the card)" onClick={() => editor.flipCards()}>
+            ↻ Flip
+          </button>
+        ) : (
+          <button title="Give this note a back to write on: a flip card" onClick={() => editor.setFlipCards(true)}>
+            Flip card
+          </button>
+        ))}
       {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
       {items.length > 0 && <ReactMenu />}
       {hasSketch(editor) && (

@@ -257,6 +257,10 @@ These become interactive once selected; drag them by their title strip.
   card's lines; double-click it to change them. Select a few sticky notes
   first and their text becomes the options. **Spin** and everyone in the live
   session watches the same wheel land on the same answer.
+- **Flip cards:** select a sticky note and click **Flip card** to give it a
+  back. The ↻ button on the card turns it over for everyone, so you can put
+  the question on the front and the answer on the back. Write on whichever
+  side is showing.
 
 ### Presenting
 

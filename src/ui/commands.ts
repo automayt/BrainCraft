@@ -108,6 +108,13 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       list.push({ id: `status-${st.id}`, label: `Mark as ${st.label.toLowerCase()}`, group: 'Selection', aliases: 'status mark progress state tick done finished complete todo task', run: () => editor.markStatus(st.id) })
     if (editor.selectedItems.some((i) => i.status)) list.push({ id: 'status-none', label: 'Clear status', group: 'Selection', aliases: 'status remove unmark', run: () => editor.markStatus(null) })
   }
+  if (editor.selectedItems.some((i) => i.kind === 'sticky')) {
+    const cards = editor.selectedItems.filter((i) => typeof i.back === 'string')
+    if (cards.length) {
+      list.push({ id: 'flip', label: 'Flip card over', group: 'Selection', aliases: 'flip turn over reveal back answer quiz', run: () => editor.flipCards() })
+      list.push({ id: 'flip-off', label: 'Remove the back (plain sticky note)', group: 'Selection', aliases: 'flip card back remove', run: () => editor.setFlipCards(false) })
+    } else list.push({ id: 'flip-on', label: 'Make a flip card (add a back)', group: 'Selection', aliases: 'flip card back quiz reveal answer two sided', run: () => editor.setFlipCards(true) })
+  }
   for (const { info } of statusCounts(editor.board))
     list.push({ id: `show-${info.id}`, label: `Show only what's ${info.label.toLowerCase()}`, group: 'View', aliases: 'filter status highlight focus', run: () => editor.setStatusFilter(info.id) })
   if (editor.statusFilter) list.push({ id: 'show-all', label: 'Show everything (clear status filter)', group: 'View', aliases: 'filter status clear reset', run: () => editor.setStatusFilter(null) })
