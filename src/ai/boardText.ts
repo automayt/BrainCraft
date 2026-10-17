@@ -22,6 +22,8 @@ export function objectLine(i: Item): string {
   if (i.kind === 'flow' && i.shape) parts.push(`shape:${i.shape}`)
   if (i.notes?.length) parts.push(`comments:${i.notes.length}`)
   if (i.description) parts.push('has-description')
+  if (i.reactions) parts.push(`reactions:${Object.entries(i.reactions).map(([e, who]) => `${e}×${who.length}`).join(',')}`)
+  if (i.poll) parts.push(`vote-card options:${i.poll.options.join(',')} ${i.poll.ended ? 'closed' : i.poll.revealed ? 'revealed' : 'counts-hidden'}`)
   return parts.join(' ')
 }
 

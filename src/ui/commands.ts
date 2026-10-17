@@ -82,6 +82,11 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
     { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
   ]
+  if (editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame'))
+    list.push({ id: 'start-vote', label: 'Start a dot vote on the selection', group: 'Selection', aliases: 'vote poll dot voting choose pick decide favourite', run: () => editor.startVote() })
+  if (editor.selection.size)
+    for (const emoji of ['👍', '❤️', '🎉'])
+      list.push({ id: `react-${emoji}`, label: `React ${emoji}`, group: 'Selection', aliases: 'react reaction emoji like love', run: () => editor.toggleReaction(emoji) })
   if (editor.single?.kind === 'mind') {
     const id = editor.single.id
     list.push({ id: 'tidy-mind', label: 'Tidy mind map', group: 'Mind map', aliases: 'reset layout arrange auto align clean', run: () => editor.tidyMindMap(id) })

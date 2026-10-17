@@ -124,6 +124,19 @@ These become interactive once selected; drag them by their title strip.
   timeline events and line labels, filtered by type. With an empty query it
   lists every object, so it doubles as the object lookup.
 
+### Reactions and dot voting
+
+- **React** to anything with 👍 ❤️ 😂 🎉 🤔 ⭐ from the selection toolbar.
+  Reactions show under the object with a count; hover to see who, click to
+  add or take back yours.
+- **Vote:** select the options (stickies, cards, shapes…) and press **Vote**.
+  A vote card appears above them and everyone gets a few votes to spread
+  around — click the dot on an option to vote, **−** (or Alt-click) to take
+  one back. Counts stay hidden until someone presses **Reveal**; **End**
+  closes the vote and crowns the winner, and **Sort** lines the options up
+  by votes. It all syncs live and undoes like any other change.
+- The AI assistant and MCP clients can react and start votes too.
+
 ### Boards, files and sharing
 
 - **Your boards (Ctrl+O)** lists every board in this browser with a live

@@ -5645,3 +5645,120 @@ button.on,
     min-height: 160px;
   }
 }
+
+/* ----- reactions and votes ----- */
+
+.reaction {
+  cursor: pointer;
+}
+
+.reaction rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+}
+
+.reaction.mine rect {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+}
+
+.reaction:hover rect {
+  stroke: var(--accent);
+}
+
+.reaction text {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.vote-dot,
+.vote-minus {
+  cursor: pointer;
+}
+
+.vote-dot circle {
+  fill: var(--surface);
+  stroke: var(--accent);
+}
+
+.vote-dot text,
+.vote-minus text {
+  fill: var(--text);
+  font-weight: 700;
+}
+
+.vote-dot.mine circle {
+  fill: var(--accent-strong);
+}
+
+.vote-dot.mine text {
+  fill: var(--on-accent);
+}
+
+.vote-dot.winner circle {
+  fill: #ffd25a;
+  stroke: #b8860b;
+}
+
+.vote-dot.winner text {
+  fill: #1e1e24;
+}
+
+.vote-dot.closed {
+  cursor: default;
+}
+
+.vote-dot:not(.closed):hover circle,
+.vote-minus:hover circle {
+  stroke-width: 3;
+}
+
+.vote-minus circle {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+}
+
+.vote-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 100%;
+  padding: 0 2px;
+  font-size: 12px;
+  color: #1e1e24;
+}
+
+.vote-status {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.vote-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.vote-buttons button {
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #1e1e24;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 7px;
+}
+
+.vote-buttons button:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.react-menu button {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.react-menu button.on {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+}

@@ -8,6 +8,7 @@
  */
 
 import * as B from '../model/board'
+import { startPoll, toggleReaction } from '../model/reactions'
 import { type Rect, type Vec, unionAll } from '../model/geom'
 import * as D from '../model/dataset'
 import { newKanban } from '../model/kanban'
@@ -76,6 +77,8 @@ export type Op =
   | { op: 'addRecords'; id: Ref; records: Record<string, unknown>[] }
   | { op: 'updateRecord'; id: Ref; record: string; values: Record<string, unknown> }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
+  | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
+  | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
   | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
   | { op: 'delete'; ids: Ref[] }
@@ -437,6 +440,24 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'react': {
+        if (!Array.isArray(op.ids) || !op.ids.length) fail(index, op, '"ids" should be a list of objects')
+        const emoji = text(op.emoji, 'emoji', false)
+        if (!emoji.trim() || [...emoji].length > 4) fail(index, op, '"emoji" should be one emoji, like 👍')
+        const who = op.by?.trim() || 'AI'
+        const ids = new Set(op.ids.map((r, k) => resolve(r, `ids[${k}]`)))
+        b = B.updateItems(b, ids, (i) => (i.reactions?.[emoji]?.includes(who) ? i : toggleReaction(i, emoji, who)))
+        done({ ids: [...ids] })
+        break
+      }
+      case 'createVote': {
+        if (!Array.isArray(op.options) || op.options.length < 2) fail(index, op, '"options" should list two or more objects to vote on')
+        const options = op.options.map((r, k) => resolve(r, `options[${k}]`))
+        let id: Id
+        ;[b, id] = startPoll(b, options, { question: op.question, each: op.each })
+        done({ id })
+        break
+      }
       case 'addComment': {
         const id = resolve(op.id, 'id')
         b = addNote(b, id, text(op.text, 'text'), op.author, ctx.now)
@@ -470,6 +491,8 @@ export const OPS: Op['op'][] = [
   'addRecords',
   'updateRecord',
   'deleteRecords',
+  'react',
+  'createVote',
 ]
 
 /** Pulls a list of operations out of pasted JSON: `{"ops": […]}`, a bare list, or one operation. */

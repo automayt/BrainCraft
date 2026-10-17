@@ -1,6 +1,7 @@
 import * as B from '../model/board'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
+import * as RX from '../model/reactions'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -213,6 +214,12 @@ export function SelectionToolbar() {
           </button>
         </>
       )}
+      {items.length > 0 && <ReactMenu />}
+      {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && (
+        <button title="Start a dot vote on these: everyone gets a few votes, counts hidden until revealed" onClick={() => editor.startVote()}>
+          Vote
+        </button>
+      )}
       {items.length > 0 && (
         <button title="Duplicate (Ctrl+D)" onClick={() => editor.duplicate()}>
           Duplicate
@@ -288,6 +295,58 @@ function AlignMenu({ count }: { count: number }) {
             {icon('M3 2h12M3 16h12M6 7h6v4H6z')}
           </button>
         </div>,
+          document.body,
+        )}
+    </span>
+  )
+}
+
+/** Emoji reactions for the selection. */
+function ReactMenu() {
+  const editor = useEditor()
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const me = editor.me
+  return (
+    <span className="align-anchor">
+      <button
+        title="React"
+        aria-label="React"
+        aria-expanded={!!at}
+        className={at ? 'on' : ''}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M6 10.5c.8 1.2 1.8 1.8 3 1.8s2.2-.6 3-1.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <circle cx="6.6" cy="7" r="1" fill="currentColor" />
+          <circle cx="11.4" cy="7" r="1" fill="currentColor" />
+        </svg>
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu react-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+            {RX.REACTIONS.map((emoji) => {
+              const on = editor.selectedItems.length > 0 && editor.selectedItems.every((i) => i.reactions?.[emoji]?.includes(me))
+              return (
+                <button
+                  key={emoji}
+                  role="menuitemcheckbox"
+                  aria-checked={on}
+                  className={on ? 'on' : ''}
+                  title={on ? 'Take your reaction off' : 'React'}
+                  onClick={() => {
+                    editor.toggleReaction(emoji)
+                    setAt(null)
+                  }}
+                >
+                  {emoji}
+                </button>
+              )
+            })}
+          </div>,
           document.body,
         )}
     </span>
