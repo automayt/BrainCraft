@@ -245,7 +245,8 @@ export function addSibling(b: Board, id: Id, text = ''): [Board, Id] {
   if (node.parent === undefined) return addChild(b, id, undefined, text)
   const newId = b.nextId
   const sib: Item = {
-    ...newItem('mind', { x: node.x, y: node.y + node.h, w: 60, h: 30 }, { text, color: node.color }),
+    // A main branch (a child of the root) gets the next branch colour; deeper ideas share their branch's.
+    ...newItem('mind', { x: node.x, y: node.y + node.h, w: 60, h: 30 }, { text, color: getItem(b, node.parent)?.parent === undefined ? nextBranchColor(b, node.parent) : node.color }),
     id: newId,
     parent: node.parent,
     side: node.side,

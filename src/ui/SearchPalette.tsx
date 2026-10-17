@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { lookup, search } from '../model/search'
 import { type Id, type Kind, KIND_LABELS } from '../model/types'
 import { commands, matchCommands } from './commands'
@@ -50,10 +50,11 @@ export function SearchPalette() {
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLUListElement>(null)
 
-  useEffect(() => {
+  // Focus before the browser paints, so the first key typed after Ctrl+K lands in the box.
+  useLayoutEffect(() => {
     if (editor.searchOpen) {
       setActive(0)
-      requestAnimationFrame(() => input.current?.select())
+      input.current?.select()
     }
   }, [editor.searchOpen])
 

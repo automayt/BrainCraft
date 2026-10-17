@@ -1,4 +1,6 @@
 import * as B from '../model/board'
+import { rectToWorld } from '../model/camera'
+import { intersects } from '../model/geom'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -9,7 +11,8 @@ import { useEditor } from './useEditor'
 export function SelectionToolbar() {
   const editor = useEditor()
   const ui = useUi()
-  const [width, setWidth] = useState(0)
+  const [size, setSize] = useState({ w: 0, h: 40 })
+  const width = size.w
   // Measure the bar so it can be kept fully on screen and clear of the tool rail. A resize
   // observer, not a read after every render: that would force a layout of the whole board.
   const observer = useRef<ResizeObserver | null>(null)
@@ -17,12 +20,18 @@ export function SelectionToolbar() {
     observer.current?.disconnect()
     observer.current = null
     if (!el || typeof ResizeObserver === 'undefined') return
-    observer.current = new ResizeObserver(([e]) => setWidth(Math.round(e.borderBoxSize?.[0]?.inlineSize ?? el.offsetWidth)))
+    observer.current = new ResizeObserver(([e]) => {
+      const w = Math.round(e.borderBoxSize?.[0]?.inlineSize ?? el.offsetWidth)
+      const h = Math.round(e.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight)
+      setSize((s) => (s.w === w && s.h === h ? s : { w, h }))
+    })
     observer.current.observe(el)
   }, [])
   if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker || ui.menu) return null
   const { board } = editor
   let anchor: { x: number; y: number }
+  /** Where it goes if there's no room above (its top edge). */
+  let below: number | null = null
   let palette: readonly [string, string][]
   const items = editor.selectedItems
   const mind = editor.single?.kind === 'mind' ? editor.single : undefined
@@ -38,7 +47,10 @@ export function SelectionToolbar() {
     const bounds = B.bounds(board, editor.selection)
     if (!bounds) return null
     const r = editor.screenRect(bounds)
-    anchor = { x: r.x + r.w / 2, y: r.y - 22 }
+    // Flowchart shapes have "add a step" arrows just outside them: keep clear of those.
+    const gap = items.some((i) => i.kind === 'flow') ? 40 : 16
+    anchor = { x: r.x + r.w / 2, y: r.y - gap }
+    below = r.y + r.h + gap
     if (items.every((i) => i.kind === 'mind')) {
       palette = mind?.parent === undefined && mind ? [['Ink', MIND_ROOT_COLOR], ...BRANCHES] : BRANCHES
     } else palette = items.every((i) => usesInk(i.kind)) ? INKS : FILLS
@@ -46,17 +58,31 @@ export function SelectionToolbar() {
 
   const connector = editor.selectedConnector !== null ? B.getConnector(board, editor.selectedConnector) : undefined
   const flows = items.filter((i) => i.kind === 'flow')
-  const minX = 68 + width / 2
+  // Clear of the tool rail on the left (on phones it sits at the bottom instead).
+  const minX = (editor.viewport.w > 720 ? 68 : 12) + width / 2
   const maxX = editor.viewport.w - 12 - width / 2
   const x = maxX < minX ? minX : Math.min(Math.max(anchor.x, minX), maxX)
-  const y = Math.max(anchor.y, 72)
+  // Above the selection unless that's under the top bar or covers more of the board than below.
+  const covered = (top: number) => {
+    const box = rectToWorld(editor.camera, { x: x - width / 2, y: top, w: width, h: size.h })
+    let area = 0
+    for (const i of board.items) {
+      if (editor.selection.has(i.id) || !intersects(box, i)) continue
+      area += (Math.min(box.x + box.w, i.x + i.w) - Math.max(box.x, i.x)) * (Math.min(box.y + box.h, i.y + i.h) - Math.max(box.y, i.y))
+    }
+    return area
+  }
+  const aboveTop = anchor.y - size.h
+  const fitsBelow = below !== null && below + size.h < editor.viewport.h - 12
+  const useBelow = fitsBelow && (aboveTop < 64 || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
+  const y = useBelow ? below! : Math.max(anchor.y, 64 + size.h)
   const plain = (i: (typeof items)[number]) => i.kind !== 'image' && !isWidget(i.kind)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
 
   return (
-    <div ref={ref} className="selection-toolbar no-canvas" style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
       {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (

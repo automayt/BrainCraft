@@ -48,7 +48,7 @@ The board fills the window and the controls float above it:
   layout.
 - Select several ideas to move them together (the rest of the map stays
   put), or press **Ctrl+G** to group sibling ideas under a new one.
-- **Collapse** a branch with **C** or with the toggle next to it.
+- **Collapse** a branch with **/** or with the toggle next to it.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
   plain indentation) to turn it into a map. **Copy outline** does the reverse.
 
