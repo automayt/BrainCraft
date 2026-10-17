@@ -6021,17 +6021,18 @@ button.on,
 
 /* ----- top centre: catch-up news and the timer ----- */
 
+/* Spans the window, clear of the tool rail, and centres its children, so they can use the
+   full width: a box pinned at left: 50% would be squeezed to half the window. */
 .top-stack {
   position: absolute;
   top: 66px;
-  left: 50%;
+  right: 76px;
+  left: 76px;
   z-index: 15;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  max-width: calc(100% - 32px);
-  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -6045,7 +6046,7 @@ button.on,
 }
 
 .catchup {
-  max-width: 760px;
+  max-width: min(760px, 100%);
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -6054,16 +6055,27 @@ button.on,
   animation: pop 0.2s var(--ease);
 }
 
+/* When the message and buttons don't fit on one line, the buttons drop below, right-aligned. */
 .catchup-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   padding: 6px 6px 6px 12px;
 }
 
-.catchup-head > span:nth-child(2) {
-  flex: 1;
+.catchup-msg {
+  flex: 1 1 15em;
   min-width: 0;
+}
+
+.catchup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .catchup-head small {
@@ -6164,9 +6176,8 @@ button.on,
 @media (max-width: 720px) {
   .top-stack {
     top: 116px;
-  }
-  .catchup-head {
-    flex-wrap: wrap;
+    right: 16px;
+    left: 16px;
   }
 }
 
