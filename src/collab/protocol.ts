@@ -25,8 +25,20 @@ export interface PeerInfo extends Presence {
 /** Ids handed out by each connection come from its own block, so two people never make the same id. */
 export const ID_BLOCK = 2 ** 24
 
+/** Moments, not board changes: an emote at a spot, a line of cursor chat, or starting/stopping the shared timer. */
+export type Signal = { kind: 'emote'; emoji: string; at: Vec } | { kind: 'chat'; text: string } | { kind: 'timer'; seconds: number | null }
+
+/** The shared timer as the server tells it: time left (not a clock time, so clocks needn't agree). */
+export interface TimerState {
+  remainingMs: number
+  totalMs: number
+  by: string
+}
+
 export type ServerMessage =
-  | { t: 'hello'; board: Board; version: number; you: { id: string; role: Role; idBase: number }; peers: PeerInfo[] }
+  | { t: 'hello'; board: Board; version: number; you: { id: string; role: Role; idBase: number }; peers: PeerInfo[]; timer?: TimerState | null }
+  | { t: 'signal'; from: string; signal: Signal }
+  | { t: 'timer'; timer: TimerState | null }
   | { t: 'patch'; patches: Patch[]; from: string; version: number }
   /** Your patch message `seq` is in, at `version`. */
   | { t: 'ack'; seq: number; version: number }
@@ -37,6 +49,7 @@ export type ServerMessage =
 export type ClientMessage =
   | { t: 'patch'; seq: number; patches: Patch[] }
   | { t: 'presence'; presence: Presence }
+  | { t: 'signal'; signal: Signal }
 
 /** The live-session part of a link: `#live=ID.KEY` (plus `&server=URL` when the server isn't where the app is). */
 export interface LiveLink {

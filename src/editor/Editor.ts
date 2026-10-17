@@ -23,7 +23,7 @@ import * as R from '../model/runbook'
 import * as D from '../model/dataset'
 import * as RX from '../model/reactions'
 import { type Patch, applyPatches, diff } from '../collab/patch'
-import type { PeerInfo } from '../collab/protocol'
+import type { PeerInfo, Signal } from '../collab/protocol'
 import {
   type Arrowheads,
   type Board,
@@ -219,6 +219,8 @@ export interface AiChange {
 
 /** Slides can zoom in this far, so small frames fill the screen. */
 const SLIDE_MAX_ZOOM = 4
+const EMOTE_MS = 2200
+const CHAT_MS = 6000
 const FLIGHT_MS = 520
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
@@ -274,6 +276,95 @@ export class Editor {
   onAiHistory: ((h: AiChange[]) => void) | null = null
   /** Other people in a live session, by connection id. */
   peers = new Map<string, PeerInfo>()
+
+  // ----- live moments: emotes, cursor chat and the shared timer (not part of the board) ----------
+
+  /** Emotes floating up from where they were sent. */
+  emotes: { key: number; emoji: string; at: Vec; color: string; t: number }[] = []
+  /** The latest line of cursor chat from each person ("me" for mine), shown for a few seconds. */
+  chats = new Map<string, { text: string; t: number }>()
+  timer: { endsAt: number; totalMs: number; by: string } | null = null
+  /** Set by a live session: sends a moment to everyone; false when not connected. */
+  sendSignal: ((s: Signal) => boolean) | null = null
+  /** Where the emote picker is open (screen position), if it is. */
+  emotePicker: Vec | null = null
+  /** Typing a line of cursor chat. */
+  chatting = false
+  myColor = '#7048e8'
+  private emoteKey = 0
+
+  /** Sends an emote from the pointer (or the middle of the view). */
+  emote(emoji: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    this.emotePicker = null
+    this.showEmote(emoji, at, this.myColor)
+    this.sendSignal?.({ kind: 'emote', emoji, at })
+  }
+
+  showEmote(emoji: string, at: Vec, color: string) {
+    const e = { key: ++this.emoteKey, emoji, at, color, t: Date.now() }
+    this.emotes = [...this.emotes.slice(-30), e]
+    setTimeout(() => {
+      this.emotes = this.emotes.filter((x) => x !== e)
+      this.emit()
+    }, EMOTE_MS)
+    this.emit()
+  }
+
+  openEmotePicker(at: Vec | null = this.pointer ? toScreen(this.camera, this.pointer) : null) {
+    this.emotePicker = at ?? { x: this.viewport.w / 2, y: this.viewport.h / 2 }
+    this.emit()
+  }
+
+  closeEmotePicker() {
+    this.emotePicker = null
+    this.emit()
+  }
+
+  setChatting(on: boolean) {
+    this.chatting = on
+    this.emit()
+  }
+
+  /** Says something next to my cursor, for everyone in the session. */
+  say(text: string) {
+    this.chatting = false
+    const line = text.trim().slice(0, 140)
+    if (line) {
+      this.showChat('me', line)
+      this.sendSignal?.({ kind: 'chat', text: line })
+    }
+    this.emit()
+  }
+
+  showChat(who: string, text: string) {
+    const entry = { text, t: Date.now() }
+    this.chats = new Map(this.chats).set(who, entry)
+    setTimeout(() => {
+      if (this.chats.get(who) !== entry) return
+      const next = new Map(this.chats)
+      next.delete(who)
+      this.chats = next
+      this.emit()
+    }, CHAT_MS)
+    this.emit()
+  }
+
+  /** Starts (or with null, stops) the timer; in a live session everyone sees the same one. */
+  startTimer(seconds: number | null) {
+    if (this.sendSignal?.({ kind: 'timer', seconds })) return
+    this.setTimer(seconds ? { endsAt: Date.now() + seconds * 1000, totalMs: seconds * 1000, by: this.me } : null)
+  }
+
+  setTimer(t: { endsAt: number; totalMs: number; by: string } | null) {
+    this.timer = t
+    this.emit()
+  }
+
+  /** A moment someone else sent. */
+  receiveSignal(from: string, s: Signal) {
+    if (s.kind === 'emote') this.showEmote(s.emoji, s.at, this.peers.get(from)?.color ?? '#7048e8')
+    else if (s.kind === 'chat') this.showChat(from, s.text)
+  }
   /** Pointer moves (for showing your cursor to others); null when it leaves the board. */
   onPointer: ((world: Vec | null) => void) | null = null
   /** The person moved the camera themselves (stops following someone). */
@@ -2005,6 +2096,13 @@ export class Editor {
   /** Keyboard shortcuts on the canvas (not while typing). */
   keyDown(key: string, mods: Modifiers): KeyResult {
     const k = key.length === 1 ? key.toLowerCase() : key
+    if (this.emotePicker) {
+      const n = Number(k)
+      if (n >= 1 && n <= RX.REACTIONS.length) this.emote(RX.REACTIONS[n - 1])
+      else if (k === 'Escape' || k === 'e') this.closeEmotePicker()
+      else return false
+      return true
+    }
     if (this.shapePicker) {
       const n = Number(k)
       if (n >= 1 && n <= this.shapePicker.options.length) this.pickShape(this.shapePicker.options[n - 1])
@@ -2116,6 +2214,17 @@ export class Editor {
       }
     }
     if (k === 'Enter' && !node && this.placeHere()) return true
+    // With nothing selected: E for an emote, / to say something by your cursor.
+    if (!this.selection.size && !mods.alt && !mods.ctrl) {
+      if (k === 'e') {
+        this.openEmotePicker()
+        return true
+      }
+      if (k === '/') {
+        this.setChatting(true)
+        return true
+      }
+    }
     // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
     if (node && !mods.alt && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly) {
       this.startEditing(node.id)

@@ -20,6 +20,7 @@ import { TOOL_ICONS } from './icons'
 import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
 import { PeerLayer } from './Live'
+import { Moments } from './Moments'
 import { ShapePicker } from './ShapePicker'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
@@ -258,6 +259,7 @@ export function Canvas() {
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <PeerLayer />
+      <Moments />
       <SelectionToolbar />
       <ShapePicker />
       <Minimap />

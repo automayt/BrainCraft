@@ -463,6 +463,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl K', 'Search the board or run any command'],
       ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
       ['Ctrl Shift E', 'Export the board or selection as an image or PDF'],
+      ['E', 'Send an emote from your cursor (nothing selected)'],
+      ['/', 'Cursor chat: say something next to your pointer'],
       ['Right-click', 'Actions for whatever is under the pointer'],
       ['Shift C', 'Comments on the selected object'],
       ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],
