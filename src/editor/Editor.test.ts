@@ -5,6 +5,7 @@ import * as M from '../model/mindmap'
 import { toScreen } from '../model/camera'
 import { fakeMeasure } from '../model/test-helpers'
 import { Editor } from './Editor'
+import { diff } from '../collab/patch'
 
 function editor() {
   const e = new Editor(emptyBoard(), fakeMeasure)
@@ -248,10 +249,10 @@ describe('flowchart editing', () => {
     e.pointerDown({ x: 400, y: 100 }, 0, {}, { kind: 'flowAdd', dir: 'right' })
     e.pointerMove({ x: 700, y: 400 })
     e.pointerUp({ x: 700, y: 400 })
-    // Dropping on empty space offers the likeliest next shapes; 2 picks the second.
+    // Dropping on empty space offers the likeliest next shapes, numbered as in the shape panel (4 is Input / Output).
     expect(e.shapePicker?.options.slice(0, 2)).toEqual(['process', 'data'])
     expect(e.board.items).toHaveLength(2)
-    e.keyDown('2', {})
+    e.keyDown('4', {})
     expect(e.shapePicker).toBeNull()
     expect(e.board.items).toHaveLength(3)
     expect(e.board.items[2]).toMatchObject({ shape: 'data' })
@@ -855,5 +856,104 @@ describe('who changed it', () => {
     e.author = 'Jo'
     e.toggleReaction('👍', [id])
     expect(B.getItem(e.board, id)!.by).toBe('Alex')
+  })
+})
+
+describe('gestures alongside other people', () => {
+  // Someone else adds a note while this person is mid-gesture.
+  const peerAdds = (e: Editor) => {
+    const [b] = B.addItem(e.board, B.newItem('sticky', { x: 900, y: 900, w: 100, h: 100 }, { text: 'From a friend' }))
+    e.applyRemote(diff(e.board, b))
+  }
+  const hasPeerNote = (e: Editor) => e.board.items.some((i) => i.text === 'From a friend')
+
+  it('keeps a note added while a branch is dragged, through the drop and its undo', () => {
+    const e = editor()
+    e.pasteText('Root\n  A\n  B')
+    const id = (t: string) => e.board.items.find((i) => i.text === t)!.id
+    const start = screenCenter(e, id('A'))
+    e.select([id('A')])
+    e.pointerDown(start, 0, {})
+    e.pointerMove({ x: start.x + 40, y: start.y + 300 })
+    peerAdds(e)
+    e.pointerMove({ x: start.x + 60, y: start.y + 320 })
+    expect(hasPeerNote(e)).toBe(true)
+    e.pointerUp({ x: start.x + 60, y: start.y + 320 })
+    expect(hasPeerNote(e)).toBe(true)
+    e.undo()
+    expect(hasPeerNote(e)).toBe(true)
+  })
+
+  it('keeps a note added during a branch click that puts the branch back', () => {
+    const e = editor()
+    e.pasteText('Root\n  A')
+    const a = e.board.items[1].id
+    const start = screenCenter(e, a)
+    e.select([a])
+    e.pointerDown(start, 0, {})
+    peerAdds(e)
+    e.pointerUp(start)
+    expect(hasPeerNote(e)).toBe(true)
+  })
+
+  it('keeps a note added before a move is called off', () => {
+    const e = editor()
+    const [b, mine] = B.addItem(emptyBoard(), B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Mine' }))
+    e.load(b)
+    e.camera = { x: 0, y: 0, zoom: 1 }
+    e.pointerDown({ x: 50, y: 50 }, 0, {})
+    e.pointerMove({ x: 250, y: 50 })
+    peerAdds(e)
+    e.cancelDrag()
+    expect(hasPeerNote(e)).toBe(true)
+    expect(B.getItem(e.board, mine)!.x).toBe(0)
+  })
+
+  it('keeps a note added while a new idea is typed, if the idea is left empty', () => {
+    const e = editor()
+    const [b, root] = M.createMap(emptyBoard(), { x: 0, y: 0 }, 'Root')
+    e.load(b)
+    e.select([root])
+    e.addMindNode(root, 'child')
+    peerAdds(e)
+    e.finishEditing()
+    expect(hasPeerNote(e)).toBe(true)
+    expect(e.board.items.filter((i) => i.kind === 'mind')).toHaveLength(1)
+  })
+})
+
+describe('Escape during a drag', () => {
+  it('puts the dragged object back and keeps it selected', () => {
+    const e = editor()
+    const [b, id] = B.addItem(emptyBoard(), B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))
+    e.load(b)
+    e.camera = { x: 0, y: 0, zoom: 1 }
+    e.pointerDown({ x: 50, y: 50 }, 0, {})
+    e.pointerMove({ x: 250, y: 90 })
+    expect(e.keyDown('Escape', {})).toBe(true)
+    expect(B.getItem(e.board, id)!.x).toBe(0)
+    expect(e.drag.type).toBe('none')
+    expect([...e.selection]).toEqual([id])
+    e.pointerUp({ x: 250, y: 90 })
+    expect(B.getItem(e.board, id)!.x).toBe(0)
+    expect(e.history.canUndo).toBe(false)
+  })
+})
+
+describe('typing on a selected note', () => {
+  it('types a capital letter instead of running a shortcut; Alt + letter acts', () => {
+    const e = editor()
+    const [b, id] = B.addItem(emptyBoard(), B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Old' }))
+    e.load(b)
+    e.select([id])
+    expect(e.keyDown('C', { shift: true })).toBe(true)
+    expect(e.notesOpen).toBe(false)
+    expect(e.editing?.id).toBe(id)
+    e.setEditingText('Coffee')
+    e.finishEditing()
+    expect(B.getItem(e.board, id)!.text).toBe('Coffee')
+    e.select([id])
+    e.keyDown('c', { alt: true })
+    expect(e.notesOpen).toBe(true)
   })
 })

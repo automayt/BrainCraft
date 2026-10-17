@@ -130,3 +130,15 @@ describe('live moments', () => {
     expect(inbox.get('b')!.filter((m) => m.t === 'signal').length).toBeLessThanOrEqual(15)
   })
 })
+
+describe('rooms refusing a change', () => {
+  it('names the refused message, so its sender can drop it and reload', () => {
+    const { r, inbox, join } = room()
+    join('a', 'edit')
+    join('v', 'view')
+    r.receive('v', { t: 'patch', seq: 4, patches: [] })
+    expect(inbox.get('v')!.at(-1)).toMatchObject({ t: 'error', seq: 4 })
+    r.receive('a', { t: 'patch', seq: 9, patches: 'nope' as never })
+    expect(inbox.get('a')!.at(-1)).toMatchObject({ t: 'error', seq: 9 })
+  })
+})

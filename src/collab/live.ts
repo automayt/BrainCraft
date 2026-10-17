@@ -16,6 +16,8 @@ import { type ClientMessage, type LiveLink, type PeerInfo, type Presence, type R
 export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
 
 const SEND_DELAY = 40
+/** Patches per message, under the server's limit (a select-all move on a huge board goes in parts). */
+const BATCH = 2000
 const PRESENCE_EVERY = 80
 const RETRY = [500, 1000, 2000, 4000, 8000, 15000]
 
@@ -50,6 +52,8 @@ export class LiveSession {
   private synced: Board | null = null
   /** Keys of objects with patches the server hasn't confirmed yet, by message. */
   private pending = new Map<number, Set<string>>()
+  /** Those patches themselves, kept to send again if the connection drops before the server confirms. */
+  private inflight = new Map<number, Patch[]>()
   private seq = 0
   private sendTimer: ReturnType<typeof setTimeout> | undefined
   private presenceTimer: ReturnType<typeof setTimeout> | undefined
@@ -135,8 +139,10 @@ export class LiveSession {
     switch (m.t) {
       case 'hello': {
         this.role = m.you.role
-        // Work done while disconnected is replayed on top of the server's board.
-        const unsent = this.synced ? diff(this.synced, this.editor.board) : []
+        // Work the server may not have (sent but not confirmed, or done while disconnected) is
+        // replayed on top of its board; what it already has makes no difference there.
+        const unsent = [...[...this.inflight.values()].flat(), ...(this.synced ? diff(this.synced, this.editor.board) : [])]
+        this.inflight.clear()
         this.editor.resetFromRemote(m.board, { readOnly: m.you.role === 'view', idBase: m.you.idBase })
         this.synced = this.editor.board
         if (unsent.length && this.role === 'edit') {
@@ -173,6 +179,7 @@ export class LiveSession {
       }
       case 'ack':
         this.pending.delete(m.seq)
+        this.inflight.delete(m.seq)
         break
       case 'presence':
         this.peers.set(m.peer.id, m.peer)
@@ -192,6 +199,13 @@ export class LiveSession {
         break
       case 'error':
         this.editor.setStatus(`Live session: ${m.message}`)
+        if (m.seq !== undefined && this.pending.has(m.seq)) {
+          // That change was refused: forget it and reload the board everyone has, so this screen
+          // doesn't hold on to it (or ignore others' edits to those objects) from now on.
+          this.pending.delete(m.seq)
+          this.inflight.delete(m.seq)
+          this.ws?.close()
+        }
         break
     }
   }
@@ -215,10 +229,14 @@ export class LiveSession {
     if (!this.synced || this.role !== 'edit' || this.ws?.readyState !== WebSocket.OPEN) return
     const patches: Patch[] = diff(this.synced, this.editor.board)
     if (!patches.length) return
-    const seq = ++this.seq
-    this.pending.set(seq, new Set(patches.map(keyOf)))
     this.synced = this.editor.board
-    this.sendRaw({ t: 'patch', seq, patches })
+    for (let at = 0; at < patches.length; at += BATCH) {
+      const part = patches.slice(at, at + BATCH)
+      const seq = ++this.seq
+      this.pending.set(seq, new Set(part.map(keyOf)))
+      this.inflight.set(seq, part)
+      this.sendRaw({ t: 'patch', seq, patches: part })
+    }
   }
 
   // ----- presence --------------------------------------------------------------------------

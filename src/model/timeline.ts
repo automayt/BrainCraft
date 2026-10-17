@@ -14,7 +14,10 @@ const DAY = 86_400_000
 /** Whole days since 1970-01-01 for a YYYY-MM-DD date. */
 export function toDay(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number)
-  return Math.round(Date.UTC(y, (m || 1) - 1, d || 1) / DAY)
+  // setUTCFullYear, unlike Date.UTC, reads years below 100 as written (0026 is not 1926).
+  const t = new Date(0)
+  t.setUTCFullYear(y, (m || 1) - 1, d || 1)
+  return Math.round(t.getTime() / DAY)
 }
 
 export function fromDay(day: number): string {
@@ -118,21 +121,41 @@ export interface Tick {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** Axis labels: days, weeks or months depending on how much room each day gets. */
+/** Most labels an axis gets, however long the span (a mistyped year can make it centuries). */
+const MAX_TICKS = 400
+
+/**
+ * Axis labels: days, weeks, months, quarters, years or decades, depending on how much room
+ * each day gets. The first tick also names its month (and year), so a ruler of day numbers
+ * says which month it's in.
+ */
 export function ticks(start: number, end: number, pxPerDay: number): Tick[] {
   const out: Tick[] = []
-  for (let day = start; day <= end; day++) {
-    const d = new Date(day * DAY)
-    const date = d.getUTCDate()
-    const firstOfMonth = date === 1
-    const monday = d.getUTCDay() === 1
-    if (pxPerDay >= 26) {
-      out.push({ day, label: firstOfMonth ? `${MONTHS[d.getUTCMonth()]} ${date}` : `${date}`, major: firstOfMonth || monday })
-    } else if (pxPerDay >= 5) {
-      if (monday) out.push({ day, label: `${MONTHS[d.getUTCMonth()]} ${date}`, major: firstOfMonth })
-    } else if (firstOfMonth) {
-      out.push({ day, label: d.getUTCMonth() === 0 ? `${MONTHS[0]} ${d.getUTCFullYear()}` : MONTHS[d.getUTCMonth()], major: d.getUTCMonth() === 0 })
+  if (pxPerDay >= 5) {
+    for (let day = start; day <= end && out.length < MAX_TICKS; day++) {
+      const d = new Date(day * DAY)
+      const date = d.getUTCDate()
+      const firstOfMonth = date === 1
+      const monday = d.getUTCDay() === 1
+      const named = firstOfMonth || !out.length
+      if (pxPerDay >= 26) out.push({ day, label: named ? `${MONTHS[d.getUTCMonth()]} ${date}` : `${date}`, major: firstOfMonth || monday })
+      else if (monday) out.push({ day, label: `${MONTHS[d.getUTCMonth()]} ${date}`, major: firstOfMonth })
     }
+    return out
+  }
+  // Months or longer: step from one first-of-month to the next, never day by day.
+  const perMonth = pxPerDay * 30.4
+  const months = [1, 3, 12, 60, 120, 600, 1200].find((n) => perMonth * n >= 40) ?? 1200
+  const s = new Date(start * DAY)
+  let m = s.getUTCFullYear() * 12 + s.getUTCMonth() + (s.getUTCDate() === 1 ? 0 : 1)
+  m = Math.ceil(m / months) * months
+  for (; out.length < MAX_TICKS; m += months) {
+    const year = Math.floor(m / 12)
+    const month = m - year * 12
+    const day = toDay(`${year}-${month + 1}-1`)
+    if (day > end) break
+    if (months < 12) out.push({ day, label: month === 0 || !out.length ? `${MONTHS[month]} ${year}` : MONTHS[month], major: month === 0 })
+    else out.push({ day, label: String(year), major: year % (months >= 60 ? 100 : 10) === 0 })
   }
   return out
 }

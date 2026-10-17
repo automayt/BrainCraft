@@ -38,7 +38,7 @@ describe('untrusted board data', () => {
     const clean = cleanItem(bad)!
     for (const k of ['status', 'by', 'hiddenBy', 'back', 'lang', 'masked']) expect(k in clean, k).toBe(false)
     expect(clean.wheel).toEqual({})
-    expect(clean.view && 'month' in clean.view).toBe(false)
+    expect(clean.view?.month).toBeUndefined()
     const link = { ...newItem('link', { x: 0, y: 0, w: 10, h: 10 }), id: 2, link: { url: 'https://x.example/', title: 5, site: { a: 1 } } } as unknown as Item
     expect(cleanItem(link)!.link).toEqual({ url: 'https://x.example/' })
     expect(cleanItem({ ...link, link: { title: 'no url' } } as unknown as Item)).toBeNull()

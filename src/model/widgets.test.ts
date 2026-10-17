@@ -133,7 +133,15 @@ describe('timeline', () => {
     const start = TL.toDay('2026-10-01')
     expect(TL.ticks(start, start + 6, 40).map((x) => x.label)).toEqual(['Oct 1', '2', '3', '4', '5', '6', '7'])
     expect(TL.ticks(start, start + 14, 10).map((x) => x.label)).toEqual(['Oct 5', 'Oct 12'])
-    expect(TL.ticks(start, start + 100, 2).map((x) => x.label)).toEqual(['Oct', 'Nov', 'Dec', 'Jan 2027'])
+    expect(TL.ticks(start, start + 100, 2).map((x) => x.label)).toEqual(['Oct 2026', 'Nov', 'Dec', 'Jan 2027'])
+    // A mistyped year makes a span of centuries: a few labels, a year apart or more, and quickly.
+    const t0 = performance.now()
+    const [from, to] = [TL.toDay('0026-01-01'), TL.toDay('2026-12-31')]
+    const wide = TL.ticks(from, to, 1000 / (to - from))
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(wide.length).toBeGreaterThan(3)
+    expect(wide.length).toBeLessThan(60)
+    expect(wide.every((x) => /^\d+$/.test(x.label))).toBe(true)
   })
 
   it('stacks overlapping entries in a lane', () => {

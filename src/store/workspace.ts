@@ -100,7 +100,8 @@ export class Workspace {
   server: string | null = null
 
   private timer: ReturnType<typeof setTimeout> | undefined
-  private pending: Board | null = null
+  /** Unsaved work, and which board it belongs to (the open board can change before it's saved). */
+  private pending: { id: string; board: Board } | null = null
   private listeners = new Set<() => void>()
   version = 0
 
@@ -368,6 +369,11 @@ export class Workspace {
   }
 
   async remove(id: string) {
+    // Unsaved work on a deleted board goes with it (and never lands on another board).
+    if (this.pending?.id === id) {
+      clearTimeout(this.timer)
+      this.pending = null
+    }
     await this.library.remove(id)
     this.libraryChanged()
     if (id === this.boardId) {
@@ -392,8 +398,8 @@ export class Workspace {
     this.live?.localChanged()
     this.tabChanged()
     this.markSeen()
-    if (this.readOnly) return
-    this.pending = b
+    if (this.readOnly || !this.boardId) return
+    this.pending = { id: this.boardId, board: b }
     this.saveState = 'unsaved'
     clearTimeout(this.timer)
     this.timer = setTimeout(() => void this.flush(), SAVE_DELAY)
@@ -403,9 +409,8 @@ export class Workspace {
   /** Writes any unsaved change now. */
   async flush() {
     clearTimeout(this.timer)
-    const b = this.pending
-    const id = this.boardId
-    if (!b || !id) return
+    if (!this.pending) return
+    const { id, board: b } = this.pending
     this.pending = null
     this.saveState = 'saving'
     try {
@@ -426,9 +431,9 @@ export class Workspace {
 
   /** Called as the page closes: IndexedDB may not finish, so leave a synchronous copy too. */
   rescue() {
-    if (!this.pending || !this.boardId) return
+    if (!this.pending) return
     try {
-      safeStorage()?.setItem(RESCUE_KEY, JSON.stringify({ id: this.boardId, json: toJson(this.pending) }))
+      safeStorage()?.setItem(RESCUE_KEY, JSON.stringify({ id: this.pending.id, json: toJson(this.pending.board) }))
     } catch {
       // Too big for localStorage; the IndexedDB write may still land.
     }
@@ -711,8 +716,11 @@ export class Workspace {
     if (!id) {
       id = await this.library.create(emptyBoard('Shared board'))
       await this.library.setLive(id, { server, id: link.id, key: link.key, role: 'edit' })
-    } else if (known?.live?.key !== link.key) {
-      await this.library.setLive(id, { ...known!.live!, key: link.key })
+    } else if (known?.live && known.live.key !== link.key && known.live.viewKey !== link.key) {
+      const live = known.live
+      // Someone who can edit keeps their edit key when they open a view link (it becomes the
+      // view link this browser offers); a view-only visitor tries the new key, keeping the old one.
+      await this.library.setLive(id, live.role === 'edit' ? { ...live, viewKey: link.key } : { ...live, key: link.key, role: 'edit', viewKey: live.key })
     }
     await this.switchTo(id)
   }

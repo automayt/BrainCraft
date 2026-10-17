@@ -146,9 +146,13 @@ function SaveState() {
   const where = ws.persistent ? 'in this browser' : 'nowhere yet — this browser does not keep data'
   const tip = `${SAVE_LABELS[ws.saveState]} ${where}${ws.fileName ? ` · file: ${ws.fileName}` : ''}`
   return (
-    <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`} aria-live="polite">
+    <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`}>
       <i aria-hidden="true" />
       <span className="sr-only">{tip}</span>
+      {/* Only problems are announced, not every save. */}
+      <span className="sr-only" aria-live="polite">
+        {!ws.persistent || ws.saveState === 'error' ? tip : ''}
+      </span>
       <Tip label={tip} />
     </span>
   )
@@ -202,7 +206,7 @@ export function TopLeft() {
                 <MenuItem label="Save as…" keys="Ctrl Shift S" onClick={run(() => ui.saveFile(true))} />
               </>
             ) : (
-              <MenuItem label="Download file" keys="Ctrl S" onClick={run(ui.download)} />
+              <MenuItem label="Download a copy" keys="Ctrl S" onClick={run(ui.download)} />
             )}
             <MenuItem label="Share…" onClick={run(ui.openShare)} />
             <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
@@ -266,7 +270,7 @@ export function TopRight() {
         onClick={() => editor.toggleNotes()}
       >
         <CommentsIcon />
-        <Tip label="Comments" keys="Shift C" />
+        <Tip label="Comments" keys="Alt C" />
       </button>
       <div className="anchor">
         <button className={`icon-btn has-tip${themes ? ' on' : ''}`} aria-label="Theme" aria-expanded={themes} onMouseDown={keepFocus} onClick={() => setThemes(!themes)}>
@@ -533,22 +537,22 @@ export function Toast() {
 }
 
 export const SHORTCUTS: [string, [string, string][]][] = [
-  ['Tools', TOOLS.map((t) => [t.key.toUpperCase(), t.label])],
+  ['Tools (with nothing selected)', TOOLS.map((t) => [t.key.toUpperCase(), t.label])],
   [
     'Everywhere',
     [
-      ['Ctrl K', 'Search the board or run any command'],
+      ['Ctrl K · Ctrl F', 'Search the board or run any command (type > for commands only)'],
       ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
       ['Ctrl Shift E', 'Export the board or selection as an image or PDF'],
-      ['E', 'Send an emote from your cursor (nothing selected)'],
+      ['E', 'Send an emote from your cursor (nothing selected; 1–6 pick one)'],
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],
       ['Ctrl Shift L', 'Lock or unlock the selection'],
       ['/', 'Cursor chat: say something next to your pointer (nothing selected)'],
       ['Enter', 'Place the current tool in the middle of the view'],
       ['Type', 'With one object selected, typing replaces its text'],
       ['Right-click', 'Actions for whatever is under the pointer'],
-      ['Shift C', 'Comments on the selected object'],
-      ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],
+      ['Alt C', 'Comments on the selected object'],
+      ['Ctrl Z / Ctrl Shift Z · Ctrl Y', 'Undo / redo'],
       ['Ctrl C / X / V / D', 'Copy, cut, paste, duplicate'],
       ['Ctrl A', 'Select all'],
       ['Ctrl S · Ctrl Shift S', 'Save to a file · save as'],
@@ -563,7 +567,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Scroll · Space-drag · middle-drag', 'Pan'],
       ['Ctrl scroll · pinch · Ctrl + / −', 'Zoom'],
-      ['Shift 1', 'Zoom to fit'],
+      ['Shift 1 · Ctrl 0', 'Zoom to fit · back to 100%'],
       ['Double-click', 'Edit text, or add a sticky note'],
       ['Drag the blue dot', 'Connect; drop on empty space for a linked note'],
       ['Shift-click · drag a box', 'Select several'],
@@ -586,8 +590,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Mind maps',
     [
       ['M then click', 'Start a mind map'],
-      ['Tab · Shift Tab', 'Add a child idea · a sibling'],
-      ['Enter', 'Add a sibling (while typing: finish, then add the next)'],
+      ['Tab · Shift Tab', 'Add a sub-idea · an idea below'],
+      ['Enter', 'Add an idea below (while typing: finish, then add the next)'],
       ['Shift Enter', 'New line while typing'],
       ['Arrows', 'Move between ideas'],
       ['Alt ↑ / ↓', 'Reorder an idea'],
@@ -605,7 +609,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Drag a blue arrow to empty space', 'Pick the next shape (1–7)'],
       ['Double-click a line', 'Label it (e.g. Yes / No)'],
       ['Paste Mermaid', 'Builds the flowchart'],
-      ['Shift R', 'Run the flowchart step by step (1–9 pick a way, Backspace goes back)'],
+      ['Alt R', 'Run the flowchart step by step (1–9 pick a way, Backspace goes back)'],
     ],
   ],
   [

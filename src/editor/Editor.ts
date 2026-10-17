@@ -53,6 +53,7 @@ import {
   KIND_LABELS,
   INKS,
   defaultSize,
+  FLOW_SHAPES,
   flowShapeInfo,
   WIDGET_TITLE_H,
   hasText,
@@ -145,9 +146,11 @@ export type Drag =
       magnet?: F.Magnet | null
       /** Mind-map ideas that move by their offset rather than their position. */
       heads: Set<Id>
+      /** The board as this drag last left it. */
+      at?: Board
     }
-  | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board }
-  | { type: 'resize'; id: Id; anchor: Vec; before: Board }
+  | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board; at?: Board }
+  | { type: 'resize'; id: Id; anchor: Vec; before: Board; at?: Board }
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
   | { type: 'create'; kind: Kind; start: Vec; current: Vec }
   | { type: 'draw'; points: Vec[] }
@@ -566,6 +569,15 @@ export class Editor {
     const patched = applyPatches(this.board, patches)
     const next = M.layoutAll(opts.sharedIds ? withIdsAfter(patched, patches) : patched, this.measure)
     this.board = next
+    // A gesture or edit under way keeps the board it started from, to restore or record
+    // against: the change that just arrived goes into that too, so neither erases it.
+    const held = (b: Board) => M.layoutAll(applyPatches(b, patches), this.measure)
+    const d = this.drag
+    if ('before' in d) {
+      d.before = held(d.before)
+      if (d.at) d.at = held(d.at)
+    }
+    if (this.editing) this.editing = { ...this.editing, before: held(this.editing.before) }
     this.selection = new Set([...this.selection].filter((id) => B.getItem(next, id)))
     if (this.selectedConnector !== null && !B.getConnector(next, this.selectedConnector)) this.selectedConnector = null
     if (this.editing && !(this.editing.connector ? B.getConnector(next, this.editing.id) : B.getItem(next, this.editing.id))) this.editing = null
@@ -1620,9 +1632,9 @@ export class Editor {
     const i = B.getItem(this.board, id)
     if (!i) return
     const r = this.screenRect(i)
-    // Room taken by the chrome: top bars, the tool rail (bottom on phones), the zoom bar, side panels.
+    // Room taken by the chrome: top bars, the tool rail (bottom on phones), the zoom bar and status key, side panels.
     const phone = this.viewport.w <= 720
-    const pad = { left: phone ? 16 : 76, top: phone ? 116 : 72, right: 16 + this.rightInset, bottom: phone ? 132 : 64 }
+    const pad = { left: phone ? 16 : 76, top: phone ? 116 : 72, right: 16 + this.rightInset, bottom: phone ? 132 : 104 }
     const w = this.viewport.w - pad.left - pad.right
     const h = this.viewport.h - pad.top - pad.bottom
     if (r.w > w || r.h > h) {
@@ -1664,6 +1676,8 @@ export class Editor {
     if (newId < 0) return
     this.apply(b)
     this.startEditing(newId, { before, created: true })
+    // Never type blind: a new idea past the edge of the screen comes into view.
+    this.keepInView(newId)
   }
 
   /** Lines up the selected objects. */
@@ -2058,6 +2072,10 @@ export class Editor {
         if (!mods.shift) this.selection = new Set()
         this.selectedConnector = null
         this.drag = { type: 'marquee', start: world, current: world, base: new Set(this.selection) }
+        // A locked object ignores clicks; say why (locked frames are backgrounds, so they stay quiet).
+        const under = this.hitAt(screen, true)
+        const locked = under?.type === 'item' ? B.getItem(this.board, under.id) : undefined
+        if (locked?.locked && locked.kind !== 'frame') this.setStatus('Locked — right-click or Alt-click it to unlock')
       }
     }
     this.emit()
@@ -2139,6 +2157,7 @@ export class Editor {
         // Ideas inside a mind map keep their place through the layout by their offset.
         if (d.heads.size) moved = B.updateItems(moved, d.heads, (i) => B.nudgeItem(i, step.x, step.y))
         this.apply(moved)
+        d.at = this.board
         d.applied = delta
         break
       }
@@ -2148,6 +2167,7 @@ export class Editor {
         // The idea itself follows the pointer, its branch and lines with it.
         const base = B.getItem(d.before, d.id)?.offset ?? { x: 0, y: 0 }
         this.apply(B.updateItem(d.before, d.id, (i) => ({ ...i, offset: { x: base.x + d.offset.x, y: base.y + d.offset.y } })))
+        d.at = this.board
         break
       }
       case 'resize': {
@@ -2164,6 +2184,7 @@ export class Editor {
           if (world.y < d.anchor.y) r.y = d.anchor.y - r.h
         }
         this.apply(B.updateItem(this.board, d.id, (i) => B.setRect(i, r)))
+        d.at = this.board
         break
       }
       case 'marquee':
@@ -2236,7 +2257,8 @@ export class Editor {
   /** Abandons the current gesture (e.g. when a second finger starts a pinch). */
   cancelDrag() {
     const d = this.drag
-    if ('before' in d) this.apply(d.before)
+    // Takes back only what the drag itself changed, whatever else has happened since.
+    if ('before' in d && d.at) this.apply(this.rebase(d.at, d.before))
     this.drag = { type: 'none' }
     this.emit()
   }
@@ -2388,6 +2410,12 @@ export class Editor {
 
   // ----- keyboard ----------------------------------------------------------------
 
+  /** Whether `key` would start typing into the one selected object (replacing its text). */
+  typesInto(key: string, mods: Modifiers = {}): boolean {
+    const node = this.single
+    return !!node && !mods.alt && !mods.ctrl && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly
+  }
+
   /** Keyboard shortcuts on the canvas (not while typing). */
   keyDown(key: string, mods: Modifiers): KeyResult {
     const k = key.length === 1 ? key.toLowerCase() : key
@@ -2399,10 +2427,17 @@ export class Editor {
       return true
     }
     if (this.shapePicker) {
-      const n = Number(k)
-      if (n >= 1 && n <= this.shapePicker.options.length) this.pickShape(this.shapePicker.options[n - 1])
+      // The same numbers as the shape panel, whatever order the suggestions come in.
+      const shape = /^[1-9]$/.test(k) ? FLOW_SHAPES[Number(k) - 1]?.shape : undefined
+      if (shape) this.pickShape(shape)
       else if (k === 'Escape') this.cancelShapePicker()
       else return false
+      return true
+    }
+    if ('before' in this.drag) {
+      // Mid-drag, Esc puts things back as they were; undo or delete would tangle with the drag.
+      if (k === 'Escape') this.cancelDrag()
+      else if (!(mods.ctrl || k === 'Delete' || k === 'Backspace')) return false
       return true
     }
     if (mods.ctrl) {
@@ -2431,18 +2466,19 @@ export class Editor {
       else return false
       return true
     }
-    if (mods.shift && k === 'c') {
+    // Letters with Alt act on the selection; plain or shifted ones type into it (below).
+    if (mods.alt && k === 'c') {
       this.toggleNotes()
       return true
     }
-    if (mods.shift && k === 'r' && this.single?.kind === 'flow') {
+    if (mods.alt && k === 'r' && this.single?.kind === 'flow') {
       this.startRun()
       return true
     }
     const node = this.single
     const mind = node?.kind === 'mind' ? node : undefined
 
-    if (mods.shift && k === '!') {
+    if (mods.shift && k === '!' && !this.typesInto(key, mods)) {
       this.zoomToFit()
       return true
     }
@@ -2493,7 +2529,10 @@ export class Editor {
           this.edit((b) => M.moveAmongSiblings(b, mind.id, dir === 'up' ? -1 : 1))
         } else {
           const next = M.navigate(this.board, mind.id, dir)
-          if (next !== undefined) this.select([next])
+          if (next !== undefined) {
+            this.select([next])
+            this.keepInView(next)
+          }
         }
         return true
       }
@@ -2523,7 +2562,7 @@ export class Editor {
       }
     }
     // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
-    if (node && !mods.alt && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly) {
+    if (node && this.typesInto(key, mods)) {
       this.startEditing(node.id)
       this.setEditingText(key)
       return true
@@ -2557,7 +2596,7 @@ export class Editor {
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single
     if (node?.kind === 'mind')
-      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Shift+C comments'
+      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Alt+C comments'
     if (node?.kind === 'flow')
       return 'Tab next step  ·  Alt+Arrow add a step that way  ·  Enter edit  ·  Drag a blue arrow for shape ideas'
     return null

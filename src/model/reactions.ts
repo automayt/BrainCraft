@@ -49,11 +49,17 @@ export function activePoll(b: Board): (Item & { poll: Poll }) | undefined {
 
 const key = (poll: Id) => String(poll)
 
+/** A record's own entry (people's names like "constructor" aren't object built-ins). */
+const own = <T>(r: Record<string, T> | undefined, k: string): T | undefined => (r && Object.hasOwn(r, k) ? r[k] : undefined)
+
 /** `who`'s votes on one option. */
-export const votesBy = (i: Item, poll: Id, who: string) => i.votes?.[key(poll)]?.[who] ?? 0
+export const votesBy = (i: Item, poll: Id, who: string) => {
+  const n = own(own(i.votes, key(poll)), who)
+  return typeof n === 'number' ? n : 0
+}
 
 /** All votes on one option. */
-export const totalVotes = (i: Item, poll: Id) => Object.values(i.votes?.[key(poll)] ?? {}).reduce((a, n) => a + n, 0)
+export const totalVotes = (i: Item, poll: Id) => Object.values(own(i.votes, key(poll)) ?? {}).reduce((a, n) => a + (typeof n === 'number' ? n : 0), 0)
 
 /** How many of their votes `who` has used in this poll. */
 export function usedVotes(b: Board, poll: Id, who: string): number {

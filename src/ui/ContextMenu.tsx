@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react'
 import { hasSketch, sketchToBoard } from './sketch'
+import { VIEW_TYPES } from '../model/dataset'
 import { copyImage } from './ExportImage'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
@@ -8,12 +10,26 @@ import { useEscape } from './useEscape'
 
 type Entry = { label: string; keys?: string; run: () => void; danger?: boolean } | 'sep' | { heading: string }
 
+/** Up and down arrows (and Home, End) move between a menu's items. */
+function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  const at = items.indexOf(document.activeElement as HTMLElement)
+  const to = e.key === 'ArrowDown' ? (at + 1) % items.length : e.key === 'ArrowUp' ? (at - 1 + items.length) % items.length : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -1
+  if (to < 0 || !items.length) return
+  e.preventDefault()
+  items[to].focus()
+}
+
 /** Right-click: the actions that make sense for what's under the pointer. */
 export function ContextMenu() {
   const editor = useEditor()
   const ui = useUi()
   const m = ui.menu
   useEscape(ui.closeMenu, !!m)
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (m?.keyboard) listRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+  }, [m])
   if (!m) return null
 
   const single = editor.single
@@ -47,7 +63,7 @@ export function ContextMenu() {
   } else if (editor.selection.size) {
     if (single && single.kind !== 'pen' && single.kind !== 'image' && single.kind !== 'link')
       entries.push({ label: single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline' ? 'Rename' : 'Edit text', keys: 'Enter', run: () => editor.startEditing(single.id) })
-    if (single) entries.push({ label: `Comments${single.notes?.length ? ` (${single.notes.length})` : ''}`, keys: 'Shift C', run: () => editor.toggleNotes(true) })
+    if (single) entries.push({ label: `Comments${single.notes?.length ? ` (${single.notes.length})` : ''}`, keys: 'Alt C', run: () => editor.toggleNotes(true) })
     if (single?.kind === 'mind') {
       entries.push('sep', { label: 'Add sub-idea', keys: 'Tab', run: () => editor.addMindNode(single.id, 'child') })
       if (single.parent !== undefined) entries.push({ label: 'Add idea below', keys: 'Enter', run: () => editor.addMindNode(single.id, 'sibling') })
@@ -59,7 +75,7 @@ export function ContextMenu() {
       const runs = runsOf(editor.board, single.id)?.runs.length ?? 0
       entries.push(
         'sep',
-        { label: 'Run flowchart', keys: 'Shift R', run: () => editor.startRun(single.id) },
+        { label: 'Run flowchart', keys: 'Alt R', run: () => editor.startRun(single.id) },
         { label: 'Run from this step', run: () => editor.startRun(single.id, true) },
         { label: runs ? `Run history (${runs})` : 'Run history', run: () => ui.openRuns(single.id) },
       )
@@ -81,6 +97,7 @@ export function ContextMenu() {
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },
       ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
       ...(editor.selection.size > 1 ? [{ label: 'Spin a wheel between these', run: () => editor.addWheel() }] : []),
+      ...(editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame') ? [{ label: 'Start a dot vote on these', run: () => editor.startVote() }] : []),
       ...(single?.kind === 'sticky' ? [typeof single.back === 'string' ? { label: 'Remove the back (plain sticky note)', run: () => editor.setFlipCards(false) } : { label: 'Make a flip card', run: () => editor.setFlipCards(true) }] : []),
       ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',
@@ -93,7 +110,7 @@ export function ContextMenu() {
       entries.push({ label: 'Convert to linked data', run: () => editor.convertToData(single.id) })
     if (single?.kind === 'data') {
       entries.push(
-        ...(['table', 'board', 'timeline', 'calendar', 'gallery'] as const).map((t) => ({ label: `Add a ${t} view`, run: () => editor.addDataView(single.id, t) })),
+        ...VIEW_TYPES.map((t) => ({ label: `Add a ${t.label.toLowerCase()} view`, run: () => editor.addDataView(single.id, t.type) })),
       )
     }
     if (single?.kind === 'mind') {
@@ -111,7 +128,7 @@ export function ContextMenu() {
       { label: 'Sticky note', keys: 'N', run: place('sticky') },
       { label: 'Mind map', keys: 'M', run: place('mind') },
       { label: 'Flowchart shape', keys: 'D', run: place('flow') },
-      { label: 'Comment', keys: 'C', run: place('comment') },
+      { label: 'Comment block', keys: 'C', run: place('comment') },
       { label: 'Table', keys: 'G', run: place('table') },
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
@@ -129,7 +146,7 @@ export function ContextMenu() {
   return (
     <>
       <div className="scrim no-canvas" onPointerDown={ui.closeMenu} onContextMenu={(e) => { e.preventDefault(); ui.closeMenu() }} />
-      <div className="popover context-menu no-canvas" role="menu" style={{ left, top }}>
+      <div ref={listRef} className="popover context-menu no-canvas" role="menu" style={{ left, top }} onKeyDown={moveFocus}>
         {entries.map((e, k) =>
           e === 'sep' ? (
             <hr key={k} />

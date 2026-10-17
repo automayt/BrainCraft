@@ -238,7 +238,7 @@ export function RunsDialog({ id, onClose }: { id: Id; onClose: () => void }) {
               )}
             </div>
           ) : (
-            <p className="muted">No runs yet. Select a shape and choose Run flowchart (Shift R) to walk through it step by step.</p>
+            <p className="muted">No runs yet. Select a shape and choose Run flowchart (Alt R) to walk through it step by step.</p>
           )}
           <ol className="run-list">{runs.map(row)}</ol>
         </div>

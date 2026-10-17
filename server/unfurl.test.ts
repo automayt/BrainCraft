@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { checkUrl, isPublicAddress, PreviewCache, readMeta, unfurl, UnfurlError } from './unfurl'
+import { BusyError, checkUrl, isPublicAddress, PreviewCache, readMeta, unfurl, UnfurlError } from './unfurl'
 
 describe('which addresses may be fetched', () => {
   it('allows public addresses only', () => {
@@ -151,6 +151,12 @@ describe('preview cache', () => {
 describe('preview hardening', () => {
   it('blocks IPv6 forms that carry private IPv4 addresses', () => {
     for (const ip of ['::a00:1', '::ffff:0:a00:1', '64:ff9b:1::a00:1']) expect(isPublicAddress(ip), ip).toBe(false)
+  })
+
+  it('never remembers that the server itself was busy', async () => {
+    const cache = new PreviewCache()
+    await expect(cache.get('p', () => Promise.reject(new BusyError('Busy')))).rejects.toThrow('Busy')
+    expect(await cache.get('p', async (url) => ({ url }))).toEqual({ url: 'p' })
   })
 
   it('shares one fetch between people asking for the same page at once', async () => {

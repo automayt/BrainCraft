@@ -21,9 +21,30 @@ function fromBase64Url(text: string): Uint8Array<ArrayBuffer> {
   return out
 }
 
+/** The most a share link may unpack to: a tiny link can't be made to fill the memory. */
+const MAX_BOARD_BYTES = 64 * 1024 * 1024
+
 async function pipe(bytes: Uint8Array<ArrayBuffer>, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
-  const out = new Response(new Blob([bytes]).stream().pipeThrough(stream))
-  return new Uint8Array(await out.arrayBuffer())
+  const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_BOARD_BYTES) {
+      void reader.cancel()
+      throw new Error('That board is too big to open from a link')
+    }
+    parts.push(value)
+  }
+  const out = new Uint8Array(size)
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.byteLength
+  }
+  return out
 }
 
 /** The board as a compact, URL-safe string. */

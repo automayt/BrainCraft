@@ -5,6 +5,7 @@ import { AiDialog } from './AiConnect'
 import { Presenter } from './Present'
 import { RunPanel, RunsDialog } from './RunPanel'
 import { Editor } from '../editor/Editor'
+import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
 import { FILE_EXT, Workspace } from '../store/workspace'
 import { BoardsDialog, ReadOnlyBanner, ShareDialog, VersionsDialog } from './Boards'
@@ -209,6 +210,8 @@ function App({ ws }: { ws: Workspace }) {
       // Keys already handled inside a panel or a live table/board/timeline stay there.
       if (isTyping(e.target) || editor.searchOpen || e.defaultPrevented) return
       if (uiRef.current.menu && e.key !== 'Escape') return
+      // Escape closes the open menu, dialog or pop-up; it shouldn't also clear the selection behind it.
+      if (e.key === 'Escape' && (uiRef.current.menu || document.querySelector('[role="dialog"], .popover, .align-menu'))) return
       const ctrl = e.ctrlKey || e.metaKey
       // Board zoom instead of browser zoom.
       if (ctrl && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
@@ -217,12 +220,22 @@ function App({ ws }: { ws: Workspace }) {
         else editor.zoomBy(e.key === '-' ? 1 / 1.25 : 1.25)
         return
       }
-      if (e.key === '?' && !ctrl) {
+      // Shift F10 or the Menu key: the right-click menu, for the selection (or the middle of the view).
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault()
+        const box = editor.selection.size ? B.bounds(editor.board, editor.selection) : null
+        const at = box ? editor.screenRect(box) : null
+        uiRef.current.openMenu(at ? { x: at.x + at.w / 2, y: at.y + at.h / 2, keyboard: true } : { x: editor.viewport.w / 2, y: editor.viewport.h / 2, keyboard: true })
+        return
+      }
+      // Typing on a selected note wins over these: "?" or a capital P can start its new text.
+      const typing = editor.typesInto(e.key, { ctrl, alt: e.altKey }) && !(e.target as Element | null)?.closest?.('.no-canvas')
+      if (e.key === '?' && !ctrl && !typing) {
         e.preventDefault()
         setDialog((d) => (d === 'help' ? null : 'help'))
         return
       }
-      if (e.shiftKey && !ctrl && e.key.toLowerCase() === 'p') {
+      if (e.shiftKey && !ctrl && !typing && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         uiRef.current.present()
         return

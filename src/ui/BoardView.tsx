@@ -33,6 +33,7 @@ function Text({ item, className, color }: { item: Item; className: string; color
 }
 
 function penPath(points: { x: number; y: number }[]): string {
+  if (!points.length) return ''
   if (points.length === 1) return `M${points[0].x} ${points[0].y}h0.01`
   // Quadratic curves through midpoints smooth out the sampled stroke.
   let d = `M${points[0].x} ${points[0].y}`
@@ -46,7 +47,12 @@ function penPath(points: { x: number; y: number }[]): string {
 }
 
 /** One object. Memoized: boards are immutable, so an unchanged object keeps the same `item`. */
-export const ItemShape = memo(function ItemShape({ item, depth, editing, live = false }: { item: Item; depth: number; editing: boolean; live?: boolean }) {
+/**
+ * One object. Drawn again only when its props change: `deps` carries what a
+ * widget shows from elsewhere on the board (a database view's records, the
+ * Kanban boards a timeline follows), so those redraw when only that changes.
+ */
+export const ItemShape = memo(function ItemShape({ item, depth, editing, live = false }: { item: Item; depth: number; editing: boolean; live?: boolean; deps?: unknown }) {
   const text = editing ? null : item.text
   switch (item.kind) {
     case 'frame': {
@@ -410,6 +416,14 @@ const CoarseShape = memo(function CoarseShape({ item }: { item: Item }) {
   )
 })
 
+/** What an object shows from elsewhere on the board (see ItemShape). */
+function depsOf(board: Board, i: Item): unknown {
+  if (i.kind === 'data' && i.view) return board.datasets?.find((d) => d.id === i.view!.dataset)
+  // A timeline following Kanban boards redraws with the board (rare, and cheap enough).
+  if (i.kind === 'timeline' && i.timeline?.sources?.length) return board.items
+  return undefined
+}
+
 /** The whole board: frames, mind-map branches, items, then connectors on top. */
 export const BoardView = memo(function BoardView({
   board,
@@ -444,7 +458,7 @@ export const BoardView = memo(function BoardView({
     coarse && !KEEP_WHEN_COARSE.has(i.kind) && editingId !== i.id && !selection.has(i.id) ? (
       <CoarseShape key={i.id} item={i} />
     ) : (
-      <ItemShape key={i.id} item={i} depth={depth} editing={editingId === i.id} live={selection.size === 1 && selection.has(i.id) && editingId === null} />
+      <ItemShape key={i.id} item={i} depth={depth} editing={editingId === i.id} live={selection.size === 1 && selection.has(i.id) && editingId === null} deps={depsOf(board, i)} />
     )
   // Dropped objects fade; with a status filter, so does everything else.
   const shape = (i: Item, depth: number) => {

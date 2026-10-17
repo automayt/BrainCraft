@@ -34,7 +34,8 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string }[] = [
 
 export const VIEW_TYPES: { type: DataViewType; label: string }[] = [
   { type: 'table', label: 'Table' },
-  { type: 'board', label: 'Board' },
+  // "Kanban": "board" already means the whole canvas.
+  { type: 'board', label: 'Kanban' },
   { type: 'timeline', label: 'Timeline' },
   { type: 'calendar', label: 'Calendar' },
   { type: 'gallery', label: 'Gallery' },

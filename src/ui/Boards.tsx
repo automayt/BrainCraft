@@ -282,6 +282,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
                   <button
                     className="danger"
                     onClick={async () => {
+                      if (!window.confirm('Delete this version for good?')) return
                       await ws.deleteVersion(preview.v)
                       setPreview(null)
                       reload()
@@ -392,7 +393,7 @@ export function ReadOnlyBanner() {
         Save a copy to edit
       </button>
       <button onClick={() => ws.boards[0] && void ws.switchTo(ws.boards[0].id)} disabled={!ws.boards.length}>
-        My boards
+        Your boards
       </button>
     </div>
   )

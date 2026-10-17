@@ -205,3 +205,46 @@ describe('wiki-links', () => {
     ws.dispose()
   })
 })
+
+describe('autosave races', () => {
+  it('saves an edit made while switching onto the board it was made on', async () => {
+    const { ws, editor } = await workspace()
+    const a = ws.boardId!
+    const b = await ws.newBoard(emptyBoard('B'))
+    await ws.switchTo(a)
+    // Switch away, and edit A before the switch lands (a live or tab change can do this).
+    const going = ws.switchTo(b)
+    const [withNote] = addItem(editor.board, newItem('sticky', { x: 0, y: 0, w: 10, h: 10 }, { text: 'late edit on A' }))
+    editor.applyRemote(diff(editor.board, withNote))
+    await going
+    await ws.flush()
+    expect((await ws.library.load(b))!.items.some((i) => i.text === 'late edit on A')).toBe(false)
+    ws.dispose()
+  })
+
+  it('never writes a deleted board over another one', async () => {
+    const { ws, editor } = await workspace()
+    const keep = await ws.newBoard(emptyBoard('Keep'))
+    const doomed = await ws.newBoard(emptyBoard('Doomed'))
+    editor.setTitle('Doomed, edited')
+    await ws.remove(doomed)
+    await ws.flush()
+    expect((await ws.library.load(keep))!.title).toBe('Keep')
+    ws.rescue()
+    await ws.flush()
+    expect((await ws.library.load(keep))!.title).toBe('Keep')
+    ws.dispose()
+  })
+})
+
+describe('live links', () => {
+  it('keeps the edit key when someone who can edit opens the view link', async () => {
+    const { ws } = await workspace()
+    const server = 'https://bc.example/'
+    await ws.joinLive({ id: 'room1', key: 'edit-key-1234567890' }, server)
+    await ws.joinLive({ id: 'room1', key: 'view-key-1234567890' }, server)
+    const known = await ws.library.findLive(server, 'room1')
+    expect(known?.live).toMatchObject({ key: 'edit-key-1234567890', role: 'edit', viewKey: 'view-key-1234567890' })
+    ws.dispose()
+  })
+})

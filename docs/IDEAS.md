@@ -54,6 +54,36 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [ ] **Status badges stay with their object** (an object on top hides the
   badges of what's under it).
 
+## From the second review (October 2026)
+
+- [ ] **Undo and AI changes merge field by field.** Undoing your own move, or
+  applying an AI proposal made a minute ago, replaces the whole object, so a
+  friend's text edit to it in the meantime is lost. Patches should carry
+  only the fields that changed.
+- [ ] **Undo says what it undid** ("Undid: move branch") and pans to the change
+  when it's off-screen.
+- [ ] **Widgets act on the first click:** "Next month", a Kanban card or a
+  table cell work even before the widget is selected, and selecting it no
+  longer adds a tab strip that shifts the content.
+- [ ] **Present overview with slide numbers:** the overview numbers the frames,
+  marks the current one, and clicking a frame jumps to it.
+- [ ] **New timeline events open for renaming**, and the "+" add-child handle
+  on a mind idea no longer sits on top of its first child.
+- [ ] **Imported flowcharts land in free space** rather than on top of what's
+  in the middle of the view.
+- [ ] **Phone width with the comments panel open:** hide the status key, and
+  keep A− and A+ together when the toolbar wraps.
+- [ ] **A screen reader can follow the board:** the canvas announces what's
+  selected, the search palette works as a combobox, every input has a label,
+  and errors use role="alert".
+- [ ] **Eraser** in the pen panel, a way to hide the minimap, and export
+  options for "just what's on screen" and a light or transparent background.
+- [ ] **Vote commands in Ctrl K**, a "Many stickies" mode of its own in the
+  import dialog, and the flowchart menu listing every shape.
+- [ ] **AI quick actions:** one-click "Summarise", "Group these" and "Turn into
+  a plan" on a selection.
+- [ ] **A welcome board that feels like friends**, not a product tour.
+
 ## From the earlier list
 
 - [x] **More database views:** calendar and gallery.

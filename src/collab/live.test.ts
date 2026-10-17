@@ -118,3 +118,72 @@ describe('live sessions', () => {
     expect(editor.readOnly).toBe(true)
   })
 })
+
+describe('live sessions when things go wrong', () => {
+  const hello = (text: string): ServerMessage => ({
+    t: 'hello',
+    board: { ...emptyBoard('Shared'), items: [note(1, text)], nextId: 2 },
+    version: 3,
+    you: { id: 'me', role: 'edit', idBase: ID_BLOCK },
+    peers: [],
+  })
+
+  it('sends an unconfirmed edit again after the connection drops', () => {
+    vi.useFakeTimers()
+    try {
+      const { editor, live, ws } = session()
+      editor.edit((b) => B.updateItem(b, 1, (i) => ({ ...i, text: 'Typed just before the drop' })))
+      live.flush()
+      ws.onclose!()
+      vi.advanceTimersByTime(1000)
+      const again = FakeSocket.last!
+      expect(again).not.toBe(ws)
+      // The server never got it.
+      again.deliver(hello('Start'))
+      live.flush()
+      expect(B.getItem(editor.board, 1)!.text).toBe('Typed just before the drop')
+      expect(again.sent.filter((m) => m.t === 'patch')).toMatchObject([{ patches: [{ k: 'item', id: 1 }] }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reloads the board after the server refuses a change, and takes others’ edits again', () => {
+    vi.useFakeTimers()
+    try {
+      const { editor, live, ws } = session()
+      editor.edit((b) => B.updateItem(b, 1, (i) => ({ ...i, text: 'Refused' })))
+      live.flush()
+      let closed = false
+      ws.close = () => {
+        closed = true
+        ws.onclose!()
+      }
+      ws.deliver({ t: 'error', message: 'Bad patch', seq: 1 })
+      expect(closed).toBe(true)
+      vi.advanceTimersByTime(1000)
+      const again = FakeSocket.last!
+      again.deliver(hello('Start'))
+      live.flush()
+      // The refused change isn't sent again, and the board is everyone's.
+      expect(again.sent.filter((m) => m.t === 'patch')).toHaveLength(0)
+      expect(B.getItem(editor.board, 1)!.text).toBe('Start')
+      again.deliver({ t: 'patch', from: 'them', version: 4, patches: [{ k: 'item', id: 1, v: note(1, 'Theirs') }] })
+      expect(B.getItem(editor.board, 1)!.text).toBe('Theirs')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends a very large change in parts the server accepts', () => {
+    const { editor, live, ws } = session()
+    editor.edit((b) => {
+      for (let k = 0; k < 4500; k++) b = B.addItem(b, note(0, `n${k}`))[0]
+      return b
+    })
+    live.flush()
+    const parts = ws.sent.filter((m) => m.t === 'patch')
+    expect(parts.length).toBeGreaterThan(1)
+    for (const p of parts) expect(p.t === 'patch' && p.patches.length).toBeLessThanOrEqual(5000)
+  })
+})

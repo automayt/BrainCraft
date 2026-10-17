@@ -458,8 +458,8 @@ function Overlays({ editor }: { editor: Editor }) {
       out.push(<rect key="multi" {...xywh({ x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 16 })} className="sel-bounds" />)
     }
   }
-  // Comment counts on objects that have work notes.
-  for (const i of editor.board.items) {
+  // Comment counts on objects that have work notes (none on others' hidden brainstorm notes).
+  for (const i of editor.viewBoard.items) {
     if (!i.notes?.length || editor.hidden.has(i.id)) continue
     const r = editor.screenRect(i)
     if (r.x > editor.viewport.w || r.y > editor.viewport.h || r.x + r.w < 0 || r.y + r.h < 0) continue
@@ -765,6 +765,7 @@ const STARTERS: { tool: Parameters<Editor['setTool']>[0]; label: string; hint: s
   { tool: 'kanban', label: 'Kanban board', hint: 'Drag cards across' },
   { tool: 'table', label: 'Table', hint: 'Sort, filter, hide' },
   { tool: 'timeline', label: 'Timeline', hint: 'Plan in time' },
+  { tool: 'data', label: 'Database', hint: 'Records as a table, Kanban, calendar…' },
 ]
 
 /** A blank board offers a few ways to start, each placed in the middle of the view. */
@@ -780,7 +781,7 @@ function EmptyBoard() {
   return (
     <div className="empty-board no-canvas" onPointerDown={(e) => e.stopPropagation()}>
       <h1>Start with an idea</h1>
-      <p className="muted">Pick a starting point, double-click anywhere for a sticky note, or paste a link, Mermaid, an outline or a spreadsheet.</p>
+      <p className="muted">Pick a starting point, double-click anywhere for a sticky note, or paste a list of ideas, a link, Mermaid, an outline or a spreadsheet. Your boards (Ctrl+O) has templates.</p>
       <div className="starters">
         {STARTERS.map((s) => (
           <button key={s.tool} onClick={() => start(s.tool)}>

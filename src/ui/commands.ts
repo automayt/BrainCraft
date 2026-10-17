@@ -1,4 +1,5 @@
 import { hasSketch, sketchToBoard } from './sketch'
+import { VIEW_TYPES } from '../model/dataset'
 import { copyImage } from './ExportImage'
 /** Everything the app can do, by name: shared by the command palette and menus. */
 
@@ -54,7 +55,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'emote', label: 'Send an emote', group: 'Together', keys: 'E', aliases: 'emoji react party celebrate live', run: () => editor.openEmotePicker() },
     { id: 'chat', label: 'Say something by your cursor', group: 'Together', keys: '/', aliases: 'cursor chat message talk live', run: () => editor.setChatting(true) },
     ...[1, 3, 5, 10].map((m) => ({ id: `timer-${m}`, label: `Start a ${m}-minute timer`, group: 'Together', aliases: 'timer countdown timebox clock brainstorm', run: () => editor.startTimer(m * 60) })),
-    { id: 'wheel', label: editor.selection.size > 1 ? 'Spin a wheel between the selected' : 'Add a spinner wheel', group: 'Together', aliases: 'wheel spinner spin random pick choose decide lottery raffle who', run: () => editor.addWheel() },
+    { id: 'wheel', label: editor.selection.size > 1 ? 'Spin a wheel between these' : 'Add a spinner wheel', group: 'Together', aliases: 'wheel spinner spin random pick choose decide lottery raffle who', run: () => editor.addWheel() },
     { id: 'brainstorm', label: 'Start a private brainstorm', group: 'Together', aliases: 'brainstorm private hidden secret blind ideas reveal anonymous sticky', run: () => editor.startBrainstorm() },
     ...(editor.timer ? [{ id: 'timer-stop', label: 'Stop the timer', group: 'Together', aliases: 'timer stop cancel', run: () => editor.startTimer(null) }] : []),
     { id: 'export-image', label: 'Export image or PDF…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print', run: ui.openExport },
@@ -63,7 +64,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },
     { id: 'redo', label: 'Redo', group: 'Edit', keys: 'Ctrl Shift Z', run: () => editor.redo() },
     { id: 'select-all', label: 'Select all', group: 'Edit', keys: 'Ctrl A', run: () => editor.selectAll() },
-    { id: 'comments', label: 'Show comments', group: 'Edit', keys: 'Shift C', aliases: 'notes work notes panel', run: () => editor.toggleNotes(true) },
+    { id: 'comments', label: 'Show comments', group: 'Edit', keys: 'Alt C', aliases: 'notes work notes panel', run: () => editor.toggleNotes(true) },
     { id: 'present', label: 'Present', group: 'View', keys: 'Shift P', aliases: 'slides slideshow presentation fullscreen frames deck', run: ui.present },
     { id: 'zoom-in', label: 'Zoom in', group: 'View', run: () => editor.zoomBy(1.25) },
     { id: 'zoom-out', label: 'Zoom out', group: 'View', run: () => editor.zoomBy(1 / 1.25) },
@@ -81,7 +82,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'open', label: 'Open board file…', group: 'Board', aliases: 'load import json braincraft', run: ui.openFile },
     { id: 'save', label: 'Save to file', group: 'Board', keys: 'Ctrl S', aliases: 'export json braincraft disk', run: () => ui.saveFile() },
     { id: 'save-as', label: 'Save as…', group: 'Board', keys: 'Ctrl Shift S', aliases: 'export file copy', run: () => ui.saveFile(true) },
-    { id: 'download', label: 'Download a copy', group: 'Board', aliases: 'save export json file', run: ui.download },
+    { id: 'download', label: 'Download a copy (.braincraft file)', group: 'Board', aliases: 'save export json file', run: ui.download },
     { id: 'share', label: 'Share…', group: 'Board', aliases: 'link url send view publish live collaborate together invite team realtime', run: ui.openShare },
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude chat ai summarise cluster', run: ui.toggleAssistant },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude cursor chatgpt llm agent pair', run: ui.openAi },
@@ -108,7 +109,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
   if (editor.selectedItems.some((i) => canHaveStatus(i.kind))) {
     for (const st of STATUSES)
       list.push({ id: `status-${st.id}`, label: `Mark as ${st.label.toLowerCase()}`, group: 'Selection', aliases: 'status mark progress state tick done finished complete todo task', run: () => editor.markStatus(st.id) })
-    if (editor.selectedItems.some((i) => i.status)) list.push({ id: 'status-none', label: 'Clear status', group: 'Selection', aliases: 'status remove unmark', run: () => editor.markStatus(null) })
+    if (editor.selectedItems.some((i) => i.status)) list.push({ id: 'status-none', label: 'No status (clear it)', group: 'Selection', aliases: 'status remove unmark', run: () => editor.markStatus(null) })
   }
   if (editor.selectedItems.some((i) => i.kind === 'sticky')) {
     const cards = editor.selectedItems.filter((i) => typeof i.back === 'string')
@@ -136,7 +137,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
   if (editor.single?.kind === 'flow') {
     const id = editor.single.id
     list.push(
-      { id: 'run', label: 'Run flowchart', group: 'Flowchart', keys: 'Shift R', aliases: 'runbook checklist procedure walk steps play', run: () => editor.startRun(id) },
+      { id: 'run', label: 'Run flowchart', group: 'Flowchart', keys: 'Alt R', aliases: 'runbook checklist procedure walk steps play', run: () => editor.startRun(id) },
       { id: 'run-here', label: 'Run from this step', group: 'Flowchart', aliases: 'runbook checklist procedure walk', run: () => editor.startRun(id, true) },
       { id: 'run-history', label: 'Run history', group: 'Flowchart', aliases: 'runbook runs log audit past', run: () => ui.openRuns(id) },
     )
@@ -146,8 +147,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     list.push({ id: 'to-data', label: 'Convert to linked data', group: 'Data', aliases: 'database dataset records views sync link', run: () => editor.convertToData(single.id) })
   }
   if (single?.kind === 'data') {
-    for (const t of ['table', 'board', 'timeline', 'calendar', 'gallery'] as const)
-      list.push({ id: `view-${t}`, label: `Add a ${t} view of this data`, group: 'Data', aliases: 'database linked view kanban gantt', run: () => editor.addDataView(single.id, t) })
+    for (const { type: t, label } of VIEW_TYPES)
+      list.push({ id: `view-${t}`, label: `Add a ${label.toLowerCase()} view of this data`, group: 'Data', aliases: 'database linked view kanban gantt', run: () => editor.addDataView(single.id, t) })
   }
   if (editor.selection.size > 1) {
     for (const [how, label] of [['left', 'Align left'], ['center', 'Align centres'], ['right', 'Align right'], ['top', 'Align tops'], ['middle', 'Align middles'], ['bottom', 'Align bottoms']] as const)
