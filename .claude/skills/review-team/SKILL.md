@@ -123,8 +123,11 @@ panel's `SHORTCUTS`, templates). Focus:
 1. Run `npm run check` (typecheck, lint, tests) and `npm run build`.
 2. Rebuild, reload the preview, and confirm the UI fixes in the browser.
    Measure with `getBoundingClientRect` where overlaps were reported.
-3. Run `git grep -i miro -- . ':!package-lock.json'`. It must find **nothing**:
-   Miro is inspiration only and is never named in code, UI, docs or commits.
+3. The whiteboard product that inspired BrainCraft must never be named in code,
+   UI, docs, commits or this skill (the owner's rule; Claude's memory notes have
+   the name). `git grep -i` for it across the repo, excluding
+   `package-lock.json`, and expect **nothing**. Describe borrowed ideas in
+   BrainCraft's own words.
 4. Commit with a plain-English summary and bullets, ending with the
    attribution lines the harness gives. Never put model names in commits or
    code. Stage by path or `git add -A -- . ':!.claude/launch.json'`, so the
