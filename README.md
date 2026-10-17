@@ -132,6 +132,18 @@ These become interactive once selected; drag them by their title strip.
   timeline events and line labels, filtered by type. With an empty query it
   lists every object, so it doubles as the object lookup.
 
+### Status marks
+
+- **Mark where anything stands**: *to do*, *in progress*, *waiting*,
+  *undecided*, *done* or *dropped*. Select objects and pick a status from the
+  toolbar, or press **Ctrl+K** and type "mark as". Each status has its own
+  colour and icon on the object; dropped ones fade.
+- **Mind maps count progress**: an idea with marked ideas under it shows how
+  many of them are done ("3/7"), turning green when they all are.
+- **The status key** along the bottom counts each status on the board. Click
+  one to dim everything else; click it again (or *Show all*) to see the whole
+  board. Search finds statuses too, and the AI can read and set them.
+
 ### Reactions and dot voting
 
 - **React** to anything with 👍 ❤️ 😂 🎉 🤔 ⭐ from the selection toolbar.

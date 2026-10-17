@@ -31,6 +31,9 @@ export interface LinkCard {
   checked?: boolean
 }
 
+/** Where an object stands. */
+export type Status = 'todo' | 'doing' | 'waiting' | 'undecided' | 'done' | 'dropped'
+
 /** A timestamped work note attached to an object. */
 export interface Note {
   id: string
@@ -247,6 +250,8 @@ export interface Item extends Rect {
   locked?: boolean
   /** Objects sharing a group id select and move together. */
   group?: string
+  /** Where this object stands: to do, in progress, done… */
+  status?: Status
 }
 
 /** A dot vote: each person spreads `each` votes over the options; totals hidden until revealed. */

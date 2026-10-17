@@ -25,6 +25,7 @@ import * as RX from '../model/reactions'
 import * as CU from '../model/catchup'
 import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
+import * as ST from '../model/status'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -37,6 +38,7 @@ import {
   type KanbanData,
   type Kind,
   type LinkCard,
+  type Status,
   type TableData,
   type TimelineData,
   type Side,
@@ -251,6 +253,8 @@ export class Editor {
   paletteDrag: { shape: FlowShape; at: Vec; magnet: F.Magnet | null } | null = null
   /** The comments (work notes) panel is showing. */
   notesOpen = false
+  /** Only objects with this status show at full strength (the status key's filter). */
+  statusFilter: Status | null = null
   /** The search / object lookup palette is showing. */
   searchOpen = false
   /** Name stamped on new comments. */
@@ -1584,6 +1588,21 @@ export class Editor {
     this.setStatus(`Deleted ${what}  ·  Ctrl+Z to undo`)
     this.selection = new Set(next !== undefined && B.getItem(this.board, next) ? [next] : [])
     this.selectedConnector = null
+    this.emit()
+  }
+
+  /** Marks the selection with a status (null clears it). */
+  markStatus(status: Status | null) {
+    const ids = this.selectedItems.filter((i) => ST.canHaveStatus(i.kind)).map((i) => i.id)
+    if (!ids.length) return
+    this.edit((b) => ST.setStatus(b, ids, status))
+    const info = ST.statusInfo(status)
+    this.setStatus(info ? `Marked ${ids.length === 1 ? 'as' : `${ids.length} objects as`} ${info.label.toLowerCase()}` : 'Status cleared')
+  }
+
+  /** Dims everything without this status; the same status again (or null) shows everything. */
+  setStatusFilter(status: Status | null) {
+    this.statusFilter = status === this.statusFilter ? null : status
     this.emit()
   }
 

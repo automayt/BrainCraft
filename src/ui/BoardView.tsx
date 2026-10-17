@@ -11,7 +11,7 @@ import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
 import { DataViewWidget } from './widgets/DataView'
-import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
+import { type Board, type Connector, type Id, type Item, type Status, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
 import { LinkCardView } from './LinkCardView'
 
 export function darken(hex: string, k = 0.72): string {
@@ -393,6 +393,7 @@ export const BoardView = memo(function BoardView({
   selection,
   view = null,
   coarse = false,
+  statusFilter = null,
 }: {
   board: Board
   hidden: ReadonlySet<Id>
@@ -404,18 +405,31 @@ export const BoardView = memo(function BoardView({
   view?: Rect | null
   /** Far zoom: plain shapes instead of text. */
   coarse?: boolean
+  /** Objects without this status are dimmed. */
+  statusFilter?: Status | null
 }) {
   const depths = mindDepths(board)
   // The selection and the object being edited always render, wherever they are.
   const shown = (i: Item) => !hidden.has(i.id) && (!view || intersects(view, i) || selection.has(i.id) || editingId === i.id)
   const visible = board.items.filter(shown)
   const pairInView = (a: Item, b: Item) => !view || intersects(view, union(a, b))
-  const shape = (i: Item, depth: number) =>
+  const drawn = (i: Item, depth: number) =>
     coarse && !KEEP_WHEN_COARSE.has(i.kind) && editingId !== i.id && !selection.has(i.id) ? (
       <CoarseShape key={i.id} item={i} />
     ) : (
       <ItemShape key={i.id} item={i} depth={depth} editing={editingId === i.id} live={selection.size === 1 && selection.has(i.id) && editingId === null} />
     )
+  // Dropped objects fade; with a status filter, so does everything else.
+  const shape = (i: Item, depth: number) => {
+    const fade = statusFilter && i.kind !== 'frame' ? i.status !== statusFilter && !selection.has(i.id) : i.status === 'dropped'
+    return fade ? (
+      <g key={i.id} className={statusFilter ? 'filtered-out' : 'status-dropped'}>
+        {drawn(i, depth)}
+      </g>
+    ) : (
+      drawn(i, depth)
+    )
+  }
   return (
     <g>
       {visible.filter((i) => i.kind === 'frame').map((i) => shape(i, 0))}

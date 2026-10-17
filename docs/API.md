@@ -90,7 +90,7 @@ timeline.
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |
 | `createLink` | `url` (one `http(s)` address), `w?`, `h?` | Link card. Its title, description and picture fill in once the app (connected to a BrainCraft server) reads the page. YouTube, Vimeo and Spotify links play on the card. |
 | `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?` | Line between two objects. Lines to flowchart shapes default to `elbow`. |
-| `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?` | — (`description` is the free text above an object's comments) |
+| `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?`, `locked?`, `status?` | — (`description` is the free text above an object's comments; `status` is `todo`, `doing`, `waiting`, `undecided`, `done`, `dropped`, or `none` to clear it) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
 | `addComment` | `id`, `text`, `author?` | Timestamped work note on the object. Mention other objects with `@[Label](#id)`. |
 | `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
