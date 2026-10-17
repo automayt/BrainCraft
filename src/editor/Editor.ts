@@ -1066,11 +1066,11 @@ export class Editor {
   /** Highlighting the changes on the board. */
   showingCatchUp = false
   onCatchUpDone: (() => void) | null = null
-  /** A question for the AI assistant from elsewhere in the app (it opens and asks). */
-  pendingAiPrompt: string | null = null
+  /** A question for the AI assistant from elsewhere in the app (it opens and asks), with any pictures. */
+  pendingAiPrompt: { text: string; images?: { mediaType: 'image/png' | 'image/jpeg'; data: string }[]; label?: string } | null = null
 
-  askAi(prompt: string) {
-    this.pendingAiPrompt = prompt
+  askAi(text: string, images?: { mediaType: 'image/png' | 'image/jpeg'; data: string }[], label?: string) {
+    this.pendingAiPrompt = { text, images, label }
     this.emit()
   }
 

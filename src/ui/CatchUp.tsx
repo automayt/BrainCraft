@@ -30,7 +30,7 @@ export function CatchUpBanner() {
         </button>
         <button
           title="Ask the AI assistant for a short summary"
-          onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.board)}`)}
+          onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.board)}`, undefined, 'What changed since I was last here?')}
         >
           Summarise with AI
         </button>

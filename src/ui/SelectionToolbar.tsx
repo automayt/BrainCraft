@@ -2,6 +2,7 @@ import * as B from '../model/board'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
+import { hasSketch, sketchToBoard } from './sketch'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -234,6 +235,11 @@ export function SelectionToolbar() {
         </>
       )}
       {items.length > 0 && <ReactMenu />}
+      {hasSketch(editor) && (
+        <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
+          ✦ To board
+        </button>
+      )}
       {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && (
         <button title="Start a dot vote on these: everyone gets a few votes, counts hidden until revealed" onClick={() => editor.startVote()}>
           Vote

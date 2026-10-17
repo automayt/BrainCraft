@@ -252,6 +252,10 @@ These become interactive once selected; drag them by their title strip.
   history is kept with the board.
 - One-click actions: Summarise, Find gaps, Decision log, and with a selection,
   Cluster into themes, Make a mind map and Make a flowchart.
+- **Sketch to board:** draw a rough flowchart or mind map with the pen, or
+  drop in a photo of a napkin or whiteboard, select it and press
+  **✦ To board**. Claude reads the picture and proposes real shapes, ideas or
+  notes beside it — previewed first, like every AI change.
 - Use the BrainCraft server's key (its owner pays) or paste your own Anthropic
   API key, which stays in your browser. Claude Opus 5.5 by default; Sonnet 5.5
   and Haiku 5.5 are options. See [docs/AI.md](docs/AI.md).

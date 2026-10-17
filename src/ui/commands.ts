@@ -1,3 +1,4 @@
+import { hasSketch, sketchToBoard } from './sketch'
 import { copyImage } from './ExportImage'
 /** Everything the app can do, by name: shared by the command palette and menus. */
 
@@ -86,6 +87,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
     { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
   ]
+  if (hasSketch(editor))
+    list.push({ id: 'sketch', label: 'Turn sketch into a board (AI)', group: 'Selection', aliases: 'sketch drawing photo picture napkin whiteboard ocr recognise convert ai', run: () => void sketchToBoard(editor) })
   if (editor.selection.size) {
     const locked = editor.selectedItems.every((i) => i.locked)
     list.push({ id: 'lock', label: locked ? 'Unlock' : 'Lock (can’t be moved or changed by accident)', group: 'Selection', keys: 'Ctrl Shift L', aliases: 'lock pin freeze background fix unlock', run: () => editor.setLocked(!locked) })

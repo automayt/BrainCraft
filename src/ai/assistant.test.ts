@@ -107,3 +107,15 @@ describe('assistant', () => {
     expect(sent[0].fallbacks).toBeUndefined()
   })
 })
+
+describe('pictures', () => {
+  it('sends images before the text in the same message', async () => {
+    const { client, sent } = fakeClient([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'A flowchart.' }] }])
+    await new Assistant(client, { board, measure: fakeMeasure, selection: () => [7] }).send('What is this?', { text: () => {}, status: () => {}, proposal: () => {} }, undefined, [
+      { mediaType: 'image/png', data: 'iVBORw0KGgo=' },
+    ])
+    const content = (sent[0].messages as { content: Block[] }[])[0].content
+    expect(content[0]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } })
+    expect(content[1]).toMatchObject({ type: 'text' })
+  })
+})

@@ -6104,3 +6104,11 @@ button.on,
     flex-wrap: wrap;
   }
 }
+
+.ai-waiting {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
