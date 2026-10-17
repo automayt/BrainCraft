@@ -11,7 +11,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
   dims everything except one status. A mind-map branch shows how many of its
   ideas are done. People already fake this by colouring text and drawing a
   legend by hand; this makes it one click, searchable and readable by the AI.
-- [ ] **Private brainstorm.** Everyone writes sticky notes that only they can
+- [x] **Private brainstorm.** Everyone writes sticky notes that only they can
   read; others see blank cards until the host reveals them all at once. Stops
   the first idea from steering everyone else. Same idea as hidden votes.
 - [ ] **Spinner wheel.** Put names or options on a wheel and spin it; everyone

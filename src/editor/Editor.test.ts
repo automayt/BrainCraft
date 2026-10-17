@@ -762,3 +762,31 @@ describe('lock and groups', () => {
     expect(e.board.items.some((i) => i.group)).toBe(false)
   })
 })
+
+describe('private brainstorm', () => {
+  it('keeps notes written with the sticky tool hidden from others until revealed', () => {
+    const e = editor()
+    e.author = 'Sam'
+    e.viewport = { w: 1200, h: 800 }
+    e.startBrainstorm('Garage layout?')
+    const card = e.single!
+    e.setTool('sticky')
+    e.pointerDown({ x: 100, y: 100 }, 0, {})
+    e.pointerUp({ x: 100, y: 100 })
+    type(e, 'Pegboard wall')
+    e.finishEditing()
+    const note = e.board.items.find((i) => i.kind === 'sticky')!
+    expect(note.hiddenBy).toBe('Sam')
+    expect(B.getItem(e.viewBoard, note.id)!.text).toBe('Pegboard wall')
+    // Someone else sees a blank card and can't edit it.
+    e.author = 'Alex'
+    expect(B.getItem(e.viewBoard, note.id)).toMatchObject({ text: '', masked: true })
+    e.startEditing(note.id)
+    expect(e.editing).toBeNull()
+    e.revealBrainstorm(card.id)
+    expect(B.getItem(e.viewBoard, note.id)!.text).toBe('Pegboard wall')
+    // Undoing the reveal hides it again.
+    e.undo()
+    expect(B.getItem(e.viewBoard, note.id)!.masked).toBe(true)
+  })
+})

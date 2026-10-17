@@ -115,6 +115,7 @@ export function ContextMenu() {
       { label: 'Table', keys: 'G', run: place('table') },
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
+      { label: 'Private brainstorm', run: () => editor.startBrainstorm() },
       'sep',
       { label: 'Select all', keys: 'Ctrl A', run: () => editor.selectAll() },
       { label: 'Zoom to fit', keys: 'Shift 1', run: () => editor.zoomToFit() },
