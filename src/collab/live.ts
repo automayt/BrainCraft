@@ -118,6 +118,7 @@ export class LiveSession {
     this.ws?.close()
     this.ws = null
     this.editor.peers = new Map()
+    this.editor.sendSignal = null
     this.editor.emit()
   }
 
@@ -141,6 +142,13 @@ export class LiveSession {
         }
         this.peers = new Map(m.peers.map((p) => [p.id, p]))
         this.pushPeers()
+        // Times come as "time left", so clocks needn't agree.
+        this.editor.setTimer(m.timer ? { endsAt: Date.now() + m.timer.remainingMs, totalMs: m.timer.totalMs, by: m.timer.by } : null)
+        this.editor.sendSignal = (signal) => {
+          if (this.state !== 'live' || this.ws?.readyState !== WebSocket.OPEN) return false
+          this.sendRaw({ t: 'signal', signal })
+          return true
+        }
         this.set('live')
         this.sendPresence(true)
         break
@@ -171,6 +179,12 @@ export class LiveSession {
         this.peers.delete(m.id)
         if (this.following === m.id) this.following = null
         this.pushPeers()
+        break
+      case 'signal':
+        this.editor.receiveSignal(m.from, m.signal)
+        break
+      case 'timer':
+        this.editor.setTimer(m.timer ? { endsAt: Date.now() + m.timer.remainingMs, totalMs: m.timer.totalMs, by: m.timer.by } : null)
         break
       case 'error':
         this.editor.setStatus(`Live session: ${m.message}`)

@@ -5762,3 +5762,178 @@ button.on,
   background: var(--accent-soft);
   outline: 1px solid var(--accent);
 }
+
+/* ----- live moments ----- */
+
+.moments-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.emote {
+  position: absolute;
+  font-size: 34px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  animation: emote-float 2.2s var(--ease) forwards;
+}
+
+@keyframes emote-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.15);
+  }
+  25% {
+    transform: translate(-50%, -70%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -260%) scale(0.95);
+  }
+}
+
+.chat-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 260px;
+  padding: 7px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #fff;
+  border-radius: 4px 14px 14px 14px;
+  box-shadow: var(--shadow-lg);
+  overflow-wrap: anywhere;
+  animation: pop 0.16s var(--ease);
+}
+
+.chat-bubble small {
+  display: block;
+  font-size: 10.5px;
+  opacity: 0.8;
+}
+
+.chat-input {
+  z-index: 25;
+  pointer-events: auto;
+  padding: 4px;
+}
+
+.chat-input input {
+  width: 230px;
+  padding: 5px 7px;
+  font: inherit;
+  color: #fff;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.chat-input input::placeholder {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.emote-picker {
+  position: absolute;
+  z-index: 26;
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-lg);
+  transform: translate(-50%, calc(-100% - 12px));
+  animation: pop 0.14s var(--ease);
+}
+
+.emote-picker button {
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  border-radius: 50%;
+}
+
+.emote-picker button:hover {
+  background: var(--surface-3);
+  transform: scale(1.12);
+}
+
+.timer-badge {
+  position: absolute;
+  top: 66px;
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 6px 0 12px;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-lg);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-badge strong {
+  min-width: 42px;
+}
+
+.timer-bar {
+  width: 80px;
+  height: 5px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+
+.timer-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s linear;
+}
+
+.timer-badge button {
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.timer-badge button:hover {
+  background: var(--surface-3);
+}
+
+.timer-badge.ending {
+  border-color: var(--warning);
+}
+
+.timer-badge.ending .timer-bar i {
+  background: var(--warning);
+}
+
+.timer-badge.done {
+  padding: 0 16px;
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  animation: pop 0.2s var(--ease);
+}
+
+@media (max-width: 720px) {
+  .timer-badge {
+    top: 116px;
+  }
+}

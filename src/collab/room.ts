@@ -8,14 +8,19 @@ import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
 import { type Patch, applyPatches, diff } from './patch'
-import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage } from './protocol'
+import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage, type Signal } from './protocol'
 
 export interface Member {
   id: string
   role: Role
   presence: Presence | null
   send: (m: ServerMessage) => void
+  /** Recent signal times, to keep emote spam in check. */
+  signals?: number[]
 }
+
+const SIGNALS_PER_5S = 15
+const MAX_TIMER_S = 3 * 3600
 
 /** What the server stores for a room. */
 export interface RoomData {
@@ -59,12 +64,23 @@ export class Room {
     for (const member of this.members.values()) if (member.id !== except) member.send(m)
   }
 
+  /** The shared timer, in server time. */
+  private timer: { endsAt: number; totalMs: number; by: string } | null = null
+  /** The clock (tests replace it). */
+  now = () => Date.now()
+
+  private timerState() {
+    const t = this.timer
+    if (!t || t.endsAt <= this.now()) return null
+    return { remainingMs: t.endsAt - this.now(), totalMs: t.totalMs, by: t.by }
+  }
+
   join(member: Omit<Member, 'presence'>): void {
     const m: Member = { ...member, presence: null }
     this.members.set(m.id, m)
     const idBase = m.role === 'edit' ? this.data.nextSlot++ * ID_BLOCK : 0
     if (m.role === 'edit') this.changed(false)
-    m.send({ t: 'hello', board: this.data.board, version: this.data.version, you: { id: m.id, role: m.role, idBase }, peers: this.peers(m.id) })
+    m.send({ t: 'hello', board: this.data.board, version: this.data.version, you: { id: m.id, role: m.role, idBase }, peers: this.peers(m.id), timer: this.timerState() })
   }
 
   leave(id: string) {
@@ -78,6 +94,23 @@ export class Room {
     if (msg.t === 'presence') {
       m.presence = sanitizePresence(msg.presence)
       if (m.presence) this.broadcast({ t: 'presence', peer: { id, role: m.role, ...m.presence } }, id)
+      return
+    }
+    if (msg.t === 'signal') {
+      const sig = sanitizeSignal(msg.signal)
+      if (!sig) return
+      const now = this.now()
+      m.signals = (m.signals ?? []).filter((t) => now - t < 5000)
+      if (m.signals.length >= SIGNALS_PER_5S) return
+      m.signals.push(now)
+      if (sig.kind === 'timer') {
+        // Viewers can watch the timer but not run it.
+        if (m.role !== 'edit') return
+        this.timer = sig.seconds ? { endsAt: now + sig.seconds * 1000, totalMs: sig.seconds * 1000, by: m.presence?.name ?? 'Someone' } : null
+        this.broadcast({ t: 'timer', timer: this.timerState() })
+        return
+      }
+      this.broadcast({ t: 'signal', from: id, signal: sig }, id)
       return
     }
     if (msg.t === 'patch') {
@@ -119,6 +152,26 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 /** Presence comes from other people's browsers: keep only well-formed, bounded values. */
+export function sanitizeSignal(s: unknown): Signal | null {
+  if (!s || typeof s !== 'object') return null
+  const x = s as Signal
+  if (x.kind === 'emote') {
+    const emoji = str(x.emoji, 16)
+    if (!emoji || !x.at || typeof x.at !== 'object') return null
+    return { kind: 'emote', emoji, at: { x: num(x.at.x), y: num(x.at.y) } }
+  }
+  if (x.kind === 'chat') {
+    const text = str(x.text, 140).trim()
+    return text ? { kind: 'chat', text } : null
+  }
+  if (x.kind === 'timer') {
+    const seconds = x.seconds === null ? null : Math.round(num(x.seconds))
+    if (seconds !== null && (seconds <= 0 || seconds > MAX_TIMER_S)) return null
+    return { kind: 'timer', seconds }
+  }
+  return null
+}
+
 export function sanitizePresence(p: unknown): Presence | null {
   if (!p || typeof p !== 'object') return null
   const x = p as Presence

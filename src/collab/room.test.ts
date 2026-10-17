@@ -86,3 +86,47 @@ describe('rooms', () => {
     expect(sanitizePresence(null)).toBeNull()
   })
 })
+
+describe('live moments', () => {
+  it('passes emotes and chat to everyone else, cleaned up', () => {
+    const { r, inbox, join } = room()
+    join('a', 'edit')
+    join('b', 'view')
+    r.receive('a', { t: 'signal', signal: { kind: 'emote', emoji: '🎉', at: { x: 10, y: 20 } } })
+    r.receive('b', { t: 'signal', signal: { kind: 'chat', text: `  ${'x'.repeat(300)}  ` } })
+    expect(inbox.get('b')!.at(-1)).toEqual({ t: 'signal', from: 'a', signal: { kind: 'emote', emoji: '🎉', at: { x: 10, y: 20 } } })
+    const chat = inbox.get('a')!.at(-1) as Extract<ServerMessage, { t: 'signal' }>
+    expect(chat.signal).toMatchObject({ kind: 'chat' })
+    expect((chat.signal as { text: string }).text.length).toBeLessThanOrEqual(140)
+    // Nonsense is dropped.
+    r.receive('a', { t: 'signal', signal: { kind: 'emote', emoji: '', at: null } } as never)
+    expect(inbox.get('b')!.filter((m) => m.t === 'signal')).toHaveLength(1)
+  })
+
+  it('runs one shared timer that late joiners see, and only editors can start it', () => {
+    const { r, inbox, join } = room()
+    let now = 1_000_000
+    r.now = () => now
+    join('a', 'edit')
+    join('v', 'view')
+    r.receive('v', { t: 'signal', signal: { kind: 'timer', seconds: 60 } })
+    expect(inbox.get('a')!.some((m) => m.t === 'timer')).toBe(false)
+    r.receive('a', { t: 'signal', signal: { kind: 'timer', seconds: 300 } })
+    // Everyone, the starter included, hears about it.
+    expect(inbox.get('a')!.at(-1)).toMatchObject({ t: 'timer', timer: { remainingMs: 300_000, totalMs: 300_000 } })
+    expect(inbox.get('v')!.at(-1)).toMatchObject({ t: 'timer' })
+    now += 100_000
+    join('late', 'edit')
+    expect((inbox.get('late')![0] as Extract<ServerMessage, { t: 'hello' }>).timer).toMatchObject({ remainingMs: 200_000 })
+    r.receive('a', { t: 'signal', signal: { kind: 'timer', seconds: null } })
+    expect(inbox.get('late')!.at(-1)).toEqual({ t: 'timer', timer: null })
+  })
+
+  it('throttles a flood of emotes', () => {
+    const { r, inbox, join } = room()
+    join('a', 'edit')
+    join('b', 'edit')
+    for (let k = 0; k < 50; k++) r.receive('a', { t: 'signal', signal: { kind: 'emote', emoji: '👍', at: { x: 0, y: 0 } } })
+    expect(inbox.get('b')!.filter((m) => m.t === 'signal').length).toBeLessThanOrEqual(15)
+  })
+})

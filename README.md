@@ -205,6 +205,17 @@ These become interactive once selected; drag them by their title strip.
 - The server also provides an **HTTP API**: post operations to a board from
   scripts, bots or CI. See [docs/SERVER.md](docs/SERVER.md).
 
+### Together in the moment
+
+- **E** sends an emote (👍 ❤️ 😂 🎉 🤔 ⭐ — or press 1–6 in the picker) that
+  floats up from your cursor for everyone in the live session.
+- **/** opens cursor chat: type a line and it appears next to your cursor
+  for a few seconds.
+- **Timers:** "Start a 5-minute timer" in Ctrl+K (1, 3, 5 or 10 minutes).
+  Everyone sees the same countdown — people who join late too — with
+  +1 min and stop, and a chime at the end.
+- All of these work alone as well; nothing is saved into the board.
+
 ### Presenting
 
 - **Present (Shift+P)** turns the board's frames into slides, in reading

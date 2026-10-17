@@ -120,6 +120,7 @@ export class Workspace {
     }
     editor.guestName = guest
     if (!editor.author) editor.author = storage?.getItem(NAME_KEY) ?? storage?.getItem('braincraft:author') ?? ''
+    editor.myColor = this.me.color
     editor.onAiHistory = (h) => {
       // The latest 50 AI changes per board, so each can still be undone after a reload.
       if (this.boardId) void this.library.kv.set(aiKey(this.boardId), h.slice(-50))

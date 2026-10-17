@@ -49,6 +49,10 @@ export function commands(editor: Editor, ui: Ui): Command[] {
         editor.placeHere()
       },
     })),
+    { id: 'emote', label: 'Send an emote', group: 'Together', keys: 'E', aliases: 'emoji react party celebrate live', run: () => editor.openEmotePicker() },
+    { id: 'chat', label: 'Say something by your cursor', group: 'Together', keys: '/', aliases: 'cursor chat message talk live', run: () => editor.setChatting(true) },
+    ...[1, 3, 5, 10].map((m) => ({ id: `timer-${m}`, label: `Start a ${m}-minute timer`, group: 'Together', aliases: 'timer countdown timebox clock brainstorm', run: () => editor.startTimer(m * 60) })),
+    ...(editor.timer ? [{ id: 'timer-stop', label: 'Stop the timer', group: 'Together', aliases: 'timer stop cancel', run: () => editor.startTimer(null) }] : []),
     { id: 'export-image', label: 'Export image or PDF…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print', run: ui.openExport },
     { id: 'copy-image', label: editor.selection.size ? 'Copy selection as image' : 'Copy board as image', group: 'Board', aliases: 'png picture screenshot clipboard share chat', run: () => void copyImage(editor, editor.selection.size ? new Set(editor.selection) : undefined) },
     { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
