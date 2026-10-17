@@ -57,7 +57,8 @@ function WikiLink({ to, label }: { to: LinkTarget | null; label: string }) {
         ? `Go to ${KIND_LABELS[item.kind].toLowerCase()}`
         : 'This board'
   return (
-    <button className={`wikilink${elsewhere ? ' board' : ''}${missing ? ' missing' : ''}`} title={title} disabled={missing} onClick={() => void ws.openLink(target)}>
+    <button className={`wikilink${elsewhere ? (meta?.icon ? ' board has-icon' : ' board') : ''}${missing ? ' missing' : ''}`} title={title} disabled={missing} onClick={() => void ws.openLink(target)}>
+      {meta?.icon && `${meta.icon} `}
       {shown}
     </button>
   )

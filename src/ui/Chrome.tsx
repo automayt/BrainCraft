@@ -47,6 +47,73 @@ function Tip({ label, keys }: { label: string; keys?: string }) {
 /** Buttons in floating panels never take focus from the board, so shortcuts keep working. */
 const keepFocus = (e: React.MouseEvent) => e.preventDefault()
 
+const BOARD_ICONS = ['🚗', '🏎️', '🔧', '🛠️', '🏠', '🌱', '📚', '🎮', '🎵', '🎬', '🍕', '✈️', '🏕️', '💡', '🧠', '📈', '💼', '🎨', '📷', '🐶', '🐱', '⚽', '🎉', '❤️', '⭐', '🔥', '🚀', '🧪', '💻', '📝', '🗺️', '🧩', '🎲', '🏋️', '🍳', '🛒', '💰', '📅', '🎁', '🌍']
+
+/** The board's emoji, next to its title: click to pick one. */
+function BoardIcon() {
+  const editor = useEditor()
+  const ws = useWorkspace()
+  const [open, setOpen] = useState(false)
+  const icon = editor.board.icon
+  // The browser tab shows it too.
+  useEffect(() => {
+    const t = editor.board.title || 'Untitled board'
+    document.title = `${icon ? `${icon} ` : ''}${t} · BrainCraft`
+  }, [icon, editor.board.title])
+  if (ws.readOnly && !icon) return null
+  return (
+    <div className="anchor">
+      <button
+        className={`board-icon${icon ? '' : ' empty'}`}
+        aria-label={icon ? 'Change the board icon' : 'Pick a board icon'}
+        title={icon ? 'Change the board icon' : 'Pick an icon for this board'}
+        disabled={ws.readOnly}
+        onMouseDown={keepFocus}
+        onClick={() => setOpen(!open)}
+      >
+        {icon ?? (
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M8.5 14.5c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+            <circle cx="15" cy="10" r="1.2" fill="currentColor" />
+          </svg>
+        )}
+      </button>
+      {open && (
+        <Popover onClose={() => setOpen(false)} className="icon-picker">
+          <div className="icon-grid">
+            {BOARD_ICONS.map((e) => (
+              <button
+                key={e}
+                className={e === icon ? 'on' : ''}
+                aria-label={e}
+                onClick={() => {
+                  editor.setBoardIcon(e)
+                  setOpen(false)
+                }}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+          {icon && (
+            <button
+              className="icon-clear"
+              onClick={() => {
+                editor.setBoardIcon(null)
+                setOpen(false)
+              }}
+            >
+              No icon
+            </button>
+          )}
+        </Popover>
+      )}
+    </div>
+  )
+}
+
 function Popover({ onClose, children, className = '' }: { onClose: () => void; children: ReactNode; className?: string }) {
   useEscape(onClose)
   return (
@@ -107,6 +174,7 @@ export function TopLeft() {
         <BoardsIcon />
         <Tip label="Your boards" keys="Ctrl O" />
       </button>
+      <BoardIcon />
       <input
         className="board-title"
         value={editor.board.title}

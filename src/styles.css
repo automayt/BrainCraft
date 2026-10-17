@@ -6573,3 +6573,66 @@ button.on,
 .flip-button:hover circle {
   fill: var(--accent);
 }
+
+/* ----- board icons ----- */
+
+.board-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: -6px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 8px;
+}
+
+.board-icon.empty {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.board-icon:hover:not(:disabled) {
+  background: var(--surface-2);
+  opacity: 1;
+}
+
+.popover.icon-picker {
+  min-width: 0;
+  width: 264px;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.icon-grid button {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 6px;
+}
+
+.icon-grid button:hover,
+.icon-grid button.on {
+  background: var(--accent-soft);
+}
+
+.icon-clear {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.board-name-icon {
+  margin-right: 6px;
+}
+
+.wikilink.board.has-icon::before {
+  content: none;
+}

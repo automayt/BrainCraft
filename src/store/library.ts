@@ -23,6 +23,8 @@ export interface BoardMeta {
   id: string
   live?: LiveInfo
   title: string
+  /** The board's emoji, if it has one. */
+  icon?: string
   created: number
   updated: number
   items: number
@@ -134,6 +136,7 @@ export class Library {
       id,
       ...(live ? { live } : {}),
       title: board.title || 'Untitled board',
+      ...(board.icon ? { icon: board.icon } : {}),
       created,
       updated: this.now(),
       items: board.items.length,
