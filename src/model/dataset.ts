@@ -36,6 +36,8 @@ export const VIEW_TYPES: { type: DataViewType; label: string }[] = [
   { type: 'table', label: 'Table' },
   { type: 'board', label: 'Board' },
   { type: 'timeline', label: 'Timeline' },
+  { type: 'calendar', label: 'Calendar' },
+  { type: 'gallery', label: 'Gallery' },
 ]
 
 /** Colours handed to new choices, in order. */
@@ -428,6 +430,59 @@ export function shiftDates(ds: Dataset, v: DataView, recordId: string, days: num
   return next
 }
 
+// ----- calendar and gallery ----------------------------------------------------------------
+
+/** "2026-10" for a day number. */
+export const monthOf = (day: number) => fromDay(day).slice(0, 7)
+
+/** The month `delta` months from `month` (YYYY-MM). */
+export function addMonths(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/** The 6 weeks shown for a month, Monday first: day numbers, and whether each is in the month. */
+export function monthGrid(month: string): { day: number; inMonth: boolean }[] {
+  const first = toDay(`${month}-01`)
+  // 1970-01-01 (day 0) was a Thursday; Monday-based weekday of the 1st:
+  const weekday = (((first + 3) % 7) + 7) % 7
+  const start = first - weekday
+  return Array.from({ length: 42 }, (_, k) => ({ day: start + k, inMonth: monthOf(start + k) === month }))
+}
+
+/** Records by the days they cover (from `start` to `end`) within `days`. */
+export function recordsByDay(ds: Dataset, v: DataView, days: { day: number }[]): Map<number, Bar[]> {
+  const out = new Map<number, Bar[]>()
+  if (!days.length) return out
+  const lo = days[0].day
+  const hi = days[days.length - 1].day
+  for (const b of bars(ds, v).bars) {
+    for (let d = Math.max(lo, b.start); d <= Math.min(hi, b.end); d++) out.set(d, [...(out.get(d) ?? []), b])
+  }
+  return out
+}
+
+/** Moves a record so it starts on `day` (keeping its length). */
+export function moveToDay(ds: Dataset, v: DataView, recordId: string, day: number): Dataset {
+  const b = bars(ds, v).bars.find((x) => x.record.id === recordId)
+  const { start } = dateFields(ds, v)
+  if (!start) return ds
+  if (!b) return setValue(ds, recordId, start.id, fromDay(day))
+  return shiftDates(ds, v, recordId, day - b.start)
+}
+
+const PICTURE = /^(https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif|svg)(?:\?\S*)?|data:image\/[\w+.-]+;base64,\S+)$/i
+
+/** A record's cover picture for the gallery: the first field holding a picture's address. */
+export function coverOf(ds: Dataset, r: DataRecord): string | undefined {
+  for (const f of ds.fields) {
+    const v = r.values[f.id]
+    if (f.type === 'text' && typeof v === 'string' && PICTURE.test(v.trim())) return v.trim()
+  }
+  return undefined
+}
+
 // ----- making datasets --------------------------------------------------------------------
 
 export function newDataset(name = 'Projects', now = today()): Dataset {
@@ -553,6 +608,8 @@ export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: numbe
     return { w: 960, h: Math.min(600, Math.max(300, 150 + ds.records.length * 30 + lanes * 26)) }
   }
   if (type === 'board') return { w: Math.max(620, Math.min(1400, groups(ds, { dataset: ds.id, type }).length * 248 + 40)), h: 440 }
+  if (type === 'calendar') return { w: 860, h: 640 }
+  if (type === 'gallery') return { w: Math.max(560, Math.min(1100, Math.ceil(Math.sqrt(ds.records.length + 1)) * 236 + 40)), h: Math.min(720, Math.max(360, Math.ceil((ds.records.length + 1) / 4) * 250 + 110)) }
   const w = 36 + 40 + ds.fields.reduce((sum, f) => sum + FIELD_W[f.type], 0)
   return { w: Math.max(560, Math.min(1200, w + 2)), h: Math.min(560, Math.max(260, 120 + ds.records.length * 34)) }
 }

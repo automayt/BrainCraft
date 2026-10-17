@@ -605,6 +605,218 @@ function TimelineBody({ c, width }: { c: Ctx; width: number }) {
   )
 }
 
+// ----- calendar ---------------------------------------------------------------------------
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+interface DayDrag {
+  id: string
+  fresh: boolean
+  pointer: number
+  x: number
+  y: number
+  moved: boolean
+  day: number | null
+}
+
+function CalendarBody({ c }: { c: Ctx }) {
+  const { start } = D.dateFields(c.ds, c.view)
+  const now = today()
+  const month = c.view.month ?? D.monthOf(now)
+  const [drag, setDrag] = useState<DayDrag | null>(null)
+  const dragRef = useRef<DayDrag | null>(null)
+  const group = D.groupField(c.ds, c.view)
+
+  if (!start)
+    return (
+      <div className="dv-empty">
+        <p>A calendar needs a date field.</p>
+        {c.live && (
+          <button className="primary" onClick={() => c.edit((d) => D.addField(d, 'Date', 'date')[0])}>
+            Add a Date field
+          </button>
+        )}
+      </div>
+    )
+
+  const cells = D.monthGrid(month)
+  const byDay = D.recordsByDay(c.ds, c.view, cells)
+  const [y, m] = month.split('-').map(Number)
+  const title = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+  const dayAt = (x: number, yy: number) => {
+    const el = document.elementFromPoint(x, yy)?.closest('[data-day]')
+    return el ? Number(el.getAttribute('data-day')) : null
+  }
+  const down = (e: PointerEvent, id: string) => {
+    if (!c.editable || e.button !== 0) return
+    e.stopPropagation()
+    if (!c.live) c.select()
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    dragRef.current = { id, fresh: !c.live, pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false, day: null }
+    setDrag(dragRef.current)
+  }
+  const move = (e: PointerEvent) => {
+    const d = dragRef.current
+    if (!d || d.pointer !== e.pointerId) return
+    const moved = d.moved || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4
+    dragRef.current = { ...d, moved, day: moved ? dayAt(e.clientX, e.clientY) : null }
+    setDrag(dragRef.current)
+  }
+  const up = (e: PointerEvent) => {
+    const d = dragRef.current
+    if (!d || d.pointer !== e.pointerId) return
+    dragRef.current = null
+    setDrag(null)
+    if (!d.moved) return d.fresh ? undefined : c.openRecord(d.id)
+    if (d.day !== null) c.edit((x) => D.moveToDay(x, c.view, d.id, d.day!))
+  }
+  const addOn = (day: number) => {
+    let id = ''
+    c.edit((d) => {
+      const [next, rid] = D.addRecord(d, { [D.titleField(d).id]: 'New', [start.id]: fromDay(day) })
+      id = rid
+      return next
+    })
+    if (id) c.openRecord(id)
+  }
+
+  return (
+    <div className="dv-calendar">
+      <div className="dv-cal-head">
+        <strong>{title}</strong>
+        <span className="dv-cal-nav">
+          <button title="Previous month" onClick={() => c.setView((v) => ({ ...v, month: D.addMonths(month, -1) }))}>
+            ‹
+          </button>
+          <button title="This month" onClick={() => c.setView((v) => ({ ...v, month: undefined }))}>
+            Today
+          </button>
+          <button title="Next month" onClick={() => c.setView((v) => ({ ...v, month: D.addMonths(month, 1) }))}>
+            ›
+          </button>
+        </span>
+      </div>
+      <div className="dv-cal-grid">
+        {WEEKDAYS.map((w) => (
+          <span key={w} className="dv-cal-weekday">
+            {w}
+          </span>
+        ))}
+        {cells.map((cell) => {
+          const here = byDay.get(cell.day) ?? []
+          const shown = here.slice(0, 3)
+          return (
+            <div
+              key={cell.day}
+              data-day={cell.day}
+              className={`dv-cal-day${cell.inMonth ? '' : ' out'}${cell.day === now ? ' today' : ''}${drag?.moved && drag.day === cell.day ? ' drop' : ''}`}
+              onDoubleClick={(e) => c.live && !(e.target as Element).closest('.dv-cal-chip') && addOn(cell.day)}
+              title={c.live ? 'Double-click to add a record on this day' : undefined}
+            >
+              <span className="dv-cal-num">{Number(fromDay(cell.day).slice(8))}</span>
+              {shown.map((b) => {
+                const color = group?.type === 'select' ? D.optionOf(group, b.record.values[group.id])?.color : undefined
+                const continues = b.start < cell.day
+                return (
+                  <button
+                    key={b.record.id}
+                    className={`dv-cal-chip${drag?.id === b.record.id && drag.moved ? ' dragging' : ''}${continues ? ' continues' : ''}`}
+                    style={color ? { background: color, color: textOn(color) } : undefined}
+                    title={D.recordTitle(c.ds, b.record)}
+                    onPointerDown={(e) => down(e, b.record.id)}
+                    onPointerMove={move}
+                    onPointerUp={up}
+                    onPointerCancel={() => ((dragRef.current = null), setDrag(null))}
+                  >
+                    {continues ? '… ' : ''}
+                    {D.recordTitle(c.ds, b.record)}
+                  </button>
+                )
+              })}
+              {here.length > 3 && <span className="dv-cal-more">+{here.length - 3} more</span>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ----- gallery ----------------------------------------------------------------------------
+
+/** A card's picture, or its first letter on its group's colour (also when the picture won't load). */
+function GalleryCover({ src, color, name }: { src?: string; color?: string; name: string }) {
+  const [broken, setBroken] = useState(false)
+  const show = src && !broken
+  return (
+    <div className="dv-gcover" style={show ? undefined : { background: color ?? 'var(--surface-2)' }}>
+      {show ? (
+        <img src={src} alt="" loading="lazy" draggable={false} referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      ) : (
+        <span style={color ? { color: textOn(color) } : undefined}>{name.slice(0, 1).toUpperCase()}</span>
+      )}
+    </div>
+  )
+}
+
+function GalleryBody({ c }: { c: Ctx }) {
+  const records = D.viewRecords(c.ds, c.view)
+  const group = D.groupField(c.ds, c.view)
+  const meta = D.shownFields(c.ds, c.view)
+    .slice(1)
+    .filter((f) => !(f.type === 'text' && records.some((r) => D.coverOf(c.ds, r) === r.values[f.id])))
+    .slice(0, 3)
+  const add = () => {
+    let id = ''
+    c.edit((d) => {
+      const [next, rid] = D.addRecord(d, { [D.titleField(d).id]: 'New' })
+      id = rid
+      return next
+    })
+    if (id) c.openRecord(id)
+  }
+  return (
+    <div className="dv-gallery">
+      {records.map((r) => {
+        const cover = D.coverOf(c.ds, r)
+        const color = group?.type === 'select' ? D.optionOf(group, r.values[group.id])?.color : undefined
+        const name = D.recordTitle(c.ds, r)
+        return (
+          <article
+            key={r.id}
+            className="dv-gcard"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              e.stopPropagation()
+              if (!c.live) c.select()
+            }}
+            onClick={() => c.live && c.openRecord(r.id)}
+          >
+            <GalleryCover src={cover} color={color} name={name} />
+            <strong>{name}</strong>
+            <div className="dv-meta">
+              {meta.map((f) =>
+                r.values[f.id] === undefined || r.values[f.id] === '' ? null : (
+                  <span key={f.id} title={f.name} className={`m-${f.type}`}>
+                    {f.type === 'checkbox' ? (r.values[f.id] ? `✓ ${f.name}` : null) : <Show ds={c.ds} f={f} v={r.values[f.id]} />}
+                  </span>
+                ),
+              )}
+            </div>
+          </article>
+        )
+      })}
+      {c.live && (
+        <button className="dv-gcard dv-gadd" onClick={add}>
+          + New
+        </button>
+      )}
+      {!records.length && !c.live && <p className="muted">No records</p>}
+    </div>
+  )
+}
+
 // ----- the widget -------------------------------------------------------------------------
 
 const VIEW_ICON: Record<DataViewType, ReactNode> = {
@@ -621,6 +833,16 @@ const VIEW_ICON: Record<DataViewType, ReactNode> = {
   timeline: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2 4h7M5 8h8M3 12h6" />
+    </svg>
+  ),
+  calendar: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.5 3.5h11v10h-11zM2.5 6.5h11M5.5 2v3M10.5 2v3" />
+    </svg>
+  ),
+  gallery: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 2.5h5v5H2zM9 2.5h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" />
     </svg>
   ),
 }
@@ -736,6 +958,18 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
             </select>
           </label>
         )}
+        {view.type === 'calendar' && c.live && dates.length > 1 && (
+          <label className="dv-pick">
+            Date
+            <select value={start?.id} onChange={(e) => c.setView((v) => ({ ...v, start: e.target.value }))}>
+              {dates.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {view.type === 'timeline' && c.live && dates.length > 0 && (
           <label className="dv-pick">
             Dates
@@ -777,6 +1011,8 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
         {view.type === 'table' && <TableBody c={c} />}
         {view.type === 'board' && <BoardBody c={c} />}
         {view.type === 'timeline' && <TimelineBody c={c} width={item.w} />}
+        {view.type === 'calendar' && <CalendarBody c={c} />}
+        {view.type === 'gallery' && <GalleryBody c={c} />}
       </div>
       {open && <RecordSheet c={c} id={open} onClose={() => setOpen(null)} />}
     </Widget>
