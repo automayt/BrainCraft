@@ -58,6 +58,9 @@ export class LiveSession {
   private closed = false
   private cursor: Vec | null = null
 
+  /** Called each time the session has (re)loaded the server's board. */
+  onSynced: (() => void) | null = null
+
   constructor(editor: Editor, server: string, link: LiveLink, me: Me) {
     this.editor = editor
     this.server = server
@@ -150,6 +153,7 @@ export class LiveSession {
           return true
         }
         this.set('live')
+        this.onSynced?.()
         this.sendPresence(true)
         break
       }

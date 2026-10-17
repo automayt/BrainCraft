@@ -54,7 +54,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}`)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [runsFor, setRunsFor] = useState<number | null>(null)
@@ -105,6 +105,14 @@ function App({ ws }: { ws: Workspace }) {
   }
   const uiRef = useRef(ui)
   uiRef.current = ui
+
+  // Something elsewhere asked the assistant a question: open it (it picks the question up).
+  useEffect(() => {
+    if (editor.pendingAiPrompt && !assistant) {
+      if (editor.notesOpen) editor.toggleNotes(false)
+      setAssistant(true)
+    }
+  }, [editor, editor.pendingAiPrompt, assistant])
 
   // The comments panel and the assistant share the right edge; framing keeps clear of them.
   useEffect(() => {

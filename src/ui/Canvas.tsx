@@ -13,6 +13,7 @@ import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
 import { Social } from './Social'
+import { CatchUpOverlay } from './CatchUp'
 import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
@@ -248,6 +249,7 @@ export function Canvas() {
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
           />
           <Social editor={editor} />
+          <CatchUpOverlay editor={editor} />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
           {editor.aiPreview && <AiPreview editor={editor} />}
