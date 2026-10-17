@@ -7,7 +7,7 @@ import type { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { center } from '../model/geom'
 import type { Board, Id, Kind } from '../model/types'
-import { OPS, type Op, type OpResult, applyOps } from './ops'
+import { OPS, type Op, type OpResult, applyOps, maskedIds } from './ops'
 import { type ObjectDetail, type ObjectSummary, findObjects, getObject, listObjects, mermaidOf } from './queries'
 
 export type { ObjectSummary }
@@ -26,7 +26,7 @@ export class BrainCraftAPI {
     const list = Array.isArray(ops) ? ops : [ops]
     let results: OpResult[] = []
     this.editor.edit((b) => {
-      const out = applyOps(b, list, { measure: this.editor.measure, origin: center(this.editor.visibleWorld) })
+      const out = applyOps(b, list, { measure: this.editor.measure, origin: center(this.editor.visibleWorld), protect: maskedIds(this.editor.viewBoard) })
       results = out.results
       return out.board
     })
@@ -38,29 +38,29 @@ export class BrainCraftAPI {
     return results
   }
 
-  /** The whole board as plain data (the same format as a downloaded file). */
+  /** The whole board as plain data (the same format as a downloaded file), as this person may see it. */
   getBoard(): Board {
-    return structuredClone(this.editor.board)
+    return structuredClone(this.editor.viewBoard)
   }
 
   /** Every object, optionally of one kind. */
   list(kind?: Kind): ObjectSummary[] {
-    return listObjects(this.editor.board, kind)
+    return listObjects(this.editor.viewBoard, kind)
   }
 
   /** One object with its content and comments. */
   get(id: Id): ObjectDetail | null {
-    return getObject(this.editor.board, id)
+    return getObject(this.editor.viewBoard, id)
   }
 
   /** Searches text, comments, cells, cards and labels. */
   find(query: string) {
-    return findObjects(this.editor.board, query)
+    return findObjects(this.editor.viewBoard, query)
   }
 
   /** The selection's (or every flowchart's) Mermaid source. */
   exportMermaid(ids?: Id[]): string {
-    return mermaidOf(this.editor.board, ids)
+    return mermaidOf(this.editor.viewBoard, ids)
   }
 
   select(ids: Id[]) {

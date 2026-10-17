@@ -7,7 +7,7 @@
  *  - File: pass `file` to any tool to work on a .braincraft file on disk; no browser needed.
  *
  * No dependencies: MCP over stdio (newline-delimited JSON-RPC) and a tiny localhost HTTP server.
- * Settings (environment): BRAINCRAFT_URL (the app's address), BRAINCRAFT_PORT, BRAINCRAFT_DIR.
+ * Settings (environment): BRAINCRAFT_URL (the app's address), BRAINCRAFT_PORT, BRAINCRAFT_DIR, BRAINCRAFT_TOKEN.
  */
 
 import { randomBytes } from 'node:crypto'

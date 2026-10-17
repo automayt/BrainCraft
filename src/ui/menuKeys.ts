@@ -1,0 +1,44 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type React from 'react'
+import { useEscape } from './useEscape'
+
+const ITEMS = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)'
+
+/** Arrow keys (and Home, End) move between a menu's items. They stop at the ends rather than wrap:
+ * one press too many past the top shouldn't land on Delete. */
+export function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>(ITEMS)]
+  const at = items.indexOf(document.activeElement as HTMLElement)
+  const next = e.key === 'ArrowDown' || e.key === 'ArrowRight'
+  const prev = e.key === 'ArrowUp' || e.key === 'ArrowLeft'
+  const to = next ? Math.min(at + 1, items.length - 1) : prev ? Math.max(at - 1, 0) : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -1
+  if (to < 0 || !items.length) return
+  e.preventDefault()
+  e.stopPropagation()
+  items[to].focus()
+}
+
+/** Puts the keyboard on a menu's first item. */
+export function focusFirst(menu: HTMLElement | null) {
+  menu?.querySelector<HTMLElement>(ITEMS)?.focus()
+}
+
+/**
+ * A small pop-up menu under a toolbar button: opens and closes from the button, closes on Esc,
+ * and when opened from the keyboard puts focus on its first item (arrows then move through it).
+ */
+export function useButtonMenu() {
+  const [at, setAt] = useState<{ x: number; y: number; keyboard: boolean } | null>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setAt(null), [])
+  useEscape(close, !!at)
+  useEffect(() => {
+    if (at?.keyboard) focusFirst(menu.current)
+  }, [at])
+  const toggle = (e: React.MouseEvent<HTMLElement>) => {
+    // The toolbar scrolls sideways on small screens, so the menu lives outside it.
+    const r = e.currentTarget.getBoundingClientRect()
+    setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8, keyboard: e.detail === 0 })
+  }
+  return { at, close, toggle, menuProps: { ref: menu, onKeyDown: moveFocus } }
+}

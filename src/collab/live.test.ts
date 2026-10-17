@@ -14,7 +14,7 @@ class FakeSocket {
   sent: ClientMessage[] = []
   onopen: (() => void) | null = null
   onmessage: ((e: { data: string }) => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((e?: { code?: number }) => void) | null = null
   url: string
   constructor(url: string) {
     this.url = url
@@ -143,6 +143,69 @@ describe('live sessions when things go wrong', () => {
       live.flush()
       expect(B.getItem(editor.board, 1)!.text).toBe('Typed just before the drop')
       expect(again.sent.filter((m) => m.t === 'patch')).toMatchObject([{ patches: [{ k: 'item', id: 1 }] }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not send a confirmed-looking edit again over a newer one by someone else', () => {
+    vi.useFakeTimers()
+    try {
+      const { editor, live, ws } = session()
+      editor.edit((b) => B.updateItem(b, 1, (i) => ({ ...i, text: 'Mine' })))
+      live.flush()
+      ws.onclose!()
+      vi.advanceTimersByTime(1000)
+      const again = FakeSocket.last!
+      // The server took "Mine" (the ack was lost), then Bo changed the note.
+      again.deliver(hello('Bo wrote this later'))
+      live.flush()
+      expect(B.getItem(editor.board, 1)!.text).toBe('Bo wrote this later')
+      expect(again.sent.filter((m) => m.t === 'patch')).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends two unconfirmed edits to one note again as the last one', () => {
+    vi.useFakeTimers()
+    try {
+      const { editor, live, ws } = session()
+      editor.edit((b) => B.updateItem(b, 1, (i) => ({ ...i, text: 'First' })))
+      live.flush()
+      editor.edit((b) => B.updateItem(b, 1, (i) => ({ ...i, text: 'Second' })))
+      live.flush()
+      ws.onclose!()
+      vi.advanceTimersByTime(1000)
+      const again = FakeSocket.last!
+      again.deliver(hello('Start'))
+      live.flush()
+      expect(B.getItem(editor.board, 1)!.text).toBe('Second')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('splits a change full of pictures by size, and drops one the server closed on', () => {
+    vi.useFakeTimers()
+    try {
+      const { editor, live, ws } = session()
+      const big = 'data:image/png;base64,' + 'A'.repeat(3_000_000)
+      editor.edit((b) => {
+        for (let k = 0; k < 3; k++) b = B.addItem(b, { ...note(0, ''), kind: 'image', src: big } as Item)[0]
+        return b
+      })
+      live.flush()
+      const parts = ws.sent.filter((m) => m.t === 'patch')
+      expect(parts.length).toBe(3)
+      for (const p of parts) expect(JSON.stringify(p).length).toBeLessThan(5_000_000)
+      // Too big for the server after all: it closes, and the same message isn't sent again.
+      ws.onclose!({ code: 1009 })
+      vi.advanceTimersByTime(1000)
+      const again = FakeSocket.last!
+      again.deliver(hello('Start'))
+      live.flush()
+      expect(again.sent.filter((m) => m.t === 'patch')).toHaveLength(0)
     } finally {
       vi.useRealTimers()
     }

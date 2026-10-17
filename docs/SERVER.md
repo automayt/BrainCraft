@@ -54,7 +54,7 @@ Docs:
 - Each person's browser keeps its own copy of shared boards in its board
   library. Boards reconnect when reopened, and work done offline is sent
   when the connection comes back.
-- **Stop syncing here** turns the copy in your browser back into a normal
+- **Leave the live session (keep my copy)** turns the copy in your browser back into a normal
   board. The server copy stays for everyone else.
 
 There are no user accounts yet. Names shown to others are set in the share

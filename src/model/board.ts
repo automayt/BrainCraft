@@ -455,6 +455,10 @@ export function paste(b: Board, clip: Clip, dx: number, dy: number): [Board, Set
     const copyItem: Item = { ...translateItem(i, dx, dy), id: mapping.get(i.id)! }
     // A copied flowchart starts with no run history: those runs happened on the original.
     delete copyItem.runs
+    // A copy is a new note by whoever pasted it: in a private brainstorm it is hidden as theirs.
+    delete copyItem.hiddenBy
+    delete copyItem.hiddenRound
+    delete copyItem.masked
     if (i.kind === 'mind') {
       const parent = i.parent !== undefined ? mapping.get(i.parent) : undefined
       copyItem.parent = parent

@@ -120,14 +120,14 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
       <button title="Earlier" aria-label="Earlier" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, -Math.max(1, Math.round(days / 4))) }))}>
         ‹
       </button>
-      <button title="Zoom in" aria-label="Zoom in" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 0.6) }))}>
-        +
+      <button title="Later" aria-label="Later" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, Math.max(1, Math.round(days / 4))) }))}>
+        ›
       </button>
       <button title="Zoom out" aria-label="Zoom out" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 1.6) }))}>
         −
       </button>
-      <button title="Later" aria-label="Later" onClick={() => update((x) => ({ ...x, range: TL.panRange(range, Math.max(1, Math.round(days / 4))) }))}>
-        ›
+      <button title="Zoom in" aria-label="Zoom in" onClick={() => update((x) => ({ ...x, range: TL.zoomRange(range, 0.6) }))}>
+        +
       </button>
       <button title="Fit to the events" onClick={() => update((x) => ({ ...x, range: undefined }))}>
         Fit

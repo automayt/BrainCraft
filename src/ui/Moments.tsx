@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toScreen } from '../model/camera'
 import { REACTIONS } from '../model/reactions'
+import { LiveViewerBanner } from './Boards'
 import { CatchUpBanner } from './CatchUp'
 import { useEditor } from './useEditor'
 
@@ -168,6 +169,7 @@ export function Moments() {
       {editor.chatting && <ChatInput x={me.x} y={me.y} color={editor.myColor} />}
       <EmotePicker />
       <div className="top-stack">
+        <LiveViewerBanner />
         <CatchUpBanner />
         <TimerBadge />
       </div>

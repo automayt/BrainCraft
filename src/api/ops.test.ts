@@ -187,9 +187,10 @@ describe('operations with fields of the wrong type', () => {
             if (!(err instanceof OpError)) throw new Error(`${op.op}.${field} = ${JSON.stringify(value)} threw ${(err as Error).message}`)
             continue
           }
+          // Exactly as made: what's kept here is what a reload (or a friend's screen) keeps.
           const back = fromJson(toJson(out.board))
-          expect(back.items.length, `${op.op}.${field} = ${JSON.stringify(value)}`).toBe(out.board.items.length)
-          expect(back.connectors.length, `${op.op}.${field} = ${JSON.stringify(value)}`).toBe(out.board.connectors.length)
+          expect(back.items, `${op.op}.${field} = ${JSON.stringify(value)}`).toEqual(out.board.items)
+          expect(back.connectors, `${op.op}.${field} = ${JSON.stringify(value)}`).toEqual(out.board.connectors)
         }
   })
 })

@@ -6,11 +6,11 @@ import { applyPatches } from '../collab/patch'
 import { Editor } from '../editor/Editor'
 import { BoardView } from '../ui/BoardView'
 import { EditorContext } from '../ui/useEditor'
-import { emptyBoard } from './board'
+import { addItem, emptyBoard, newItem } from './board'
 import { allNotes } from './notes'
 import { cleanPatches } from './sanitize'
 import { search } from './search'
-import { fromJson } from './serialize'
+import { fromJson, toJson } from './serialize'
 import { fakeMeasure } from './test-helpers'
 import type { Board } from './types'
 
@@ -72,5 +72,20 @@ describe('hostile board data', () => {
   it('keeps the first of two items with the same id', () => {
     const b = fromJson(JSON.stringify({ version: 1, title: 't', items: [{ ...base, id: 1, kind: 'sticky', text: 'a' }, { ...base, id: 1, kind: 'sticky', text: 'b' }], connectors: [], nextId: 2 }))
     expect(b.items.map((i) => i.text)).toEqual(['a'])
+  })
+
+  it('ignores a nextId that would give new objects ids a reload drops', () => {
+    for (const nextId of ['1e309', '2.5', '-4']) {
+      const b = fromJson(`{"version":1,"title":"t","items":[${JSON.stringify({ ...base, id: 7, kind: 'sticky' })}],"connectors":[],"nextId":${nextId}}`)
+      expect(b.nextId).toBe(8)
+      const [withNew, id] = addItem(b, newItem('sticky', { x: 0, y: 0, w: 10, h: 10 }))
+      expect(fromJson(toJson(withNew)).items.some((i) => i.id === id)).toBe(true)
+    }
+  })
+
+  it('opens a very big board (no spreading its ids into Math.max)', () => {
+    const items = Array.from({ length: 200_000 }, (_, k) => ({ ...base, id: k + 1, kind: 'sticky', text: '' }))
+    const b = fromJson(JSON.stringify({ version: 1, title: 't', items, connectors: [], nextId: 1 }))
+    expect(b.nextId).toBe(200_001)
   })
 })

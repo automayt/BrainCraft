@@ -32,7 +32,7 @@ const TOOL_VERBS: Record<string, string> = {
   table: 'Add table',
   kanban: 'Add Kanban board',
   timeline: 'Add timeline',
-  data: 'Add database (table, board, timeline, calendar and gallery views)',
+  data: 'Add database (table, Kanban, timeline, calendar and gallery views)',
   connector: 'Connect objects',
   pen: 'Draw with the pen',
   frame: 'Add frame',
@@ -169,8 +169,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       { id: 'back', label: 'Send to back', group: 'Edit', run: () => editor.sendToBack() },
     )
   }
+  // A board that can't be changed (a snapshot link, the view link, a presentation) offers looking, not editing.
+  if (editor.readOnly) return list.filter((c) => (LOOK_GROUPS.has(c.group) && !EDIT_IDS.has(c.id)) || LOOK_IDS.has(c.id))
   return list
 }
+
+const LOOK_GROUPS = new Set(['Board', 'View', 'Help'])
+const EDIT_IDS = new Set(['versions', 'import'])
+const LOOK_IDS = new Set(['emote', 'chat'])
 
 /** Commands whose label, group or aliases contain every word of `query`, best first. */
 export function matchCommands(list: Command[], query: string): Command[] {

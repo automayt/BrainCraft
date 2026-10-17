@@ -7,17 +7,24 @@ import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
+import { focusFirst, moveFocus } from './menuKeys'
 
 type Entry = { label: string; keys?: string; run: () => void; danger?: boolean } | 'sep' | { heading: string }
 
-/** Up and down arrows (and Home, End) move between a menu's items. */
-function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
-  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-  const at = items.indexOf(document.activeElement as HTMLElement)
-  const to = e.key === 'ArrowDown' ? (at + 1) % items.length : e.key === 'ArrowUp' ? (at - 1 + items.length) % items.length : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -1
-  if (to < 0 || !items.length) return
-  e.preventDefault()
-  items[to].focus()
+/** What a view-only board's menu keeps. */
+const LOOK = /^(Copy|Comments|Run history|Select all|Zoom to fit)/
+
+/** Drops headings with nothing under them and doubled, leading or trailing separators. */
+function tidy(entries: Entry[]): Entry[] {
+  const out: Entry[] = []
+  entries.forEach((e, k) => {
+    const next = entries[k + 1]
+    if (typeof e === 'object' && 'heading' in e && (!next || next === 'sep' || 'heading' in next)) return
+    if (e === 'sep' && (!out.length || out[out.length - 1] === 'sep')) return
+    out.push(e)
+  })
+  while (out[out.length - 1] === 'sep') out.pop()
+  return out
 }
 
 /** Right-click: the actions that make sense for what's under the pointer. */
@@ -28,7 +35,7 @@ export function ContextMenu() {
   useEscape(ui.closeMenu, !!m)
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (m?.keyboard) listRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    if (m?.keyboard) focusFirst(listRef.current)
   }, [m])
   if (!m) return null
 
@@ -140,6 +147,11 @@ export function ContextMenu() {
       { label: 'Zoom to fit', keys: 'Shift 1', run: () => editor.zoomToFit() },
       { label: 'Import Mermaid / outline…', run: ui.openImport },
     )
+  }
+  if (editor.readOnly) {
+    // Nothing here can change: keep the entries that only look or copy.
+    const kept = tidy(entries.filter((e) => typeof e !== 'object' || 'heading' in e || LOOK.test(e.label)))
+    entries.splice(0, entries.length, ...(kept.length ? kept : [{ label: 'Zoom to fit', keys: 'Shift 1', run: () => editor.zoomToFit() }]))
   }
   const left = Math.min(m.x, editor.viewport.w - 250)
   const top = Math.min(m.y, Math.max(8, editor.viewport.h - entries.length * 32 - 16))

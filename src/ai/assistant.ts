@@ -8,7 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import { OpError, type Op, applyOps } from '../api/ops'
+import { OpError, type Op, applyOps, maskedIds } from '../api/ops'
 import { OPS_GUIDE, TOOL_DEFS, type ToolHost, runTool } from '../api/tools'
 import { type Patch, diff } from '../collab/patch'
 import { type Measure, layoutAll } from '../model/mindmap'
@@ -207,7 +207,8 @@ export class Assistant {
       return 'propose_changes needs "summary" (text) and "ops" (a non-empty list of operations, each with an "op" field)'
     const before = this.host.board()
     try {
-      const after = layoutAll(applyOps(before, x.ops as Op[], { measure: this.host.measure }).board, this.host.measure)
+      const view = this.host.readable?.()
+      const after = layoutAll(applyOps(before, x.ops as Op[], { measure: this.host.measure, protect: view && maskedIds(view) }).board, this.host.measure)
       const patches = diff(before, after)
       if (!patches.length) return 'Those operations change nothing on the board.'
       return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, counts: countChanges(before, patches), status: 'pending' }
@@ -263,6 +264,8 @@ export class Assistant {
       ],
     })
     let jsonRetries = 0
+    // This step's tool results so far, kept if the request stops partway.
+    let done: Anthropic.Beta.BetaToolResultBlockParam[] = []
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
         on.status(step === 0 ? 'Thinking…' : 'Working…')
@@ -315,6 +318,7 @@ export class Assistant {
           continue
         }
         const results: Anthropic.Beta.BetaToolResultBlockParam[] = []
+        done = results
         for (const u of uses) {
           on.status(STATUS[u.name] ?? 'Working…')
           const r = await this.runTool(u.name, u.input, on).catch((err: unknown) => ({ content: `That tool failed: ${(err as Error)?.message ?? String(err)}`, is_error: true }))
@@ -322,26 +326,36 @@ export class Assistant {
         }
         // Every result for one turn goes back in a single message.
         this.messages.push({ role: 'user', content: results })
+        done = []
       }
       on.text('\n\n_Stopped after too many steps._')
     } finally {
-      this.answerOpenToolCalls()
+      this.answerOpenToolCalls(done)
       on.status(null)
     }
   }
 
   /**
    * A request stopped mid-step (aborted, or an error) can leave Claude's tool calls without
-   * results, which would make every later request invalid; answer them as not run.
+   * results, which would make every later request invalid; answer them as not run (keeping the
+   * results of any that did run, such as a proposal already on screen).
    */
-  private answerOpenToolCalls() {
+  private answerOpenToolCalls(done: Anthropic.Beta.BetaToolResultBlockParam[] = []) {
     const last = this.messages[this.messages.length - 1]
     if (last?.role !== 'assistant' || !Array.isArray(last.content)) return
     const uses = last.content.filter((b) => b.type === 'tool_use')
     if (!uses.length) return
     this.messages.push({
       role: 'user',
-      content: uses.map((u) => ({ type: 'tool_result' as const, tool_use_id: (u as Anthropic.Beta.BetaToolUseBlock).id, is_error: true, content: 'Not run: the request was stopped.' })),
+      content: uses.map(
+        (u) =>
+          done.find((r) => r.tool_use_id === (u as Anthropic.Beta.BetaToolUseBlock).id) ?? {
+            type: 'tool_result' as const,
+            tool_use_id: (u as Anthropic.Beta.BetaToolUseBlock).id,
+            is_error: true,
+            content: 'Not run: the request was stopped.',
+          },
+      ),
     })
   }
 

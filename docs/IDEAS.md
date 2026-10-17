@@ -22,7 +22,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [x] **Board icons.** Pick an emoji for each board; it shows in the board list,
   the tab title and wiki-links, so boards are easy to tell apart.
 - [x] **Many stickies at once.** Type or paste a list, one idea per line, and
-  get a tidy grid of sticky notes (pasting a list today makes a mind map).
+  get a tidy grid of sticky notes (an indented list still makes a mind map).
 - [x] **Code blocks.** Code with syntax highlighting and a language label, for
   friends who share snippets.
 
@@ -78,11 +78,49 @@ small group of friends using BrainCraft together. Ticked ones are built.
   and errors use role="alert".
 - [ ] **Eraser** in the pen panel, a way to hide the minimap, and export
   options for "just what's on screen" and a light or transparent background.
-- [ ] **Vote commands in Ctrl K**, a "Many stickies" mode of its own in the
+- [ ] **More vote commands in Ctrl K** (reveal, end and sort; starting a vote
+  is already there), a "Many stickies" mode of its own in the
   import dialog, and the flowchart menu listing every shape.
-- [ ] **AI quick actions:** one-click "Summarise", "Group these" and "Turn into
-  a plan" on a selection.
+- [ ] **AI quick actions on the selection toolbar:** one-click "Summarise",
+  "Group these" and "Turn into a plan" next to the selection (the AI panel
+  already has its own one-click actions).
 - [ ] **A welcome board that feels like friends**, not a product tour.
+
+## From the third review (October 2026)
+
+- [ ] **A "⋯ More" menu on the selection toolbar.** A single sticky gets a
+  bar nearly 1000px wide; keep colour, size, status, comments and delete, and
+  move lock, front and back, flip and duplicate into the menu, so it never
+  needs a scrollbar or wraps to four rows on a phone.
+- [ ] **One record of the screen's busy areas** (tool rail, shape panel,
+  minimap, side panels, banners) that the toolbar, keep-in-view, the hint
+  bar and the pickers all read, instead of each keeping its own numbers.
+- [ ] **One bottom dock** stacking the hint, messages and the status key.
+- [ ] **Live: all-or-nothing big changes.** A change sent in parts can be half
+  refused; the server could take grouped parts together or not at all.
+- [ ] **Live: the server says which change it applied last**, so a reconnect
+  never has to guess what to send again.
+- [ ] **QR code in the share dialog**, so friends in the same room join by
+  pointing a phone.
+- [ ] **"I'll take it":** put a person on a sticky, card or record (an avatar
+  chip), with a "Mine" filter. For chores, packing lists, who brings what.
+- [ ] **Find a date:** each friend taps the days they can make it; the best
+  days light up and can become a timeline event.
+- [ ] **Add to my calendar:** dated cards, records and events as a calendar
+  file or a subscription link.
+- [ ] **Copy an update for the group chat:** "Since you were here" or the
+  statuses as a short plain-text summary.
+- [ ] **Countdown:** give a board a big day; the top bar and board list show
+  "12 days to go".
+- [ ] **Place cards:** an address or map link becomes a card with the place
+  name and a small map, for trips and moves.
+- [ ] **A new edit link** (the old one stops working), or links that expire
+  after the trip.
+- [ ] **Viewers who join in a little:** view-link friends can react, vote and
+  spin, and "Ask to edit" pings the editors.
+- [ ] **Photo wall:** dropping several photos lays them out in a captioned grid.
+- [ ] **Help with a search box**, and shortcuts marked "with nothing
+  selected" where that matters.
 
 ## From the earlier list
 

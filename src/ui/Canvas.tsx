@@ -112,7 +112,7 @@ export function Canvas() {
     ref.current!.setPointerCapture(e.pointerId)
     // Keep focus off any text box so canvas shortcuts work.
     if (document.activeElement instanceof HTMLElement && !editor.editing) document.activeElement.blur()
-    editor.pointerDown(p, e.button, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey }, readHandle(e.target))
+    editor.pointerDown(p, e.button, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey, touch: e.pointerType === 'touch' }, readHandle(e.target))
     if (e.button !== 2) e.preventDefault()
     // Touch has no right-click: holding a finger still opens the context menu instead.
     if (e.pointerType === 'touch') {

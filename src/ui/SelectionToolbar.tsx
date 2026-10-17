@@ -7,6 +7,7 @@ import { hasSketch, sketchToBoard } from './sketch'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useButtonMenu } from './menuKeys'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
@@ -79,7 +80,11 @@ export function SelectionToolbar() {
   const flows = items.filter((i) => i.kind === 'flow')
   // Clear of the tool rail on the left (on phones it sits at the bottom instead).
   // (and of the flowchart shape panel beside it, when that's open).
-  const minX = (editor.viewport.w > 720 ? (editor.flowPalette ? 224 : 68) : 12) + width / 2
+  // (The rail ends at 62px, or 94px where short screens give it two columns; the panel is 270px
+  // wide, 12px to its right.)
+  const rail = editor.viewport.h <= 660 ? 94 : 62
+  const leftInset = editor.viewport.w > 720 ? (editor.flowPalette ? rail + 292 : rail + 6) : 12
+  const minX = leftInset + width / 2
   // ...and clear of the comments panel or assistant on the right.
   const maxX = editor.viewport.w - editor.rightInset - 12 - width / 2
   const x = maxX < minX ? minX : Math.min(Math.max(anchor.x, minX), maxX)
@@ -112,7 +117,7 @@ export function SelectionToolbar() {
   const current = items[0]?.color
 
   return (
-    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - (editor.viewport.w > 720 ? 80 : 24)) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys} onWheel={scrollSideways}>
+    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys} onWheel={scrollSideways}>
       {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (
@@ -240,23 +245,23 @@ export function SelectionToolbar() {
       <span className="sep" />
       {items.length > 1 && <AlignMenu count={items.length} />}
       {items.length > 1 && items.every((i) => i.kind === 'mind' && i.parent !== undefined) && new Set(items.map((i) => i.parent)).size === 1 && (
-        <button title="Put these ideas under a new idea (Ctrl+G)" onClick={() => editor.groupIdeas()}>
+        <button title="Put these ideas under a new idea (Ctrl G)" onClick={() => editor.groupIdeas()}>
           Group
         </button>
       )}
       {items.length > 1 && !items.every((i) => i.kind === 'mind') && !(items.every((i) => i.group) && new Set(items.map((i) => i.group)).size === 1) && (
-        <button title="Group: select and move these as one (Ctrl+G)" onClick={() => editor.group()}>
+        <button title="Group: select and move these as one (Ctrl G)" onClick={() => editor.group()}>
           Group
         </button>
       )}
       {items.some((i) => i.group) && (
-        <button title="Ungroup (Ctrl+Shift+G)" onClick={() => editor.ungroup()}>
+        <button title="Ungroup (Ctrl Shift G)" onClick={() => editor.ungroup()}>
           Ungroup
         </button>
       )}
       {items.length > 0 && (
         <button
-          title={items.every((i) => i.locked) ? 'Unlock (Ctrl+Shift+L)' : 'Lock: can’t be moved or changed by accident (Ctrl+Shift+L)'}
+          title={items.every((i) => i.locked) ? 'Unlock (Ctrl Shift L)' : 'Lock: can’t be moved or changed by accident (Ctrl Shift L)'}
           aria-pressed={items.every((i) => i.locked)}
           onClick={() => editor.setLocked(!items.every((i) => i.locked))}
         >
@@ -296,13 +301,13 @@ export function SelectionToolbar() {
         </button>
       )}
       {items.length > 0 && (
-        <button title="Duplicate (Ctrl+D)" onClick={() => editor.duplicate()}>
+        <button title="Duplicate (Ctrl D)" onClick={() => editor.duplicate()}>
           Duplicate
         </button>
       )}
       {editor.single && (
-        <button title="Comments (Alt+C)" onClick={() => editor.toggleNotes(true)}>
-          Comment{editor.single.notes?.length ? ` (${editor.single.notes.length})` : ''}
+        <button title="Comments (Alt C)" onClick={() => editor.toggleNotes(true)}>
+          Comments{editor.single.notes?.length ? ` (${editor.single.notes.length})` : ''}
         </button>
       )}
       <button className="danger" title="Delete (Del)" onClick={() => editor.deleteSelection()}>
@@ -324,9 +329,8 @@ const ALIGN: { how: B.AlignHow; label: string; d: string }[] = [
 /** Align and distribute for a multiple selection. */
 function AlignMenu({ count }: { count: number }) {
   const editor = useEditor()
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const { at, close, toggle, menuProps } = useButtonMenu()
   const open = !!at
-  const setOpen = (v: boolean) => !v && setAt(null)
   const icon = (d: string) => (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -338,17 +342,14 @@ function AlignMenu({ count }: { count: number }) {
         title="Align and distribute"
         aria-expanded={open}
         className={open ? 'on' : ''}
-        onClick={(e) => {
-          // The toolbar scrolls sideways on small screens, so the menu lives outside it.
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          setAt(open ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
-        }}
+        aria-haspopup="menu"
+        onClick={toggle}
       >
         Align
       </button>
       {at &&
         createPortal(
-        <div className="align-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+        <div className="align-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
           {ALIGN.map((a) => (
             <button
               key={a.how}
@@ -357,16 +358,16 @@ function AlignMenu({ count }: { count: number }) {
               aria-label={a.label}
               onClick={() => {
                 editor.align(a.how)
-                setOpen(false)
+                close()
               }}
             >
               {icon(a.d)}
             </button>
           ))}
-          <button role="menuitem" title="Space evenly across" aria-label="Distribute horizontally" disabled={count < 3} onClick={() => (editor.distribute('x'), setOpen(false))}>
+          <button role="menuitem" title="Space evenly across" aria-label="Distribute horizontally" disabled={count < 3} onClick={() => (editor.distribute('x'), close())}>
             {icon('M2 3v12M16 3v12M7 6h4v6H7z')}
           </button>
-          <button role="menuitem" title="Space evenly down" aria-label="Distribute vertically" disabled={count < 3} onClick={() => (editor.distribute('y'), setOpen(false))}>
+          <button role="menuitem" title="Space evenly down" aria-label="Distribute vertically" disabled={count < 3} onClick={() => (editor.distribute('y'), close())}>
             {icon('M3 2h12M3 16h12M6 7h6v4H6z')}
           </button>
         </div>,
@@ -396,7 +397,7 @@ export function StatusDot({ status, size = 16 }: { status: string | undefined; s
 /** Where the selection stands: to do, in progress, done… */
 function StatusMenu() {
   const editor = useEditor()
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const { at, close, toggle, menuProps } = useButtonMenu()
   const marked = editor.selectedItems.filter((i) => canHaveStatus(i.kind))
   const same = marked.every((i) => i.status === marked[0]?.status) ? marked[0]?.status : undefined
   return (
@@ -406,17 +407,15 @@ function StatusMenu() {
         aria-label="Status"
         aria-expanded={!!at}
         className={`status-button${at ? ' on' : ''}`}
-        onClick={(e) => {
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
-        }}
+        aria-haspopup="menu"
+        onClick={toggle}
       >
         <StatusDot status={same} />
         {statusInfo(same)?.label ?? 'Status'}
       </button>
       {at &&
         createPortal(
-          <div className="align-menu status-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+          <div className="align-menu status-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
             {STATUSES.map((st) => (
               <button
                 key={st.id}
@@ -425,7 +424,7 @@ function StatusMenu() {
                 className={same === st.id ? 'on' : ''}
                 onClick={() => {
                   editor.markStatus(st.id)
-                  setAt(null)
+                  close()
                 }}
               >
                 <StatusDot status={st.id} />
@@ -437,7 +436,7 @@ function StatusMenu() {
                 role="menuitem"
                 onClick={() => {
                   editor.markStatus(null)
-                  setAt(null)
+                  close()
                 }}
               >
                 <StatusDot status={undefined} />
@@ -454,7 +453,7 @@ function StatusMenu() {
 /** Emoji reactions for the selection. */
 function ReactMenu() {
   const editor = useEditor()
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const { at, close, toggle, menuProps } = useButtonMenu()
   const me = editor.me
   return (
     <span className="align-anchor">
@@ -463,10 +462,8 @@ function ReactMenu() {
         aria-label="React"
         aria-expanded={!!at}
         className={at ? 'on' : ''}
-        onClick={(e) => {
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
-        }}
+        aria-haspopup="menu"
+        onClick={toggle}
       >
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
           <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -477,7 +474,7 @@ function ReactMenu() {
       </button>
       {at &&
         createPortal(
-          <div className="align-menu react-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+          <div className="align-menu react-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
             {RX.REACTIONS.map((emoji) => {
               const on = editor.selectedItems.length > 0 && editor.selectedItems.every((i) => i.reactions?.[emoji]?.includes(me))
               return (
@@ -489,7 +486,7 @@ function ReactMenu() {
                   title={on ? 'Take your reaction off' : 'React'}
                   onClick={() => {
                     editor.toggleReaction(emoji)
-                    setAt(null)
+                    close()
                   }}
                 >
                   {emoji}

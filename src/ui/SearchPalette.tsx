@@ -67,6 +67,10 @@ export function SearchPalette() {
 
   if (!editor.searchOpen) return null
   const kinds = FILTERS[filter].kinds ? new Set(FILTERS[filter].kinds) : undefined
+  // Only the filters for what's on this board (and the one picked).
+  const present = new Set<Kind | 'connector'>(editor.board.items.map((i) => i.kind))
+  if (editor.board.connectors.length) present.add('connector')
+  const shown = FILTERS.flatMap((f, k) => (!f.kinds || k === filter || f.kinds.some((x) => present.has(x)) ? [k] : []))
   const commandOnly = query.trimStart().startsWith('>')
   const cmds: Row[] =
     filter === 0 && query.trim()
@@ -124,15 +128,15 @@ export function SearchPalette() {
             else if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, rows.length - 1))
             else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0))
             else if (e.key === 'Enter') go(rows[active])
-            else if (e.key === 'Tab') setFilter((f) => (f + (e.shiftKey ? FILTERS.length - 1 : 1)) % FILTERS.length)
+            else if (e.key === 'Tab') setFilter((f) => shown[(shown.indexOf(f) + (e.shiftKey ? shown.length - 1 : 1)) % shown.length])
             else return
             e.preventDefault()
           }}
         />
         <div className="filters" role="tablist">
-          {FILTERS.map((f, k) => (
+          {shown.map((k) => (
             <button
-              key={f.label}
+              key={FILTERS[k].label}
               role="tab"
               aria-selected={k === filter}
               className={k === filter ? 'active' : ''}
@@ -142,7 +146,7 @@ export function SearchPalette() {
                 setActive(0)
               }}
             >
-              {f.label}
+              {FILTERS[k].label}
             </button>
           ))}
         </div>

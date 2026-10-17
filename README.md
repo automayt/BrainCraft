@@ -131,7 +131,8 @@ These become interactive once selected; drag them by their title strip.
   one. Links to a shared board use its live-session id, so they work for
   every friend who has that board.
 - **Every object has comments.** Select it and press **Alt+C** (or click
-  *Comment*) to open the panel on the right. Notes are timestamped, show who
+  *Comment*) to open the panel on the right; the keyboard goes straight to the
+  comment box. Comments are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention another object; the
   mention links to it, and the other object lists it under "Linked from".
   With nothing selected, the panel shows every comment on the board.
@@ -188,7 +189,7 @@ These become interactive once selected; drag them by their title strip.
 - **Ctrl+S saves to a `.braincraft` file.** In Chrome and Edge it writes
   back to the same file each time; elsewhere it downloads a copy. Open
   files with **Open file…** or by dropping them on the window.
-- **Share read-only link** packs the whole board, compressed, into the
+- **Snapshot link** (in Share) packs the whole board, compressed, into the
   link itself. Nothing is uploaded. People who open it see the board
   read-only and can save their own copy.
 
@@ -360,8 +361,10 @@ These become interactive once selected; drag them by their title strip.
   Ctrl+Shift+G ungroups.
 - **Type to rename:** with one object selected, just start typing.
 - **Keyboard and touch:** with a tool picked, **Enter** puts one in the
-  middle of the view (so does choosing "Add …" in Ctrl+K). On touch screens,
-  **press and hold** for the menu that right-click opens.
+  middle of the view (so does choosing "Add …" in Ctrl+K). **Shift+F10** or
+  the Menu key opens the right-click menu for the selection, and the arrow
+  keys move through it. On touch screens, drag empty space to move around,
+  pinch to zoom, and **press and hold** for that menu.
 - Undo and redo; deleting tells you what went, in case it was a slip.
 
 Press **?** in the app to see every shortcut.
