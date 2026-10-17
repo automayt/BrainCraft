@@ -2630,6 +2630,20 @@ button.on,
   }
 }
 
+/* A phone on its side: three columns, so the rail fits between the top and bottom bars. */
+@media (max-height: 450px) and (min-width: 721px) {
+  .tool-group {
+    width: 104px;
+  }
+}
+
+/* Narrow desktop windows: a shorter title keeps the two top bars apart. */
+@media (max-width: 960px) and (min-width: 721px) {
+  .board-title {
+    width: 140px;
+  }
+}
+
 @media (max-width: 1100px) {
   .search-pill span,
   .wordmark {
@@ -2701,7 +2715,23 @@ button.on,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* Once: a pulsing dot shouldn't flicker endlessly at that speed. */
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  /* Emotes still show (they'd vanish at 0.01ms): still, then fading. */
+  .emote {
+    animation: emote-still 2.2s linear forwards !important;
+  }
+}
+
+@keyframes emote-still {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -2762,10 +2792,20 @@ button.on,
 }
 
 .save-warning {
+  padding: 2px 4px;
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
   color: var(--danger);
   white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.save-warning:hover {
+  text-decoration: underline;
 }
 
 @keyframes pulse {
@@ -7001,8 +7041,18 @@ button.on,
 }
 
 .dv-cal-more {
+  padding: 0 2px;
+  font: inherit;
   font-size: 11px;
+  text-align: left;
   color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.dv-cal-more:hover {
+  color: var(--text);
 }
 
 .dv-gallery {
@@ -7109,4 +7159,24 @@ button.on,
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Phones: messages stand above the tool rail and the status key at the bottom. */
+@media (max-width: 720px) {
+  .toast {
+    bottom: 184px;
+  }
+}
+
+/* Touch screens: the hint bar speaks keyboard and mouse, and board-card actions can't wait for a hover. */
+@media (pointer: coarse) {
+  .hint-bar {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .board-actions {
+    opacity: 1;
+  }
 }

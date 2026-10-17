@@ -86,7 +86,13 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 const http = createServer(async (req, res) => {
   cors(req, res)
-  const url = new URL(req.url ?? '/', 'http://localhost')
+  let url: URL
+  try {
+    url = new URL(req.url ?? '/', 'http://localhost')
+  } catch {
+    // A malformed request mustn't end the server (and the assistant's connection with it).
+    return void res.writeHead(400).end()
+  }
   if (req.method === 'OPTIONS') return void res.writeHead(204).end()
   if (url.pathname === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' })

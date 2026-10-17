@@ -30,7 +30,14 @@ export function focusFirst(menu: HTMLElement | null) {
 export function useButtonMenu() {
   const [at, setAt] = useState<{ x: number; y: number; keyboard: boolean } | null>(null)
   const menu = useRef<HTMLDivElement>(null)
-  const close = useCallback(() => setAt(null), [])
+  const trigger = useRef<HTMLElement | null>(null)
+  const close = useCallback(() => {
+    setAt((was) => {
+      // Opened from the keyboard: the keyboard goes back to the button, not off to the page.
+      if (was?.keyboard) queueMicrotask(() => trigger.current?.isConnected && trigger.current.focus())
+      return null
+    })
+  }, [])
   useEscape(close, !!at)
   useEffect(() => {
     if (at?.keyboard) focusFirst(menu.current)
@@ -38,6 +45,7 @@ export function useButtonMenu() {
   const toggle = (e: React.MouseEvent<HTMLElement>) => {
     // The toolbar scrolls sideways on small screens, so the menu lives outside it.
     const r = e.currentTarget.getBoundingClientRect()
+    trigger.current = e.currentTarget
     setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8, keyboard: e.detail === 0 })
   }
   return { at, close, toggle, menuProps: { ref: menu, onKeyDown: moveFocus } }

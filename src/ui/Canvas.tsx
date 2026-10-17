@@ -781,7 +781,7 @@ function EmptyBoard() {
   return (
     <div className="empty-board no-canvas" onPointerDown={(e) => e.stopPropagation()}>
       <h1>Start with an idea</h1>
-      <p className="muted">Pick a starting point, double-click anywhere for a sticky note, or paste a list of ideas, a link, Mermaid, an outline or a spreadsheet. Your boards (Ctrl+O) has templates.</p>
+      <p className="muted">Pick a starting point, double-click (or double-tap) anywhere for a sticky note, or paste a list of ideas, a link, Mermaid, an outline or a spreadsheet. Your boards (Ctrl O) has templates.</p>
       <div className="starters">
         {STARTERS.map((s) => (
           <button key={s.tool} onClick={() => start(s.tool)}>

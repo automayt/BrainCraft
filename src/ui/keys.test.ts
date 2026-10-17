@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Editor } from '../editor/Editor'
 import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
+import { applyOps } from '../api/ops'
 import { commands } from './commands'
 import { altLetter } from './keys'
 import type { Ui } from './uiContext'
@@ -29,5 +30,11 @@ describe('keyboard', () => {
     expect(ids()).not.toContain('brainstorm')
     expect(ids()).toContain('zoom-fit')
     expect(ids()).toContain('export-image')
+    // Runs record nothing, so they work there too; and comments can be read.
+    e.readOnly = false
+    e.edit((b) => applyOps(b, [{ op: 'createFlowchart', mermaid: 'flowchart TD\n  A --> B' }], { measure: fakeMeasure }).board)
+    e.select([e.board.items.find((i) => i.kind === 'flow')!.id])
+    e.readOnly = true
+    expect(ids()).toEqual(expect.arrayContaining(['run', 'run-here', 'run-history', 'comments', 'select-all']))
   })
 })

@@ -133,7 +133,8 @@ export type Handle =
 
 export type Drag =
   | { type: 'none' }
-  | { type: 'pan'; last: Vec }
+  /** `tap`: what a finger came down on, selected if it lifts without moving the board. */
+  | { type: 'pan'; last: Vec; tap?: { id: Id; at: Vec } }
   | {
       type: 'move'
       ids: Set<Id>
@@ -272,6 +273,8 @@ export class Editor {
   flowShape: FlowShape = 'process'
   /** The flowchart shape panel stays open while building a flowchart, until closed or another tool is picked. */
   flowPalette = false
+  /** "Select several" on a touch screen: taps add to the selection and a drag draws a box, as Shift does. */
+  tapToAdd = false
   /** A shape being dragged out of the panel: where it would land, and what it would snap to. */
   paletteDrag: { shape: FlowShape; at: Vec; magnet: F.Magnet | null } | null = null
   /** The comments (work notes) panel is showing. */
@@ -509,9 +512,18 @@ export class Editor {
     else this.emit()
   }
 
+  /** Turns "Select several" (for touch screens) on or off. */
+  setTapToAdd(on: boolean) {
+    this.tapToAdd = on
+    this.tool = 'select'
+    this.setStatus(on ? 'Selecting several: tap objects to add or remove them, or drag a box — press and hold for Done' : '')
+    this.emit()
+  }
+
   setTool(tool: Tool) {
     if (this.readOnly && tool !== 'select' && tool !== 'hand') return
     this.finishEditing()
+    this.tapToAdd = false
     if (tool === 'flow') this.flowPalette = true
     else if (tool !== 'select' && tool !== 'hand') this.flowPalette = false
     this.tool = tool
@@ -576,7 +588,7 @@ export class Editor {
     const patched = applyPatches(this.board, patches)
     // Only mind maps are laid out here, so a change that leaves them alone needs no layout pass
     // (this runs for every message from every busy peer).
-    const mind = patches.some((p) => p.k === 'item' && (p.v === null || p.v.kind === 'mind'))
+    const mind = patches.some((p) => (p.k === 'item' && (p.v === null || p.v.kind === 'mind')) || p.k === 'order')
     const layout = (b: Board) => (mind ? M.layoutAll(b, this.measure) : b)
     const next = layout(opts.sharedIds ? withIdsAfter(patched, patches) : patched)
     this.board = next
@@ -745,6 +757,11 @@ export class Editor {
 
   /** Starts walking the flowchart containing `id` (default: the selection) from its start, or from `id` itself. */
   startRun(id: Id | undefined = this.single?.id, fromHere = false): boolean {
+    // One at a time (a second would take the first's read-only state as the board's own).
+    if (this.running) {
+      this.setStatus('A run is under way — finish or stop it first')
+      return false
+    }
     const item = id !== undefined ? B.getItem(this.board, id) : undefined
     if (item?.kind !== 'flow') {
       this.setStatus('Select a flowchart shape to run its flowchart')
@@ -1288,7 +1305,7 @@ export class Editor {
     if (this.readOnly) return
     const { notes } = BS.roundStats(this.board)
     this.edit((b) => BS.reveal(b, card))
-    this.setStatus(notes ? `Revealed ${notes} note${notes === 1 ? '' : 's'}` : 'Brainstorm closed')
+    this.setStatus(notes ? `Revealed ${notes} note${notes === 1 ? '' : 's'} — Ctrl Z hides them again` : 'Brainstorm closed')
   }
 
   startVote(question?: string, each?: number) {
@@ -1766,7 +1783,7 @@ export class Editor {
       : items.size
         ? `${items.size} object${items.size === 1 ? '' : 's'}`
         : 'the line'
-    this.setStatus(`Deleted ${what}  ·  Ctrl+Z to undo`)
+    this.setStatus(`Deleted ${what}  ·  Ctrl Z to undo`)
     this.selection = new Set(next !== undefined && B.getItem(this.board, next) ? [next] : [])
     this.selectedConnector = null
     this.emit()
@@ -1859,7 +1876,7 @@ export class Editor {
     const id = uid()
     const ids = new Set(items.map((i) => i.id))
     this.edit((b) => B.updateItems(b, ids, (i) => ({ ...i, group: id })))
-    this.setStatus(`Grouped ${ids.size} objects — Ctrl+Shift+G to ungroup`)
+    this.setStatus(`Grouped ${ids.size} objects — Ctrl Shift G to ungroup`)
   }
 
   ungroup() {
@@ -2015,6 +2032,8 @@ export class Editor {
       this.finishEditing()
       // Right-click reaches locked objects too, so they can be unlocked.
       const hit = this.hitAt(screen, true)
+      // Selecting several (touch), press-and-hold opens the menu for what's already picked.
+      if (this.tapToAdd) return
       if (hit?.type === 'item' && !this.selection.has(hit.id)) this.select([hit.id])
       else if (hit?.type === 'connector') {
         this.selection = new Set()
@@ -2079,6 +2098,7 @@ export class Editor {
       const hit = this.hitAt(screen)
       if (hit?.type === 'item') this.drag = { type: 'connect', from: hit.id, current: world, origin: screen }
     } else if (this.tool === 'select') {
+      if (this.tapToAdd) mods = { ...mods, shift: true }
       // Alt-click reaches locked objects (to select and unlock them).
       const hit = this.hitAt(screen, mods.alt)
       // A finger on empty space (or anywhere, on a board that can't be changed) moves the board,
@@ -2088,7 +2108,7 @@ export class Editor {
           this.selection = new Set()
           this.selectedConnector = null
         }
-        this.drag = { type: 'pan', last: screen }
+        this.drag = { type: 'pan', last: screen, ...(hit?.type === 'item' ? { tap: { id: hit.id, at: screen } } : {}) }
         this.emit()
         return
       }
@@ -2259,6 +2279,10 @@ export class Editor {
     const d = this.drag
     this.drag = { type: 'none' }
     switch (d.type) {
+      case 'pan':
+        // A still tap on a board that can't change selects (to read comments, copy, follow a run).
+        if (d.tap && dist(d.tap.at, screen) < 8) this.select(B.withGroups(this.board, [d.tap.id]))
+        break
       case 'move': {
         const m = d.magnet
         const id = [...d.ids][0]
@@ -2537,6 +2561,7 @@ export class Editor {
     if (k === 'Escape') {
       // First Esc deselects; another (or the first, with nothing selected) closes the flowchart shape panel.
       if (!this.selection.size && this.selectedConnector === null && (this.tool === 'select' || this.tool === 'flow') && this.flowPalette) this.flowPalette = false
+      this.tapToAdd = false
       this.drag = { type: 'none' }
       this.tool = 'select'
       this.select([])

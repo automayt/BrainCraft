@@ -7,6 +7,7 @@ import { fakeMeasure } from '../model/test-helpers'
 import { Editor } from './Editor'
 import { diff } from '../collab/patch'
 import { BrainCraftAPI } from '../api/api'
+import { applyOps } from '../api/ops'
 import { FLOW_SHAPES } from '../model/types'
 
 function editor() {
@@ -648,7 +649,7 @@ describe('review fixes', () => {
     e.select([kid])
     e.keyDown('Delete', { shift: false, ctrl: false, alt: false })
     expect(e.status).toContain('“Channels” and 1 sub-idea')
-    expect(e.status).toContain('Ctrl+Z')
+    expect(e.status).toContain('Ctrl Z')
   })
 
   it('gives each main branch made with Enter its own colour', () => {
@@ -1038,13 +1039,85 @@ describe('touch', () => {
     expect(B.getItem(e.board, id)!.x).toBe(40)
   })
 
-  it('moves the board from anywhere when it can’t be changed', () => {
+  it('moves the board from anywhere when it can’t be changed, and a still tap selects', () => {
     const e = editor()
-    e.edit((b) => B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))[0])
+    let id = 0
+    e.edit((b) => {
+      ;[b, id] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))
+      return b
+    })
     e.readOnly = true
     e.pointerDown({ x: 50, y: 50 }, 0, { touch: true })
     e.pointerMove({ x: 80, y: 50 })
     expect(e.camera.x).toBe(30)
+    e.pointerUp({ x: 80, y: 50 })
+    expect(e.selection.size).toBe(0)
+    e.pointerDown({ x: 60, y: 50 }, 0, { touch: true })
+    e.pointerUp({ x: 61, y: 50 })
+    expect([...e.selection]).toEqual([id])
+  })
+
+  it('selects several with taps and a box in "Select several"', () => {
+    const e = editor()
+    const ids: number[] = []
+    e.edit((b) => {
+      for (const x of [0, 200, 400]) {
+        let id: number
+        ;[b, id] = B.addItem(b, B.newItem('sticky', { x, y: 0, w: 100, h: 100 }))
+        ids.push(id)
+      }
+      return b
+    })
+    e.setTapToAdd(true)
+    for (const id of ids.slice(0, 2)) {
+      e.pointerDown(screenCenter(e, id), 0, { touch: true })
+      e.pointerUp(screenCenter(e, id))
+    }
+    expect(e.selection.size).toBe(2)
+    // Press and hold keeps what's picked.
+    e.pointerDown(screenCenter(e, ids[2]), 2, {})
+    expect(e.selection.size).toBe(2)
+    // A drag on empty space draws a box that adds to them.
+    e.pointerDown({ x: 380, y: -20 }, 0, { touch: true })
+    e.pointerMove({ x: 520, y: 120 })
+    e.pointerUp({ x: 520, y: 120 })
+    expect(e.selection.size).toBe(3)
+    e.keyDown('Escape', {})
+    expect(e.tapToAdd).toBe(false)
+  })
+})
+
+describe('flowchart runs', () => {
+  it('runs one at a time, so the board isn’t left read-only after', () => {
+    const e = editor()
+    e.edit((b) => applyOps(b, [{ op: 'createFlowchart', mermaid: 'flowchart TD\n  A --> B' }], { measure: fakeMeasure }).board)
+    const first = e.board.items.find((i) => i.kind === 'flow')!
+    expect(e.startRun(first.id)).toBe(true)
+    expect(e.startRun(first.id)).toBe(false)
+    e.endRun('stopped')
+    expect(e.readOnly).toBe(false)
+  })
+})
+
+describe('a board that can’t change', () => {
+  it('refuses tools’ changes instead of reporting them done', () => {
+    const e = editor()
+    e.readOnly = true
+    expect(() => new BrainCraftAPI(e).apply({ op: 'createNote', text: 'Lost' })).toThrow(/can’t be changed/)
+    expect(e.board.items).toHaveLength(0)
+  })
+
+  it('keeps a private brainstorm’s card from being deleted while it hides notes', () => {
+    const e = editor()
+    e.author = 'Sam'
+    e.startBrainstorm('Names?')
+    const card = e.single!.id
+    e.edit((b) => B.addItem(b, B.newItem('sticky', { x: 300, y: 0, w: 100, h: 100 }, { text: 'Secret' }))[0])
+    e.author = 'Alex'
+    const api = new BrainCraftAPI(e)
+    expect(() => api.apply({ op: 'delete', ids: [card] })).toThrow(/brainstorm/)
+    // Moving it is fine.
+    expect(() => api.apply({ op: 'update', id: card, x: 900 })).not.toThrow()
   })
 })
 

@@ -121,7 +121,8 @@ function cleanTimeline(v: unknown): TimelineData | undefined {
   const lanes = arr(v.lanes).flatMap((l) => (isObj(l) && typeof l.id === 'string' ? [{ id: l.id.slice(0, 64), name: str(l.name, NAME_MAX) ?? '' }] : []))
   const entries = arr(v.entries).flatMap((e) => {
     if (!isObj(e) || typeof e.id !== 'string' || typeof e.lane !== 'string' || !day(e.start)) return []
-    const after = arr(e.after).filter((x): x is string => typeof x === 'string')
+    // A handful of "waits for" links per event; a file with thousands could stall Line up.
+    const after = arr(e.after).filter((x): x is string => typeof x === 'string').slice(0, 50).map((x) => x.slice(0, 64))
     return [
       {
         id: e.id.slice(0, 64),
@@ -180,14 +181,15 @@ function cleanReactions(v: unknown): Record<string, string[]> | undefined {
 
 function cleanVotes(v: unknown): Record<string, Record<string, number>> | undefined {
   if (!isObj(v)) return undefined
-  const out: Record<string, Record<string, number>> = {}
-  for (const [poll, byPerson] of Object.entries(v)) {
+  // No prototype: a key named "__proto__" stays an ordinary key.
+  const out: Record<string, Record<string, number>> = Object.create(null)
+  for (const [poll, byPerson] of Object.entries(v).slice(0, 100)) {
     if (!isObj(byPerson)) continue
-    const counts: Record<string, number> = {}
+    const counts: Record<string, number> = Object.create(null)
     for (const [person, n] of Object.entries(byPerson)) if (num(n) !== undefined && (n as number) > 0) counts[person.slice(0, 60)] = Math.min(100, Math.floor(n as number))
-    if (Object.keys(counts).length) out[poll] = counts
+    if (Object.keys(counts).length) out[poll.slice(0, 64)] = { ...counts }
   }
-  return Object.keys(out).length ? out : undefined
+  return Object.keys(out).length ? { ...out } : undefined
 }
 
 function cleanPoll(v: unknown): Poll | undefined {
@@ -200,11 +202,18 @@ function cleanPoll(v: unknown): Poll | undefined {
  * The item with every field checked: wrong types repaired or dropped, long
  * strings cut. Null when it can't be used at all (no id, unknown kind, no position).
  */
+/**
+ * Object and line ids: whole numbers well inside the safe range, so the next id (one more than
+ * the largest) is a whole number too. 2.5, 2^53 or 1e300 would give new objects ids a reload drops.
+ */
+export const MAX_ID = 2 ** 50
+const isId = (n: number | undefined): n is number => n !== undefined && Number.isSafeInteger(n) && n >= 0 && n < MAX_ID
+
 export function cleanItem(raw: unknown): Item | null {
   if (!isObj(raw)) return null
   const id = num(raw.id)
   const kind = raw.kind as Kind
-  if (id === undefined || !Number.isInteger(id) || !KINDS.includes(kind)) return null
+  if (!isId(id) || !KINDS.includes(kind)) return null
   const x = num(raw.x)
   const y = num(raw.y)
   const w = num(raw.w)
@@ -334,7 +343,7 @@ export function cleanConnector(v: unknown): Connector | null {
   const id = num(v.id)
   const from = num(v.from)
   const to = num(v.to)
-  if (id === undefined || from === undefined || to === undefined) return null
+  if (!isId(id) || from === undefined || to === undefined) return null
   const c: Connector = { id, from, to, color: str(v.color, 32) ?? '#6e6e78' }
   const label = str(v.label, NAME_MAX)
   if (label) c.label = label

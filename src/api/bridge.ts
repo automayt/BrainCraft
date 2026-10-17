@@ -46,6 +46,8 @@ function liveHost(ws: Workspace): ToolHost {
     board: () => editor.viewBoard,
     apply: (ops) => {
       if (ws.readOnly) throw new ToolError('The browser is showing a read-only shared board. Ask the person to save a copy first, or open another board.')
+      if (ws.viewOnly) throw new ToolError('The browser joined this live board with the view link, so it can’t change it. Ask for the edit link, or open another board.')
+      if (editor.presenting || editor.running) throw new ToolError('The board is being presented or a flowchart run is under way; changes wait until that ends.')
       const results = api.apply(ops)
       editor.setStatus(`AI assistant: ${ops.length} change${ops.length === 1 ? '' : 's'} — Ctrl Z to undo`)
       return results

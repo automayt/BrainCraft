@@ -15,13 +15,13 @@ interface Turn {
   proposals: Proposal[]
 }
 
-const QUICK: { label: string; prompt: string; needs?: 'selection' }[] = [
+const QUICK: { label: string; prompt: string; needs?: 'selection'; changes?: true }[] = [
   { label: 'Summarise', prompt: 'Summarise what is on the board (or in my selection) in a few bullets.' },
   { label: 'Find gaps', prompt: 'Look for gaps and loose ends: decisions without a "No" branch, dead ends in flowcharts, overdue or unowned tasks, open questions in comments. List what you find, linking each object.' },
-  { label: 'Cluster into themes', prompt: 'Cluster the selected sticky notes into themes. Propose frames, one per theme, with the notes moved inside them in tidy rows.', needs: 'selection' },
-  { label: 'Make a mind map', prompt: 'Turn the selected content into a mind map placed beside it.', needs: 'selection' },
-  { label: 'Make a flowchart', prompt: 'Turn the selected content into a clear flowchart (with decisions where there are choices), placed beside it.', needs: 'selection' },
-  { label: 'Decision log', prompt: 'Read the comments on the selected objects (or the whole board) and propose a comment block summarising the decisions made and the open questions.' },
+  { label: 'Cluster into themes', prompt: 'Cluster the selected sticky notes into themes. Propose frames, one per theme, with the notes moved inside them in tidy rows.', needs: 'selection', changes: true },
+  { label: 'Make a mind map', prompt: 'Turn the selected content into a mind map placed beside it.', needs: 'selection', changes: true },
+  { label: 'Make a flowchart', prompt: 'Turn the selected content into a clear flowchart (with decisions where there are choices), placed beside it.', needs: 'selection', changes: true },
+  { label: 'Decision log', prompt: 'Read the comments on the selected objects (or the whole board) and propose a comment block summarising the decisions made and the open questions.', changes: true },
 ]
 
 /** Answers as light Markdown: paragraphs, bullets, **bold**, `code`, and @[Label](#id) object links. */
@@ -273,7 +273,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             </label>
           )}
           {settings.mode === 'server' && server.available && server.password && (
-            <input type="password" className="ai-field" placeholder="Server AI password" value={settings.password ?? ''} onChange={(e) => update({ ...settings, password: e.target.value })} />
+            <input type="password" className="ai-field" aria-label="Server AI password" placeholder="Server AI password" value={settings.password ?? ''} onChange={(e) => update({ ...settings, password: e.target.value })} />
           )}
           <label className="ai-choice">
             <input type="radio" checked={settings.mode === 'key' || !server.available} onChange={() => update({ ...settings, mode: 'key' })} />
@@ -292,6 +292,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             <input
               type="password"
               className="ai-field"
+              aria-label="Anthropic API key"
               placeholder="sk-ant-…"
               autoFocus
               autoComplete="off"
@@ -324,13 +325,17 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           <div className="ai-scroll" ref={scroller}>
             {!turns.length && (
               <div className="ai-empty">
-                <p>
-                  Ask about this board, or ask for changes. Changes are <strong>previewed</strong> on the board first, and every applied change can be undone from{' '}
-                  <button className="link" onClick={() => setTab('history')}>
-                    History
-                  </button>
-                  .
-                </p>
+                {editor.readOnly ? (
+                  <p>This board can’t be changed from here, so the assistant answers questions about it but won’t change it.</p>
+                ) : (
+                  <p>
+                    Ask about this board, or ask for changes. Changes are <strong>previewed</strong> on the board first, and every applied change can be undone from{' '}
+                    <button className="link" onClick={() => setTab('history')}>
+                      History
+                    </button>
+                    .
+                  </p>
+                )}
               </div>
             )}
             {turns.map((t, k) =>
@@ -384,7 +389,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="ai-quick">
-            {QUICK.filter((q) => !q.needs || editor.selection.size).map((q) => (
+            {QUICK.filter((q) => (!q.needs || editor.selection.size) && !(q.changes && editor.readOnly)).map((q) => (
               <button key={q.label} disabled={running} onClick={() => void send(q.prompt)}>
                 {q.label}
               </button>
@@ -405,7 +410,9 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               placeholder={editor.selection.size ? `Ask about the ${editor.selection.size} selected…` : 'Ask anything about this board…'}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                e.stopPropagation()
+                // Typing stays here; Ctrl shortcuts (Ctrl J to close, Ctrl K to search) still work.
+                if (!(e.ctrlKey || e.metaKey)) e.stopPropagation()
+                if (e.key === 'Escape' && !running) onClose()
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   void send(input)
@@ -466,7 +473,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
                         Show
                       </button>
                     )}
-                    <button onClick={() => editor.toggleAiChange(c.id)}>{c.undone ? 'Redo' : 'Undo'}</button>
+                    {!editor.readOnly && <button onClick={() => editor.toggleAiChange(c.id)}>{c.undone ? 'Redo' : 'Undo'}</button>}
                   </div>
                 </li>
               )

@@ -7,6 +7,6 @@ export const WorkspaceContext = createContext<Workspace | null>(null)
 export function useWorkspace(): Workspace {
   const ws = useContext(WorkspaceContext)
   if (!ws) throw new Error('useWorkspace outside WorkspaceContext')
-  useSyncExternalStore(ws.subscribe, ws.getVersion)
+  useSyncExternalStore(ws.subscribe, ws.getVersion, ws.getVersion)
   return ws
 }

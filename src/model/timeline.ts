@@ -273,7 +273,11 @@ export function lineUp(t: TimelineData): TimelineData {
     const byId = new Map(entries.map((e) => [e.id, e]))
     const next = entries.map((e) => {
       if (!e.after?.length) return e
-      const ready = Math.max(...e.after.map((b) => byId.get(b)).filter((b): b is TimelineEntry => !!b).map((b) => finish(b) + (b.end ? 1 : 0)))
+      let ready = -Infinity
+      for (const b of e.after) {
+        const w = byId.get(b)
+        if (w) ready = Math.max(ready, finish(w) + (w.end ? 1 : 0))
+      }
       if (!Number.isFinite(ready) || toDay(e.start) >= ready) return e
       moved = true
       return { ...e, ...shiftDates(e, ready - toDay(e.start)) }

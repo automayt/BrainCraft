@@ -326,8 +326,9 @@ export class Workspace {
     safeStorage()?.setItem(CURRENT_KEY, id)
     this.fileName = file?.name ?? null
     this.loadQuietly(board)
-    this.editor.aiHistory = (await this.library.kv.get<AiChange[]>(aiKey(id))) ?? []
+    // Before the next wait, so an edit made during it still goes to other tabs.
     this.tabSynced = this.editor.board
+    this.editor.aiHistory = (await this.library.kv.get<AiChange[]>(aiKey(id))) ?? []
     this.savedTitle = board.title
     // Another tab may have this board open with changes not saved yet.
     this.post({ t: 'want', board: id, from: this.tabId })
@@ -467,8 +468,9 @@ export class Workspace {
   async saveVersion(name: string) {
     if (!this.boardId) return
     await this.flush()
-    await this.library.addVersion(this.boardId, this.editor.board, name.trim() || undefined)
-    this.editor.setStatus(`Saved version “${name.trim() || 'Untitled'}”`)
+    // Saved by hand, so never listed as an autosave.
+    await this.library.addVersion(this.boardId, this.editor.board, name.trim() || 'Saved version')
+    this.editor.setStatus(name.trim() ? `Saved version “${name.trim()}”` : 'Saved a version')
   }
 
   /** Puts an old version back as one undoable step. */
@@ -767,9 +769,9 @@ export class Workspace {
 
   // ----- sharing -----------------------------------------------------------------
 
-  /** A read-only link holding the whole board. */
+  /** A read-only link holding the whole board (as this person sees it: others' hidden brainstorm notes stay blank). */
   async shareLink(opts: { images: boolean }): Promise<string> {
-    const b = opts.images ? this.editor.board : withoutImages(this.editor.board)
+    const b = opts.images ? this.editor.viewBoard : withoutImages(this.editor.viewBoard)
     const base = typeof location === 'undefined' ? 'https://braincraft.invalid/' : location.href
     return shareUrl(b, base)
   }

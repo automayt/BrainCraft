@@ -113,8 +113,13 @@ function TimerBadge() {
   }, [t, editor])
   if (!t && !done) return null
   const left = t ? t.endsAt - Date.now() : 0
+  // Screen readers hear the start, the last minute and the end, not every second.
+  const say = done ?? (!t ? '' : left <= 60_000 ? 'One minute left' : `Timer: ${Math.round(t.totalMs / 60_000)} minutes`)
   return (
-    <div className={`timer-badge no-canvas${done ? ' done' : ''}${t && left < 10_000 ? ' ending' : ''}`} role="timer" aria-live="polite">
+    <div className={`timer-badge no-canvas${done ? ' done' : ''}${t && left < 10_000 ? ' ending' : ''}`} role="timer">
+      <span className="sr-only" aria-live="polite">
+        {say}
+      </span>
       {done ? (
         <strong>{done}</strong>
       ) : (
@@ -127,12 +132,17 @@ function TimerBadge() {
           <span className="timer-bar" aria-hidden="true">
             <i style={{ width: `${Math.max(0, Math.min(100, (100 * left) / t!.totalMs))}%` }} />
           </span>
-          <button title="One more minute" onClick={() => editor.startTimer(Math.ceil(left / 1000) + 60)}>
-            +1 min
-          </button>
-          <button title="Stop the timer" aria-label="Stop the timer" onClick={() => editor.startTimer(null)}>
-            ×
-          </button>
+          {/* The server only takes timer changes from people who can edit. */}
+          {!editor.readOnly && (
+            <>
+              <button title="One more minute" onClick={() => editor.startTimer(Math.ceil(left / 1000) + 60)}>
+                +1 min
+              </button>
+              <button title="Stop the timer" aria-label="Stop the timer" onClick={() => editor.startTimer(null)}>
+                ×
+              </button>
+            </>
+          )}
         </>
       )}
     </div>

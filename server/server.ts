@@ -21,7 +21,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { AiProxy } from './aiProxy'
 import { BusyError, PreviewCache, unfurl, UnfurlError } from './unfurl'
 import { OpError, opsFromText } from '../src/api/ops'
-import { type ClientMessage, type ServerMessage } from '../src/collab/protocol'
+import { type ClientMessage, type Role, type ServerMessage } from '../src/collab/protocol'
 import { Room, type RoomData } from '../src/collab/room'
 import { approxMeasure } from '../src/model/approxMeasure'
 import { fromJson } from '../src/model/serialize'
@@ -136,6 +136,23 @@ function previewAllowed(who: string, now = Date.now()): boolean {
   return ++use.count <= PREVIEWS_PER_MINUTE
 }
 
+/** At most `limit` uses per visitor per `windowMs` (forgetting visitors whose window is over). */
+function limiter(limit: number, windowMs: number) {
+  const use = new Map<string, { start: number; count: number }>()
+  return (who: string, now = Date.now()): boolean => {
+    const u = use.get(who)
+    if (!u || now - u.start > windowMs) {
+      if (use.size > 10_000) for (const [k, x] of use) if (now - x.start > windowMs) use.delete(k)
+      use.set(who, { start: now, count: 1 })
+      return true
+    }
+    return ++u.count <= limit
+  }
+}
+
+/** Starting live sessions: plenty for friends, not enough for a script to fill the disk. */
+const boardCreateAllowed = limiter(30, 60 * 60_000)
+
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
   res.end(JSON.stringify(body))
@@ -199,7 +216,7 @@ function serveStatic(url: URL, res: ServerResponse) {
   res.end(readFileSync(file))
 }
 
-const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, password: AI_PASSWORD, equal: safeEqual, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined }) : null
+const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, password: AI_PASSWORD, equal: safeEqual, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined, visitor }) : null
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
@@ -242,6 +259,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
   // POST /api/boards {board?} → a new shared board and its two keys.
   if (parts.length === 2 && req.method === 'POST') {
+    if (!boardCreateAllowed(visitor(req))) return send(res, 429, { error: 'Too many new live boards from here. Try again in an hour.' })
     let board = fromJson(JSON.stringify({ version: 1, title: 'Untitled board', items: [], connectors: [], nextId: 1 }))
     const body = await readBody(req)
     if (body.trim()) {
@@ -285,8 +303,30 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   return send(res, 405, { error: 'Method not allowed' })
 }
 
+/** The request's address, or null when it's garbage (a bad "%" escape, or a malformed absolute URL). */
+function parseUrl(req: IncomingMessage): URL | null {
+  try {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    decodeURIComponent(url.pathname)
+    return url
+  } catch {
+    return null
+  }
+}
+
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost')
+  // One malformed request must never take the server down for everyone.
+  try {
+    handle(req, res)
+  } catch (err) {
+    log('request error', err)
+    if (!res.headersSent) send(res, 400, { error: 'Bad request' })
+  }
+})
+
+function handle(req: IncomingMessage, res: ServerResponse) {
+  const url = parseUrl(req)
+  if (!url) return send(res, 400, { error: 'Bad request' })
   if (url.pathname.startsWith('/api/')) {
     cors(req, res)
     if (req.method === 'OPTIONS') return void res.writeHead(204).end()
@@ -298,17 +338,23 @@ const server = createServer((req, res) => {
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' })
   serveStatic(url, res)
-})
+}
 
 // ----- live sessions ---------------------------------------------------------------------
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_BODY })
 
 server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url ?? '/', 'http://localhost')
-  const m = /^\/api\/boards\/([^/]+)\/live$/.exec(url.pathname)
-  const room = m ? getRoom(m[1]) : null
-  const role = room?.roleFor(url.searchParams.get('key'), safeEqual)
+  let room: Room | null = null
+  let role: Role | null = null
+  try {
+    const url = parseUrl(req)
+    const m = url && /^\/api\/boards\/([^/]+)\/live$/.exec(url.pathname)
+    room = m ? getRoom(m[1]) : null
+    role = room?.roleFor(url!.searchParams.get('key'), safeEqual) ?? null
+  } catch (err) {
+    log('upgrade error', err)
+  }
   if (!room || !role) {
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
     socket.destroy()
@@ -338,6 +384,9 @@ server.on('upgrade', (req, socket, head) => {
     })
   })
 })
+
+// A last line of defence: log a stray error rather than drop every friend's live session.
+process.on('uncaughtException', (err) => log('unexpected error', err))
 
 server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)

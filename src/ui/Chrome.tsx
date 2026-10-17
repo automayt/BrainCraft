@@ -122,7 +122,12 @@ function Popover({ onClose, children, className = '' }: { onClose: () => void; c
   // Opened from the keyboard (its button has focus; a click keeps focus on the board): the
   // first item takes focus, and the arrows move through the rest.
   useEffect(() => {
-    if (document.activeElement?.tagName === 'BUTTON') focusFirst(ref.current)
+    const opener = document.activeElement?.tagName === 'BUTTON' ? (document.activeElement as HTMLElement) : null
+    if (opener) focusFirst(ref.current)
+    // ...and back to its button when it closes, unless something else (a dialog) took the keyboard.
+    return () => {
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body || ref.current?.contains(document.activeElement))) opener.focus()
+    }
   }, [])
   return (
     <>
@@ -149,17 +154,19 @@ const SAVE_LABELS = { saved: 'Saved', saving: 'Saving…', unsaved: 'Saving…',
 /** Whether the board is safely stored, and where. */
 function SaveState() {
   const ws = useWorkspace()
+  const ui = useUi()
   if (ws.readOnly) return null
-  const where = ws.persistent ? 'in this browser' : 'nowhere yet — this browser does not keep data'
-  const tip = `${SAVE_LABELS[ws.saveState]} ${where}${ws.fileName ? ` · file: ${ws.fileName}` : ''}`
+  const tip = ws.persistent
+    ? `${SAVE_LABELS[ws.saveState]} in this browser${ws.fileName ? ` · file: ${ws.fileName}` : ''}`
+    : 'Not kept in this browser (it doesn’t keep data here) — save to a file to keep it'
   return (
     <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`}>
       <i aria-hidden="true" />
       {/* A problem is spelled out, not left to a red dot. */}
       {(!ws.persistent || ws.saveState === 'error') && (
-        <b className="save-warning" aria-hidden="true">
+        <button className="save-warning" aria-label="Not saved: save to a file" onMouseDown={keepFocus} onClick={() => (ws.canWriteFiles ? ui.saveFile() : ui.download())}>
           Not saved
-        </b>
+        </button>
       )}
       <span className="sr-only">{tip}</span>
       {/* Only problems are announced, not every save. */}
@@ -229,7 +236,7 @@ export function TopLeft() {
             <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
             <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
             <hr />
-            <MenuItem label="Keyboard shortcuts" keys="?" onClick={run(ui.openHelp)} />
+            <MenuItem label="Help and shortcuts" keys="?" onClick={run(ui.openHelp)} />
           </Popover>
         )}
       </div>
@@ -316,9 +323,9 @@ export function TopRight() {
           </Popover>
         )}
       </div>
-      <button className="icon-btn has-tip" aria-label="Keyboard shortcuts" onMouseDown={keepFocus} onClick={ui.openHelp}>
+      <button className="icon-btn has-tip" aria-label="Help and shortcuts" onMouseDown={keepFocus} onClick={ui.openHelp}>
         <HelpIcon />
-        <Tip label="Shortcuts" keys="?" />
+        <Tip label="Help and shortcuts" keys="?" />
       </button>
     </div>
   )
@@ -556,8 +563,9 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Touch',
     [
-      ['Drag on empty space', 'Move around the board'],
+      ['Drag on empty space', 'Move around the board (two fingers work anywhere)'],
       ['Pinch', 'Zoom in and out'],
+      ['Press and hold → Select several', 'Then tap objects to add them, or drag a box'],
       ['Press and hold', 'Actions for whatever is under your finger (the right-click menu)'],
       ['Double-tap', 'Edit text, or add a sticky note'],
     ],
@@ -635,7 +643,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Drag a blue arrow to empty space', 'Pick the next shape (1–7)'],
       ['Double-click a line', 'Label it (e.g. Yes / No)'],
       ['Paste Mermaid', 'Builds the flowchart'],
-      ['Alt R', 'Run the flowchart step by step (1–9 pick a way, Backspace goes back)'],
+      ['Alt R', 'Run the flowchart step by step (Enter moves on, 1–9 pick a way, Backspace goes back, Esc stops)'],
     ],
   ],
   [
@@ -682,7 +690,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   ],
 ]
 
-const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|F2|F10|arrow|scroll|[A-Z0-9]|[↑↓←→/?+−]|1–7)$/.test(token)
+const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|Backspace|Home|End|F2|F10|Arrows|arrow|arrows|scroll|[A-Z0-9]|[↑↓←→/?+−]|1–7|1–9)$/.test(token)
 
 /** On a touch screen the touch gestures come first; elsewhere they come last. */
 const touchFirst = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches
@@ -693,9 +701,9 @@ export function Help({ onClose }: { onClose: () => void }) {
   useDialog(dialogRef)
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal help" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div className="modal help" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Help and shortcuts">
         <header>
-          <h2>Keyboard shortcuts</h2>
+          <h2>Help and shortcuts</h2>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
             ×
           </button>

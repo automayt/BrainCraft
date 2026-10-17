@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useDialog } from './useDialog'
 import { type Bridge, DEFAULT_PORT, parsePairing } from '../api/bridge'
 import { useEscape } from './useEscape'
+import { copyText } from './copyText'
 
 const STATE_LABEL = { off: 'Not connected', connecting: 'Connecting…', connected: 'Connected', lost: 'Reconnecting… (is the MCP server running?)' } as const
 
@@ -15,10 +16,10 @@ function Snippet({ label, code }: { label: string; code: string }) {
         <span>{label}</span>
         <button
           className="link"
-          onClick={() => {
-            void navigator.clipboard?.writeText(code)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
+          onClick={async () => {
+            const ok = await copyText(code)
+            setCopied(ok)
+            if (ok) setTimeout(() => setCopied(false), 1500)
           }}
         >
           {copied ? 'Copied' : 'Copy'}
@@ -118,7 +119,13 @@ export function AiDialog({ bridge, onClose }: { bridge: Bridge; onClose: () => v
 export function AiChip({ bridge, onClick }: { bridge: Bridge; onClick: () => void }) {
   if (bridge.state === 'off') return null
   return (
-    <button className={`ai-chip ${bridge.state}`} onMouseDown={(e) => e.preventDefault()} onClick={onClick} title={STATE_LABEL[bridge.state]}>
+    <button
+      className={`ai-chip ${bridge.state}`}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      title={STATE_LABEL[bridge.state]}
+      aria-label={`AI assistant: ${STATE_LABEL[bridge.state]}`}
+    >
       <i aria-hidden="true" />
       AI
     </button>

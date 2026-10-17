@@ -24,7 +24,14 @@ export interface AiProxyOptions {
   fetch?: typeof fetch
   now?: () => number
   equal?: (a: string, b: string) => boolean
+  /** Who's asking, for the request budget (the server's own rule, which knows about proxies). */
+  visitor?: (req: IncomingMessage) => string
 }
+
+/** The request fields the app sends (and harmless ones like it); anything else could reach paid server features. */
+const FIELDS = new Set(['model', 'max_tokens', 'messages', 'system', 'tools', 'tool_choice', 'thinking', 'output_config', 'cache_control', 'stream', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'metadata', 'fallbacks'])
+/** Wrong passwords per address per window, before it has to wait. */
+const PASSWORD_TRIES = 20
 
 type Reject = { status: number; error: string }
 
@@ -32,6 +39,8 @@ type Reject = { status: number; error: string }
 export function checkRequest(body: unknown): string | null {
   if (!body || typeof body !== 'object') return 'Send a JSON Messages API request'
   const b = body as { model?: unknown; max_tokens?: unknown; tools?: unknown }
+  const extra = Object.keys(body).find((k) => !FIELDS.has(k))
+  if (extra) return `This server doesn't pass on "${extra}"`
   if (typeof b.model !== 'string' || !AI_MODELS.includes(b.model)) return `This server only offers ${AI_MODELS.join(', ')}`
   if (typeof b.max_tokens !== 'number' || b.max_tokens < 1 || b.max_tokens > MAX_TOKENS) return `max_tokens must be between 1 and ${MAX_TOKENS}`
   if (b.tools !== undefined) {
@@ -43,6 +52,7 @@ export function checkRequest(body: unknown): string | null {
 
 export class AiProxy {
   private hits = new Map<string, number[]>()
+  private fails = new Map<string, number[]>()
   private o: Required<AiProxyOptions>
 
   constructor(o: AiProxyOptions) {
@@ -52,22 +62,36 @@ export class AiProxy {
       fetch: globalThis.fetch.bind(globalThis),
       now: Date.now,
       equal: (a, b) => a === b,
+      visitor: (req) => req.socket.remoteAddress ?? 'unknown',
       ...(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as AiProxyOptions),
     }
   }
 
+  /** Counts one use against `who` in `map`; false once there have been `limit` in the window. */
+  private count(map: Map<string, number[]>, who: string, limit: number): boolean {
+    const now = this.o.now()
+    // Forget addresses whose window is over, so the map can't grow without end.
+    if (map.size > 10_000) for (const [k, ts] of map) if (!ts.some((t) => now - t < RATE.windowMs)) map.delete(k)
+    const recent = (map.get(who) ?? []).filter((t) => now - t < RATE.windowMs)
+    if (recent.length >= limit) return false
+    recent.push(now)
+    map.set(who, recent)
+    return true
+  }
+
   private gate(req: IncomingMessage): Reject | null {
+    const who = this.o.visitor(req)
     if (this.o.password) {
+      if ((this.fails.get(who)?.filter((t) => this.o.now() - t < RATE.windowMs).length ?? 0) >= PASSWORD_TRIES)
+        return { status: 429, error: 'Too many wrong AI passwords from this address; try again later' }
       const given = req.headers['x-braincraft-ai-password']
-      if (typeof given !== 'string' || !this.o.equal(given, this.o.password)) return { status: 403, error: 'Wrong or missing AI password' }
+      if (typeof given !== 'string' || !this.o.equal(given, this.o.password)) {
+        this.count(this.fails, who, Infinity)
+        return { status: 403, error: 'Wrong or missing AI password' }
+      }
       return null
     }
-    const who = req.socket.remoteAddress ?? 'unknown'
-    const now = this.o.now()
-    const recent = (this.hits.get(who) ?? []).filter((t) => now - t < RATE.windowMs)
-    if (recent.length >= RATE.limit) return { status: 429, error: 'Too many AI requests from this address; try again later' }
-    recent.push(now)
-    this.hits.set(who, recent)
+    if (!this.count(this.hits, who, RATE.limit)) return { status: 429, error: 'Too many AI requests from this address; try again later' }
     return null
   }
 

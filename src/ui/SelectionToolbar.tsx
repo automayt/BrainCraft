@@ -80,9 +80,9 @@ export function SelectionToolbar() {
   const flows = items.filter((i) => i.kind === 'flow')
   // Clear of the tool rail on the left (on phones it sits at the bottom instead).
   // (and of the flowchart shape panel beside it, when that's open).
-  // (The rail ends at 62px, or 94px where short screens give it two columns; the panel is 270px
-  // wide, 12px to its right.)
-  const rail = editor.viewport.h <= 660 ? 94 : 62
+  // (The rail ends at 62px, or 94px and 128px where short screens give it two or three columns;
+  // the panel is 270px wide, 12px to its right.)
+  const rail = editor.viewport.h <= 450 ? 128 : editor.viewport.h <= 660 ? 94 : 62
   const leftInset = editor.viewport.w > 720 ? (editor.flowPalette ? rail + 292 : rail + 6) : 12
   const minX = leftInset + width / 2
   // ...and clear of the comments panel or assistant on the right.
@@ -98,9 +98,10 @@ export function SelectionToolbar() {
     }
     return area
   }
-  // Below the top bar, and below the "Since you were here" news while that's showing.
-  // (The board fills the window, so the news's page position is its position here too.)
-  const stack = editor.catchUp ? document.querySelector('.top-stack')?.getBoundingClientRect() : undefined
+  // Below the top bar, and below what stacks under it while that's showing: "Since you were
+  // here", the timer, the "Watching live" banner. (The board fills the window, so the stack's
+  // page position is its position here too.)
+  const stack = editor.catchUp || editor.timer || editor.readOnly ? document.querySelector('.top-stack')?.getBoundingClientRect() : undefined
   const topLimit = stack && stack.height ? Math.max(64, stack.bottom + 8) : 64
   const aboveTop = anchor.y - size.h
   // On phones the tool rail and zoom bar take the bottom ~130px.
@@ -281,11 +282,11 @@ export function SelectionToolbar() {
       {items.length > 0 && items.every((i) => i.kind === 'sticky') &&
         (items.every((i) => typeof i.back === 'string') ? (
           <button title="Turn over (or click ↻ on the card)" onClick={() => editor.flipCards()}>
-            ↻ Flip
+            ↻ Turn over
           </button>
         ) : (
           <button title="Give this note a back to write on: a flip card" onClick={() => editor.setFlipCards(true)}>
-            Flip card
+            Add a back
           </button>
         ))}
       {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}

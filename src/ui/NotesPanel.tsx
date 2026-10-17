@@ -236,7 +236,8 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
-    e.stopPropagation()
+    // Typing stays here; Ctrl shortcuts (Ctrl K to search, Ctrl J for the assistant) still work.
+    if (!(e.ctrlKey || e.metaKey)) e.stopPropagation()
     if (picker.onKey(e)) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -244,7 +245,8 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
     }
     // Esc hands the keyboard back to the board; Alt C closes the panel, as from the board.
     if (e.key === 'Escape') ref.current?.blur()
-    if (e.altKey && e.code === 'KeyC') {
+    // Only with nothing typed: Option C (Mac) and AltGr C type letters such as ç and ć.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyC' && !text) {
       e.preventDefault()
       editor.toggleNotes(false)
     }
@@ -286,7 +288,7 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
         </form>
       )}
       <div className="composer-foot">
-        <span className="muted">Enter to post · Shift+Enter new line</span>
+        <span className="muted">Enter to post · Shift Enter new line</span>
         <button className="primary" disabled={!text.trim()} onClick={post}>
           Post
         </button>
@@ -411,9 +413,10 @@ export function NotesPanel() {
   useEffect(() => setDraft(author), [author])
 
   const cross = useLinksHere(editor.notesOpen)
-  // Opened for one object: the keyboard goes to its comment box, so typing doesn't replace the object's text.
+  // Opened for one object: the keyboard goes to its comment box, so typing doesn't replace the
+  // object's text. Not on touch screens, where that would pop up the keyboard just to read.
   useEffect(() => {
-    if (editor.notesOpen) document.querySelector<HTMLTextAreaElement>('.notes-panel .composer textarea')?.focus({ preventScroll: true })
+    if (editor.notesOpen && !globalThis.matchMedia?.('(pointer: coarse)').matches) document.querySelector<HTMLTextAreaElement>('.notes-panel .composer textarea')?.focus({ preventScroll: true })
   }, [editor.notesOpen])
 
   if (!editor.notesOpen) return null
@@ -560,7 +563,7 @@ function AllNotes({ onOpen }: { onOpen: (id: Id) => void }) {
   const editor = useEditor()
   const notes = allNotes(editor.viewBoard)
   if (!notes.length)
-    return <p className="empty muted">Nothing yet. Select any object and add a comment, or press Alt+C with it selected.</p>
+    return <p className="empty muted">Nothing yet. Select any object and add a comment, or press Alt C with it selected.</p>
   return (
     <ul className="notes">
       {notes.map(({ item, note }) => (

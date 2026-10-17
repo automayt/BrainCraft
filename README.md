@@ -21,7 +21,8 @@ The board fills the window and the controls float above it:
 - **Board menu** (top left): the board's icon and title, your boards, new,
   open, download, share, import and export, version history, connecting an AI
   assistant, and shortcuts.
-- **Top right:** **Share**, **Ask AI**, **Present**, **Search** (Ctrl+K
+- **Top right:** **Share** (in a live session, the **Live** button that shows
+  who's here), **Ask AI**, **Present**, **Search** (Ctrl+K
   searches the board *and* runs any command by name; type `>` to show only
   commands), **Comments**, the theme and **Help** (?).
 - **Tool rail** (left): hover any tool to see its shortcut.
@@ -131,8 +132,8 @@ These become interactive once selected; drag them by their title strip.
   one. Links to a shared board use its live-session id, so they work for
   every friend who has that board.
 - **Every object has comments.** Select it and press **Alt+C** (or click
-  *Comment*) to open the panel on the right; the keyboard goes straight to the
-  comment box. Comments are timestamped, show who
+  *Comments*) to open the panel on the right; with a keyboard, typing goes
+  straight into the comment box. Comments are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention another object; the
   mention links to it, and the other object lists it under "Linked from".
   With nothing selected, the panel shows every comment on the board.
@@ -180,7 +181,8 @@ These become interactive once selected; drag them by their title strip.
   has one page per frame, like the slides. Right-click → **Copy as image**
   does the selection in one step.
 - Boards **autosave** as you work; the dot next to the title shows when
-  they're saved.
+  they're saved, and "Not saved" appears there if the browser won't keep
+  them (save to a file then).
 - **Open the same board in several tabs** and they stay in step live, no
   server needed. Each tab keeps its own undo.
 - **Version history** keeps a version every ten minutes plus any you name
@@ -294,7 +296,7 @@ These become interactive once selected; drag them by their title strip.
 
 ### Ask AI: an assistant inside the board
 
-- **Ctrl J** (or **Ask AI**, top right) opens a chat with Claude about the
+- **Ctrl+J** (or **Ask AI**, top right) opens a chat with Claude about the
   board you're looking at. It reads the board, knows what you've selected,
   and links every object it mentions so you can click straight to it.
 - **Changes are previewed, never just made.** When you ask for changes

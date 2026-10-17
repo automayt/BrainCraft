@@ -3,7 +3,7 @@
  * Every view of the same dataset edits the same records, so changes show up everywhere.
  */
 
-import { type PointerEvent, type ReactNode, useContext, useRef, useState } from 'react'
+import { type PointerEvent, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import * as D from '../../model/dataset'
 import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
@@ -146,10 +146,19 @@ function Cell({ c, f, r, autoFocus }: { c: Ctx; f: Field; r: DataRecord; autoFoc
 /** Every field of one record, for boards and timelines (and anywhere a record is opened). */
 function RecordSheet({ c, id, onClose }: { c: Ctx; id: string; onClose: () => void }) {
   useEscape(onClose)
+  const sheet = useRef<HTMLDivElement>(null)
+  // The keyboard (and a screen reader) goes to the sheet that just opened, and back after.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null
+    sheet.current?.querySelector<HTMLElement>('input, textarea, select, button:not(.icon-close)')?.focus({ preventScroll: true })
+    return () => {
+      if (before?.isConnected) before.focus({ preventScroll: true })
+    }
+  }, [id])
   const r = c.ds.records.find((x) => x.id === id)
   if (!r) return null
   return (
-    <div className="dv-sheet" role="dialog" aria-label={`Record: ${D.recordTitle(c.ds, r)}`}>
+    <div ref={sheet} className="dv-sheet" role="dialog" aria-label={`Record: ${D.recordTitle(c.ds, r)}`}>
       <header>
         <span className="muted">{c.ds.name}</span>
         <button className="icon-close" aria-label="Close" onClick={onClose}>
@@ -624,6 +633,8 @@ function CalendarBody({ c }: { c: Ctx }) {
   const [drag, setDrag] = useState<DayDrag | null>(null)
   const dragRef = useRef<DayDrag | null>(null)
   const group = D.groupField(c.ds, c.view)
+  // A day opened to show all its records (past the first three).
+  const [allOf, setAllOf] = useState<number | null>(null)
 
   if (!start)
     return (
@@ -704,7 +715,7 @@ function CalendarBody({ c }: { c: Ctx }) {
         ))}
         {cells.map((cell) => {
           const here = byDay.get(cell.day) ?? []
-          const shown = here.slice(0, 3)
+          const shown = allOf === cell.day ? here : here.slice(0, 3)
           return (
             <div
               key={cell.day}
@@ -727,13 +738,19 @@ function CalendarBody({ c }: { c: Ctx }) {
                     onPointerMove={move}
                     onPointerUp={up}
                     onPointerCancel={() => ((dragRef.current = null), setDrag(null))}
+                    // From the keyboard (Enter or Space), open it; the pointer opens it on release.
+                    onClick={(e) => e.detail === 0 && c.openRecord(b.record.id)}
                   >
                     {continues ? '… ' : ''}
                     {D.recordTitle(c.ds, b.record)}
                   </button>
                 )
               })}
-              {here.length > 3 && <span className="dv-cal-more">+{here.length - 3} more</span>}
+              {here.length > 3 && (
+                <button className="dv-cal-more" onPointerDown={(e) => e.stopPropagation()} onClick={() => setAllOf(allOf === cell.day ? null : cell.day)}>
+                  {allOf === cell.day ? 'Fewer' : `+${here.length - 3} more`}
+                </button>
+              )}
             </div>
           )
         })}
@@ -790,6 +807,15 @@ function GalleryBody({ c }: { c: Ctx }) {
           <article
             key={r.id}
             className="dv-gcard"
+            role="button"
+            tabIndex={c.live ? 0 : -1}
+            aria-label={name}
+            onKeyDown={(e) => {
+              if (c.live && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault()
+                c.openRecord(r.id)
+              }
+            }}
             onPointerDown={(e) => {
               if (e.button !== 0) return
               e.stopPropagation()

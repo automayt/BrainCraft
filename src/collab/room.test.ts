@@ -3,7 +3,7 @@ import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
 import type { Item } from '../model/types'
 import { ID_BLOCK, type ServerMessage } from './protocol'
-import { Room, sanitizePresence } from './room'
+import { MAX_ITEMS, Room, sanitizePresence } from './room'
 
 function room() {
   const r = new Room({ id: 'r1', board: emptyBoard('Shared'), version: 0, editKey: 'edit-key-1234567890', viewKey: 'view-key-1234567890', nextSlot: 1, created: 0, updated: 0 }, fakeMeasure)
@@ -18,6 +18,17 @@ function room() {
 const note = (id: number, text: string): Item => ({ id, kind: 'sticky', x: 0, y: 0, w: 100, h: 100, color: '#fff9b1', text, fontSize: 22 })
 
 describe('rooms', () => {
+  it('refuses to grow a board past its object limit (but still takes edits there)', () => {
+    const { r, inbox, join } = room()
+    r.data.board = { ...r.data.board, items: Array.from({ length: MAX_ITEMS }, (_, k) => note(k + 1, '')), nextId: MAX_ITEMS + 1 }
+    join('a', 'edit')
+    r.receive('a', { t: 'patch', seq: 1, patches: [{ k: 'item', id: ID_BLOCK, v: note(ID_BLOCK, 'One too many') }] })
+    expect(inbox.get('a')!.at(-1)).toMatchObject({ t: 'error', seq: 1 })
+    expect(r.data.board.items).toHaveLength(MAX_ITEMS)
+    r.receive('a', { t: 'patch', seq: 2, patches: [{ k: 'item', id: 1, v: note(1, 'Edited') }] })
+    expect(inbox.get('a')!.at(-1)).toMatchObject({ t: 'ack', seq: 2 })
+  })
+
   it('greets each editor with the board and their own id block', () => {
     const { inbox, join } = room()
     join('a', 'edit')

@@ -1,7 +1,7 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { cleanConnector, cleanDataset, cleanIcon, cleanItem } from './sanitize'
+import { MAX_ID, cleanConnector, cleanDataset, cleanIcon, cleanItem } from './sanitize'
 import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
 
 export function toJson(b: Board): string {
@@ -38,7 +38,7 @@ export function fromJson(json: string): Board {
     items: kept,
     connectors: connectors.filter((c) => keptIds.has(c.from) && keptIds.has(c.to)),
     // Ids are whole numbers: a nextId like 2.5 or 1e309 would give new objects ids a reload drops.
-    nextId: Math.max(Number.isSafeInteger(raw.nextId) ? (raw.nextId as number) : 0, maxId + 1),
+    nextId: Math.max(Number.isSafeInteger(raw.nextId) && (raw.nextId as number) <= MAX_ID ? (raw.nextId as number) : 0, maxId + 1),
     ...(datasets.length ? { datasets } : {}),
   }
 }
