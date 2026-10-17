@@ -127,3 +127,45 @@ describe('datasets', () => {
     expect(typeof today()).toBe('number')
   })
 })
+
+describe('calendar and gallery views', () => {
+  it('lays a month out in Monday-first weeks', async () => {
+    const D = await import('./dataset')
+    const { toDay } = await import('./timeline')
+    const cells = D.monthGrid('2026-10')
+    expect(cells).toHaveLength(42)
+    // 1 October 2026 is a Thursday, so the grid starts on Monday 28 September.
+    expect(cells[0].day).toBe(toDay('2026-09-28'))
+    expect(cells[3]).toEqual({ day: toDay('2026-10-01'), inMonth: true })
+    expect(cells.filter((c) => c.inMonth)).toHaveLength(31)
+    expect(D.addMonths('2026-12', 1)).toBe('2027-01')
+    expect(D.addMonths('2026-01', -1)).toBe('2025-12')
+  })
+
+  it('puts records on every day they cover and moves them by their start', async () => {
+    const D = await import('./dataset')
+    const { toDay } = await import('./timeline')
+    let ds = D.newDataset('Car', toDay('2026-10-10'))
+    const v = D.newView(ds.id, 'calendar')
+    const cells = D.monthGrid('2026-10')
+    const byDay = D.recordsByDay(ds, v, cells)
+    const research = ds.records[0]
+    // "Research" runs from 10 days before to 3 days before the 10th.
+    expect(byDay.get(toDay('2026-09-30'))?.map((b) => b.record.id)).toContain(research.id)
+    expect(byDay.get(toDay('2026-10-07'))?.map((b) => b.record.id)).toContain(research.id)
+    expect(byDay.get(toDay('2026-10-08'))?.map((b) => b.record.id) ?? []).not.toContain(research.id)
+    ds = D.moveToDay(ds, v, research.id, toDay('2026-10-20'))
+    const { start, end } = D.dateFields(ds, v)
+    const moved = ds.records.find((r) => r.id === research.id)!
+    expect([moved.values[start!.id], moved.values[end!.id]]).toEqual(['2026-10-20', '2026-10-27'])
+  })
+
+  it('finds a cover picture in a text field', async () => {
+    const D = await import('./dataset')
+    let ds = D.datasetFromColumns('Cars', ['Name', 'Photo'], [['240z', 'https://example.com/z.jpg?w=400'], ['Celica', 'not a picture']])
+    expect(D.coverOf(ds, ds.records[0])).toBe('https://example.com/z.jpg?w=400')
+    expect(D.coverOf(ds, ds.records[1])).toBeUndefined()
+    ds = D.datasetFromColumns('Cars', ['Name'], [['x']])
+    expect(D.coverOf(ds, ds.records[0])).toBeUndefined()
+  })
+})

@@ -78,7 +78,7 @@ export interface Dataset {
   records: DataRecord[]
 }
 
-export type DataViewType = 'table' | 'board' | 'timeline'
+export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery'
 
 /** How a `data` item shows its dataset. Sorting, filtering and hiding change the view, never the data. */
 export interface DataView {
@@ -94,6 +94,8 @@ export interface DataView {
   /** Timeline bars run from `start` to `end` (date fields). */
   start?: string
   end?: string
+  /** The month a calendar view shows (YYYY-MM); this month when missing. */
+  month?: string
 }
 
 /** One step of a flowchart run (runbook mode). */

@@ -192,8 +192,11 @@ These become interactive once selected; drag them by their title strip.
 
 - **Database (B)** adds a set of records with typed fields: text, number,
   date, choice, person and checkbox. Show it as a **table**, a **board**
-  (Kanban columns from a choice or person field) or a **timeline** (bars
-  from two date fields), and switch between them in the title bar.
+  (Kanban columns from a choice or person field), a **timeline** (bars
+  from two date fields), a **calendar** (a month of days, each record on
+  the days it covers; drag one to another day, double-click a day to add
+  one) or a **gallery** (cards, with a picture from any field holding an
+  image address), and switch between them in the title bar.
 - **+ View** puts another view of the same records next to it. Every view
   stays in sync. Change a status in the table and the card moves on the
   board; drag a bar on the timeline and the dates change in the table.
