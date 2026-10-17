@@ -110,7 +110,7 @@ function App({ ws }: { ws: Workspace }) {
   }, [editor.notesOpen])
   useEffect(() => {
     const wide = editor.viewport.w > 720
-    editor.rightInset = wide && assistant ? 412 : wide && editor.notesOpen ? 388 : 0
+    editor.rightInset = wide && (assistant || editor.notesOpen) ? 404 : 0
   }, [editor, assistant, editor.notesOpen])
 
   // Fonts change text measurements, so lay mind maps out again once Inter has loaded.

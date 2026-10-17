@@ -1,0 +1,41 @@
+/** Keyboard behaviour for modal dialogs: focus moves in, Tab stays inside, and focus returns on close. */
+
+import { type RefObject, useEffect } from 'react'
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+export function useDialog(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const back = document.activeElement as HTMLElement | null
+    // Something inside may have focused itself (autoFocus); otherwise the first field, else the dialog.
+    if (!el.contains(document.activeElement)) {
+      const first = el.querySelector<HTMLElement>('input:not([type=hidden]), textarea, select') ?? el.querySelector<HTMLElement>(FOCUSABLE)
+      if (first) first.focus({ preventScroll: true })
+      else {
+        el.tabIndex = -1
+        el.focus({ preventScroll: true })
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const all = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.offsetParent !== null)
+      if (!all.length) return
+      const first = all[0]
+      const last = all[all.length - 1]
+      if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    el.addEventListener('keydown', onKey)
+    return () => {
+      el.removeEventListener('keydown', onKey)
+      if (back && document.contains(back)) back.focus({ preventScroll: true })
+    }
+  }, [ref])
+}

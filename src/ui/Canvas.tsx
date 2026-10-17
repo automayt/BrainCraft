@@ -78,6 +78,8 @@ export function Canvas() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [editor])
 
+  const longPress = useRef<{ at: { x: number; y: number }; timer: ReturnType<typeof setTimeout> } | null>(null)
+
   const local = (e: { clientX: number; clientY: number }) => {
     const r = ref.current!.getBoundingClientRect()
     return { x: e.clientX - r.left, y: e.clientY - r.top }
@@ -100,6 +102,27 @@ export function Canvas() {
     if (document.activeElement instanceof HTMLElement && !editor.editing) document.activeElement.blur()
     editor.pointerDown(p, e.button, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey }, readHandle(e.target))
     if (e.button !== 2) e.preventDefault()
+    // Touch has no right-click: holding a finger still opens the context menu instead.
+    if (e.pointerType === 'touch') {
+      clearTimeout(longPress.current?.timer)
+      longPress.current = {
+        at: p,
+        timer: setTimeout(() => {
+          longPress.current = null
+          if (touches.current.size !== 1) return
+          editor.cancelDrag()
+          editor.pointerDown(p, 2, {})
+          ui.openMenu(p)
+          // Lifting the finger "clicks" whatever is now under it: a menu item. Swallow that one click.
+          const swallow = (ev: Event) => {
+            ev.preventDefault()
+            ev.stopPropagation()
+          }
+          window.addEventListener('click', swallow, { capture: true, once: true })
+          setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 800)
+        }, LONG_PRESS_MS),
+      }
+    }
   }
 
   const onPointerMove = (e: RPointerEvent) => {
@@ -116,10 +139,19 @@ export function Canvas() {
         return
       }
     }
+    // A finger that moves is dragging or panning, not holding.
+    if (longPress.current && Math.hypot(p.x - longPress.current.at.x, p.y - longPress.current.at.y) > 8) {
+      clearTimeout(longPress.current.timer)
+      longPress.current = null
+    }
     editor.pointerMove(p, { alt: e.altKey })
   }
 
   const onPointerUp = (e: RPointerEvent) => {
+    if (longPress.current) {
+      clearTimeout(longPress.current.timer)
+      longPress.current = null
+    }
     if (e.pointerType === 'touch') {
       touches.current.delete(e.pointerId)
       if (pinch.current) {
@@ -294,6 +326,8 @@ function DragPreview({ editor }: { editor: Editor }) {
       return null
   }
 }
+
+const LONG_PRESS_MS = 500
 
 /**
  * The area of the board worth drawing: the view plus half a screen around it, snapped to a

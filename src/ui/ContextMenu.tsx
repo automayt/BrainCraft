@@ -136,7 +136,6 @@ export function ContextMenu() {
                 e.run()
               }}
             >
-              <span className="check" />
               <span>{e.label}</span>
               {e.keys && <kbd>{e.keys}</kbd>}
             </button>

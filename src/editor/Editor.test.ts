@@ -678,3 +678,31 @@ describe('review fixes', () => {
     expect(e.camera).toEqual(before)
   })
 })
+
+describe('keyboard creation', () => {
+  it('places the armed tool’s object in the middle of the view with Enter', () => {
+    const e = editor()
+    e.setViewport(1000, 800)
+    e.setTool('sticky')
+    expect(e.hint).toContain('Enter puts one in the middle')
+    expect(e.keyDown('Enter', { shift: false, ctrl: false, alt: false })).toBe(true)
+    const note = e.board.items.find((i) => i.kind === 'sticky')!
+    expect(note).toBeTruthy()
+    expect(e.editing?.id).toBe(note.id)
+    // Near the middle of the view.
+    const c = e.screenRect(note)
+    expect(Math.abs(c.x + c.w / 2 - 500)).toBeLessThan(120)
+  })
+
+  it('keeps a new widget clear of the toolbars', () => {
+    const e = editor()
+    e.setViewport(1440, 900)
+    e.setTool('kanban')
+    e.pointerDown({ x: 80, y: 70 }, 0, {})
+    e.pointerUp({ x: 80, y: 70 })
+    const k = e.board.items.find((i) => i.kind === 'kanban')!
+    const r = e.screenRect(k)
+    expect(r.y).toBeGreaterThanOrEqual(72)
+    expect(r.x).toBeGreaterThanOrEqual(76)
+  })
+})

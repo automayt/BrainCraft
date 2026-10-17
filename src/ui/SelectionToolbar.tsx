@@ -73,7 +73,8 @@ export function SelectionToolbar() {
     return area
   }
   const aboveTop = anchor.y - size.h
-  const fitsBelow = below !== null && below + size.h < editor.viewport.h - 12
+  // On phones the tool rail and zoom bar take the bottom ~130px.
+  const fitsBelow = below !== null && below + size.h < editor.viewport.h - (editor.viewport.w > 720 ? 12 : 140)
   const useBelow = fitsBelow && (aboveTop < 64 || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
   const y = useBelow ? below! : Math.max(anchor.y, 64 + size.h)
   const plain = (i: (typeof items)[number]) => i.kind !== 'image' && !isWidget(i.kind)

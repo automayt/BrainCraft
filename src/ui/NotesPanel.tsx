@@ -56,9 +56,16 @@ function NoteRow({ note, onDelete, onOpen, about }: { note: Note; onDelete?: () 
 }
 
 /** The note composer, with an @mention picker. */
-function Composer({ target }: { target: Item }) {
+function Composer({ target, author, setAuthor }: { target: Item; author: string; setAuthor: (name: string) => void }) {
   const editor = useEditor()
   const [text, setText] = useState('')
+  // Asked once, on the first post: with friends on the same board, "You" tells nobody anything.
+  const mentions = useRef(new Map<string, number>())
+  /** The text with each picked "@Label" turned into a link to its object. */
+  const encode = (t: string) =>
+    [...mentions.current].sort((a, z) => z[0].length - a[0].length).reduce((out, [label, id]) => out.split(`@${label}`).join(mentionToken(label, id)), t)
+  const [askName, setAskName] = useState(false)
+  const [name, setName] = useState('')
   const [caret, setCaret] = useState(0)
   const [pick, setPick] = useState(0)
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -81,7 +88,10 @@ function Composer({ target }: { target: Item }) {
   const insert = (item: Item) => {
     if (!mention) return
     const start = caret - mention[0].length
-    const token = `${mentionToken(objectLabel(item), item.id)} `
+    // The box shows "@Label"; the link to the object is filled in when posting.
+    const label = objectLabel(item)
+    mentions.current.set(label, item.id)
+    const token = `@${label} `
     const next = text.slice(0, start) + token + text.slice(caret)
     setText(next)
     const pos = start + token.length
@@ -91,7 +101,12 @@ function Composer({ target }: { target: Item }) {
 
   const post = () => {
     if (!text.trim()) return
-    editor.addNote(target.id, text)
+    if (!author.trim()) {
+      setAskName(true)
+      return
+    }
+    editor.addNote(target.id, encode(text))
+    mentions.current.clear()
     setText('')
     setCaret(0)
   }
@@ -123,7 +138,7 @@ function Composer({ target }: { target: Item }) {
         ref={ref}
         value={text}
         rows={3}
-        placeholder="Add a work note…  (@ to mention an object)"
+        placeholder="Add a comment…  (@ to mention an object)"
         onChange={(e) => {
           setText(e.target.value)
           setCaret(e.target.selectionStart)
@@ -151,6 +166,30 @@ function Composer({ target }: { target: Item }) {
             </li>
           ))}
         </ul>
+      )}
+      {askName && (
+        <form
+          className="composer-name"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!name.trim()) return
+            setAuthor(name.trim())
+            editor.setAuthor(name.trim())
+            setAskName(false)
+            editor.addNote(target.id, encode(text))
+            mentions.current.clear()
+            setText('')
+            setCaret(0)
+          }}
+        >
+          <label>
+            Your name, so friends know who wrote this
+            <input autoFocus value={name} placeholder="e.g. Sam" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+          </label>
+          <button className="primary" type="submit" disabled={!name.trim()}>
+            Post
+          </button>
+        </form>
       )}
       <div className="composer-foot">
         <span className="muted">Enter to post · Shift+Enter new line</span>
@@ -249,7 +288,7 @@ export function NotesPanel() {
 
       {target && <Description key={target.id} id={target.id} value={target.description ?? ''} />}
 
-      {target && target.kind !== 'pen' && <Composer target={target} />}
+      {target && target.kind !== 'pen' && <Composer target={target} author={author} setAuthor={setAuthor} />}
 
       <div className="notes-scroll">
         {target ? (

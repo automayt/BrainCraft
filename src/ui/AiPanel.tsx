@@ -279,6 +279,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               type="password"
               className="ai-field"
               placeholder="sk-ant-…"
+              autoFocus
               autoComplete="off"
               value={settings.apiKey ?? ''}
               onChange={(e) => update({ ...settings, mode: 'key', apiKey: e.target.value })}
@@ -325,6 +326,11 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               ) : t.role === 'error' ? (
                 <div key={k} className="ai-msg error">
                   {t.text}
+                  {/settings|key|password/i.test(t.text) && (
+                    <button className="link ai-fix" onClick={() => setSetup(true)}>
+                      Open AI settings
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div key={k} className="ai-msg assistant">
@@ -378,6 +384,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             }}
           >
             <textarea
+              autoFocus
               value={input}
               rows={2}
               placeholder={editor.selection.size ? `Ask about the ${editor.selection.size} selected…` : 'Ask anything about this board…'}

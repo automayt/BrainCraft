@@ -98,7 +98,8 @@ These become interactive once selected; drag them by their title strip.
   cells inline (Enter moves down and adds a row at the end). Click a header to
   sort (numbers sort naturally). Filter by column. Hide rows and columns and
   bring them back. Insert and delete rows and columns, and copy as CSV.
-- **Kanban boards (K):** drag cards between columns. Press Enter to keep
+- **Kanban boards (K):** drag cards between columns, or focus a card and
+  press **Alt + arrows** (or use "Move to" in its ⋯ menu). Press Enter to keep
   adding cards. Cards have colors and start/due dates, and overdue cards are
   flagged.
 - **Timelines (I):** lanes of events and milestones on a time axis that
@@ -246,7 +247,11 @@ These become interactive once selected; drag them by their title strip.
   and delete.
 - Copy, cut and paste work through the system clipboard. Plain text you
   paste becomes a sticky note. **Paste or drop images** to add them.
-- Undo and redo.
+- **Type to rename:** with one object selected, just start typing.
+- **Keyboard and touch:** with a tool picked, **Enter** puts one in the
+  middle of the view (so does choosing "Add …" in Ctrl+K). On touch screens,
+  **press and hold** for the menu that right-click opens.
+- Undo and redo; deleting tells you what went, in case it was a slip.
 
 Press **?** in the app to see every shortcut.
 

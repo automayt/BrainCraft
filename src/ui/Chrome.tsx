@@ -1,6 +1,7 @@
 /** The floating controls around the canvas. */
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useDialog } from './useDialog'
 import { preloadAi } from './lazyAi'
 import { createPortal } from 'react-dom'
 import { TOOLS, type Tool } from '../editor/Editor'
@@ -61,7 +62,7 @@ function Popover({ onClose, children, className = '' }: { onClose: () => void; c
 function MenuItem({ label, keys, onClick, checked }: { label: string; keys?: string; onClick: () => void; checked?: boolean }) {
   return (
     <button role="menuitem" className="menu-item" onMouseDown={keepFocus} onClick={onClick}>
-      <span className="check">{checked && <CheckIcon />}</span>
+      {checked !== undefined && <span className="check">{checked && <CheckIcon />}</span>}
       <span>{label}</span>
       {keys && <kbd>{keys}</kbd>}
     </button>
@@ -545,9 +546,11 @@ const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|F2
 
 export function Help({ onClose }: { onClose: () => void }) {
   useEscape(onClose)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef)
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal help" role="dialog" aria-label="Keyboard shortcuts">
+      <div className="modal help" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <header>
           <h2>Keyboard shortcuts</h2>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>

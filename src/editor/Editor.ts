@@ -754,7 +754,7 @@ export class Editor {
     const p = this.presenting
     if (!p) return null
     const r = p.overview ? B.bounds(this.board) : p.slides[p.index]?.rect
-    return r ? fit(r, this.viewport, p.overview ? 60 : Math.min(48, this.viewport.w * 0.04), SLIDE_MAX_ZOOM) : null
+    return r ? fit(r, this.viewport, p.overview ? 60 : Math.min(72, this.viewport.w * 0.05), SLIDE_MAX_ZOOM) : null
   }
 
   /** Frames the current slide; called again when the window changes size. */
@@ -837,8 +837,14 @@ export class Editor {
   }
 
   zoomToFit() {
-    const target = B.bounds(this.board, this.selection.size ? this.selection : undefined)
-    this.camera = target ? fit(target, this.viewport, 96) : defaultCamera()
+    const phone = this.viewport.w <= 720
+    let target = B.bounds(this.board, this.selection.size ? this.selection : undefined)
+    // On a phone a whole board is often unreadably small: start at its first frame instead.
+    if (phone && target && !this.selection.size && fit(target, this.viewport, 24).zoom < 0.3) {
+      const frames = this.board.items.filter((i) => i.kind === 'frame').sort((a, z) => a.y - z.y || a.x - z.x)
+      if (frames.length) target = B.itemBounds(frames[0])
+    }
+    this.camera = target ? fit(target, this.viewport, phone ? 24 : 96) : defaultCamera()
     this.emit()
   }
 
@@ -856,6 +862,10 @@ export class Editor {
     this.selection = new Set([id])
     this.selectedConnector = null
     this.editing = { id, before: opts.before ?? this.board, created: opts.created ?? false }
+    // On a phone, bring what's being typed up to a readable size.
+    if (this.viewport.w <= 720 && this.camera.zoom < 0.75 && !this.presenting) {
+      this.flyTo(centerOn({ ...this.camera, zoom: 0.75 }, center(item), this.viewport))
+    }
     this.emit()
   }
 
@@ -1240,24 +1250,43 @@ export class Editor {
   }
 
   /** Pans just enough to bring item `id` into view. */
+  /** Pans (or zooms out) so item `id` is fully visible, clear of the toolbars and side panels. */
   keepInView(id: Id) {
     const i = B.getItem(this.board, id)
     if (!i) return
     const r = this.screenRect(i)
-    const m = 40
-    if (r.w > this.viewport.w - 2 * m || r.h > this.viewport.h - 2 * m) {
-      // Too big to show at this zoom: zoom out to fit it.
-      this.camera = fit(B.itemBounds(i), this.viewport, m)
+    // Room taken by the chrome: top bars, the tool rail (bottom on phones), the zoom bar, side panels.
+    const phone = this.viewport.w <= 720
+    const pad = { left: phone ? 16 : 76, top: phone ? 116 : 72, right: 16 + this.rightInset, bottom: phone ? 132 : 64 }
+    const w = this.viewport.w - pad.left - pad.right
+    const h = this.viewport.h - pad.top - pad.bottom
+    if (r.w > w || r.h > h) {
+      // Too big to show at this zoom: zoom out to fit it in the clear area.
+      const cam = fit(B.itemBounds(i), { w, h }, 0)
+      this.camera = { ...cam, x: cam.x + pad.left, y: cam.y + pad.top }
       this.emit()
       return
     }
     let dx = 0
     let dy = 0
-    if (r.x < m) dx = m - r.x
-    else if (r.x + r.w > this.viewport.w - m) dx = this.viewport.w - m - (r.x + r.w)
-    if (r.y < m) dy = m - r.y
-    else if (r.y + r.h > this.viewport.h - m) dy = this.viewport.h - m - (r.y + r.h)
+    if (r.x < pad.left) dx = pad.left - r.x
+    else if (r.x + r.w > this.viewport.w - pad.right) dx = this.viewport.w - pad.right - (r.x + r.w)
+    if (r.y < pad.top) dy = pad.top - r.y
+    else if (r.y + r.h > this.viewport.h - pad.bottom) dy = this.viewport.h - pad.bottom - (r.y + r.h)
     if (dx || dy) this.pan(dx, dy)
+  }
+
+  /** Creates whatever the armed tool makes in the middle of the view: keyboard and command-palette creation. */
+  placeHere(): boolean {
+    const kind = CREATES[this.tool] ?? (this.tool === 'mind' ? 'mind' : this.tool === 'flow' ? 'flow' : undefined)
+    if (!kind || this.readOnly) return false
+    const view = this.openView
+    // A little off-centre each time, so repeated placements don't stack exactly.
+    const n = this.board.items.length % 5
+    const at = { x: view.w / 2 + n * 24, y: view.h / 2 + n * 24 }
+    this.pointerDown(at, 0, {})
+    this.pointerUp(at)
+    return true
   }
 
   // ----- mind maps ---------------------------------------------------------------
@@ -2016,6 +2045,7 @@ export class Editor {
         return true
       }
     }
+    if (k === 'Enter' && !node && this.placeHere()) return true
     // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
     if (node && !mods.alt && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly) {
       this.startEditing(node.id)
@@ -2045,6 +2075,9 @@ export class Editor {
     if (this.tool === 'mind') return 'Click to place the central idea'
     if (this.tool === 'flow') return `Click to place a ${flowShapeInfo(this.flowShape).label.toLowerCase()} (near a shape it snaps on and connects), or drag one from the panel`
     if (this.tool === 'connector') return 'Drag from one item to another'
+    if (this.tool === 'pen') return 'Draw on the board  ·  Esc done'
+    const armed = TOOLS.find((t) => t.tool === this.tool)
+    if (armed && CREATES[this.tool]) return `Click to place a ${armed.label.toLowerCase()} (or drag to size it)  ·  Enter puts one in the middle  ·  Esc cancel`
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single
     if (node?.kind === 'mind')

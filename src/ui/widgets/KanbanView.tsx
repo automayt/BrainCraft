@@ -100,7 +100,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
               )}
               <span className="count">{col.cards.length}</span>
               {live && (
-                <button className="more" title="Column options" onClick={() => setMenu(col.id)}>
+                <button className="more" title="Column options" aria-label={`Options for column ${col.title}`} onClick={() => setMenu(col.id)}>
                   ⋯
                 </button>
               )}
@@ -132,6 +132,30 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                       onPointerUp={onCardUp}
                       onPointerCancel={onCardUp}
                       onDoubleClick={() => live && setEditing(card.id)}
+                      tabIndex={live ? 0 : -1}
+                      aria-label={`${card.title || 'Untitled'}, in ${col.title}`}
+                      onKeyDown={(e) => {
+                        if (!live || e.target !== e.currentTarget) return
+                        // Alt + arrows move the card without dragging; Enter renames, Space opens the details.
+                        const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+                        const dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0
+                        if (e.altKey && (dx || dy)) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const to = k.columns[ci + dx]
+                          if (!to) return
+                          update((x) => K.moveCard(x, card.id, to.id, dx ? to.cards.length : Math.max(0, index + dy)))
+                          requestAnimationFrame(() => (document.querySelector(`[data-card="${card.id}"]`) as HTMLElement | null)?.focus())
+                        } else if (e.key === 'Enter') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setEditing(card.id)
+                        } else if (e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDetails(details === card.id ? null : card.id)
+                        }
+                      }}
                     >
                       {editing === card.id ? (
                         <textarea
@@ -160,13 +184,18 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                         </div>
                       )}
                       {live && (
-                        <button className="card-more" title="Card details" onClick={() => setDetails(details === card.id ? null : card.id)}>
+                        <button className="card-more" title="Card details" aria-label={`Details for ${card.title || 'card'}`} onClick={() => setDetails(details === card.id ? null : card.id)}>
                           ⋯
                         </button>
                       )}
                       {details === card.id && (
                         <CardDetails
                           card={card}
+                          columns={k.columns.filter((c) => c.id !== col.id).map((c) => ({ id: c.id, title: c.title }))}
+                          onMove={(column) => {
+                            setDetails(null)
+                            update((x) => K.moveCard(x, card.id, column, x.columns.find((c) => c.id === column)?.cards.length ?? 0))
+                          }}
                           onClose={() => setDetails(null)}
                           onChange={(patch) => update((x) => K.updateCard(x, card.id, patch))}
                           onDelete={() => {
@@ -179,6 +208,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                   </div>
                 )
               })}
+              {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">No cards yet</p>}
               {drag?.moved && drag.target?.column === col.id && drag.target.index >= col.cards.filter((c) => c.id !== drag.card).length && (
                 <div className="drop-line" />
               )}
@@ -214,11 +244,15 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
 
 function CardDetails({
   card,
+  columns,
+  onMove,
   onChange,
   onDelete,
   onClose,
 }: {
   card: KanbanCard
+  columns: { id: string; title: string }[]
+  onMove: (column: string) => void
   onChange: (patch: Partial<KanbanCard>) => void
   onDelete: () => void
   onClose: () => void
@@ -241,6 +275,16 @@ function CardDetails({
           Due
           <input type="date" value={card.due ?? ''} onChange={(e) => onChange({ due: e.target.value })} />
         </label>
+        {columns.length > 0 && (
+          <div className="card-move">
+            <span>Move to</span>
+            {columns.map((c) => (
+              <button key={c.id} onClick={() => onMove(c.id)}>
+                {c.title}
+              </button>
+            ))}
+          </div>
+        )}
         <button className="danger" onClick={onDelete}>
           Delete card
         </button>

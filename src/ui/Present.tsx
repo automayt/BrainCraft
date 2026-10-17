@@ -28,6 +28,8 @@ function Laser({ trail, at }: { trail: Dot[]; at: Dot | null }) {
   )
 }
 
+const spot = (r: { x: number; y: number; w: number; h: number }) => ({ left: r.x, top: r.y, width: r.w, height: r.h })
+
 export function Presenter() {
   const editor = useEditor()
   const p = editor.presenting
@@ -75,6 +77,8 @@ export function Presenter() {
 
   return (
     <div className={`presenter${idle ? ' idle' : ''}${p.laser ? ' laser-on' : ''}`}>
+      {/* Only the slide shows: the rest of the board is covered. */}
+      {!p.overview && slide && <div className="present-spot" style={spot(editor.screenRect(slide.rect))} aria-hidden="true" />}
       <div
         className="present-layer"
         onPointerMove={(e) => {

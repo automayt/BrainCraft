@@ -1,6 +1,7 @@
 /** Runbook mode: the panel that walks a flowchart, the summary after a run, and run history. */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDialog } from './useDialog'
 import * as B from '../model/board'
 import { type RunRecord, formatDuration, instructions, runStats, runToMarkdown, runsOf } from '../model/runbook'
 import { type Id, flowShapeInfo } from '../model/types'
@@ -163,6 +164,8 @@ function Finished() {
 export function RunsDialog({ id, onClose }: { id: Id; onClose: () => void }) {
   const editor = useEditor()
   useEscape(onClose)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef)
   const found = runsOf(editor.board, id)
   const [copied, setCopied] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
@@ -205,7 +208,7 @@ export function RunsDialog({ id, onClose }: { id: Id; onClose: () => void }) {
   )
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal runs-dialog" role="dialog" aria-label="Run history" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
+      <div className="modal runs-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Run history" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
         <header>
           <h2>Runs of “{title}”</h2>
           <button className="icon-close" aria-label="Close" onClick={onClose}>

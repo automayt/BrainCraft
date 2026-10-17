@@ -42,5 +42,9 @@ export function textOn(hex: string): string {
     const c = v / 255
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
   })
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? '#1e1e24' : '#ffffff'
+  // Whichever of white or near-black text has more contrast on this colour (WCAG ratios).
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  const onWhite = 1.05 / (l + 0.05)
+  const onDark = (l + 0.05) / 0.063
+  return onDark > onWhite ? '#1e1e24' : '#ffffff'
 }
