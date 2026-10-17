@@ -77,7 +77,8 @@ or as `?key=<key>`.
 
 | Request | Key | Does |
 | --- | --- | --- |
-| `GET /api/health` | — | `{"ok": true, "name": "braincraft", "version", "ai", "aiPassword"}` |
+| `GET /api/health` | — | `{"ok": true, "name": "braincraft", "version", "ai", "aiPassword", "previews"}` |
+| `GET /api/unfurl?url=…` | — | A link card's preview: `{"url", "title"?, "description"?, "image"?, "site"}`, or 422 with `{"error"}`. See below. |
 | `POST /api/boards` with optional `{"board": …}` | — | Creates a shared board and returns `{"id", "editKey", "viewKey"}` |
 | `GET /api/boards/{id}` | edit or view | `{"id", "role", "version", "board", "people"}` |
 | `POST /api/boards/{id}/ops` with `{"ops": […]}` | edit | Applies [operations](API.md) as one change and returns `{"version", "results"}`. Everyone connected sees it immediately. |
@@ -91,6 +92,27 @@ curl -X POST "https://braincraft.example.com/api/boards/$BOARD/ops" \
   -H "Authorization: Bearer $EDIT_KEY" \
   -d '{"ops":[{"op":"createComment","text":"Deploy 418 is live ✅"}]}'
 ```
+
+### Link previews
+
+When someone pastes a web address, the app asks `/api/unfurl` for the page's
+title, description and picture. The server fetches the page itself, so it is
+careful about what it will fetch:
+
+- only `http` and `https` addresses on the standard ports, without a user
+  name or password in them;
+- every address the name resolves to must be on the public internet (no
+  private, loopback, link-local or other reserved ranges, including IPv6
+  forms that carry an IPv4 address), and the connection goes to the address
+  that was checked, so the name can't be re-pointed between the check and the
+  fetch;
+- redirects are followed at most four times, each checked the same way;
+- it waits at most 5 seconds and reads at most 2 MB, and only HTML is read;
+- only the preview comes back, never the page; answers are cached for an hour
+  (failures for five minutes), and each visitor gets 60 previews a minute.
+
+Pictures on cards load straight from the page's own site in each viewer's
+browser.
 
 `POST /api/boards` is open to anyone who can reach the server. If yours is on
 the public internet, limit it at your proxy, for example with basic auth or

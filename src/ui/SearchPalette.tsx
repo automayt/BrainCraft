@@ -19,6 +19,7 @@ const FILTERS: Filter[] = [
   { label: 'Shapes', kinds: ['rect', 'ellipse'] },
   { label: 'Frames', kinds: ['frame'] },
   { label: 'Images', kinds: ['image'] },
+  { label: 'Links', kinds: ['link'] },
 ]
 
 /** Wraps each query word found in `text` in <mark>. */

@@ -45,6 +45,7 @@ createTable {columns: [names], rows?: [[cells]], title?}
 createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}]}
 createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}], followKanban?: [kanban ids/refs]} — an entry without end is a milestone; followed Kanban boards show their dated cards live
 createImage {src: https or data URL, w?, h?}
+createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}
 update {id, text?, description?, color?, x?, y?, w?, h?, locked?} — description is free text shown above an object's comments; locked objects can't be moved or changed by accident
 delete {ids: [...]} — deleting a mind-map idea deletes its branch

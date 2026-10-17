@@ -12,6 +12,7 @@ import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
 import { DataViewWidget } from './widgets/DataView'
 import { type Board, type Connector, type Id, type Item, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
+import { LinkCardView } from './LinkCardView'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -114,6 +115,8 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
       return item.timeline ? <TimelineView item={item} live={live} editingTitle={editing} /> : null
     case 'data':
       return item.view ? <DataViewWidget item={item} live={live} editingTitle={editing} /> : null
+    case 'link':
+      return <LinkCardView item={item} live={live} />
     default:
       return null
   }

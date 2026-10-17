@@ -88,6 +88,7 @@ timeline.
 | `createKanban` | `columns?` (`[{"title", "cards": [text \| {"title", "start?", "due?", "color?"}]}]`), `title?` | Kanban board (default: To do / In progress / Done) |
 | `createTimeline` | `lanes?` (`[{"name", "entries": [{"title", "start", "end?", "color?"}]}]`), `followKanban?` (Kanban ids/refs), `title?`, `w?`, `h?` | Timeline. An entry without `end` is a milestone. Followed Kanban boards show their dated cards live. |
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |
+| `createLink` | `url` (one `http(s)` address), `w?`, `h?` | Link card. Its title, description and picture fill in once the app (connected to a BrainCraft server) reads the page. YouTube, Vimeo and Spotify links play on the card. |
 | `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?` | Line between two objects. Lines to flowchart shapes default to `elbow`. |
 | `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?` | — (`description` is the free text above an object's comments) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |

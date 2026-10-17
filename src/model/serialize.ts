@@ -7,7 +7,7 @@ export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
 }
 
-const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data'])
+const KINDS = new Set(['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link'])
 
 function isItem(x: unknown): x is Item {
   const i = x as Item
@@ -18,7 +18,8 @@ function isItem(x: unknown): x is Item {
     KINDS.has(i.kind) &&
     [i.x, i.y, i.w, i.h, i.fontSize].every((n) => typeof n === 'number' && Number.isFinite(n)) &&
     typeof i.color === 'string' &&
-    typeof i.text === 'string'
+    typeof i.text === 'string' &&
+    (i.kind !== 'link' || typeof i.link?.url === 'string')
   )
 }
 

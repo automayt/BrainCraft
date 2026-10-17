@@ -16,6 +16,7 @@ import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
+import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
 import { ExportDialog } from './ExportImage'
 import { SearchPalette } from './SearchPalette'
@@ -113,6 +114,9 @@ function App({ ws }: { ws: Workspace }) {
       setAssistant(true)
     }
   }, [editor, editor.pendingAiPrompt, assistant])
+
+  // Link cards get their title and picture from the server, when there is one.
+  useEffect(() => watchLinkPreviews(editor, () => ws.server, ws.subscribe), [editor, ws])
 
   // The comments panel and the assistant share the right edge; framing keeps clear of them.
   useEffect(() => {

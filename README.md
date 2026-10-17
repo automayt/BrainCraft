@@ -298,6 +298,11 @@ These become interactive once selected; drag them by their title strip.
   and delete.
 - Copy, cut and paste work through the system clipboard. Plain text you
   paste becomes a sticky note. **Paste or drop images** to add them.
+- **Paste a web address** to get a link card with the page's title, picture
+  and site (filled in by the BrainCraft server; without one, the card shows
+  the address). **YouTube, Vimeo and Spotify** links play right on the card:
+  select it to load the player. The arrow on the card opens the page in a new
+  tab.
 - **Lock (Ctrl+Shift+L)** a background, image or layout so it can't be
   clicked, moved or changed by accident; right-click or Alt-click it to
   unlock. **Group (Ctrl+G)** any objects so they select and move as one;
@@ -353,12 +358,12 @@ See [docs/SERVER.md](docs/SERVER.md).
 
 | Path | Purpose |
 | --- | --- |
-| `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, comments, search, undo history, serialization. Pure functions over immutable data. |
+| `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, link cards, comments and wiki-links, search, undo history, serialization. Pure functions over immutable data. |
 | `src/ai/` | The in-app assistant: the Claude conversation, its tools, proposals and settings. |
 | `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
 | `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
 | `src/collab/` | Live collaboration: board patches (also used by undo), the wire protocol, the server's room logic and the browser's live session. |
-| `server/` | The BrainCraft server: hosting, shared boards, WebSockets, the HTTP API and the AI proxy, bundled into one Node script. |
+| `server/` | The BrainCraft server: hosting, shared boards, WebSockets, the HTTP API, link previews and the AI proxy, bundled into one Node script. |
 | `mcp/` | The MCP server for AI assistants, bundled into one Node script. |
 | `src/editor/Editor.ts` | Tools, selection, gestures and keyboard commands. Framework-independent and unit-tested. |
 | `src/ui/` | React components: SVG canvas, toolbars, text editing, comments panel, search, dialogs, and the table/Kanban/timeline views. |

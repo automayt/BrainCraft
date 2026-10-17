@@ -24,6 +24,7 @@ import * as D from '../model/dataset'
 import * as RX from '../model/reactions'
 import * as CU from '../model/catchup'
 import { uid } from '../model/uid'
+import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -35,6 +36,7 @@ import {
   type Item,
   type KanbanData,
   type Kind,
+  type LinkCard,
   type TableData,
   type TimelineData,
   type Side,
@@ -1298,6 +1300,30 @@ export class Editor {
     this.select([id])
   }
 
+  /** Adds a card for web address `url` at the pointer; its preview fills in once the server reads the page. */
+  addLink(url: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    let id = -1
+    this.edit((b) => {
+      const [next, newId] = B.addItem(b, linkItem(url, at))
+      id = newId
+      return next
+    })
+    this.tool = 'select'
+    this.select([id])
+    return id
+  }
+
+  /**
+   * Fills in a link card's preview. It isn't an undo step of its own: undoing
+   * the paste takes the card away, preview and all.
+   */
+  fillLink(id: Id, preview: Partial<LinkCard>) {
+    const item = B.getItem(this.board, id)
+    if (!item?.link || this.readOnly) return
+    this.apply(B.updateItem(this.board, id, (i) => withPreview(i, preview)))
+    this.emit()
+  }
+
   /** Inserts a Mermaid flowchart at the pointer (or view centre). Throws if it can't be read. */
   importMermaid(text: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
     const graph = parseMermaid(text)
@@ -1692,6 +1718,11 @@ export class Editor {
         const p = B.getItem(this.board, id)?.parent
         return p === undefined || !ids.has(p)
       }))
+      return
+    }
+    const url = urlIn(text)
+    if (url) {
+      this.addLink(url, at)
       return
     }
     if (looksTabular(text)) {

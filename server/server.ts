@@ -19,6 +19,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiProxy } from './aiProxy'
+import { PreviewCache, unfurl, UnfurlError } from './unfurl'
 import { OpError, opsFromText } from '../src/api/ops'
 import { type ClientMessage, type ServerMessage } from '../src/collab/protocol'
 import { Room, type RoomData } from '../src/collab/room'
@@ -107,6 +108,21 @@ setInterval(() => {
 
 // ----- HTTP ------------------------------------------------------------------------------
 
+const previews = new PreviewCache()
+const PREVIEWS_PER_MINUTE = 60
+const previewUse = new Map<string, { start: number; count: number }>()
+
+/** A few friends pasting links never get near this; a script hammering the server does. */
+function previewAllowed(ip: string, now = Date.now()): boolean {
+  const use = previewUse.get(ip)
+  if (!use || now - use.start > 60_000) {
+    if (previewUse.size > 10_000) previewUse.clear()
+    previewUse.set(ip, { start: now, count: 1 })
+    return true
+  }
+  return ++use.count <= PREVIEWS_PER_MINUTE
+}
+
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
   res.end(JSON.stringify(body))
@@ -174,7 +190,19 @@ const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, password: AI_PASSWORD, eq
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
-  if (parts[1] === 'health') return send(res, 200, { ok: true, name: 'braincraft', version: VERSION, ai: !!aiProxy, aiPassword: !!AI_PASSWORD })
+  if (parts[1] === 'health') return send(res, 200, { ok: true, name: 'braincraft', version: VERSION, ai: !!aiProxy, aiPassword: !!AI_PASSWORD, previews: true })
+
+  // GET /api/unfurl?url=… → a link preview: title, description, picture and site name.
+  if (parts[1] === 'unfurl') {
+    if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
+    if (!previewAllowed(req.socket.remoteAddress ?? '')) return send(res, 429, { error: 'Too many link previews at once. Try again in a minute.' })
+    const target = url.searchParams.get('url') ?? ''
+    try {
+      return send(res, 200, await previews.get(target, (u) => unfurl(u)))
+    } catch (err) {
+      return send(res, 422, { error: err instanceof UnfurlError ? err.message : 'That page couldn’t be read' })
+    }
+  }
 
   // POST /api/ai/v1/messages → the Anthropic Messages API, with this server's key.
   if (parts[1] === 'ai') {

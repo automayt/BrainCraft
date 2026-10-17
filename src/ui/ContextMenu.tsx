@@ -45,7 +45,7 @@ export function ContextMenu() {
       { label: 'Delete', keys: 'Del', danger: true, run: () => editor.deleteSelection() },
     )
   } else if (editor.selection.size) {
-    if (single && single.kind !== 'pen' && single.kind !== 'image')
+    if (single && single.kind !== 'pen' && single.kind !== 'image' && single.kind !== 'link')
       entries.push({ label: single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline' ? 'Rename' : 'Edit text', keys: 'Enter', run: () => editor.startEditing(single.id) })
     if (single) entries.push({ label: `Comments${single.notes?.length ? ` (${single.notes.length})` : ''}`, keys: 'Shift C', run: () => editor.toggleNotes(true) })
     if (single?.kind === 'mind') {
