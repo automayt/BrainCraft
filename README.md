@@ -253,6 +253,10 @@ These become interactive once selected; drag them by their title strip.
   way nobody's first idea steers the rest. Search and the assistant don't
   see hidden notes either. (As with hidden votes, they're hidden on screen:
   every browser in the session holds the whole board.)
+- **Spinner wheel** (right-click, or Ctrl+K): a wheel whose options are the
+  card's lines; double-click it to change them. Select a few sticky notes
+  first and their text becomes the options. **Spin** and everyone in the live
+  session watches the same wheel land on the same answer.
 
 ### Presenting
 

@@ -80,6 +80,7 @@ export function ContextMenu() {
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },
       ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
+      ...(editor.selection.size > 1 ? [{ label: 'Spin a wheel between these', run: () => editor.addWheel() }] : []),
       ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',
       { label: 'Bring to front', run: () => editor.bringToFront() },
@@ -116,6 +117,7 @@ export function ContextMenu() {
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
       { label: 'Private brainstorm', run: () => editor.startBrainstorm() },
+      { label: 'Spinner wheel', run: () => editor.addWheel() },
       'sep',
       { label: 'Select all', keys: 'Ctrl A', run: () => editor.selectAll() },
       { label: 'Zoom to fit', keys: 'Shift 1', run: () => editor.zoomToFit() },

@@ -27,6 +27,7 @@ import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
+import * as WH from '../model/wheel'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -1137,6 +1138,26 @@ export class Editor {
     const me = this.me
     if (this.masked?.board !== this.board || this.masked.me !== me) this.masked = { board: this.board, me, view: BS.maskFor(this.board, me) }
     return this.masked.view
+  }
+
+  /** Adds a spinner wheel; selected objects' text become its options. */
+  addWheel() {
+    if (this.readOnly) return
+    const options = this.selectedItems.map((i) => N.objectLabel(i)).filter((t) => t && !/^(Sticky note|Text|Rectangle|Ellipse) d+$/.test(t))
+    let id: Id = -1
+    this.edit((b) => {
+      const [next, card] = WH.newWheel(b, this.pointer ?? center(this.visibleWorld), options)
+      id = card
+      return next
+    })
+    this.select([id])
+    this.keepInView(id)
+    this.setStatus(options.length >= 2 ? `A wheel with ${options.length} options — click Spin` : 'Double-click the wheel to put your options on it, one per line')
+  }
+
+  spinWheel(id: Id) {
+    if (this.readOnly) return
+    this.edit((b) => WH.spinWheel(b, id))
   }
 
   /** Opens a private brainstorm round (or shows the one already open). */

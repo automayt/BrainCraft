@@ -45,6 +45,7 @@ createTable {columns: [names], rows?: [[cells]], title?}
 createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}]}
 createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}], followKanban?: [kanban ids/refs]} — an entry without end is a milestone; followed Kanban boards show their dated cards live
 createImage {src: https or data URL, w?, h?}
+createSpinner {options: [text, …]} — a spinner wheel card; anyone can spin it and everyone sees the same answer
 createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}
 update {id, text?, description?, color?, x?, y?, w?, h?, locked?, status?} — description is free text shown above an object's comments; locked objects can't be moved or changed by accident; status marks where it stands: todo, doing, waiting, undecided, done, dropped, or none to clear (not on frames, drawings or data widgets)

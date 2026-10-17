@@ -4,6 +4,8 @@ import type { Editor } from '../editor/Editor'
 import { bounds as getBoardBounds, getItem } from '../model/board'
 import * as RX from '../model/reactions'
 import * as BS from '../model/brainstorm'
+import { SPIN_MS, wheelOptions } from '../model/wheel'
+import { useEffect, useState } from 'react'
 import type { Item } from '../model/types'
 import { commentBodyRect } from './BoardView'
 
@@ -134,6 +136,39 @@ function BrainstormControls({ card, editor }: { card: Item & { brainstorm: NonNu
   )
 }
 
+/** Under a spinner: the Spin button and, once it stops, the answer. */
+function WheelControls({ card, editor }: { card: Item & { wheel: NonNullable<Item['wheel']> }; editor: Editor }) {
+  const body = commentBodyRect(card)
+  const spin = card.wheel.spin
+  const options = wheelOptions(card)
+  const [, rerender] = useState(0)
+  const left = spin ? spin.at + SPIN_MS - Date.now() : 0
+  // Show the answer once the wheel has stopped.
+  useEffect(() => {
+    if (left <= 0) return
+    const t = setTimeout(() => rerender((n) => n + 1), left + 30)
+    return () => clearTimeout(t)
+  }, [left])
+  const spinning = left > 0
+  const answer = spin && !spinning ? options[spin.result] : undefined
+  return (
+    <foreignObject x={card.x + 10} y={body.y + body.h + 4} width={Math.max(1, card.w - 20)} height={44}>
+      <div className="vote-controls no-canvas" onPointerDown={(e) => e.stopPropagation()}>
+        <span className="vote-status wheel-answer">
+          {spinning ? 'Spinning…' : answer ? <>→ <strong>{answer}</strong></> : options.length < 2 ? 'Put an option on each line' : `${options.length} options`}
+        </span>
+        {!editor.readOnly && (
+          <span className="vote-buttons">
+            <button onClick={() => editor.spinWheel(card.id)} disabled={spinning || options.length < 2} title="Spin: everyone sees it land on the same answer">
+              Spin
+            </button>
+          </span>
+        )}
+      </div>
+    </foreignObject>
+  )
+}
+
 /** "Only you can see this" on your own notes while a round is open. */
 function MyHiddenNotes({ editor, k }: { editor: Editor; k: number }) {
   const me = editor.me
@@ -187,7 +222,8 @@ export function Social({ editor }: { editor: Editor }) {
   const extras = editor.board.items.some((i) => i.locked) || editor.selectedItems.some((i) => i.group)
   const rounds = editor.board.items.filter((i): i is Item & { brainstorm: NonNullable<Item['brainstorm']> } => !!i.brainstorm && !editor.hidden.has(i.id))
   const roundOpen = rounds.some((r) => !r.brainstorm.revealed)
-  if (!reacted.length && !polls.length && !extras && !rounds.length) return null
+  const wheels = editor.board.items.filter((i): i is Item & { wheel: NonNullable<Item['wheel']> } => !!i.wheel && !editor.hidden.has(i.id))
+  if (!reacted.length && !polls.length && !extras && !rounds.length && !wheels.length) return null
   return (
     <g className="social">
       {extras && <LocksAndGroups editor={editor} k={k} />}
@@ -195,6 +231,7 @@ export function Social({ editor }: { editor: Editor }) {
         <Reactions key={i.id} item={i} me={me} k={k} />
       ))}
       {roundOpen && <MyHiddenNotes editor={editor} k={k} />}
+      {wheels.map((w) => editor.editing?.id !== w.id && <WheelControls key={w.id} card={w} editor={editor} />)}
       {rounds.map((r) => editor.editing?.id !== r.id && <BrainstormControls key={r.id} card={r} editor={editor} />)}
       {polls.map((p) => (
         <g key={p.id}>
