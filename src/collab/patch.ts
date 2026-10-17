@@ -273,3 +273,33 @@ export function squash(patches: Patch[]): Patch[] {
   }
   return [...last.values()]
 }
+
+/** Looks up what a board holds under a patch's key (null for nothing), quickly for many patches. */
+export function valuesOf(b: Board): (p: Patch) => unknown {
+  const items = new Map(b.items.map((i) => [i.id, i]))
+  const conns = new Map(b.connectors.map((c) => [c.id, c]))
+  const sets = new Map((b.datasets ?? []).map((d) => [d.id, d]))
+  return (p) => {
+    switch (p.k) {
+      case 'item':
+        return items.get(p.id) ?? null
+      case 'conn':
+        return conns.get(p.id) ?? null
+      case 'title':
+        return b.title
+      case 'icon':
+        return b.icon ?? null
+      case 'order':
+        return b.items.map((i) => i.id)
+      case 'ds': {
+        const d = sets.get(p.id)
+        return d ? metaOf(d) : null
+      }
+      case 'rec':
+        return sets.get(p.ds)?.records.find((r) => r.id === p.id) ?? null
+    }
+  }
+}
+
+/** Whether two patch values are the same. */
+export const sameValue = same

@@ -6,6 +6,8 @@ import { toScreen } from '../model/camera'
 import { fakeMeasure } from '../model/test-helpers'
 import { Editor } from './Editor'
 import { diff } from '../collab/patch'
+import { BrainCraftAPI } from '../api/api'
+import { FLOW_SHAPES } from '../model/types'
 
 function editor() {
   const e = new Editor(emptyBoard(), fakeMeasure)
@@ -790,6 +792,34 @@ describe('private brainstorm', () => {
     e.undo()
     expect(B.getItem(e.viewBoard, note.id)!.masked).toBe(true)
   })
+
+  it('keeps someone else’s hidden note out of exports, copies and AI tools', () => {
+    const e = editor()
+    e.author = 'Sam'
+    e.startBrainstorm('Gift ideas?')
+    let note = 0
+    e.edit((b) => {
+      ;[b, note] = B.addItem(b, B.newItem('sticky', { x: 300, y: 0, w: 100, h: 100 }, { text: 'Secret pick' }))
+      return b
+    })
+    expect(B.getItem(e.board, note)!.hiddenBy).toBe('Sam')
+    e.author = 'Alex'
+    e.select([note])
+    expect(e.exportMermaid()).not.toContain('Secret')
+    // A duplicate is Alex's own blank note, not "Sam's" with or without the text.
+    e.duplicate()
+    const copy = e.single!
+    expect(copy.id).not.toBe(note)
+    expect(copy.text).toBe('')
+    expect(copy.hiddenBy).toBe('Alex')
+    // Tools on the page (and AI assistants through them) read the blank and can't change it.
+    const api = new BrainCraftAPI(e)
+    expect(api.get(note)!.text).toBe('')
+    expect(api.list().find((o) => o.id === note)!.hidden).toBe(true)
+    expect(() => api.apply({ op: 'update', id: note, text: 'Overwritten' })).toThrow(/hidden brainstorm note/)
+    expect(() => api.apply({ op: 'delete', ids: [note] })).toThrow(/hidden brainstorm note/)
+    expect(B.getItem(e.board, note)!.text).toBe('Secret pick')
+  })
 })
 
 describe('flip cards', () => {
@@ -955,5 +985,85 @@ describe('typing on a selected note', () => {
     e.select([id])
     e.keyDown('c', { alt: true })
     expect(e.notesOpen).toBe(true)
+  })
+
+  it('says how to get text back after typing over a note', () => {
+    const e = editor()
+    let id = 0
+    e.edit((b) => {
+      ;[b, id] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Book the cabin' }))
+      return b
+    })
+    e.select([id])
+    e.keyDown('P', { shift: true })
+    e.editingKey('Escape', {})
+    expect(B.getItem(e.board, id)!.text).toBe('P')
+    expect(e.status).toMatch(/Ctrl Z/)
+    e.undo()
+    expect(B.getItem(e.board, id)!.text).toBe('Book the cabin')
+  })
+})
+
+describe('flowchart shape panel', () => {
+  it('picks a shape by its number and closes with one Esc', () => {
+    const e = editor()
+    e.setTool('flow')
+    expect(e.flowPalette).toBe(true)
+    e.keyDown('3', {})
+    expect(e.flowShape).toBe(FLOW_SHAPES[2].shape)
+    expect(e.tool).toBe('flow')
+    e.keyDown('Escape', {})
+    expect(e.flowPalette).toBe(false)
+  })
+})
+
+describe('touch', () => {
+  it('moves the board with one finger on empty space, and clears the selection on a tap', () => {
+    const e = editor()
+    let id = 0
+    e.edit((b) => {
+      ;[b, id] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))
+      return b
+    })
+    e.select([id])
+    e.pointerDown({ x: 500, y: 500 }, 0, { touch: true })
+    expect(e.selection.size).toBe(0)
+    e.pointerMove({ x: 450, y: 420 })
+    e.pointerUp({ x: 450, y: 420 })
+    expect(e.camera).toMatchObject({ x: -50, y: -80 })
+    // A finger on an object still moves the object.
+    e.pointerDown(screenCenter(e, id), 0, { touch: true })
+    e.pointerMove({ x: screenCenter(e, id).x + 40, y: screenCenter(e, id).y })
+    e.pointerUp({ x: 0, y: 0 })
+    expect(B.getItem(e.board, id)!.x).toBe(40)
+  })
+
+  it('moves the board from anywhere when it can’t be changed', () => {
+    const e = editor()
+    e.edit((b) => B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))[0])
+    e.readOnly = true
+    e.pointerDown({ x: 50, y: 50 }, 0, { touch: true })
+    e.pointerMove({ x: 80, y: 50 })
+    expect(e.camera.x).toBe(30)
+  })
+})
+
+describe('rejoining a live session', () => {
+  it('ends a drag under way instead of taking others’ changes into it', () => {
+    const e = editor()
+    let id = 0
+    e.edit((b) => {
+      ;[b, id] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))
+      return b
+    })
+    e.select([id])
+    e.pointerDown(screenCenter(e, id), 0, {})
+    e.pointerMove({ x: screenCenter(e, id).x + 30, y: screenCenter(e, id).y })
+    const [theirs] = B.addItem(e.board, B.newItem('sticky', { x: 500, y: 0, w: 100, h: 100 }, { text: 'Theirs, from offline' }))
+    e.resetFromRemote(theirs, { readOnly: false, idBase: 0 })
+    expect(e.drag.type).toBe('none')
+    e.pointerUp({ x: 0, y: 0 })
+    e.undo()
+    expect(e.board.items.some((i) => i.text === 'Theirs, from offline')).toBe(true)
   })
 })

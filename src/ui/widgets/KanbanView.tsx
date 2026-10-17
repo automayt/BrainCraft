@@ -218,7 +218,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                     className="add-card-input"
                     autoFocus
                     rows={2}
-                    placeholder="Card title — Enter to add another, Esc to stop"
+                    placeholder="Card title — Enter to add another, Esc to cancel"
                     onBlur={(e) => {
                       // Clicking away keeps what was typed, as a card.
                       const title = e.target.value.trim()

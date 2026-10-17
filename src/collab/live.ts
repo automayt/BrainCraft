@@ -10,7 +10,7 @@
 import type { Editor } from '../editor/Editor'
 import type { Rect, Vec } from '../model/geom'
 import type { Board, Id } from '../model/types'
-import { type Patch, applyPatches, diff, keyOf } from './patch'
+import { type Patch, applyPatches, diff, keyOf, sameValue, valuesOf } from './patch'
 import { type ClientMessage, type LiveLink, type PeerInfo, type Presence, type Role, type ServerMessage } from './protocol'
 
 export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
@@ -18,6 +18,10 @@ export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
 const SEND_DELAY = 40
 /** Patches per message, under the server's limit (a select-all move on a huge board goes in parts). */
 const BATCH = 2000
+/** And at most this much JSON per message (the server takes 25 MB; pictures make patches big). */
+const BATCH_BYTES = 4_000_000
+/** A single change bigger than this can't be shared live at all. */
+const MAX_PATCH_BYTES = 20_000_000
 const PRESENCE_EVERY = 80
 const RETRY = [500, 1000, 2000, 4000, 8000, 15000]
 
@@ -52,8 +56,11 @@ export class LiveSession {
   private synced: Board | null = null
   /** Keys of objects with patches the server hasn't confirmed yet, by message. */
   private pending = new Map<number, Set<string>>()
-  /** Those patches themselves, kept to send again if the connection drops before the server confirms. */
-  private inflight = new Map<number, Patch[]>()
+  /**
+   * Those patches themselves, with the board they were made against, kept to send again if the
+   * connection drops before the server confirms.
+   */
+  private inflight = new Map<number, { patches: Patch[]; base: Board }>()
   private seq = 0
   private sendTimer: ReturnType<typeof setTimeout> | undefined
   private presenceTimer: ReturnType<typeof setTimeout> | undefined
@@ -100,9 +107,15 @@ export class LiveSession {
         // Ignore a garbled message; the next full sync puts things right.
       }
     }
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (this.ws !== ws) return
       this.ws = null
+      if (e?.code === 1009) {
+        // A message was too big for the server: sending it again would only loop. Drop what
+        // wasn't confirmed; the board reloads as everyone has it.
+        this.inflight.clear()
+        this.editor.setStatus('Live session: that change was too big to share, so it was undone here')
+      }
       this.pending.clear()
       this.peers.clear()
       // Closed before opening: the key was refused (or the server is down; retry either way, slowly).
@@ -141,9 +154,25 @@ export class LiveSession {
         this.role = m.you.role
         // Work the server may not have (sent but not confirmed, or done while disconnected) is
         // replayed on top of its board; what it already has makes no difference there.
-        const unsent = [...[...this.inflight.values()].flat(), ...(this.synced ? diff(this.synced, this.editor.board) : [])]
+        const sent = [...this.inflight.values()]
+        const offline = this.synced ? diff(this.synced, this.editor.board) : []
         this.inflight.clear()
         this.editor.resetFromRemote(m.board, { readOnly: m.you.role === 'view', idBase: m.you.idBase })
+        // A sent change goes again only where the server still has what it was made against (or
+        // an earlier change of ours to the same thing): if someone has changed it since, theirs is newer.
+        const now = valuesOf(this.editor.board)
+        const ours = new Map<string, unknown[]>()
+        const replay: Patch[] = []
+        for (const { patches, base } of sent) {
+          const then = valuesOf(base)
+          for (const p of patches) {
+            const values = ours.get(keyOf(p)) ?? [then(p)]
+            if (values.some((v) => sameValue(now(p), v))) replay.push(p)
+            values.push(p.v)
+            ours.set(keyOf(p), values)
+          }
+        }
+        const unsent = [...replay, ...offline]
         this.synced = this.editor.board
         if (unsent.length && this.role === 'edit') {
           this.editor.applyRemote(unsent)
@@ -229,14 +258,31 @@ export class LiveSession {
     if (!this.synced || this.role !== 'edit' || this.ws?.readyState !== WebSocket.OPEN) return
     const patches: Patch[] = diff(this.synced, this.editor.board)
     if (!patches.length) return
+    const base = this.synced
     this.synced = this.editor.board
-    for (let at = 0; at < patches.length; at += BATCH) {
-      const part = patches.slice(at, at + BATCH)
+    let part: Patch[] = []
+    let bytes = 0
+    const send = () => {
+      if (!part.length) return
       const seq = ++this.seq
       this.pending.set(seq, new Set(part.map(keyOf)))
-      this.inflight.set(seq, part)
+      this.inflight.set(seq, { patches: part, base })
       this.sendRaw({ t: 'patch', seq, patches: part })
+      part = []
+      bytes = 0
     }
+    // Big changes go in parts the server accepts, by count and by size.
+    for (const p of patches) {
+      const size = JSON.stringify(p).length
+      if (size > MAX_PATCH_BYTES) {
+        this.editor.setStatus('Live session: one object is too big to share live; it stays on this screen only')
+        continue
+      }
+      if (part.length >= BATCH || (part.length && bytes + size > BATCH_BYTES)) send()
+      part.push(p)
+      bytes += size
+    }
+    send()
   }
 
   // ----- presence --------------------------------------------------------------------------

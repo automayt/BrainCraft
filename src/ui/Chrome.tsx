@@ -30,6 +30,7 @@ import { THEMES } from './theme'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
+import { focusFirst, moveFocus } from './menuKeys'
 import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
 import { LiveBar } from './Live'
@@ -60,14 +61,14 @@ function BoardIcon() {
     const t = editor.board.title || 'Untitled board'
     document.title = `${icon ? `${icon} ` : ''}${t} · BrainCraft`
   }, [icon, editor.board.title])
-  if (ws.readOnly && !icon) return null
+  if (ws.viewOnly && !icon) return null
   return (
     <div className="anchor">
       <button
         className={`board-icon${icon ? '' : ' empty'}`}
         aria-label={icon ? 'Change the board icon' : 'Pick a board icon'}
         title={icon ? 'Change the board icon' : 'Pick an icon for this board'}
-        disabled={ws.readOnly}
+        disabled={ws.viewOnly}
         onMouseDown={keepFocus}
         onClick={() => setOpen(!open)}
       >
@@ -117,10 +118,16 @@ function BoardIcon() {
 
 function Popover({ onClose, children, className = '' }: { onClose: () => void; children: ReactNode; className?: string }) {
   useEscape(onClose)
+  const ref = useRef<HTMLDivElement>(null)
+  // Opened from the keyboard (its button has focus; a click keeps focus on the board): the
+  // first item takes focus, and the arrows move through the rest.
+  useEffect(() => {
+    if (document.activeElement?.tagName === 'BUTTON') focusFirst(ref.current)
+  }, [])
   return (
     <>
       <div className="scrim" onPointerDown={onClose} />
-      <div className={`popover ${className}`} role="menu">
+      <div ref={ref} className={`popover ${className}`} role="menu" onKeyDown={moveFocus}>
         {children}
       </div>
     </>
@@ -148,6 +155,12 @@ function SaveState() {
   return (
     <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`}>
       <i aria-hidden="true" />
+      {/* A problem is spelled out, not left to a red dot. */}
+      {(!ws.persistent || ws.saveState === 'error') && (
+        <b className="save-warning" aria-hidden="true">
+          Not saved
+        </b>
+      )}
       <span className="sr-only">{tip}</span>
       {/* Only problems are announced, not every save. */}
       <span className="sr-only" aria-live="polite">
@@ -185,7 +198,7 @@ export function TopLeft() {
         value={editor.board.title}
         aria-label="Board title"
         spellCheck={false}
-        readOnly={ws.readOnly}
+        readOnly={ws.viewOnly}
         onChange={(e) => editor.setTitle(e.target.value)}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
       />
@@ -210,9 +223,9 @@ export function TopLeft() {
             )}
             <MenuItem label="Share…" onClick={run(ui.openShare)} />
             <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
-            {!ws.readOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
+            {!ws.viewOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             <hr />
-            {!ws.readOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
+            {!ws.viewOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
             <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
             <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
             <hr />
@@ -516,14 +529,17 @@ export function BottomLeft() {
 /** Status messages appear briefly, then fade. */
 export function Toast() {
   const editor = useEditor()
-  const [shown, setShown] = useState('')
+  const [shown, setShown] = useState(false)
+  // The words stay while the message fades out, so it never flashes an empty pill.
+  const [text, setText] = useState('')
   const last = useRef('')
   useEffect(() => {
     if (!editor.status || editor.status === last.current) return
     last.current = editor.status
-    setShown(editor.status)
+    setText(editor.status)
+    setShown(true)
     const t = setTimeout(() => {
-      setShown('')
+      setShown(false)
       last.current = ''
       editor.status = ''
     }, 3200)
@@ -531,12 +547,21 @@ export function Toast() {
   }, [editor.status, editor])
   return (
     <div className={`toast${shown ? ' show' : ''}`} role="status" aria-live="polite">
-      {shown}
+      {text}
     </div>
   )
 }
 
 export const SHORTCUTS: [string, [string, string][]][] = [
+  [
+    'Touch',
+    [
+      ['Drag on empty space', 'Move around the board'],
+      ['Pinch', 'Zoom in and out'],
+      ['Press and hold', 'Actions for whatever is under your finger (the right-click menu)'],
+      ['Double-tap', 'Edit text, or add a sticky note'],
+    ],
+  ],
   ['Tools (with nothing selected)', TOOLS.map((t) => [t.key.toUpperCase(), t.label])],
   [
     'Everywhere',
@@ -549,8 +574,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl Shift L', 'Lock or unlock the selection'],
       ['/', 'Cursor chat: say something next to your pointer (nothing selected)'],
       ['Enter', 'Place the current tool in the middle of the view'],
-      ['Type', 'With one object selected, typing replaces its text'],
-      ['Right-click', 'Actions for whatever is under the pointer'],
+      ['Type', 'With one object selected, typing replaces its text (? and Shift P type too: press Esc first)'],
+      ['Right-click · Shift F10', 'Actions for whatever is under the pointer (or the selection)'],
       ['Alt C', 'Comments on the selected object'],
       ['Ctrl Z / Ctrl Shift Z · Ctrl Y', 'Undo / redo'],
       ['Ctrl C / X / V / D', 'Copy, cut, paste, duplicate'],
@@ -574,6 +599,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Arrows (+ Shift)', 'Nudge by 1 (10)'],
       ['Ctrl arrows (+ Shift)', 'Nudge by 10 (50), mind-map ideas too'],
       ['Alt while dragging', 'Move without snapping'],
+      ['Alt-click', 'Reach a locked object (to select and unlock it)'],
     ],
   ],
   [
@@ -603,7 +629,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Flowcharts',
     [
-      ['D then click', 'Place a shape (choose it in the panel)'],
+      ['D then click', 'Place a shape (choose it in the panel, or press 1–7)'],
       ['Tab', 'Add the next connected step'],
       ['Alt arrow', 'Add a connected step in that direction'],
       ['Drag a blue arrow to empty space', 'Pick the next shape (1–7)'],
@@ -622,7 +648,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Kanban: drag a card · Alt arrows', 'Move it to another column or up and down'],
       ['Timeline: drag · drag the ends', 'Reschedule · change length'],
       ['Timeline: Waits for… · Line up', 'Link events · move them so none starts too early'],
-      ['B then click', 'A database: table, board, timeline, calendar or gallery views'],
+      ['B then click', 'A database: table, Kanban, timeline, calendar or gallery views'],
       ['Calendar: drag · double-click a day', 'Move a record · add one on that day'],
     ],
   ],
@@ -656,7 +682,10 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   ],
 ]
 
-const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|F2|arrow|scroll|[A-Z0-9]|[↑↓←→/?+−]|1–7)$/.test(token)
+const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|F2|F10|arrow|scroll|[A-Z0-9]|[↑↓←→/?+−]|1–7)$/.test(token)
+
+/** On a touch screen the touch gestures come first; elsewhere they come last. */
+const touchFirst = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches
 
 export function Help({ onClose }: { onClose: () => void }) {
   useEscape(onClose)
@@ -672,7 +701,7 @@ export function Help({ onClose }: { onClose: () => void }) {
           </button>
         </header>
         <div className="help-grid">
-          {SHORTCUTS.map(([title, rows]) => (
+          {(touchFirst() ? SHORTCUTS : [...SHORTCUTS.slice(1), SHORTCUTS[0]]).map(([title, rows]) => (
             <section key={title}>
               <h3>{title}</h3>
               <dl>

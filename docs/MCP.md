@@ -65,6 +65,7 @@ Every board tool accepts an optional `file`. Relative paths resolve against
 | `BRAINCRAFT_URL` | `https://automayt.github.io/BrainCraft/` | Where your BrainCraft is hosted; used for the pairing link. |
 | `BRAINCRAFT_PORT` | `4319` | Local port for the browser link (the next free one is used if it's taken). |
 | `BRAINCRAFT_DIR` | the working directory | Folder for relative `file` paths and `list_boards` in file mode. |
+| `BRAINCRAFT_TOKEN` | a saved random token | Pairing token for the browser link. Normally made once and saved, so pairing survives restarts; set it only to pin a known value. |
 
 ## How the live link works, and why it's safe
 

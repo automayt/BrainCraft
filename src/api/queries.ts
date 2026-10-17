@@ -19,6 +19,8 @@ export interface ObjectSummary {
   h: number
   commentCount: number
   status?: Status
+  /** Someone else's private brainstorm note: blank until the round is revealed, and off limits. */
+  hidden?: true
 }
 
 export interface ObjectDetail extends ObjectSummary {
@@ -38,6 +40,7 @@ export const summary = (i: Item): ObjectSummary => ({
   h: Math.round(i.h),
   commentCount: i.notes?.length ?? 0,
   ...(i.status ? { status: i.status } : {}),
+  ...(i.masked ? { hidden: true as const } : {}),
 })
 
 export function listObjects(b: Board, kind?: Kind): ObjectSummary[] {

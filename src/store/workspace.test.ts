@@ -222,6 +222,45 @@ describe('autosave races', () => {
     ws.dispose()
   })
 
+  it('never saves the old board over the new one while the switch reads from storage', async () => {
+    const { ws, editor, kv } = await workspace()
+    const a = ws.boardId!
+    const b = await ws.newBoard(emptyBoard('B'))
+    await ws.switchTo(a)
+    editor.setTitle('Board A')
+    await ws.flush()
+    // Hold the switch at its storage read, and change the board (as another tab or a friend can).
+    let release = () => {}
+    const get = kv.get.bind(kv)
+    kv.get = (async (key: string) => {
+      if (key === `handle:${b}`) await new Promise<void>((r) => (release = r))
+      return get(key)
+    }) as typeof kv.get
+    const going = ws.switchTo(b)
+    await new Promise((r) => setTimeout(r, 0))
+    const [withNote] = addItem(editor.board, newItem('sticky', { x: 0, y: 0, w: 10, h: 10 }, { text: 'on A' }))
+    editor.applyRemote(diff(editor.board, withNote))
+    release()
+    await going
+    await ws.flush()
+    expect((await ws.library.load(b))!.title).toBe('B')
+    ws.dispose()
+  })
+
+  it('a save under way doesn’t bring back a board deleted meanwhile', async () => {
+    const { ws, editor } = await workspace()
+    await ws.newBoard(emptyBoard('Keep'))
+    const doomed = await ws.newBoard(emptyBoard('Doomed'))
+    editor.setTitle('Doomed, edited')
+    const saving = ws.flush()
+    await ws.remove(doomed)
+    await saving
+    // And an edit arriving before the next board opens isn't saved anywhere either.
+    expect(await ws.library.load(doomed)).toBeFalsy()
+    expect((await ws.library.list()).some((m) => m.id === doomed)).toBe(false)
+    ws.dispose()
+  })
+
   it('never writes a deleted board over another one', async () => {
     const { ws, editor } = await workspace()
     const keep = await ws.newBoard(emptyBoard('Keep'))

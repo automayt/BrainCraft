@@ -16,6 +16,7 @@ import { type Theme, applyTheme, storedTheme } from './theme'
 import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
+import { altLetter } from './keys'
 import { NotesPanel } from './NotesPanel'
 import { BoardErrorBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
@@ -211,7 +212,7 @@ function App({ ws }: { ws: Workspace }) {
       if (isTyping(e.target) || editor.searchOpen || e.defaultPrevented) return
       if (uiRef.current.menu && e.key !== 'Escape') return
       // Escape closes the open menu, dialog or pop-up; it shouldn't also clear the selection behind it.
-      if (e.key === 'Escape' && (uiRef.current.menu || document.querySelector('[role="dialog"], .popover, .align-menu'))) return
+      if (e.key === 'Escape' && (uiRef.current.menu || document.querySelector('[aria-modal="true"], .popover, .align-menu, .dv-sheet'))) return
       const ctrl = e.ctrlKey || e.metaKey
       // Board zoom instead of browser zoom.
       if (ctrl && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
@@ -250,7 +251,7 @@ function App({ ws }: { ws: Workspace }) {
         e.preventDefault()
         return
       }
-      const result = editor.keyDown(e.key, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey })
+      const result = editor.keyDown(altLetter(e) ?? e.key, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey })
       if (result === 'save') void ws.saveFile(e.shiftKey)
       if (result) e.preventDefault()
     }
@@ -310,7 +311,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.readOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}

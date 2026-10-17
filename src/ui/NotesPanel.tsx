@@ -194,7 +194,7 @@ function NoteRow({ note, onDelete, onOpen, about }: { note: Note; onDelete?: () 
           </button>
         )}
         {onDelete && (
-          <button className="note-delete" title="Delete this note" aria-label="Delete this note" onClick={onDelete}>
+          <button className="note-delete" title="Delete this comment" aria-label="Delete this comment" onClick={onDelete}>
             ×
           </button>
         )}
@@ -242,7 +242,12 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
       e.preventDefault()
       post()
     }
+    // Esc hands the keyboard back to the board; Alt C closes the panel, as from the board.
     if (e.key === 'Escape') ref.current?.blur()
+    if (e.altKey && e.code === 'KeyC') {
+      e.preventDefault()
+      editor.toggleNotes(false)
+    }
   }
 
   return (
@@ -406,6 +411,10 @@ export function NotesPanel() {
   useEffect(() => setDraft(author), [author])
 
   const cross = useLinksHere(editor.notesOpen)
+  // Opened for one object: the keyboard goes to its comment box, so typing doesn't replace the object's text.
+  useEffect(() => {
+    if (editor.notesOpen) document.querySelector<HTMLTextAreaElement>('.notes-panel .composer textarea')?.focus({ preventScroll: true })
+  }, [editor.notesOpen])
 
   if (!editor.notesOpen) return null
   const notes = target ? [...(target.notes ?? [])].reverse() : []
@@ -426,14 +435,14 @@ export function NotesPanel() {
             <span className="muted">{editor.selection.size > 1 ? 'Select one object to comment on it' : 'All comments on this board'}</span>
           )}
         </div>
-        <button className="icon-close" aria-label="Close comments" title="Close (Alt+C)" onClick={() => editor.toggleNotes(false)}>
+        <button className="icon-close" aria-label="Close comments" title="Close (Alt C)" onClick={() => editor.toggleNotes(false)}>
           ×
         </button>
       </header>
 
       {target && <Description key={target.id} id={target.id} value={target.description ?? ''} />}
 
-      {target && target.kind !== 'pen' && <Composer target={target} author={author} setAuthor={setAuthor} />}
+      {target && target.kind !== 'pen' && !editor.readOnly && <Composer target={target} author={author} setAuthor={setAuthor} />}
 
       <div className="notes-scroll">
         {target ? (

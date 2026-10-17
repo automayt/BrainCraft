@@ -88,7 +88,7 @@ export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'ellipse', key: 'o', label: 'Ellipse' },
   { tool: 'mind', key: 'm', label: 'Mind map' },
   { tool: 'flow', key: 'd', label: 'Flowchart' },
-  { tool: 'comment', key: 'c', label: 'Comment' },
+  { tool: 'comment', key: 'c', label: 'Comment block' },
   { tool: 'table', key: 'g', label: 'Table' },
   { tool: 'kanban', key: 'k', label: 'Kanban board' },
   { tool: 'timeline', key: 'i', label: 'Timeline' },
@@ -175,12 +175,16 @@ export interface Editing {
   /** The board before this edit (and before the item was created, for new items). */
   before: Board
   created: boolean
+  /** Started by typing over the selected object's text. */
+  replaced?: boolean
 }
 
 export interface Modifiers {
   shift?: boolean
   ctrl?: boolean
   alt?: boolean
+  /** A finger, not a mouse or pen. */
+  touch?: boolean
 }
 
 /** What happened to a key press, so the UI knows whether to `preventDefault`. */
@@ -240,6 +244,9 @@ const FLIGHT_MS = 520
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
 const prefersReducedMotion = () => !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+/** How to reach a locked object: phones have neither right-click nor Alt. */
+const UNLOCK_HINT = () =>
+  globalThis.matchMedia?.('(pointer: coarse)').matches ? 'Locked — press and hold it to unlock' : 'Locked — right-click or Alt-click it to unlock'
 
 export class Editor {
   board: Board
@@ -567,11 +574,15 @@ export class Editor {
     if (!patches.length) return
     // Tabs of one browser share the id sequence (live sessions hand each person their own range).
     const patched = applyPatches(this.board, patches)
-    const next = M.layoutAll(opts.sharedIds ? withIdsAfter(patched, patches) : patched, this.measure)
+    // Only mind maps are laid out here, so a change that leaves them alone needs no layout pass
+    // (this runs for every message from every busy peer).
+    const mind = patches.some((p) => p.k === 'item' && (p.v === null || p.v.kind === 'mind'))
+    const layout = (b: Board) => (mind ? M.layoutAll(b, this.measure) : b)
+    const next = layout(opts.sharedIds ? withIdsAfter(patched, patches) : patched)
     this.board = next
     // A gesture or edit under way keeps the board it started from, to restore or record
     // against: the change that just arrived goes into that too, so neither erases it.
-    const held = (b: Board) => M.layoutAll(applyPatches(b, patches), this.measure)
+    const held = (b: Board) => layout(applyPatches(b, patches))
     const d = this.drag
     if ('before' in d) {
       d.before = held(d.before)
@@ -592,10 +603,13 @@ export class Editor {
   resetFromRemote(board: Board, opts: { readOnly: boolean; idBase: number }) {
     const first = !this.board.items.length
     const next = M.layoutAll(board, this.measure)
-    this.board = opts.idBase > 0 ? { ...next, nextId: opts.idBase } : next
+    this.board = Number.isSafeInteger(opts.idBase) && opts.idBase > 0 ? { ...next, nextId: opts.idBase } : next
     this.readOnly = opts.readOnly
     this.selection = new Set([...this.selection].filter((id) => B.getItem(this.board, id)))
     this.editing = null
+    // A gesture held across a reconnect would take everything others did meanwhile as its own
+    // (one undo step, credited to you); it ends here, and its work is replayed with the rest.
+    this.drag = { type: 'none' }
     this.onBoardChange?.(this.board)
     if (first) this.zoomToFit()
     else this.emit()
@@ -1066,6 +1080,9 @@ export class Editor {
       if (!this.selection.size && item.parent !== undefined) this.selection = new Set([item.parent])
     } else {
       this.commit(e.before)
+      // A stray key can replace a whole note: say how to get it back.
+      const was = B.getItem(e.before, e.id)?.text
+      if (e.replaced && was?.trim() && item && item.text !== was) this.setStatus('Replaced the text — Ctrl Z brings it back')
     }
     this.emit()
   }
@@ -1334,7 +1351,10 @@ export class Editor {
   }
 
   deleteNote(id: Id, noteId: string) {
+    const before = this.board
     this.edit((b) => N.deleteNote(b, id, noteId))
+    // One click deletes anyone's comment: make the way back obvious.
+    if (this.board !== before) this.setStatus('Comment deleted — Ctrl Z brings it back')
   }
 
   setSearchOpen(open: boolean) {
@@ -1494,7 +1514,7 @@ export class Editor {
 
   /** Mermaid for the selection, or for every flowchart shape when nothing is selected. */
   exportMermaid(): string {
-    return toMermaid(this.board, this.selection.size ? this.selection : undefined)
+    return toMermaid(this.viewBoard, this.selection.size ? this.selection : undefined)
   }
 
   // ----- tables, Kanban boards, timelines -------------------------------------------
@@ -1650,6 +1670,16 @@ export class Editor {
     else if (r.x + r.w > this.viewport.w - pad.right) dx = this.viewport.w - pad.right - (r.x + r.w)
     if (r.y < pad.top) dy = pad.top - r.y
     else if (r.y + r.h > this.viewport.h - pad.bottom) dy = this.viewport.h - pad.bottom - (r.y + r.h)
+    if (!phone) {
+      // The minimap holds the bottom-right corner (200 × 136, 12px in): clear it, upwards if there's room.
+      const corner = { x: this.viewport.w - this.rightInset - 220, y: this.viewport.h - 156 }
+      const right = r.x + dx + r.w
+      const bottom = r.y + dy + r.h
+      if (right > corner.x && bottom > corner.y) {
+        if (corner.y - r.h >= pad.top) dy += corner.y - bottom
+        else dx += corner.x - right
+      }
+    }
     if (dx || dy) this.pan(dx, dy)
   }
 
@@ -1789,7 +1819,8 @@ export class Editor {
 
   duplicate() {
     if (!this.selection.size) return
-    const clip = B.copy(this.board, this.selection)
+    // Someone else's hidden brainstorm note copies as the blank you see.
+    const clip = B.copy(this.viewBoard, this.selection)
     let ids = new Set<Id>()
     this.edit((b) => {
       const [next, newIds] = B.paste(b, clip, 30, 30)
@@ -1817,7 +1848,7 @@ export class Editor {
       if (!locked) delete next.locked
       return next
     }))
-    this.setStatus(locked ? 'Locked — right-click or Alt-click it to unlock' : 'Unlocked')
+    this.setStatus(locked ? UNLOCK_HINT() : 'Unlocked')
   }
 
   /** Groups the selection so it selects and moves as one (mind-map ideas get a new parent idea instead). */
@@ -2050,6 +2081,17 @@ export class Editor {
     } else if (this.tool === 'select') {
       // Alt-click reaches locked objects (to select and unlock them).
       const hit = this.hitAt(screen, mods.alt)
+      // A finger on empty space (or anywhere, on a board that can't be changed) moves the board,
+      // as on any map; a tap there still clears the selection.
+      if (mods.touch && !mods.shift && (!hit || this.readOnly)) {
+        if (!hit) {
+          this.selection = new Set()
+          this.selectedConnector = null
+        }
+        this.drag = { type: 'pan', last: screen }
+        this.emit()
+        return
+      }
       if (hit?.type === 'item') {
         if (mods.shift && this.selection.has(hit.id)) {
           for (const id of B.withGroups(this.board, [hit.id])) this.selection.delete(id)
@@ -2075,7 +2117,7 @@ export class Editor {
         // A locked object ignores clicks; say why (locked frames are backgrounds, so they stay quiet).
         const under = this.hitAt(screen, true)
         const locked = under?.type === 'item' ? B.getItem(this.board, under.id) : undefined
-        if (locked?.locked && locked.kind !== 'frame') this.setStatus('Locked — right-click or Alt-click it to unlock')
+        if (locked?.locked && locked.kind !== 'frame') this.setStatus(UNLOCK_HINT())
       }
     }
     this.emit()
@@ -2440,6 +2482,12 @@ export class Editor {
       else if (!(mods.ctrl || k === 'Delete' || k === 'Backspace')) return false
       return true
     }
+    // With the shape panel open and nothing selected, its numbers pick a shape to place.
+    const panelShape = this.flowPalette && !this.selection.size && !mods.ctrl && !mods.alt && /^[1-9]$/.test(k) ? FLOW_SHAPES[Number(k) - 1]?.shape : undefined
+    if (panelShape) {
+      this.setFlowShape(panelShape)
+      return true
+    }
     if (mods.ctrl) {
       if (k === 'z' && mods.shift) this.redo()
       else if (k === 'z') this.undo()
@@ -2487,8 +2535,8 @@ export class Editor {
       return true
     }
     if (k === 'Escape') {
-      // First Esc deselects; another closes the flowchart shape panel.
-      if (!this.selection.size && this.selectedConnector === null && this.tool === 'select' && this.flowPalette) this.flowPalette = false
+      // First Esc deselects; another (or the first, with nothing selected) closes the flowchart shape panel.
+      if (!this.selection.size && this.selectedConnector === null && (this.tool === 'select' || this.tool === 'flow') && this.flowPalette) this.flowPalette = false
       this.drag = { type: 'none' }
       this.tool = 'select'
       this.select([])
@@ -2564,6 +2612,7 @@ export class Editor {
     // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
     if (node && this.typesInto(key, mods)) {
       this.startEditing(node.id)
+      if (this.editing) this.editing.replaced = true
       this.setEditingText(key)
       return true
     }
@@ -2583,7 +2632,7 @@ export class Editor {
     if (e) {
       if (e.connector) return 'Type a label  ·  Esc done'
       const kind = B.getItem(this.board, e.id)?.kind
-      if (kind === 'mind') return 'Enter next idea  ·  Tab sub-idea  ·  Shift+Enter new line  ·  Esc done'
+      if (kind === 'mind') return 'Enter next idea  ·  Tab sub-idea  ·  Shift Enter new line  ·  Esc done'
       if (kind === 'flow') return 'Tab add the next step  ·  Esc done'
       return 'Esc done'
     }
@@ -2596,9 +2645,9 @@ export class Editor {
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single
     if (node?.kind === 'mind')
-      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Alt+C comments'
+      return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Alt C comments'
     if (node?.kind === 'flow')
-      return 'Tab next step  ·  Alt+Arrow add a step that way  ·  Enter edit  ·  Drag a blue arrow for shape ideas'
+      return 'Tab next step  ·  Alt Arrow add a step that way  ·  Enter edit  ·  Drag a blue arrow for shape ideas'
     return null
   }
 

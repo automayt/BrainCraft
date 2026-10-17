@@ -10,6 +10,7 @@ import { fromDay, isIsoDay, today } from '../../model/timeline'
 import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item } from '../../model/types'
 import { textOn } from '../paint'
 import { EditorContext } from '../useEditor'
+import { useEscape } from '../useEscape'
 import { Menu, Widget } from './Widget'
 
 const WIDTH: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76 }
@@ -144,6 +145,7 @@ function Cell({ c, f, r, autoFocus }: { c: Ctx; f: Field; r: DataRecord; autoFoc
 
 /** Every field of one record, for boards and timelines (and anywhere a record is opened). */
 function RecordSheet({ c, id, onClose }: { c: Ctx; id: string; onClose: () => void }) {
+  useEscape(onClose)
   const r = c.ds.records.find((x) => x.id === id)
   if (!r) return null
   return (
@@ -683,13 +685,13 @@ function CalendarBody({ c }: { c: Ctx }) {
       <div className="dv-cal-head">
         <strong>{title}</strong>
         <span className="dv-cal-nav">
-          <button title="Previous month" onClick={() => setPaged(D.addMonths(month, -1))}>
+          <button title="Previous month" aria-label="Previous month" onClick={() => setPaged(D.addMonths(month, -1))}>
             ‹
           </button>
           <button title="This month" onClick={() => setPaged(D.monthOf(now))}>
             Today
           </button>
-          <button title="Next month" onClick={() => setPaged(D.addMonths(month, 1))}>
+          <button title="Next month" aria-label="Next month" onClick={() => setPaged(D.addMonths(month, 1))}>
             ›
           </button>
         </span>

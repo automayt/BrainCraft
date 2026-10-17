@@ -398,3 +398,17 @@ export function ReadOnlyBanner() {
     </div>
   )
 }
+
+/** In a live session joined with the view link: say so, under the top bars (the live bar is wide). */
+export function LiveViewerBanner() {
+  const ws = useWorkspace()
+  if (ws.readOnly || !ws.viewOnly) return null
+  return (
+    <div className="viewer-banner island no-canvas" role="status">
+      <span className="readonly-dot" aria-hidden="true" />
+      <span>
+        <strong>Watching live</strong> · view only · ask for the edit link to join in
+      </span>
+    </div>
+  )
+}

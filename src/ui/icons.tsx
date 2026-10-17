@@ -58,10 +58,11 @@ export const TOOL_ICONS: Record<Tool, ReactNode> = {
       <path d="M12 11.5V15" />
     </Svg>
   ),
+  // A block of text on the board (unlike the speech bubble of the Comments panel).
   comment: (
     <Svg>
-      <path d="M4 5h16v11H10l-4 4v-4H4z" />
-      <path d="M8 9h8M8 12h5" />
+      <rect x="3.5" y="4" width="17" height="16" rx="2" />
+      <path d="M3.5 8.5h17M7 12.5h10M7 16h6" />
     </Svg>
   ),
   table: (

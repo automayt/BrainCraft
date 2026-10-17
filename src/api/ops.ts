@@ -106,7 +106,12 @@ export interface ApplyContext {
   /** Where to start placing objects on an empty board. */
   origin?: Vec
   now?: number
+  /** Objects these operations may not change or delete (other people's hidden brainstorm notes). */
+  protect?: ReadonlySet<Id>
 }
+
+/** Other people's hidden brainstorm notes on a board as someone sees it (blanked, so off limits). */
+export const maskedIds = (view: Board): Set<Id> => new Set(view.items.filter((i) => i.masked).map((i) => i.id))
 
 export class OpError extends Error {}
 
@@ -140,15 +145,28 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     }
   })
 
-  // Everything made or changed must survive a save and reload as it is.
+  // Everything made or changed is kept as a save and reload would keep it (the same on every
+  // screen, since the server cleans changes the same way), or refused if it can't be kept.
   const old = new Map(board.items.map((i) => [i.id, i]))
-  for (const i of b.items) {
-    if (old.get(i.id) === i) continue
-    if (!cleanItem(i)) throw new OpError(`The operations made an object that isn't valid (${i.kind} ${i.id}); check field types`)
+  const items = b.items.map((i) => {
+    if (old.get(i.id) === i) return i
+    const clean = cleanItem(i)
+    if (!clean) throw new OpError(`The operations made an object that isn't valid (${i.kind} ${i.id}); check field types`)
+    return clean
+  })
+  if (ctx.protect?.size) {
+    const now = new Map(b.items.map((i) => [i.id, i]))
+    for (const id of ctx.protect)
+      if (old.has(id) && now.get(id) !== old.get(id)) throw new OpError(`Object ${id} is someone's hidden brainstorm note; it can't be changed or deleted until the round is revealed`)
   }
   const oldConns = new Set(board.connectors)
-  for (const c of b.connectors) if (!oldConns.has(c) && !cleanConnector(c)) throw new OpError("The operations made a connector that isn't valid; check its style and arrows")
-  return { board: layoutAll(b, ctx.measure), results }
+  const connectors = b.connectors.map((c) => {
+    if (oldConns.has(c)) return c
+    const clean = cleanConnector(c)
+    if (!clean) throw new OpError("The operations made a connector that isn't valid; check its ends")
+    return clean
+  })
+  return { board: layoutAll({ ...b, items, connectors }, ctx.measure), results }
 
   function run(op: Op, index: number) {
 

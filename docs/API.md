@@ -94,7 +94,7 @@ timeline.
 | `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?` | Line between two objects. Lines to flowchart shapes default to `elbow`. |
 | `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?`, `locked?`, `status?` | — (`description` is the free text above an object's comments; `status` is `todo`, `doing`, `waiting`, `undecided`, `done`, `dropped`, or `none` to clear it) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
-| `addComment` | `id`, `text`, `author?` | Timestamped work note on the object. Mention other objects with `@[Label](#id)`. |
+| `addComment` | `id`, `text`, `author?` | Timestamped comment on the object. Mention other objects with `@[Label](#id)`. |
 | `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline` \| `calendar` \| `gallery`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
 | `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
 | `updateRecord` | `id` (any view), `record` (record id or title), `values` | Sets fields by name; `null` or `""` clears one. |
@@ -155,7 +155,11 @@ object {"ops": [...]}, no prose. Available operations:
 - createTable {title?, columns: [names], rows: [[cells]]}
 - createKanban {title?, columns: [{title, cards: [text or {title, due: "YYYY-MM-DD"}]}]}
 - createTimeline {title?, lanes: [{name, entries: [{title, start, end?}]}], followKanban?: [refs]}
+- createDatabase {title?, fields?, records?: [{field: value}], views?: [table|board|timeline|calendar|gallery]}
+- createSpinner {options: [text]}      - createVote {options: [refs], question?}
 - connect {from, to, label?}           - addComment {id, text}
+- update {id, status?: todo|doing|waiting|undecided|done}
+- react {ids: [refs], emoji}
 Give created objects a "ref" name and use it in later operations. Leave out
 positions ("at"); BrainCraft lays things out. Dates are YYYY-MM-DD.
 ````

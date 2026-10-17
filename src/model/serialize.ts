@@ -28,14 +28,17 @@ export function fromJson(json: string): Board {
   const known = new Set(datasets.map((d) => d.id))
   const kept = items.filter((i) => i.kind !== 'data' || (i.view && known.has(i.view.dataset)))
   const keptIds = new Set(kept.map((i) => i.id))
-  const maxId = Math.max(0, ...items.map((i) => i.id), ...connectors.map((c) => c.id))
+  // A loop, not Math.max(...ids): spreading a very big board overflows the call stack.
+  let maxId = 0
+  for (const o of [...items, ...connectors]) if (o.id > maxId) maxId = o.id
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
     ...(cleanIcon(raw.icon) ? { icon: cleanIcon(raw.icon) } : {}),
     items: kept,
     connectors: connectors.filter((c) => keptIds.has(c.from) && keptIds.has(c.to)),
-    nextId: Math.max(typeof raw.nextId === 'number' ? raw.nextId : 0, maxId + 1),
+    // Ids are whole numbers: a nextId like 2.5 or 1e309 would give new objects ids a reload drops.
+    nextId: Math.max(Number.isSafeInteger(raw.nextId) ? (raw.nextId as number) : 0, maxId + 1),
     ...(datasets.length ? { datasets } : {}),
   }
 }

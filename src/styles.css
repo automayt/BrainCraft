@@ -2599,7 +2599,10 @@ button.on,
 @media (max-height: 760px) {
   .tool {
     width: 34px;
-    height: 32px;
+    height: 30px;
+  }
+  .tool-group {
+    gap: 1px;
   }
   .tool svg {
     width: 19px;
@@ -2608,6 +2611,22 @@ button.on,
   .tool-group + .tool-group {
     margin-top: 3px;
     padding-top: 3px;
+  }
+}
+
+/* Too short for one column of tools (a laptop at 125–150% scaling): two columns. */
+@media (max-height: 660px) and (min-width: 721px) {
+  .tool-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 70px;
+  }
+  /* Panels beside the rail centre on it, clear of the top bar and the zoom bar. */
+  .tool-rail .flyout {
+    top: 50%;
+    translate: 0 -50%;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
   }
 }
 
@@ -2639,6 +2658,8 @@ button.on,
     flex-direction: row;
     max-width: calc(100% - 24px);
     overflow-x: auto;
+    /* It still swipes sideways; a scrollbar under the tools only gets in the way. */
+    scrollbar-width: none;
   }
   .tool-group {
     flex-direction: row;
@@ -2731,6 +2752,20 @@ button.on,
 
 .save-state.error i {
   background: var(--danger);
+}
+
+.save-state.error {
+  display: flex;
+  gap: 6px;
+  width: auto;
+  align-items: center;
+}
+
+.save-warning {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  white-space: nowrap;
 }
 
 @keyframes pulse {
@@ -3121,6 +3156,14 @@ button.on,
   padding: 6px 6px 6px 14px;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.viewer-banner {
+  position: static;
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 13px;
+  max-width: 100%;
 }
 
 .readonly-dot {
@@ -5598,6 +5641,13 @@ button.on,
   right: calc(var(--panel-w) + 24px);
 }
 
+/* The hint goes in the middle of the board that's left, between the zoom bar and the minimap. */
+.app.notes-open .hint-bar,
+.app.ai-open .hint-bar {
+  left: calc((100% - var(--panel-w)) / 2);
+  max-width: calc(100% - var(--panel-w) - 580px);
+}
+
 @media (max-width: 720px) {
   /* Boards dialog: search on its own row, two template columns with short previews. */
   .modal.boards header {
@@ -6476,6 +6526,10 @@ button.on,
 @media (min-width: 721px) {
   .status-key.above-hint {
     bottom: 54px;
+  }
+  /* Messages stand above both. */
+  .app:has(.status-key.above-hint) .toast {
+    bottom: 108px;
   }
 }
 

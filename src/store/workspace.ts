@@ -102,6 +102,10 @@ export class Workspace {
   private timer: ReturnType<typeof setTimeout> | undefined
   /** Unsaved work, and which board it belongs to (the open board can change before it's saved). */
   private pending: { id: string; board: Board } | null = null
+  /** The save under way, if any. */
+  private saving: Promise<void> | undefined
+  /** Boards deleted in this tab: nothing saves them back. */
+  private removed = new Set<string>()
   private listeners = new Set<() => void>()
   version = 0
 
@@ -249,6 +253,11 @@ export class Workspace {
     return this.boardId === null
   }
 
+  /** Nothing here can be changed: a snapshot link, or a live session joined with the view link. */
+  get viewOnly() {
+    return this.readOnly || this.liveInfo?.role === 'view'
+  }
+
   get persistent() {
     return this.library.kv.persistent
   }
@@ -308,11 +317,14 @@ export class Workspace {
       this.editor.setStatus('That board could not be opened')
       return
     }
+    const file = await this.handle(id)
+    // From here to the load nothing waits: a change in between would be saved to the new board
+    // with the old board's content.
     this.closeLive()
     this.boardId = id
     this.editor.readOnly = false
     safeStorage()?.setItem(CURRENT_KEY, id)
-    this.fileName = (await this.handle(id))?.name ?? null
+    this.fileName = file?.name ?? null
     this.loadQuietly(board)
     this.editor.aiHistory = (await this.library.kv.get<AiChange[]>(aiKey(id))) ?? []
     this.tabSynced = this.editor.board
@@ -370,10 +382,13 @@ export class Workspace {
 
   async remove(id: string) {
     // Unsaved work on a deleted board goes with it (and never lands on another board).
+    this.removed.add(id)
     if (this.pending?.id === id) {
       clearTimeout(this.timer)
       this.pending = null
     }
+    // A save already under way finishes first, so it can't write the board back afterwards.
+    await this.saving
     await this.library.remove(id)
     this.libraryChanged()
     if (id === this.boardId) {
@@ -398,7 +413,7 @@ export class Workspace {
     this.live?.localChanged()
     this.tabChanged()
     this.markSeen()
-    if (this.readOnly || !this.boardId) return
+    if (this.readOnly || !this.boardId || this.removed.has(this.boardId)) return
     this.pending = { id: this.boardId, board: b }
     this.saveState = 'unsaved'
     clearTimeout(this.timer)
@@ -412,9 +427,12 @@ export class Workspace {
     if (!this.pending) return
     const { id, board: b } = this.pending
     this.pending = null
+    if (this.removed.has(id)) return
     this.saveState = 'saving'
     try {
-      await this.library.save(id, b)
+      const saving = this.library.save(id, b)
+      this.saving = saving.catch(() => {})
+      await saving
       this.saveState = this.pending ? 'unsaved' : 'saved'
       this.boards = await this.library.list()
       // A renamed board shows its new name in other tabs' board lists.
