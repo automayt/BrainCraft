@@ -228,6 +228,10 @@ export interface Item extends Rect {
   votes?: Record<string, Record<string, number>>
   /** On a vote card: what's being voted on and how. */
   poll?: Poll
+  /** Can't be clicked, moved, edited or deleted until unlocked (right-click or Alt-click reaches it). */
+  locked?: boolean
+  /** Objects sharing a group id select and move together. */
+  group?: string
 }
 
 /** A dot vote: each person spreads `each` votes over the options; totals hidden until revealed. */

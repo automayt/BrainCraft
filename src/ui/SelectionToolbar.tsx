@@ -204,6 +204,25 @@ export function SelectionToolbar() {
           Group
         </button>
       )}
+      {items.length > 1 && !items.every((i) => i.kind === 'mind') && !(items.every((i) => i.group) && new Set(items.map((i) => i.group)).size === 1) && (
+        <button title="Group: select and move these as one (Ctrl+G)" onClick={() => editor.group()}>
+          Group
+        </button>
+      )}
+      {items.some((i) => i.group) && (
+        <button title="Ungroup (Ctrl+Shift+G)" onClick={() => editor.ungroup()}>
+          Ungroup
+        </button>
+      )}
+      {items.length > 0 && (
+        <button
+          title={items.every((i) => i.locked) ? 'Unlock (Ctrl+Shift+L)' : 'Lock: can’t be moved or changed by accident (Ctrl+Shift+L)'}
+          aria-pressed={items.every((i) => i.locked)}
+          onClick={() => editor.setLocked(!items.every((i) => i.locked))}
+        >
+          {items.every((i) => i.locked) ? 'Unlock' : 'Lock'}
+        </button>
+      )}
       {items.length > 0 && !mind && (
         <>
           <button title="Bring to front" onClick={() => editor.bringToFront()}>

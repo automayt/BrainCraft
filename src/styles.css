@@ -5937,3 +5937,19 @@ button.on,
     top: 116px;
   }
 }
+
+.lock-badge rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  opacity: 0.9;
+}
+
+.lock-badge path {
+  stroke: var(--muted);
+}
+
+.group-outline {
+  fill: none;
+  stroke: var(--accent);
+  pointer-events: none;
+}

@@ -1,7 +1,7 @@
 /** Reactions under objects, and dot-vote badges and controls, drawn over the board. */
 
 import type { Editor } from '../editor/Editor'
-import { getItem } from '../model/board'
+import { bounds as getBoardBounds, getItem } from '../model/board'
 import * as RX from '../model/reactions'
 import type { Item } from '../model/types'
 import { commentBodyRect } from './BoardView'
@@ -110,14 +110,42 @@ function VoteControls({ poll, editor }: { poll: Item & { poll: NonNullable<Item[
   )
 }
 
+/** A small padlock on locked objects, and a dashed outline around a selected group. */
+const getBounds = (editor: Editor, ids: Set<number>) => getBoardBounds(editor.board, ids)
+
+function LocksAndGroups({ editor, k }: { editor: Editor; k: number }) {
+  const locked = editor.board.items.filter((i) => i.locked && !editor.hidden.has(i.id))
+  const groups = new Set(editor.selectedItems.map((i) => i.group).filter(Boolean))
+  return (
+    <g>
+      {locked.map((i) => (
+        <g key={i.id} className="lock-badge" transform={`translate(${i.x + i.w - 22 * k} ${i.y + 4 * k}) scale(${k})`}>
+          <title>Locked — right-click or Alt-click to unlock</title>
+          <rect width="18" height="18" rx="5" />
+          <path d="M5.5 8V6.5a3.5 3.5 0 0 1 7 0V8M5 8h8v6H5z" fill="none" strokeWidth="1.5" strokeLinejoin="round" />
+        </g>
+      ))}
+      {[...groups].map((g) => {
+        const ids = new Set(editor.board.items.filter((i) => i.group === g).map((i) => i.id))
+        const r = getBounds(editor, ids)
+        if (!r) return null
+        const pad = 10 * k
+        return <rect key={g} className="group-outline" x={r.x - pad} y={r.y - pad} width={r.w + 2 * pad} height={r.h + 2 * pad} rx={8 * k} strokeWidth={1.5 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
+      })}
+    </g>
+  )
+}
+
 export function Social({ editor }: { editor: Editor }) {
   const k = scaleFor(editor.camera.zoom)
   const me = editor.me
   const reacted = editor.board.items.filter((i) => i.reactions && !editor.hidden.has(i.id))
   const polls = editor.board.items.filter((i): i is Item & { poll: NonNullable<Item['poll']> } => !!i.poll && !editor.hidden.has(i.id))
-  if (!reacted.length && !polls.length) return null
+  const extras = editor.board.items.some((i) => i.locked) || editor.selectedItems.some((i) => i.group)
+  if (!reacted.length && !polls.length && !extras) return null
   return (
     <g className="social">
+      {extras && <LocksAndGroups editor={editor} k={k} />}
       {reacted.map((i) => (
         <Reactions key={i.id} item={i} me={me} k={k} />
       ))}

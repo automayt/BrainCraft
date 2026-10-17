@@ -86,6 +86,12 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
     { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
   ]
+  if (editor.selection.size) {
+    const locked = editor.selectedItems.every((i) => i.locked)
+    list.push({ id: 'lock', label: locked ? 'Unlock' : 'Lock (can’t be moved or changed by accident)', group: 'Selection', keys: 'Ctrl Shift L', aliases: 'lock pin freeze background fix unlock', run: () => editor.setLocked(!locked) })
+  }
+  if (editor.selection.size > 1) list.push({ id: 'group', label: 'Group', group: 'Selection', keys: 'Ctrl G', aliases: 'group combine together', run: () => editor.group() })
+  if (editor.selectedItems.some((i) => i.group)) list.push({ id: 'ungroup', label: 'Ungroup', group: 'Selection', keys: 'Ctrl Shift G', aliases: 'ungroup separate split', run: () => editor.ungroup() })
   if (editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame'))
     list.push({ id: 'start-vote', label: 'Start a dot vote on the selection', group: 'Selection', aliases: 'vote poll dot voting choose pick decide favourite', run: () => editor.startVote() })
   if (editor.selection.size)

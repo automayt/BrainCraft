@@ -22,6 +22,7 @@ import * as S from '../model/slides'
 import * as R from '../model/runbook'
 import * as D from '../model/dataset'
 import * as RX from '../model/reactions'
+import { uid } from '../model/uid'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -953,6 +954,7 @@ export class Editor {
     if (this.editing?.id !== id) this.finishEditing()
     const item = B.getItem(this.board, id)
     if (!item || !hasText(item.kind)) return
+    if (item.locked) return this.setStatus('Locked — unlock it to edit')
     this.selection = new Set([id])
     this.selectedConnector = null
     this.editing = { id, before: opts.before ?? this.board, created: opts.created ?? false }
@@ -1496,7 +1498,8 @@ export class Editor {
 
   deleteSelection() {
     const items = new Set<Id>()
-    for (const id of this.selection) {
+    if (this.selectedItems.some((i) => i.locked)) this.setStatus('Locked objects stay — unlock them to delete')
+    for (const id of [...this.selection].filter((x) => !B.getItem(this.board, x)?.locked)) {
       if (B.getItem(this.board, id)?.kind === 'mind') for (const d of B.subtree(this.board, id)) items.add(d)
       else items.add(id)
     }
@@ -1562,7 +1565,45 @@ export class Editor {
   selectAll() {
     this.finishEditing()
     this.tool = 'select'
-    this.select(this.board.items.filter((i) => !this.hidden.has(i.id)).map((i) => i.id))
+    this.select(this.board.items.filter((i) => !this.hidden.has(i.id) && !i.locked).map((i) => i.id))
+  }
+
+  // ----- lock and groups --------------------------------------------------------------
+
+  /** Locks (or unlocks) the selection: locked objects can't be clicked, moved or changed by accident. */
+  setLocked(locked: boolean) {
+    if (this.readOnly || !this.selection.size) return
+    const ids = new Set(this.selection)
+    this.edit((b) => B.updateItems(b, ids, (i) => {
+      if (!!i.locked === locked) return i
+      const next: Item = { ...i, locked }
+      if (!locked) delete next.locked
+      return next
+    }))
+    this.setStatus(locked ? 'Locked — right-click or Alt-click it to unlock' : 'Unlocked')
+  }
+
+  /** Groups the selection so it selects and moves as one (mind-map ideas get a new parent idea instead). */
+  group() {
+    const items = this.selectedItems
+    if (this.readOnly || items.length < 2) return
+    if (items.every((i) => i.kind === 'mind')) return this.groupIdeas()
+    const id = uid()
+    const ids = new Set(items.map((i) => i.id))
+    this.edit((b) => B.updateItems(b, ids, (i) => ({ ...i, group: id })))
+    this.setStatus(`Grouped ${ids.size} objects — Ctrl+Shift+G to ungroup`)
+  }
+
+  ungroup() {
+    if (this.readOnly) return
+    const ids = new Set(this.selectedItems.filter((i) => i.group).map((i) => i.id))
+    if (!ids.size) return
+    this.edit((b) => B.updateItems(b, ids, (i) => {
+      const next = { ...i }
+      delete next.group
+      return next
+    }))
+    this.setStatus('Ungrouped')
   }
 
   /** The selection, serialised for the system clipboard. */
@@ -1664,8 +1705,8 @@ export class Editor {
     return 4 / this.camera.zoom
   }
 
-  hitAt(screen: Vec): B.Hit | null {
-    return B.hitTest(this.board, toWorld(this.camera, screen), this.tol(), this.hidden)
+  hitAt(screen: Vec, withLocked = false): B.Hit | null {
+    return B.hitTest(this.board, toWorld(this.camera, screen), this.tol(), this.hidden, withLocked)
   }
 
   pointerDown(screen: Vec, button: number, mods: Modifiers, handle?: Handle) {
@@ -1679,7 +1720,8 @@ export class Editor {
     }
     if (button === 2) {
       this.finishEditing()
-      const hit = this.hitAt(screen)
+      // Right-click reaches locked objects too, so they can be unlocked.
+      const hit = this.hitAt(screen, true)
       if (hit?.type === 'item' && !this.selection.has(hit.id)) this.select([hit.id])
       else if (hit?.type === 'connector') {
         this.selection = new Set()
@@ -1741,13 +1783,15 @@ export class Editor {
       const hit = this.hitAt(screen)
       if (hit?.type === 'item') this.drag = { type: 'connect', from: hit.id, current: world, origin: screen }
     } else if (this.tool === 'select') {
-      const hit = this.hitAt(screen)
+      // Alt-click reaches locked objects (to select and unlock them).
+      const hit = this.hitAt(screen, mods.alt)
       if (hit?.type === 'item') {
         if (mods.shift && this.selection.has(hit.id)) {
-          this.selection.delete(hit.id)
+          for (const id of B.withGroups(this.board, [hit.id])) this.selection.delete(id)
           this.selection = new Set(this.selection)
         } else {
-          if (!this.selection.has(hit.id)) this.selection = new Set(mods.shift ? [...this.selection, hit.id] : [hit.id])
+          // A click on a grouped object takes the whole group.
+          if (!this.selection.has(hit.id)) this.selection = B.withGroups(this.board, mods.shift ? [...this.selection, hit.id] : [hit.id])
           this.selectedConnector = null
           const node = this.single
           if (node?.kind === 'mind' && node.parent !== undefined) {
@@ -1916,8 +1960,8 @@ export class Editor {
         this.dropBranch(d, world)
         break
       case 'marquee': {
-        const hits = B.itemsWithin(this.board, rectFromPoints(d.start, d.current), this.hidden)
-        this.selection = new Set([...d.base, ...hits])
+        const hits = [...B.itemsWithin(this.board, rectFromPoints(d.start, d.current), this.hidden)].filter((id) => !B.getItem(this.board, id)?.locked)
+        this.selection = B.withGroups(this.board, [...d.base, ...hits])
         break
       }
       case 'create':
@@ -2117,7 +2161,9 @@ export class Editor {
       else if (k === 'a') this.selectAll()
       else if (k === 'd') this.duplicate()
       else if (k === 's') return 'save'
-      else if (k === 'g' && this.selection.size > 1 && this.selectedItems.every((i) => i.kind === 'mind')) this.groupIdeas()
+      else if (k === 'g' && mods.shift) this.ungroup()
+      else if (k === 'g' && this.selection.size > 1) this.group()
+      else if (k === 'l' && mods.shift && this.selection.size) this.setLocked(!this.selectedItems.every((i) => i.locked))
       else if (ARROWS[k] && this.selection.size) {
         // Ctrl + arrow nudges anything, mind-map ideas included (Shift for bigger steps).
         const step = mods.shift ? 50 : 10
@@ -2276,7 +2322,7 @@ export class Editor {
   /** Whether the single selection can be resized with corner handles. */
   get resizable(): Item | undefined {
     const i = this.single
-    return i && !this.editing && isResizable(i.kind) ? i : undefined
+    return i && !this.editing && !i.locked && isResizable(i.kind) ? i : undefined
   }
 }
 
