@@ -6450,3 +6450,35 @@ button.on,
 .status-key.above-hint {
   bottom: 54px;
 }
+
+/* ----- private brainstorm ----- */
+
+.masked-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 12px;
+  color: rgba(30, 30, 36, 0.55);
+  text-align: center;
+}
+
+.masked-note span {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.masked-note small {
+  font-size: 12px;
+}
+
+.private-tag rect {
+  fill: rgba(30, 30, 36, 0.72);
+}
+
+.private-tag text {
+  font-weight: 600;
+  fill: #fff;
+}

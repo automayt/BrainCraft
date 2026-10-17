@@ -252,6 +252,12 @@ export interface Item extends Rect {
   group?: string
   /** Where this object stands: to do, in progress, done… */
   status?: Status
+  /** On a comment card: a private brainstorm round, and whether it was revealed. */
+  brainstorm?: { by: string; revealed?: boolean }
+  /** A sticky note written during an open brainstorm: only its writer sees it until the reveal. */
+  hiddenBy?: string
+  /** Set only on the copy drawn for someone a hidden note is hidden from; never saved. */
+  masked?: boolean
 }
 
 /** A dot vote: each person spreads `each` votes over the options; totals hidden until revealed. */

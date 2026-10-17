@@ -163,7 +163,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     let s = assistants.get(boardKey)
     if (!s || !connection) {
       if (!connection) return null
-      s = { assistant: new Assistant(makeClient(connection), { board: () => editor.board, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }, settings.model), turns: [] }
+      s = { assistant: new Assistant(makeClient(connection), { board: () => editor.board, readable: () => editor.viewBoard, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }, settings.model), turns: [] }
       assistants.set(boardKey, s)
     }
     s.assistant.model = settings.model

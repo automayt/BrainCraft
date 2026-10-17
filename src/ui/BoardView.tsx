@@ -68,6 +68,17 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
           <rect x={item.x} y={item.y + 3} width={item.w} height={item.h} rx={4} fill="rgba(0,0,0,0.09)" />
           <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={4} fill={item.color} className="shape" />
           {text && <Text item={item} className="centered" color={TEXT_ON_FILL} />}
+          {item.masked && (
+            <foreignObject x={item.x} y={item.y} width={item.w} height={item.h}>
+              <div className="masked-note">
+                <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3l18 18M10.6 5.1A10.9 10.9 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-2.8 3.9M6.4 6.4C4.3 7.7 2.7 9.7 2 12c1 2.5 5 7 10 7a10 10 0 0 0 5.6-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>{item.hiddenBy}'s note</span>
+                <small>hidden until revealed</small>
+              </div>
+            </foreignObject>
+          )}
         </g>
       )
     case 'rect':
@@ -125,7 +136,7 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
 /** Where a comment block's text goes. */
 export function commentBodyRect(i: Item) {
   // A vote card keeps its bottom strip for the vote controls.
-  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46 - (i.poll ? 48 : 0)) }
+  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46 - (i.poll || i.brainstorm ? 48 : 0)) }
 }
 
 export function formatTime(at: number, now = Date.now()): string {
@@ -154,14 +165,14 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
               <path d="M4 5h16v11H10l-4 4v-4H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             )}
           </svg>
-          <span>{item.poll ? (item.poll.ended ? 'Vote · closed' : 'Vote') : 'Comment'}</span>
+          <span>{item.poll ? (item.poll.ended ? 'Vote · closed' : 'Vote') : item.brainstorm ? (item.brainstorm.revealed ? 'Brainstorm · revealed' : 'Private brainstorm') : 'Comment'}</span>
           {item.createdAt && <time>{formatTime(item.createdAt)}</time>}
         </div>
       </foreignObject>
       {!editing && (
         <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
           <div className="item-text comment-body" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
-            {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : 'Write a comment…'}</span>}
+            {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : item.brainstorm ? 'What are we brainstorming?' : 'Write a comment…'}</span>}
           </div>
         </foreignObject>
       )}

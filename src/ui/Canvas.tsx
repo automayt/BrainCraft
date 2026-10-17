@@ -241,7 +241,7 @@ export function Canvas() {
         <rect width="100%" height="100%" fill="url(#grid)" />
         <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.zoom})`}>
           <BoardView
-            board={board}
+            board={editor.viewBoard}
             hidden={editor.hidden}
             editingId={editor.editing && !editor.editing.connector ? editor.editing.id : null}
             editingLabel={editor.editing?.connector ? editor.editing.id : null}

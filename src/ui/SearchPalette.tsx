@@ -75,7 +75,7 @@ export function SearchPalette() {
   const objects: Row[] = commandOnly
     ? []
     : query.trim()
-    ? search(editor.board, query, kinds).map((r, k) => ({
+    ? search(editor.viewBoard, query, kinds).map((r, k) => ({
         key: `${k}`,
         id: r.id,
         title: r.title,
@@ -86,7 +86,7 @@ export function SearchPalette() {
           </>
         ),
       }))
-    : lookup(editor.board, kinds).map((e) => ({
+    : lookup(editor.viewBoard, kinds).map((e) => ({
         key: `${e.id}`,
         id: e.id,
         title: e.title,

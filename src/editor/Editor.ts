@@ -26,6 +26,7 @@ import * as CU from '../model/catchup'
 import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
+import * as BS from '../model/brainstorm'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -411,7 +412,8 @@ export class Editor {
   /** Replaces the board, re-running the mind-map layout. Does not record history. */
   private apply(b: Board) {
     if (this.readOnly) return
-    const next = M.layoutAll(b, this.measure)
+    // During a private brainstorm, notes written here are marked as this person's.
+    const next = M.layoutAll(BS.stampNew(this.board, b, this.me), this.measure)
     if (next === this.board) return
     this.board = next
     this.onBoardChange?.(next)
@@ -964,6 +966,7 @@ export class Editor {
     const item = B.getItem(this.board, id)
     if (!item || !hasText(item.kind)) return
     if (item.locked) return this.setStatus('Locked — unlock it to edit')
+    if (BS.isMasked(item, this.me, !!BS.openRound(this.board))) return this.setStatus(`That's ${item.hiddenBy}'s note — hidden until the brainstorm is revealed`)
     this.selection = new Set([id])
     this.selectedConnector = null
     this.editing = { id, before: opts.before ?? this.board, created: opts.created ?? false }
@@ -1125,6 +1128,42 @@ export class Editor {
   }
 
   /** Starts a dot vote on the selection; the vote card appears just above it. */
+  // ----- private brainstorm ----------------------------------------------------------
+
+  private masked: { board: Board; me: string; view: Board } | null = null
+
+  /** The board as this person may see it: other people's notes in an open brainstorm are blank. */
+  get viewBoard(): Board {
+    const me = this.me
+    if (this.masked?.board !== this.board || this.masked.me !== me) this.masked = { board: this.board, me, view: BS.maskFor(this.board, me) }
+    return this.masked.view
+  }
+
+  /** Opens a private brainstorm round (or shows the one already open). */
+  startBrainstorm(prompt = '') {
+    if (this.readOnly) return
+    const open = BS.openRound(this.board)
+    if (open) {
+      this.focusObject(open.id)
+      return this.setStatus('A private brainstorm is already open — reveal it to start another')
+    }
+    let id: Id = -1
+    this.edit((b) => {
+      const [next, card] = BS.startBrainstorm(b, center(this.visibleWorld), this.me, prompt)
+      id = card
+      return next
+    })
+    this.select([id])
+    this.setStatus('Private brainstorm open: sticky notes stay hidden from others until someone reveals them')
+  }
+
+  revealBrainstorm(card: Id) {
+    if (this.readOnly) return
+    const { notes } = BS.roundStats(this.board)
+    this.edit((b) => BS.reveal(b, card))
+    this.setStatus(notes ? `Revealed ${notes} note${notes === 1 ? '' : 's'}` : 'Brainstorm closed')
+  }
+
   startVote(question?: string, each?: number) {
     const options = [...this.selection].filter((id) => {
       const i = B.getItem(this.board, id)

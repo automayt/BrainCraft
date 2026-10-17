@@ -3,6 +3,7 @@
 import type { Editor } from '../editor/Editor'
 import { bounds as getBoardBounds, getItem } from '../model/board'
 import * as RX from '../model/reactions'
+import * as BS from '../model/brainstorm'
 import type { Item } from '../model/types'
 import { commentBodyRect } from './BoardView'
 
@@ -110,6 +111,48 @@ function VoteControls({ poll, editor }: { poll: Item & { poll: NonNullable<Item[
   )
 }
 
+/** The bottom of a brainstorm card: how many notes are hidden, and the reveal button. */
+function BrainstormControls({ card, editor }: { card: Item & { brainstorm: NonNullable<Item['brainstorm']> }; editor: Editor }) {
+  const body = commentBodyRect(card)
+  const { notes, people } = BS.roundStats(editor.board)
+  const open = !card.brainstorm.revealed
+  return (
+    <foreignObject x={card.x + 10} y={body.y + body.h + 4} width={Math.max(1, card.w - 20)} height={44}>
+      <div className="vote-controls no-canvas" onPointerDown={(e) => e.stopPropagation()}>
+        <span className="vote-status">
+          {open ? (notes ? `${notes} hidden note${notes === 1 ? '' : 's'} from ${people} ${people === 1 ? 'person' : 'people'}` : 'Add sticky notes: only you see yours') : 'Everyone’s notes are showing'}
+        </span>
+        {open && !editor.readOnly && (
+          <span className="vote-buttons">
+            <button onClick={() => editor.revealBrainstorm(card.id)} title="Show everyone’s notes and close this round">
+              Reveal all
+            </button>
+          </span>
+        )}
+      </div>
+    </foreignObject>
+  )
+}
+
+/** "Only you can see this" on your own notes while a round is open. */
+function MyHiddenNotes({ editor, k }: { editor: Editor; k: number }) {
+  const me = editor.me
+  const mine = editor.board.items.filter((i) => i.hiddenBy === me && !editor.hidden.has(i.id))
+  return (
+    <g>
+      {mine.map((i) => (
+        <g key={i.id} className="private-tag" transform={`translate(${i.x + 6 * k} ${i.y + i.h - 22 * k}) scale(${k})`}>
+          <title>Only you can see this until the brainstorm is revealed</title>
+          <rect width="104" height="16" rx="8" />
+          <text x="52" y="11.5" textAnchor="middle" fontSize="10">
+            only you see this
+          </text>
+        </g>
+      ))}
+    </g>
+  )
+}
+
 /** A small padlock on locked objects, and a dashed outline around a selected group. */
 const getBounds = (editor: Editor, ids: Set<number>) => getBoardBounds(editor.board, ids)
 
@@ -142,13 +185,17 @@ export function Social({ editor }: { editor: Editor }) {
   const reacted = editor.board.items.filter((i) => i.reactions && !editor.hidden.has(i.id))
   const polls = editor.board.items.filter((i): i is Item & { poll: NonNullable<Item['poll']> } => !!i.poll && !editor.hidden.has(i.id))
   const extras = editor.board.items.some((i) => i.locked) || editor.selectedItems.some((i) => i.group)
-  if (!reacted.length && !polls.length && !extras) return null
+  const rounds = editor.board.items.filter((i): i is Item & { brainstorm: NonNullable<Item['brainstorm']> } => !!i.brainstorm && !editor.hidden.has(i.id))
+  const roundOpen = rounds.some((r) => !r.brainstorm.revealed)
+  if (!reacted.length && !polls.length && !extras && !rounds.length) return null
   return (
     <g className="social">
       {extras && <LocksAndGroups editor={editor} k={k} />}
       {reacted.map((i) => (
         <Reactions key={i.id} item={i} me={me} k={k} />
       ))}
+      {roundOpen && <MyHiddenNotes editor={editor} k={k} />}
+      {rounds.map((r) => editor.editing?.id !== r.id && <BrainstormControls key={r.id} card={r} editor={editor} />)}
       {polls.map((p) => (
         <g key={p.id}>
           <VoteBadges poll={p} editor={editor} k={k} />

@@ -246,6 +246,13 @@ These become interactive once selected; drag them by their title strip.
   Everyone sees the same countdown — people who join late too — with
   +1 min and stop, and a chime at the end.
 - All of these work alone as well; nothing is saved into the board.
+- **Private brainstorm** (right-click empty space, or Ctrl+K): a card with
+  the question appears, and until someone clicks **Reveal all**, every sticky
+  note people write shows only to its writer. Everyone else sees a blank
+  card with the writer's name, and the card counts the notes so far. That
+  way nobody's first idea steers the rest. Search and the assistant don't
+  see hidden notes either. (As with hidden votes, they're hidden on screen:
+  every browser in the session holds the whole board.)
 
 ### Presenting
 

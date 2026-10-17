@@ -64,6 +64,8 @@ export interface AssistantHost {
   selection(): Id[]
   /** The part of the board on screen. */
   view?(): Rect
+  /** The board as the person may see it (other people's hidden brainstorm notes blank), for reading. */
+  readable?(): Board
 }
 
 export interface Callbacks {
@@ -115,7 +117,7 @@ function hostFor(h: AssistantHost): ToolHost {
   }
   return {
     where: () => `the board "${h.board().title}" open in BrainCraft`,
-    board: () => h.board(),
+    board: () => h.readable?.() ?? h.board(),
     apply: no,
     listBoards: no,
     openBoard: no,
@@ -231,7 +233,7 @@ export class Assistant {
       if (a !== undefined && (typeof a !== 'object' || !['x', 'y', 'w', 'h'].every((k) => typeof a?.[k] === 'number')))
         return { content: '"area" needs numbers x, y, w and h', is_error: true }
       if (x.kind !== undefined && typeof x.kind !== 'string') return { content: '"kind" must be text', is_error: true }
-      const text = boardText(this.host.board(), {
+      const text = boardText(this.host.readable?.() ?? this.host.board(), {
         kind: x.kind as Kind | undefined,
         area: a as Rect | undefined,
         focus: this.host.selection(),
