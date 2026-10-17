@@ -74,6 +74,11 @@ export function ContextMenu() {
       paste,
       { label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() },
       { label: 'Copy as image', run: () => void copyImage(editor, new Set(editor.selection)) },
+      editor.selectedItems.every((i) => i.locked)
+        ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
+        : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },
+      ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
+      ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',
       { label: 'Bring to front', run: () => editor.bringToFront() },
       { label: 'Send to back', run: () => editor.sendToBack() },

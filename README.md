@@ -275,6 +275,10 @@ These become interactive once selected; drag them by their title strip.
   and delete.
 - Copy, cut and paste work through the system clipboard. Plain text you
   paste becomes a sticky note. **Paste or drop images** to add them.
+- **Lock (Ctrl+Shift+L)** a background, image or layout so it can't be
+  clicked, moved or changed by accident; right-click or Alt-click it to
+  unlock. **Group (Ctrl+G)** any objects so they select and move as one;
+  Ctrl+Shift+G ungroups.
 - **Type to rename:** with one object selected, just start typing.
 - **Keyboard and touch:** with a tool picked, **Enter** puts one in the
   middle of the view (so does choosing "Add …" in Ctrl+K). On touch screens,

@@ -80,7 +80,7 @@ export type Op =
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
-  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number }
+  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
 
@@ -337,7 +337,14 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           ...(typeof op.y === 'number' ? { y: op.y } : {}),
           ...(typeof op.w === 'number' && op.w > 0 ? { w: op.w } : {}),
           ...(typeof op.h === 'number' && op.h > 0 ? { h: op.h } : {}),
+          ...(op.locked === true ? { locked: true } : {}),
         }))
+        if (op.locked === false)
+          b = B.updateItem(b, id, (i) => {
+            const next: Item = { ...i }
+            delete next.locked
+            return next
+          })
         done({ id })
         break
       }

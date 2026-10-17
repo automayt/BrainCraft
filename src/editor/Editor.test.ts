@@ -706,3 +706,59 @@ describe('keyboard creation', () => {
     expect(r.x).toBeGreaterThanOrEqual(76)
   })
 })
+
+describe('lock and groups', () => {
+  const sticky = (x: number) => B.newItem('sticky', { x, y: 0, w: 100, h: 100 }, { text: `n${x}` })
+  function three() {
+    let b = emptyBoard()
+    const ids: number[] = []
+    for (const x of [0, 200, 400]) {
+      let id: number
+      ;[b, id] = B.addItem(b, sticky(x))
+      ids.push(id)
+    }
+    const e = editor()
+    e.load(b)
+    e.camera = { x: 0, y: 0, zoom: 1 }
+    return { e, ids }
+  }
+
+  it('locked objects can’t be clicked, moved, edited or deleted until unlocked', () => {
+    const { e, ids } = three()
+    e.select([ids[0]])
+    e.setLocked(true)
+    e.select([])
+    // A click passes through to empty board…
+    e.pointerDown({ x: 50, y: 50 }, 0, {})
+    e.pointerUp({ x: 50, y: 50 })
+    expect(e.selection.size).toBe(0)
+    // …but Alt-click reaches it.
+    e.pointerDown({ x: 50, y: 50 }, 0, { alt: true })
+    e.pointerMove({ x: 150, y: 150 })
+    e.pointerUp({ x: 150, y: 150 })
+    expect([...e.selection]).toEqual([ids[0]])
+    expect(B.getItem(e.board, ids[0])!.x).toBe(0)
+    e.deleteSelection()
+    expect(B.getItem(e.board, ids[0])).toBeTruthy()
+    e.selectAll()
+    expect(e.selection.has(ids[0])).toBe(false)
+    e.select([ids[0]])
+    e.setLocked(false)
+    expect(B.getItem(e.board, ids[0])!.locked).toBeUndefined()
+  })
+
+  it('grouped objects select and move together, and ungroup', () => {
+    const { e, ids } = three()
+    e.select([ids[0], ids[1]])
+    e.group()
+    e.select([])
+    e.pointerDown({ x: 50, y: 50 }, 0, {})
+    expect(e.selection).toEqual(new Set([ids[0], ids[1]]))
+    e.pointerMove({ x: 80, y: 50 })
+    e.pointerUp({ x: 80, y: 50 })
+    expect(B.getItem(e.board, ids[1])!.x).toBe(230)
+    expect(B.getItem(e.board, ids[2])!.x).toBe(400)
+    e.ungroup()
+    expect(e.board.items.some((i) => i.group)).toBe(false)
+  })
+})

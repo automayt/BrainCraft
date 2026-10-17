@@ -277,10 +277,10 @@ export type Hit = { type: 'item'; id: Id } | { type: 'connector'; id: Id }
  * The topmost thing under `p`. Frames sit beneath everything else, so they are
  * only hit where nothing else is; nodes in collapsed branches are skipped.
  */
-export function hitTest(b: Board, p: Vec, tol: number, hidden: ReadonlySet<Id> = hiddenIds(b)): Hit | null {
+export function hitTest(b: Board, p: Vec, tol: number, hidden: ReadonlySet<Id> = hiddenIds(b), withLocked = false): Hit | null {
   for (let k = b.items.length - 1; k >= 0; k--) {
     const i = b.items[k]
-    if (i.kind !== 'frame' && !hidden.has(i.id) && hitItem(i, p, tol)) return { type: 'item', id: i.id }
+    if (i.kind !== 'frame' && !hidden.has(i.id) && (withLocked || !i.locked) && hitItem(i, p, tol)) return { type: 'item', id: i.id }
   }
   for (let k = b.connectors.length - 1; k >= 0; k--) {
     const c = b.connectors[k]
@@ -290,9 +290,21 @@ export function hitTest(b: Board, p: Vec, tol: number, hidden: ReadonlySet<Id> =
   }
   for (let k = b.items.length - 1; k >= 0; k--) {
     const i = b.items[k]
-    if (i.kind === 'frame' && hitItem(i, p, tol)) return { type: 'item', id: i.id }
+    if (i.kind === 'frame' && (withLocked || !i.locked) && hitItem(i, p, tol)) return { type: 'item', id: i.id }
   }
   return null
+}
+
+/** The ids plus every other member of their groups. */
+export function withGroups(b: Board, ids: Iterable<Id>): Set<Id> {
+  const out = new Set(ids)
+  const groups = new Set<string>()
+  for (const id of out) {
+    const g = getItem(b, id)?.group
+    if (g) groups.add(g)
+  }
+  if (groups.size) for (const i of b.items) if (i.group && groups.has(i.group)) out.add(i.id)
+  return out
 }
 
 /** Visible items whose bounds lie entirely within `area`. */
@@ -325,6 +337,8 @@ export function movingSet(b: Board, ids: ReadonlySet<Id>): Set<Id> {
     const i = getItem(b, id)
     if (i?.kind === 'mind') for (const d of subtree(b, id)) out.add(d)
   }
+  // Locked objects stay put, even inside a frame that moves.
+  for (const id of Array.from(out)) if (getItem(b, id)?.locked) out.delete(id)
   return out
 }
 
