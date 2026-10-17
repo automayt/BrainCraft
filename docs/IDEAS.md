@@ -30,6 +30,9 @@ small group of friends using BrainCraft together. Ticked ones are built.
 
 - [x] **More database views:** calendar and gallery.
 - [ ] **Chart view** of a database (bars or a pie by a choice field).
+- [ ] **Tools for AI in the browser (WebMCP):** register BrainCraft's operations
+  with the browser, so an AI-enabled browser can read and build on the open
+  board directly, with no separate MCP server to set up.
 - [x] **Timeline dependencies:** "this can't start until that ends", with
   arrows and a warning when dates clash.
 - [ ] **Shared space on the server:** a friend group's boards listed behind one
