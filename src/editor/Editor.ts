@@ -22,6 +22,7 @@ import * as S from '../model/slides'
 import * as R from '../model/runbook'
 import * as D from '../model/dataset'
 import * as RX from '../model/reactions'
+import * as CU from '../model/catchup'
 import { uid } from '../model/uid'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
@@ -438,9 +439,11 @@ export class Editor {
     this.editing = null
     this.drag = { type: 'none' }
     this.history.clear()
-    // AI changes belong to the board they were made on.
+    // AI changes and catch-up news belong to the board they were made on.
     this.aiPreview = null
     this.aiHistory = []
+    this.catchUp = null
+    this.showingCatchUp = false
     this.status = status
     this.zoomToFit()
     this.onBoardChange?.(this.board)
@@ -1056,6 +1059,44 @@ export class Editor {
   setAuthor(name: string) {
     this.author = name
     this.emit()
+  }
+
+  /** What changed since this person last looked (shown until dismissed). */
+  catchUp: (CU.CatchUp & { before: Board }) | null = null
+  /** Highlighting the changes on the board. */
+  showingCatchUp = false
+  onCatchUpDone: (() => void) | null = null
+  /** A question for the AI assistant from elsewhere in the app (it opens and asks). */
+  pendingAiPrompt: string | null = null
+
+  askAi(prompt: string) {
+    this.pendingAiPrompt = prompt
+    this.emit()
+  }
+
+  setCatchUp(c: (CU.CatchUp & { before: Board }) | null) {
+    this.catchUp = c
+    this.showingCatchUp = false
+    this.emit()
+  }
+
+  showCatchUp(on = !this.showingCatchUp) {
+    this.showingCatchUp = on && !!this.catchUp
+    const c = this.catchUp
+    if (this.showingCatchUp && c) {
+      const box = B.bounds(this.board, new Set([...c.added, ...c.changed, ...c.comments.map((x) => x.id)]))
+      const removed = unionAll(c.removed.map(B.itemBounds))
+      const all = box && removed ? unionAll([box, removed]) : (box ?? removed)
+      if (all) this.flyTo(fit(all, this.openView, 120))
+    }
+    this.emit()
+  }
+
+  dismissCatchUp() {
+    this.catchUp = null
+    this.showingCatchUp = false
+    this.emit()
+    this.onCatchUpDone?.()
   }
 
   /** A stand-in name for reactions and votes until the person gives theirs (set per browser). */

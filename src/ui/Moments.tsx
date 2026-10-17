@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toScreen } from '../model/camera'
 import { REACTIONS } from '../model/reactions'
+import { CatchUpBanner } from './CatchUp'
 import { useEditor } from './useEditor'
 
 export const EMOTES = REACTIONS
@@ -166,7 +167,10 @@ export function Moments() {
       <div className="moments-layer">{out}</div>
       {editor.chatting && <ChatInput x={me.x} y={me.y} color={editor.myColor} />}
       <EmotePicker />
-      <TimerBadge />
+      <div className="top-stack">
+        <CatchUpBanner />
+        <TimerBadge />
+      </div>
     </>
   )
 }

@@ -205,6 +205,17 @@ These become interactive once selected; drag them by their title strip.
 - The server also provides an **HTTP API**: post operations to a board from
   scripts, bots or CI. See [docs/SERVER.md](docs/SERVER.md).
 
+### Since you were here
+
+- Come back to a board your friends worked on (in a live session, or after
+  your tab was in the background) and a banner says what changed: new,
+  changed and removed objects and new comments. **Show me** highlights them
+  on the board — green for new, blue for changed, red crosses for what went —
+  with a list that flies to each one. **Summarise with AI** asks the assistant
+  for the short version.
+- Each browser remembers how it last saw each board; your own edits never
+  count as news.
+
 ### Together in the moment
 
 - **E** sends an emote (👍 ❤️ 😂 🎉 🤔 ⭐ — or press 1–6 in the picker) that

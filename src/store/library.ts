@@ -173,6 +173,7 @@ export class Library {
     await this.kv.delete(metaKey(id))
     await this.kv.delete(`handle:${id}`)
     await this.kv.delete(`ai:${id}`)
+    await this.kv.delete(`seen:${id}`)
     for (const k of await this.kv.keys(versionPrefix(id))) await this.kv.delete(k)
   }
 

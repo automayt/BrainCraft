@@ -5953,3 +5953,154 @@ button.on,
   stroke: var(--accent);
   pointer-events: none;
 }
+
+/* ----- top centre: catch-up news and the timer ----- */
+
+.top-stack {
+  position: absolute;
+  top: 66px;
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.top-stack > * {
+  pointer-events: auto;
+}
+
+.top-stack .timer-badge {
+  position: static;
+  transform: none;
+}
+
+.catchup {
+  max-width: 760px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  animation: pop 0.2s var(--ease);
+}
+
+.catchup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+}
+
+.catchup-head > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.catchup-head small {
+  color: var(--muted);
+}
+
+.catchup-spark {
+  color: var(--logo-b);
+}
+
+.catchup-head button:not(.icon-close) {
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.catchup-head button.primary {
+  border-color: transparent;
+}
+
+.catchup-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px 8px;
+  max-height: 220px;
+  margin: 0;
+  padding: 4px 10px 10px;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.catchup-list button,
+.catchup-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: 6px;
+}
+
+.catchup-list button:hover {
+  background: var(--surface-2);
+}
+
+.catchup-tag {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 5px;
+}
+
+.catchup-tag.new {
+  color: #0b5d3b;
+  background: #b7f0d4;
+}
+
+.catchup-tag.changed,
+.catchup-tag.comment {
+  color: #1d3f8a;
+  background: #cddcff;
+}
+
+.catchup-tag.removed {
+  color: #8a1d2d;
+  background: #ffd0d7;
+}
+
+.cu-added {
+  fill: none;
+  stroke: var(--success);
+}
+
+.cu-changed {
+  fill: none;
+  stroke: #5b8cff;
+}
+
+.cu-removed rect {
+  fill: var(--danger-soft);
+  stroke: var(--danger);
+}
+
+.cu-removed path {
+  fill: none;
+  stroke: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .top-stack {
+    top: 116px;
+  }
+  .catchup-head {
+    flex-wrap: wrap;
+  }
+}

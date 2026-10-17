@@ -11,6 +11,7 @@ import { type KV, openKV } from './kv'
 import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
+import { catchUp } from '../model/catchup'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
 
@@ -33,6 +34,8 @@ type TabMessage =
   | { t: 'library'; from: string }
 const NAME_KEY = 'braincraft:name'
 const GUEST_KEY = 'braincraft:guest'
+const SEEN_DELAY = 1500
+const seenKey = (id: string) => `seen:${id}`
 const COLOR_KEY = 'braincraft:color'
 
 export const FILE_EXT = '.braincraft'
@@ -121,6 +124,13 @@ export class Workspace {
     editor.guestName = guest
     if (!editor.author) editor.author = storage?.getItem(NAME_KEY) ?? storage?.getItem('braincraft:author') ?? ''
     editor.myColor = this.me.color
+    // Once the news is read (or dismissed), the board counts as seen.
+    editor.onCatchUpDone = () => this.markSeen(true)
+    if (typeof document !== 'undefined')
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void this.checkCatchUp()
+        else this.markSeen(true)
+      })
     editor.onAiHistory = (h) => {
       // The latest 50 AI changes per board, so each can still be undone after a reload.
       if (this.boardId) void this.library.kv.set(aiKey(this.boardId), h.slice(-50))
@@ -306,6 +316,7 @@ export class Workspace {
     this.clearShareHash()
     const meta = await this.library.meta(id)
     if (meta?.live) this.connectLive(meta.live)
+    else void this.checkCatchUp()
     await this.refresh()
   }
 
@@ -374,6 +385,7 @@ export class Workspace {
   private changed(b: Board) {
     this.live?.localChanged()
     this.tabChanged()
+    this.markSeen()
     if (this.readOnly) return
     this.pending = b
     this.saveState = 'unsaved'
@@ -578,8 +590,38 @@ export class Workspace {
       this.editor.onUserCamera = null
       close()
     }
+    // Coming back to a live board: what did the others do meanwhile?
+    session.onSynced = () => void this.checkCatchUp()
     this.live = session
     this.emit()
+  }
+
+  // ----- since you were here ---------------------------------------------------------
+
+  private seenTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** Remembers the board as seen now (soon, or right away). */
+  markSeen(now = false) {
+    clearTimeout(this.seenTimer)
+    const id = this.boardId
+    // While there's unread news, keep the old snapshot; nothing counts as seen while hidden.
+    if (!id || this.editor.catchUp || (typeof document !== 'undefined' && document.visibilityState === 'hidden' && !now)) return
+    const save = () => {
+      if (this.boardId === id && !this.editor.catchUp) void this.library.kv.set(seenKey(id), { board: this.editor.board, at: Date.now() })
+    }
+    if (now) save()
+    else this.seenTimer = setTimeout(save, SEEN_DELAY)
+  }
+
+  /** Compares the board with how this person last saw it, and offers the news. */
+  async checkCatchUp() {
+    const id = this.boardId
+    if (!id || this.editor.catchUp) return
+    const seen = await this.library.kv.get<{ board: Board; at: number }>(seenKey(id))
+    if (this.boardId !== id) return
+    const news = seen ? catchUp(seen.board, this.editor.board, seen.at) : null
+    if (news) this.editor.setCatchUp({ ...news, before: seen!.board })
+    else this.markSeen(true)
   }
 
   private closeLive() {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Editor } from '../editor/Editor'
-import { emptyBoard } from '../model/board'
+import { addItem, emptyBoard, newItem } from '../model/board'
+import { diff } from '../collab/patch'
 import { fakeMeasure } from '../model/test-helpers'
 import { MemoryKV } from './kv'
 import { encodeBoard } from './share'
@@ -150,5 +151,25 @@ describe('tabs', () => {
     expect(b.boards.map((x) => x.title)).toContain('Made in A')
     a.dispose()
     b.dispose()
+  })
+})
+
+describe('since you were here', () => {
+  it('offers what changed while this person was away, then counts it as seen', async () => {
+    const kv = new MemoryKV()
+    const ws = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    ws.markSeen(true)
+    await new Promise((r) => setTimeout(r, 10))
+    // Someone else's change arrives (another tab, a live session…).
+    const [b] = addItem(ws.editor.board, newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'From Sam' }))
+    ws.editor.applyRemote(diff(ws.editor.board, b))
+    await ws.checkCatchUp()
+    expect(ws.editor.catchUp?.added).toHaveLength(1)
+    ws.editor.dismissCatchUp()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(ws.editor.catchUp).toBeNull()
+    await ws.checkCatchUp()
+    expect(ws.editor.catchUp).toBeNull()
+    ws.dispose()
   })
 })

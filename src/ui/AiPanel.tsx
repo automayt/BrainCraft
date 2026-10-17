@@ -208,6 +208,17 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // A question asked from elsewhere (e.g. "Summarise with AI" on the catch-up banner).
+  const asked = editor.pendingAiPrompt
+  useEffect(() => {
+    if (!asked || running) return
+    editor.pendingAiPrompt = null
+    if (connection) void send(asked)
+    else setInput(asked)
+    // Only when a new question arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked, !!connection])
+
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
   const pending = turns.flatMap((t) => t.proposals).filter((p) => p.status === 'pending')
   const latestPending = pending.at(-1)
