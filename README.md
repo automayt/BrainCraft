@@ -129,6 +129,10 @@ These become interactive once selected; drag them by their title strip.
 - **Your boards (Ctrl+O)** lists every board in this browser with a live
   thumbnail. Rename, duplicate or delete them, or start a new one from a
   template: blank, brainstorm, process map, sprint plan or retrospective.
+- **Export image or PDF (Ctrl+Shift+E):** the whole board or the selection
+  as PNG or SVG, or straight to the clipboard to paste into a chat. The PDF
+  has one page per frame, like the slides. Right-click → **Copy as image**
+  does the selection in one step.
 - Boards **autosave** as you work; the dot next to the title shows when
   they're saved.
 - **Open the same board in several tabs** and they stay in step live, no

@@ -1,3 +1,4 @@
+import { copyImage } from './ExportImage'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
@@ -72,6 +73,7 @@ export function ContextMenu() {
         } },
       paste,
       { label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() },
+      { label: 'Copy as image', run: () => void copyImage(editor, new Set(editor.selection)) },
       'sep',
       { label: 'Bring to front', run: () => editor.bringToFront() },
       { label: 'Send to back', run: () => editor.sendToBack() },

@@ -17,6 +17,7 @@ import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
 import { LazyAiPanel } from './lazyAi'
+import { ExportDialog } from './ExportImage'
 import { SearchPalette } from './SearchPalette'
 import { clearMeasureCache, measureText } from './measure'
 import { EditorContext } from './useEditor'
@@ -29,7 +30,7 @@ function isTyping(target: EventTarget | null) {
 
 const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -83,6 +84,7 @@ function App({ ws }: { ws: Workspace }) {
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
     openAi: () => setDialog('ai'),
+    openExport: () => setDialog('export'),
     assistant,
     toggleAssistant: () => {
       if (!assistant && editor.notesOpen) editor.toggleNotes()
@@ -170,6 +172,11 @@ function App({ ws }: { ws: Workspace }) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         editor.setSearchOpen(!editor.searchOpen)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault()
+        setDialog('export')
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
@@ -309,6 +316,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'versions' && <VersionsDialog onClose={close} />}
           {dialog === 'share' && <ShareDialog onClose={close} />}
           {dialog === 'ai' && <AiDialog bridge={bridge} onClose={close} />}
+          {dialog === 'export' && <ExportDialog onClose={close} />}
           <input
             ref={fileInput}
             type="file"

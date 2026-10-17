@@ -5558,3 +5558,90 @@ button.on,
 .selection-toolbar .swatch.active {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
+
+/* ----- export ----- */
+
+.modal.export-dialog {
+  width: 820px;
+}
+
+.export-body {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 20px;
+  padding: 18px 20px 22px;
+}
+
+.export-preview {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  max-height: 420px;
+  padding: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.export-preview img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.export-options fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.export-options legend {
+  margin-bottom: 6px;
+  font-weight: 650;
+}
+
+.export-options p {
+  margin: 0;
+}
+
+.export-options .small {
+  font-size: 12px;
+}
+
+.export-options .error {
+  color: var(--danger);
+}
+
+.export-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-actions button {
+  padding: 8px 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+}
+
+@media (max-width: 720px) {
+  .export-body {
+    grid-template-columns: 1fr;
+  }
+  .export-preview {
+    min-height: 160px;
+  }
+}
