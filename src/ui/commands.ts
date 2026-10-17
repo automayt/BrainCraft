@@ -91,7 +91,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
     { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: () => ui.openImport('export') },
-    { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
+    { id: 'help', label: 'Help and shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys keyboard shortcuts touch help', run: ui.openHelp },
   ]
   if (hasSketch(editor))
     list.push({ id: 'sketch', label: 'Turn sketch into a board (AI)', group: 'Selection', aliases: 'sketch drawing photo picture napkin whiteboard ocr recognise convert ai', run: () => void sketchToBoard(editor) })
@@ -170,13 +170,15 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     )
   }
   // A board that can't be changed (a snapshot link, the view link, a presentation) offers looking, not editing.
-  if (editor.readOnly) return list.filter((c) => (LOOK_GROUPS.has(c.group) && !EDIT_IDS.has(c.id)) || LOOK_IDS.has(c.id))
+  if (editor.readOnly) return list.filter((c) => (LOOK_GROUPS.has(c.group) && !EDIT_IDS.has(c.id)) || LOOK_IDS.has(c.id) || (!editor.running && RUN_IDS.has(c.id)))
   return list
 }
 
 const LOOK_GROUPS = new Set(['Board', 'View', 'Help'])
 const EDIT_IDS = new Set(['versions', 'import'])
-const LOOK_IDS = new Set(['emote', 'chat'])
+const LOOK_IDS = new Set(['emote', 'chat', 'select-all', 'comments', 'run-history'])
+/** Runs work on boards that can't be changed (nothing is recorded); not while one is under way. */
+const RUN_IDS = new Set(['run', 'run-here'])
 
 /** Commands whose label, group or aliases contain every word of `query`, best first. */
 export function matchCommands(list: Command[], query: string): Command[] {

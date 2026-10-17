@@ -177,6 +177,9 @@ function App({ ws }: { ws: Workspace }) {
     const onKeyDown = (e: KeyboardEvent) => {
       // While presenting, keys drive the slides and nothing else.
       if (editor.presenting) {
+        // ...except Enter and Space on a focused control (Notes, Laser…), which press it.
+        const control = (e.target as Element | null)?.closest?.('button, input, textarea, select')
+        if (control && (e.key === 'Enter' || e.key === ' ')) return
         if (editor.presentKey(e.key)) e.preventDefault()
         return
       }

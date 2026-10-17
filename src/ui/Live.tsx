@@ -1,10 +1,11 @@
 /** Live collaboration in the interface: who's here, their cursors, and starting or joining a session. */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import * as B from '../model/board'
 import { toScreen } from '../model/camera'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
+import { copyText, isLocalAddress } from './copyText'
 
 const initials = (name: string) =>
   name
@@ -77,26 +78,34 @@ export function PeerLayer() {
 }
 
 function Copy({ text, label }: { text: string; label: string }) {
-  const [done, setDone] = useState(false)
+  const [done, setDone] = useState<'' | 'copied' | 'failed'>('')
+  const field = useRef<HTMLInputElement>(null)
   return (
     <div className="share-row">
-      <input readOnly value={text} onFocus={(e) => e.target.select()} aria-label={label} />
+      <input ref={field} readOnly value={text} onFocus={(e) => e.target.select()} aria-label={label} />
       <button
         className="primary"
-        onClick={() => {
-          // Only say "Copied" when it was (the field stays selectable either way).
-          void navigator.clipboard?.writeText(text).then(
-            () => {
-              setDone(true)
-              setTimeout(() => setDone(false), 1500)
-            },
-            () => undefined,
-          )
+        onClick={async () => {
+          // Only say "Copied" when it was; otherwise the link is left selected to copy by hand.
+          const ok = await copyText(text, field.current)
+          if (!ok) field.current?.select()
+          setDone(ok ? 'copied' : 'failed')
+          setTimeout(() => setDone(''), ok ? 1500 : 4000)
         }}
       >
-        {done ? 'Copied' : 'Copy'}
+        {done === 'copied' ? 'Copied' : done === 'failed' ? 'Press Ctrl C' : 'Copy'}
       </button>
     </div>
+  )
+}
+
+/** Links made on localhost point at whoever opens them: say so before they're sent. */
+function LocalOnly() {
+  return (
+    <p className="warning">
+      This page is open as <strong>localhost</strong>, so its links only work on this computer. To invite friends, open BrainCraft by this computer’s
+      network address (such as http://192.168.1.20:8080) or its public address, and share from there.
+    </p>
   )
 }
 
@@ -121,6 +130,7 @@ export function LiveSection() {
       {info ? (
         <>
           <p className="muted">Everyone with a link sees changes as they happen, with cursors and who’s here. Links stay valid; keep the edit link to people you trust.</p>
+          {(edit ?? view) && isLocalAddress((edit ?? view)!) && <LocalOnly />}
           {edit && (
             <label className="link-label">
               Can edit
@@ -154,6 +164,7 @@ export function LiveSection() {
           <p className="muted">
             Shares this board through <strong>{new URL(ws.server).host}</strong>. You’ll get an edit link and a view-only link.
           </p>
+          {isLocalAddress(typeof location === 'undefined' ? ws.server : location.href) && <LocalOnly />}
           <button
             className="primary"
             disabled={busy}

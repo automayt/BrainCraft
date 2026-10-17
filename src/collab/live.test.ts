@@ -5,6 +5,7 @@ import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
 import type { Item } from '../model/types'
 import { LiveSession, liveUrl } from './live'
+import { Room } from './room'
 import { ID_BLOCK, type ClientMessage, type ServerMessage } from './protocol'
 
 class FakeSocket {
@@ -248,5 +249,79 @@ describe('live sessions when things go wrong', () => {
     const parts = ws.sent.filter((m) => m.t === 'patch')
     expect(parts.length).toBeGreaterThan(1)
     for (const p of parts) expect(p.t === 'patch' && p.patches.length).toBeLessThanOrEqual(5000)
+  })
+})
+
+describe('reconnecting to a real room', () => {
+  /** A session talking to an in-memory room; each socket can drop what it sends. */
+  function withRoom() {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', FakeSocket)
+    const room = new Room({ id: 'r', board: { ...emptyBoard('S'), items: [], nextId: 1 }, version: 0, editKey: 'e'.repeat(20), viewKey: 'v'.repeat(20), nextSlot: 1, created: 0, updated: 0 }, fakeMeasure)
+    const editor = new Editor(emptyBoard(), fakeMeasure)
+    const live = new LiveSession(editor, 'https://bc.example/', { id: 'r', key: 'e'.repeat(20) }, { name: 'Ana', color: '#1c7ed6' })
+    let n = 0
+    const connect = () => {
+      const ws = FakeSocket.last!
+      const id = `m${++n}`
+      ws.send = (d: string) => {
+        ws.sent.push(JSON.parse(d))
+        if (!lost.has(ws)) room.receive(id, JSON.parse(d))
+      }
+      room.join({ id, role: 'edit', send: (m) => ws.deliver(m) })
+      return ws
+    }
+    const lost = new Set<FakeSocket>()
+    const reconnect = () => {
+      FakeSocket.last!.onclose!({ code: 1006 })
+      vi.advanceTimersByTime(1000)
+      connect()
+      live.flush()
+    }
+    connect()
+    return { room, editor, live, lost, reconnect }
+  }
+
+  it('sends again an edit and a delete that were lost on the way (objects made here, keys in their own order)', () => {
+    try {
+      const { room, editor, live, lost, reconnect } = withRoom()
+      let a = 0
+      let b = 0
+      editor.edit((x) => {
+        ;[x, a] = B.addItem(x, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'one' }))
+        ;[x, b] = B.addItem(x, B.newItem('sticky', { x: 200, y: 0, w: 100, h: 100 }, { text: 'doomed' }))
+        return x
+      })
+      live.flush()
+      expect(B.getItem(room.data.board, a)?.text).toBe('one')
+      lost.add(FakeSocket.last!)
+      editor.edit((x) => B.remove(B.updateItem(x, a, (i) => ({ ...i, text: 'two' })), new Set([b])))
+      live.flush()
+      reconnect()
+      expect(B.getItem(room.data.board, a)?.text).toBe('two')
+      expect(B.getItem(room.data.board, b)).toBeUndefined()
+      expect(B.getItem(editor.board, a)?.text).toBe('two')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a picture too big to share on this screen, through a reconnect', () => {
+    try {
+      const { room, editor, live, reconnect } = withRoom()
+      let id = 0
+      editor.edit((x) => {
+        ;[x, id] = B.addItem(x, { ...B.newItem('image', { x: 0, y: 0, w: 100, h: 100 }), src: 'data:image/png;base64,' + 'A'.repeat(17 * 1024 * 1024) })
+        return x
+      })
+      live.flush()
+      expect(B.getItem(room.data.board, id)).toBeUndefined()
+      expect(editor.status).toMatch(/too big/)
+      reconnect()
+      expect(B.getItem(editor.board, id)).toBeDefined()
+      expect(B.getItem(room.data.board, id)).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

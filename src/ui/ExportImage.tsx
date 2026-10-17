@@ -47,6 +47,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         url = URL.createObjectURL(new Blob([pic.svg], { type: 'image/svg+xml' }))
         setPreview({ url, w: pic.w, h: pic.h })
       })
+      .catch(() => live && setError('Couldn’t draw this board as a picture. Try exporting a selection instead.'))
     return () => {
       live = false
       if (url) URL.revokeObjectURL(url)
@@ -116,7 +117,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 if (!pdf) throw new Error('Nothing to export')
                 m.download(pdf, name('pdf'))
               })}>
-                {busy === 'pdf' ? 'Making PDF…' : `Download PDF (${pages} page${pages === 1 ? '' : 's'})`}
+                {busy === 'pdf' ? 'Making PDF…' : `Download PDF of all frames (${pages} page${pages === 1 ? '' : 's'})`}
               </button>
             </div>
             <p className="muted small">The PDF has one page per frame, in slide order — a handout of the presentation.</p>

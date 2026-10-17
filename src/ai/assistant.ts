@@ -375,9 +375,12 @@ export class Assistant {
 
 /** A short, human message for an API failure. */
 export function describeError(err: unknown): string {
+  // The BrainCraft server's own refusals (its password, its hourly limit) say exactly what's wrong.
+  const said = (err as { error?: { error?: { message?: unknown } } })?.error?.error?.message
+  const server = typeof said === 'string' && /AI password|from this address/.test(said) ? `The BrainCraft server says: ${said}.` : ''
   if (err instanceof Anthropic.AuthenticationError) return 'The API key was rejected. Check it in the AI settings.'
-  if (err instanceof Anthropic.PermissionDeniedError) return 'This key or server isn’t allowed to use that model (or the server password is wrong).'
-  if (err instanceof Anthropic.RateLimitError) return 'Rate limited by the API. Wait a moment and try again.'
+  if (err instanceof Anthropic.PermissionDeniedError) return server || 'This key or server isn’t allowed to use that model (or the server password is wrong).'
+  if (err instanceof Anthropic.RateLimitError) return server || 'Rate limited by the API. Wait a moment and try again.'
   if (err instanceof Anthropic.APIConnectionError) return 'Couldn’t reach the AI service. Check your connection or the BrainCraft server.'
   if (err instanceof Anthropic.APIError) return `The AI service returned an error (${err.status ?? 'unknown'}): ${err.message}`
   if ((err as Error)?.name === 'AbortError' || err instanceof Anthropic.APIUserAbortError) return 'Stopped.'

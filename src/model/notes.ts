@@ -140,7 +140,8 @@ export function resolveName(name: string, b: Board, boards: readonly BoardRef[])
 
 /** A short human name for an object, used in lists and mentions. */
 export function objectLabel(i: Item): string {
-  const text = i.text.replace(/\s+/g, ' ').trim()
+  // A flip card turned to an empty side goes by its other side.
+  const text = (i.text.trim() ? i.text : (i.back ?? '')).replace(/\s+/g, ' ').trim()
   if (text) return text.length > 48 ? `${text.slice(0, 47)}…` : text
   if (i.kind === 'flow' && i.shape) return `${i.shape[0].toUpperCase()}${i.shape.slice(1)} ${i.id}`
   return `${itemKindLabel(i)} ${i.id}`

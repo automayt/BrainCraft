@@ -1,6 +1,7 @@
 /** Presentation mode: the layer over the board, the controls and the laser pointer. */
 
 import { useEffect, useRef, useState } from 'react'
+import { toWorld } from '../model/camera'
 import { useEditor } from './useEditor'
 
 const IDLE_MS = 2200
@@ -94,11 +95,19 @@ export function Presenter() {
           setFrame((f) => f + 1)
         }}
         onPointerDown={(e) => {
+          // On a phone, a tap while the controls are hidden only brings them back.
+          const asleep = idle
           wake()
+          if (e.pointerType === 'touch' && asleep) return
           // Click to advance, like a slide deck; the laser is for pointing, so it doesn't advance.
           if (p.laser || e.button !== 0) return
-          if (e.shiftKey) editor.goToSlide(p.index - 1)
-          else editor.goToSlide(p.overview ? p.index : p.index + 1)
+          if (p.overview) {
+            // In the overview, a click goes to the slide under it.
+            const at = toWorld(editor.camera, local(e))
+            const k = p.slides.findIndex((s) => at.x >= s.rect.x && at.x <= s.rect.x + s.rect.w && at.y >= s.rect.y && at.y <= s.rect.y + s.rect.h)
+            editor.goToSlide(k >= 0 ? k : p.index)
+          } else if (e.shiftKey) editor.goToSlide(p.index - 1)
+          else editor.goToSlide(p.index + 1)
         }}
         onContextMenu={(e) => {
           e.preventDefault()

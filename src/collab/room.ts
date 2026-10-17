@@ -22,6 +22,8 @@ export interface Member {
 
 const SIGNALS_PER_5S = 15
 const MAX_TIMER_S = 3 * 3600
+/** Objects a shared board may hold: far past any friends' board, short of filling the server. */
+export const MAX_ITEMS = 50_000
 
 /** What the server stores for a room. */
 export interface RoomData {
@@ -121,11 +123,15 @@ export class Room {
       if (!Array.isArray(msg.patches) || msg.patches.length > MAX_PATCHES) return m.send({ t: 'error', message: 'Bad patch', seq })
       // Checked before anyone else sees them: a bad field from one person can't crash the rest.
       const patches = cleanPatches(msg.patches)
+      let next: Board
       try {
-        this.data.board = applyPatches(this.data.board, patches)
+        next = applyPatches(this.data.board, patches)
       } catch {
         return m.send({ t: 'error', message: 'Bad patch', seq })
       }
+      if (next.items.length > MAX_ITEMS && next.items.length > this.data.board.items.length)
+        return m.send({ t: 'error', message: `This board is full (${MAX_ITEMS.toLocaleString('en')} objects)`, seq })
+      this.data.board = next
       this.data.version++
       this.changed()
       m.send({ t: 'ack', seq: msg.seq, version: this.data.version })

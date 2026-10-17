@@ -93,21 +93,24 @@ function VoteControls({ poll, editor }: { poll: Item & { poll: NonNullable<Item[
         <span className="vote-status">
           {open ? `${poll.poll.each - used} of ${poll.poll.each} vote${poll.poll.each === 1 ? '' : 's'} left` : 'Closed'} · {people} voted
         </span>
-        <span className="vote-buttons">
-          {open && (
-            <button onClick={() => editor.revealVote(poll.id, !poll.poll.revealed)} title={poll.poll.revealed ? 'Hide the counts again' : 'Show everyone’s votes'}>
-              {poll.poll.revealed ? 'Hide' : 'Reveal'}
+        {/* Hidden where nothing can change (the view link, a presentation): they'd do nothing. */}
+        {!editor.readOnly && (
+          <span className="vote-buttons">
+            {open && (
+              <button onClick={() => editor.revealVote(poll.id, !poll.poll.revealed)} title={poll.poll.revealed ? 'Hide the counts again' : 'Show everyone’s votes'}>
+                {poll.poll.revealed ? 'Hide' : 'Reveal'}
+              </button>
+            )}
+            <button onClick={() => editor.sortByVotes(poll.id)} title="Arrange the options by votes, most first">
+              Sort
             </button>
-          )}
-          <button onClick={() => editor.sortByVotes(poll.id)} title="Arrange the options by votes, most first">
-            Sort
-          </button>
-          {open && (
-            <button onClick={() => editor.endVote(poll.id)} title="Close the vote and show the results">
-              End
-            </button>
-          )}
-        </span>
+            {open && (
+              <button onClick={() => editor.endVote(poll.id)} title="Close the vote and show the results">
+                End
+              </button>
+            )}
+          </span>
+        )}
       </div>
     </foreignObject>
   )

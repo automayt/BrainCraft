@@ -301,5 +301,15 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
   }
 }
 
-/** Whether two patch values are the same. */
-export const sameValue = same
+/** JSON with object keys sorted, so the same value written in a different key order compares equal. */
+function canonical(v: unknown): string {
+  return JSON.stringify(v, (_, x: unknown) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [z]) => (a < z ? -1 : a > z ? 1 : 0))) : x,
+  )
+}
+
+/**
+ * Whether two patch values are the same, whatever order their keys were written in (the server
+ * keeps objects as its cleaning rebuilt them; this screen keeps them as they were made).
+ */
+export const sameValue = (a: unknown, z: unknown) => a === z || canonical(a) === canonical(z)

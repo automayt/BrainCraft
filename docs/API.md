@@ -158,7 +158,7 @@ object {"ops": [...]}, no prose. Available operations:
 - createDatabase {title?, fields?, records?: [{field: value}], views?: [table|board|timeline|calendar|gallery]}
 - createSpinner {options: [text]}      - createVote {options: [refs], question?}
 - connect {from, to, label?}           - addComment {id, text}
-- update {id, status?: todo|doing|waiting|undecided|done}
+- update {id, status?: todo|doing|waiting|undecided|done|dropped}
 - react {ids: [refs], emoji}
 Give created objects a "ref" name and use it in later operations. Leave out
 positions ("at"); BrainCraft lays things out. Dates are YYYY-MM-DD.

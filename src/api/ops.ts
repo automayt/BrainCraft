@@ -158,6 +158,9 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     const now = new Map(b.items.map((i) => [i.id, i]))
     for (const id of ctx.protect)
       if (old.has(id) && now.get(id) !== old.get(id)) throw new OpError(`Object ${id} is someone's hidden brainstorm note; it can't be changed or deleted until the round is revealed`)
+    // Nor can the round's card go while it hides them: that would show them all.
+    for (const i of board.items)
+      if (i.brainstorm && !i.brainstorm.revealed && !now.has(i.id)) throw new OpError(`Object ${i.id} is a private brainstorm still under way; reveal it before deleting it`)
   }
   const oldConns = new Set(board.connectors)
   const connectors = b.connectors.map((c) => {

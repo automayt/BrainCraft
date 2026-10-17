@@ -12,7 +12,7 @@ import { focusFirst, moveFocus } from './menuKeys'
 type Entry = { label: string; keys?: string; run: () => void; danger?: boolean } | 'sep' | { heading: string }
 
 /** What a view-only board's menu keeps. */
-const LOOK = /^(Copy|Comments|Run history|Select all|Zoom to fit)/
+const LOOK = /^(Copy|Comments|Run |Select all|Select several|Done selecting|Zoom to fit)/
 
 /** Drops headings with nothing under them and doubled, leading or trailing separators. */
 function tidy(entries: Entry[]): Entry[] {
@@ -47,7 +47,7 @@ export function ContextMenu() {
     run: () =>
       navigator.clipboard?.readText().then(
         (text) => text && editor.pasteText(text),
-        () => editor.setStatus('Press Ctrl+V to paste'),
+        () => editor.setStatus('Press Ctrl V to paste'),
       ),
   }
   const place = (tool: Parameters<typeof editor.setTool>[0]) => () => {
@@ -93,7 +93,7 @@ export function ContextMenu() {
       'sep',
       { label: 'Copy', keys: 'Ctrl C', run: () => {
           const text = editor.copyText()
-          if (text) navigator.clipboard?.writeText(text).then(() => editor.setStatus('Copied'), () => editor.setStatus('Press Ctrl+C to copy'))
+          if (text) navigator.clipboard?.writeText(text).then(() => editor.setStatus('Copied'), () => editor.setStatus('Press Ctrl C to copy'))
         } },
       paste,
       { label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() },
@@ -148,6 +148,9 @@ export function ContextMenu() {
       { label: 'Import Mermaid / outline…', run: ui.openImport },
     )
   }
+  // Touch has no Shift: a mode where taps add to the selection instead.
+  if (editor.tapToAdd) entries.unshift({ label: 'Done selecting', run: () => editor.setTapToAdd(false) }, 'sep')
+  else if (globalThis.matchMedia?.('(pointer: coarse)').matches) entries.unshift({ label: 'Select several…', run: () => editor.setTapToAdd(true) }, 'sep')
   if (editor.readOnly) {
     // Nothing here can change: keep the entries that only look or copy.
     const kept = tidy(entries.filter((e) => typeof e !== 'object' || 'heading' in e || LOOK.test(e.label)))

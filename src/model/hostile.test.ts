@@ -83,6 +83,28 @@ describe('hostile board data', () => {
     }
   })
 
+  it('drops ids that would make new objects vanish or collide on reload', () => {
+    const two = [
+      { ...base, id: 1, kind: 'sticky' },
+      { ...base, id: 2, kind: 'sticky' },
+    ]
+    const boards = [
+      ...[2.5, 1e300, 2 ** 53].map((id) => ({ items: two, connectors: [{ id, from: 1, to: 2 }] })),
+      { items: [{ ...base, id: 2 ** 53, kind: 'sticky' }], connectors: [] },
+    ]
+    for (const raw of boards) {
+      let b = fromJson(JSON.stringify({ version: 1, title: 't', ...raw, nextId: 1 }))
+      const made: number[] = []
+      for (let k = 0; k < 2; k++) {
+        let id: number
+        ;[b, id] = addItem(b, newItem('sticky', { x: 0, y: 0, w: 10, h: 10 }, { text: `new ${k}` }))
+        made.push(id)
+      }
+      expect(new Set(made).size).toBe(2)
+      expect(fromJson(toJson(b)).items.filter((i) => i.text.startsWith('new'))).toHaveLength(2)
+    }
+  })
+
   it('opens a very big board (no spreading its ids into Math.max)', () => {
     const items = Array.from({ length: 200_000 }, (_, k) => ({ ...base, id: k + 1, kind: 'sticky', text: '' }))
     const b = fromJson(JSON.stringify({ version: 1, title: 't', items, connectors: [], nextId: 1 }))

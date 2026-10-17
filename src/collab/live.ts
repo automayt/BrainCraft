@@ -11,6 +11,7 @@ import type { Editor } from '../editor/Editor'
 import type { Rect, Vec } from '../model/geom'
 import type { Board, Id } from '../model/types'
 import { type Patch, applyPatches, diff, keyOf, sameValue, valuesOf } from './patch'
+import { cleanConnector, cleanItem } from '../model/sanitize'
 import { type ClientMessage, type LiveLink, type PeerInfo, type Presence, type Role, type ServerMessage } from './protocol'
 
 export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
@@ -20,8 +21,12 @@ const SEND_DELAY = 40
 const BATCH = 2000
 /** And at most this much JSON per message (the server takes 25 MB; pictures make patches big). */
 const BATCH_BYTES = 4_000_000
-/** A single change bigger than this can't be shared live at all. */
-const MAX_PATCH_BYTES = 20_000_000
+/** A picture longer than this can't be shared live: the server would cut it short (as a file would). */
+const MAX_SRC = 16 * 1024 * 1024
+
+/** About how much a patch weighs when sent: pictures by their data, the rest as JSON. */
+const weigh = (p: Patch) => (p.k === 'item' && typeof p.v?.src === 'string' && p.v.src.length > 100_000 ? p.v.src.length + 4096 : JSON.stringify(p).length)
+const tooBig = (p: Patch) => p.k === 'item' && typeof p.v?.src === 'string' && p.v.src.length > MAX_SRC
 const PRESENCE_EVERY = 80
 const RETRY = [500, 1000, 2000, 4000, 8000, 15000]
 
@@ -61,6 +66,8 @@ export class LiveSession {
    * connection drops before the server confirms.
    */
   private inflight = new Map<number, { patches: Patch[]; base: Board }>()
+  /** Objects too big to share, kept on this screen only (and put back after a reconnect). */
+  private keptHere = new Map<string, Patch>()
   private seq = 0
   private sendTimer: ReturnType<typeof setTimeout> | undefined
   private presenceTimer: ReturnType<typeof setTimeout> | undefined
@@ -155,19 +162,22 @@ export class LiveSession {
         // Work the server may not have (sent but not confirmed, or done while disconnected) is
         // replayed on top of its board; what it already has makes no difference there.
         const sent = [...this.inflight.values()]
-        const offline = this.synced ? diff(this.synced, this.editor.board) : []
+        const offline = [...(this.synced ? diff(this.synced, this.editor.board) : []), ...this.keptHere.values()]
         this.inflight.clear()
         this.editor.resetFromRemote(m.board, { readOnly: m.you.role === 'view', idBase: m.you.idBase })
         // A sent change goes again only where the server still has what it was made against (or
         // an earlier change of ours to the same thing): if someone has changed it since, theirs is newer.
         const now = valuesOf(this.editor.board)
+        // Objects as the server keeps them (cleaned), so a value nobody changed compares equal.
+        const kept = (p: Patch, v: unknown) => (v && p.k === 'item' ? cleanItem(v) : v && p.k === 'conn' ? cleanConnector(v) : v)
+        const same = (p: Patch, a: unknown, z: unknown) => sameValue(kept(p, a), kept(p, z))
         const ours = new Map<string, unknown[]>()
         const replay: Patch[] = []
         for (const { patches, base } of sent) {
           const then = valuesOf(base)
           for (const p of patches) {
             const values = ours.get(keyOf(p)) ?? [then(p)]
-            if (values.some((v) => sameValue(now(p), v))) replay.push(p)
+            if (values.some((v) => same(p, now(p), v))) replay.push(p)
             values.push(p.v)
             ours.set(keyOf(p), values)
           }
@@ -273,11 +283,13 @@ export class LiveSession {
     }
     // Big changes go in parts the server accepts, by count and by size.
     for (const p of patches) {
-      const size = JSON.stringify(p).length
-      if (size > MAX_PATCH_BYTES) {
-        this.editor.setStatus('Live session: one object is too big to share live; it stays on this screen only')
+      if (tooBig(p)) {
+        if (!this.keptHere.has(keyOf(p))) this.editor.setStatus('Live session: a picture is too big to share live; it stays on this screen only')
+        this.keptHere.set(keyOf(p), p)
         continue
       }
+      this.keptHere.delete(keyOf(p))
+      const size = weigh(p)
       if (part.length >= BATCH || (part.length && bytes + size > BATCH_BYTES)) send()
       part.push(p)
       bytes += size

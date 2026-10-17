@@ -48,7 +48,12 @@ Docs:
 
 - **Share → Start a live session** uploads the open board and gives you two
   links. The **edit** link lets people change the board. The **view** link
-  lets them watch it live, but nothing they do is saved.
+  lets them watch it live: they can't change it, but they can follow
+  people, send emotes, chat by their cursor, read comments, search, export,
+  and make their own copy.
+- Links made on **localhost** only work on that computer. To invite
+  friends, open BrainCraft by the computer's network address (such as
+  `http://192.168.1.20:8080`) or a public address, and share from there.
 - Each link holds a long random key. Nobody can list or guess boards. Keep
   edit links to people you trust; anyone you give one to can pass it on.
 - Each person's browser keeps its own copy of shared boards in its board
@@ -58,7 +63,7 @@ Docs:
   board. The server copy stays for everyone else.
 
 There are no user accounts yet. Names shown to others are set in the share
-dialog and aren't verified.
+dialog or in the comments panel (the same name), and aren't verified.
 
 ## How edits merge
 

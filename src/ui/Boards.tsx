@@ -10,6 +10,8 @@ import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
 import { LiveSection } from './Live'
+import { copyText } from './copyText'
+import { useUi } from './uiContext'
 
 export function timeAgo(t: number, now = Date.now()): string {
   const s = Math.round((now - t) / 1000)
@@ -90,6 +92,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
         <h2>Your boards</h2>
         <input
           className="boards-search"
+          aria-label="Find a board"
           placeholder="Find a board"
           autoFocus
           value={query}
@@ -245,7 +248,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
         className="version-save"
         onSubmit={async (e) => {
           e.preventDefault()
-          await ws.saveVersion(name || 'Saved version')
+          await ws.saveVersion(name)
           setName('')
           reload()
         }}
@@ -293,6 +296,8 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
                   <button
                     className="primary"
                     onClick={async () => {
+                      // In a live session it replaces the board for everyone, and only you can undo it.
+                      if (ws.liveInfo && !window.confirm('Everyone in the live session will see this version instead of the board as it is now. Restore it?')) return
                       await ws.restoreVersion(preview.v)
                       onClose()
                     }}
@@ -332,13 +337,12 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
   }, [ws, images])
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link)
-    } catch {
+    const ok = await copyText(link, field.current)
+    if (!ok) {
       field.current?.select()
-      document.execCommand('copy')
+      editor.setStatus('Press Ctrl C to copy the link')
     }
-    setCopied(true)
+    setCopied(ok)
   }
 
   const kb = Math.ceil(link.length / 1024)
@@ -382,6 +386,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
 
 export function ReadOnlyBanner() {
   const ws = useWorkspace()
+  const ui = useUi()
   if (!ws.readOnly) return null
   return (
     <div className="readonly-banner island no-canvas" role="status">
@@ -392,9 +397,7 @@ export function ReadOnlyBanner() {
       <button className="primary" onClick={() => void ws.keepCopy()}>
         Save a copy to edit
       </button>
-      <button onClick={() => ws.boards[0] && void ws.switchTo(ws.boards[0].id)} disabled={!ws.boards.length}>
-        Your boards
-      </button>
+      <button onClick={ui.openBoards}>Your boards</button>
     </div>
   )
 }
@@ -407,8 +410,9 @@ export function LiveViewerBanner() {
     <div className="viewer-banner island no-canvas" role="status">
       <span className="readonly-dot" aria-hidden="true" />
       <span>
-        <strong>Watching live</strong> · view only · ask for the edit link to join in
+        <strong>Watching live</strong> · you can follow people, send emotes (E) and chat by your cursor (/). Ask for the edit link to join in.
       </span>
+      <button onClick={() => void ws.leaveLive().then(() => ws.editor.setStatus('This is your own copy now; the live board carries on without it'))}>Make my own copy</button>
     </div>
   )
 }

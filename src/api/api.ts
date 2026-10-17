@@ -7,7 +7,7 @@ import type { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { center } from '../model/geom'
 import type { Board, Id, Kind } from '../model/types'
-import { OPS, type Op, type OpResult, applyOps, maskedIds } from './ops'
+import { OPS, type Op, OpError, type OpResult, applyOps, maskedIds } from './ops'
 import { type ObjectDetail, type ObjectSummary, findObjects, getObject, listObjects, mermaidOf } from './queries'
 
 export type { ObjectSummary }
@@ -24,6 +24,8 @@ export class BrainCraftAPI {
   /** Applies a batch of operations as one undo step. Throws (changing nothing) if any is invalid. */
   apply(ops: Op[] | Op): OpResult[] {
     const list = Array.isArray(ops) ? ops : [ops]
+    // Otherwise the change would be dropped while reporting new ids as if it had worked.
+    if (this.editor.readOnly) throw new OpError('This board can’t be changed right now (it’s view-only, being presented, or running a flowchart)')
     let results: OpResult[] = []
     this.editor.edit((b) => {
       const out = applyOps(b, list, { measure: this.editor.measure, origin: center(this.editor.visibleWorld), protect: maskedIds(this.editor.viewBoard) })

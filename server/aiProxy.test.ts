@@ -39,6 +39,24 @@ describe('AI proxy', () => {
     expect(checkRequest({ model: 'claude-opus-5-5', max_tokens: 64000 })).toMatch(/max_tokens/)
     expect(checkRequest({ model: 'claude-opus-5-5', max_tokens: 100, tools: [{ type: 'web_search_20260209', name: 'web_search' }] })).toMatch(/Server tools/)
     expect(checkRequest({ model: 'claude-opus-5-5', max_tokens: 100, tools: [{ name: 'read_board', input_schema: {} }] })).toBeNull()
+    // Only the fields the app sends: nothing that could reach paid server features.
+    expect(checkRequest({ model: 'claude-opus-5-5', max_tokens: 100, messages: [], thinking: { type: 'adaptive' }, output_config: {}, cache_control: {}, stream: true, fallbacks: 'default' })).toBeNull()
+    expect(checkRequest({ model: 'claude-opus-5-5', max_tokens: 100, mcp_servers: [{ url: 'https://x' }] })).toMatch(/mcp_servers/)
+  })
+
+  it('counts requests by the server’s idea of who is asking, and limits wrong passwords', async () => {
+    const proxy = new AiProxy({ apiKey: 'k', fetch: (async () => new Response('{}')) as unknown as typeof fetch, now: () => 1000, visitor: () => 'everyone' })
+    let last = res()
+    for (let i = 0; i < 121; i++) {
+      last = res()
+      await proxy.handle(req({}, `9.9.9.${i % 200}`), last, body)
+    }
+    expect(last.status).toBe(429)
+    const locked = new AiProxy({ apiKey: 'k', password: 'pw', fetch: (async () => new Response('{}')) as unknown as typeof fetch, now: () => 1000 })
+    for (let i = 0; i < 20; i++) await locked.handle(req({ 'x-braincraft-ai-password': `guess${i}` }), res(), body)
+    const right = res()
+    await locked.handle(req({ 'x-braincraft-ai-password': 'pw' }), right, body)
+    expect(right.status).toBe(429)
   })
 
   it('adds the key and streams the reply through', async () => {

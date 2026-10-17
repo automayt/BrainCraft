@@ -7,6 +7,7 @@ export const EditorContext = createContext<Editor | null>(null)
 export function useEditor(): Editor {
   const editor = useContext(EditorContext)
   if (!editor) throw new Error('useEditor outside EditorContext')
-  useSyncExternalStore(editor.subscribe, editor.getVersion)
+  // The third argument lets static renders (image export) use the same views.
+  useSyncExternalStore(editor.subscribe, editor.getVersion, editor.getVersion)
   return editor
 }

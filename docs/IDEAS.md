@@ -122,6 +122,44 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [ ] **Help with a search box**, and shortcuts marked "with nothing
   selected" where that matters.
 
+## From the fourth review (October 2026)
+
+- [ ] **The server offers its network address:** the health check reports
+  the computer's LAN address, so the share dialog can hand out links that
+  work for friends (today it only warns about localhost).
+- [ ] **An "Undo" button in messages** ("Deleted…", "Revealed…"), since
+  phones have no Ctrl Z.
+- [ ] **Invite through the phone's share sheet**, with a ready-made line:
+  board name, edit or view, what to do.
+- [ ] **A note for friends who join:** one line from the host shown once to
+  anyone arriving by link.
+- [ ] **"Bring everyone here"** and presenting to the room: every live friend
+  follows you, and slide changes reach everyone.
+- [ ] **Quick poll:** a question and its options in one box makes the option
+  cards and the dot vote together.
+- [ ] **"I'm done" in a private brainstorm**, so the card shows "3 of 5 done".
+- [ ] **Reactions on comments**, so friends can agree without a "+1" reply.
+- [ ] **A readable version preview** (full size, pan and zoom) before
+  restoring, a summary of what changed, and autosaves grouped by day.
+- [ ] **"Who added it" view:** tint each sticky with its author's colour.
+- [ ] **Touch wording on the welcome board** and touch versions of the hints.
+- [ ] **Timer:** any length ("7m"), a chime for everyone, and a place in the
+  right-click menu.
+- [ ] **Presenting:** numbered, clickable slides in the overview, swipes on
+  phones, and quieter vote and spin controls on slides.
+- [ ] **New dot-vote cards and the toolbar keep clear of things:** the card
+  finds free space instead of covering frame titles, and the toolbar never
+  covers a big widget's own header.
+- [ ] **Calendar:** a per-day list behind "+N more", and adding a record from
+  the keyboard.
+- [ ] **Server housekeeping:** write rooms to disk without blocking, cap a
+  board's size in bytes, and throttle presence messages.
+- [ ] **Live: a reorder sent just before a drop** is replayed by its order
+  among the objects it knew, not lost when anyone else added something.
+- [ ] **A drag cut off by a reconnect** stays undoable as one step.
+- [ ] **Landscape phones:** the phone layout (tools at the bottom) for any
+  screen under about 450px tall.
+
 ## From the earlier list
 
 - [x] **More database views:** calendar and gallery.
