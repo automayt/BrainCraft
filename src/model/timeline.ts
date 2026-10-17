@@ -179,7 +179,87 @@ export function updateEntry(t: TimelineData, id: string, patch: Partial<Timeline
 }
 
 export function deleteEntry(t: TimelineData, id: string): TimelineData {
-  return { ...t, entries: t.entries.filter((e) => e.id !== id) }
+  // Nothing waits on an entry that's gone.
+  return { ...t, entries: t.entries.filter((e) => e.id !== id).map((e) => (e.after?.includes(id) ? withAfter(e, e.after.filter((x) => x !== id)) : e)) }
+}
+
+// ----- dependencies ----------------------------------------------------------------
+
+function withAfter(e: TimelineEntry, after: string[]): TimelineEntry {
+  const next = { ...e }
+  if (after.length) next.after = after
+  else delete next.after
+  return next
+}
+
+/** The day an entry is finished: its end, or a milestone's own day. */
+const finish = (e: { start: string; end?: string }) => toDay(e.end ?? e.start)
+
+/** Whether `a` already (directly or not) waits for `b`. */
+function waitsFor(t: TimelineData, a: string, b: string, seen = new Set<string>()): boolean {
+  if (a === b) return true
+  if (seen.has(a)) return false
+  seen.add(a)
+  const e = t.entries.find((x) => x.id === a)
+  return !!e?.after?.some((x) => waitsFor(t, x, b, seen))
+}
+
+/** Makes `id` wait for `before` to finish. Refused (unchanged) if it would make a loop. */
+export function addDependency(t: TimelineData, before: string, id: string): TimelineData {
+  const e = t.entries.find((x) => x.id === id)
+  if (!e || !t.entries.some((x) => x.id === before) || e.after?.includes(before) || waitsFor(t, before, id)) return t
+  return { ...t, entries: t.entries.map((x) => (x.id === id ? withAfter(x, [...(x.after ?? []), before]) : x)) }
+}
+
+export function removeDependency(t: TimelineData, before: string, id: string): TimelineData {
+  return { ...t, entries: t.entries.map((x) => (x.id === id && x.after?.includes(before) ? withAfter(x, x.after.filter((b) => b !== before)) : x)) }
+}
+
+/** Whether adding "id waits for before" would make a loop (or is the same entry). */
+export const wouldLoop = (t: TimelineData, before: string, id: string) => waitsFor(t, before, id)
+
+export interface Dependency {
+  from: string
+  to: string
+  /** The waiting entry starts before the one it waits for has finished. */
+  late: boolean
+}
+
+/** Every dependency on the timeline, with clashes marked. */
+export function dependencies(t: TimelineData): Dependency[] {
+  const byId = new Map(t.entries.map((e) => [e.id, e]))
+  const out: Dependency[] = []
+  for (const e of t.entries)
+    for (const b of e.after ?? []) {
+      const before = byId.get(b)
+      if (before) out.push({ from: b, to: e.id, late: toDay(e.start) <= finish(before) && (!!before.end || toDay(e.start) < finish(before)) })
+    }
+  return out
+}
+
+/**
+ * Moves entries that start too early to the day after what they wait for has
+ * finished (keeping their length), working down the chain.
+ */
+export function lineUp(t: TimelineData): TimelineData {
+  let entries = t.entries
+  let changed = false
+  // Enough passes to settle any chain (it can't be longer than the number of entries).
+  for (let pass = 0; pass < entries.length; pass++) {
+    let moved = false
+    const byId = new Map(entries.map((e) => [e.id, e]))
+    const next = entries.map((e) => {
+      if (!e.after?.length) return e
+      const ready = Math.max(...e.after.map((b) => byId.get(b)).filter((b): b is TimelineEntry => !!b).map((b) => finish(b) + (b.end ? 1 : 0)))
+      if (!Number.isFinite(ready) || toDay(e.start) >= ready) return e
+      moved = true
+      return { ...e, ...shiftDates(e, ready - toDay(e.start)) }
+    })
+    if (!moved) break
+    entries = next
+    changed = true
+  }
+  return changed ? { ...t, entries } : t
 }
 
 /** Shifts an entry by `days`, or one of its ends when resizing (never past the other end). */

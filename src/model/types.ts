@@ -174,6 +174,8 @@ export interface TimelineEntry {
   start: string
   end?: string
   color: string
+  /** Entries (of this timeline) that must finish before this one starts. */
+  after?: string[]
 }
 
 export interface TimelineData {

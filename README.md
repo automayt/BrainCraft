@@ -109,6 +109,10 @@ These become interactive once selected; drag them by their title strip.
   **follow Kanban boards**: their dated cards appear live in their own lane,
   overdue ones are flagged, and dragging a card on the timeline reschedules it
   on the board.
+- **Timeline dependencies:** select an event and use **Waits for…** to pick
+  what must finish first. Arrows join them; if an event starts too early its
+  arrow turns red and dashed, and **Line up** moves events (and everything
+  after them) so each starts the day after what it waits for.
 
 ### Comments and search
 
