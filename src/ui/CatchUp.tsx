@@ -22,21 +22,23 @@ export function CatchUpBanner() {
         <span className="catchup-spark" aria-hidden="true">
           ✦
         </span>
-        <span>
+        <span className="catchup-msg">
           <strong>Since you were here</strong> <small>({timeAgo(c.since)})</small>: {catchUpSummary(c)}
         </span>
-        <button className="primary" onClick={() => editor.showCatchUp()}>
-          {editor.showingCatchUp ? 'Hide' : 'Show me'}
-        </button>
-        <button
-          title="Ask the AI assistant for a short summary"
-          onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.board)}`, undefined, 'What changed since I was last here?')}
-        >
-          Summarise with AI
-        </button>
-        <button className="icon-close" aria-label="Dismiss" title="Got it" onClick={() => editor.dismissCatchUp()}>
-          ×
-        </button>
+        <span className="catchup-actions">
+          <button className="primary" onClick={() => editor.showCatchUp()}>
+            {editor.showingCatchUp ? 'Hide' : 'Show me'}
+          </button>
+          <button
+            title="Ask the AI assistant for a short summary"
+            onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.board)}`, undefined, 'What changed since I was last here?')}
+          >
+            Summarise with AI
+          </button>
+          <button className="icon-close" aria-label="Dismiss" title="Got it" onClick={() => editor.dismissCatchUp()}>
+            ×
+          </button>
+        </span>
       </div>
       {editor.showingCatchUp && (
         <ul className="catchup-list">
