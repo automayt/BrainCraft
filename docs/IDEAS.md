@@ -35,7 +35,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
   space key, and images stored on the server instead of inside boards.
 - [ ] **Phone capture:** install BrainCraft on a phone, share a photo, link or
   note to it, and it lands on an Inbox board.
-- [ ] **Who changed it:** "Since you were here" says who made each change.
+- [x] **Who changed it:** "Since you were here" says who made each change.
 
 ## Built
 

@@ -255,6 +255,8 @@ export interface Item extends Rect {
   group?: string
   /** Where this object stands: to do, in progress, done… */
   status?: Status
+  /** Who last changed it (their name), for "Since you were here". */
+  by?: string
   /** On a comment card: a private brainstorm round, and whether it was revealed. */
   brainstorm?: { by: string; revealed?: boolean }
   /** A sticky note written during an open brainstorm: only its writer sees it until the reveal. */

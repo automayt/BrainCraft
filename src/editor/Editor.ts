@@ -418,7 +418,8 @@ export class Editor {
   private apply(b: Board) {
     if (this.readOnly) return
     // During a private brainstorm, notes written here are marked as this person's.
-    const next = M.layoutAll(BS.stampNew(this.board, b, this.me), this.measure)
+    // and everything changed here is signed with their name for "Since you were here".
+    const next = M.layoutAll(CU.stampAuthors(this.board, BS.stampNew(this.board, b, this.me), this.me), this.measure)
     if (next === this.board) return
     this.board = next
     this.onBoardChange?.(next)

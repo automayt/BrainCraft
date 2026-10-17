@@ -237,6 +237,9 @@ These become interactive once selected; drag them by their title strip.
   on the board — green for new, blue for changed, red crosses for what went —
   with a list that flies to each one. **Summarise with AI** asks the assistant
   for the short version.
+- It says **who**: "3 new · 2 changed · by Sam and Alex", and each row in the
+  list names the person. Every object remembers who last changed it (by the
+  name you post comments under, or your guest name).
 - Each browser remembers how it last saw each board; your own edits never
   count as news.
 
