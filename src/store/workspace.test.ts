@@ -172,4 +172,36 @@ describe('since you were here', () => {
     expect(ws.editor.catchUp).toBeNull()
     ws.dispose()
   })
+
+  it('does not count your own last edit as news after switching boards and back', async () => {
+    const kv = new MemoryKV()
+    const ws = await Workspace.start(new Editor(emptyBoard(), fakeMeasure), kv, '')
+    const first = ws.boardId!
+    ws.markSeen(true)
+    await new Promise((r) => setTimeout(r, 10))
+    ws.editor.addNote(ws.editor.board.items[0].id, 'Written just before leaving')
+    await ws.newBoard(emptyBoard('Elsewhere'))
+    await ws.switchTo(first)
+    expect(ws.editor.catchUp).toBeNull()
+    ws.dispose()
+  })
+})
+
+describe('wiki-links', () => {
+  it('opens a linked board and shows its object, and finds links back', async () => {
+    const { ws, editor } = await workspace()
+    const home = ws.boardId!
+    const [withSticky, sticky] = addItem(emptyBoard('Garage'), newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Jack' }))
+    const garage = await ws.newBoard(withSticky)
+    await ws.switchTo(home)
+    const target = editor.board.items[0].id
+    editor.addNote(target, `See [[Jack]](board:${garage}#${sticky})`)
+    await ws.flush()
+    await ws.openLink({ board: garage, item: sticky })
+    expect(ws.boardId).toBe(garage)
+    expect([...editor.selection]).toEqual([sticky])
+    const here = await ws.linksHere()
+    expect(here.map((l) => [l.boardId, l.from, l.to.item, l.text])).toEqual([[home, target, sticky, 'See Jack']])
+    ws.dispose()
+  })
 })

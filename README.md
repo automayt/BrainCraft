@@ -114,10 +114,18 @@ These become interactive once selected; drag them by their title strip.
 - **Every object has a description**: free text at the top of its comments
   panel for context, links or decisions. It's searchable, and AI assistants
   can read and set it.
+- **Wiki-links.** Type **[[** in a description or comment to link to another
+  board or to an object on this board. Links read as chips: click one to open
+  that board or fly to that object. A typed `[[Name]]` links to whatever is
+  called that; if nothing is yet, clicking it starts a board with that name.
+  Every object lists what links to it under "Linked from", and with nothing
+  selected the panel lists comments on your other boards that link to this
+  one. Links to a shared board use its live-session id, so they work for
+  every friend who has that board.
 - **Every object has comments.** Select it and press **Shift+C** (or click
   *Comment*) to open the panel on the right. Notes are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention another object; the
-  mention links to it, and the other object lists it under "Mentioned in".
+  mention links to it, and the other object lists it under "Linked from".
   With nothing selected, the panel shows every comment on the board.
 - **Comment blocks (C)** are notes you can place anywhere on the board.
 - **Ctrl+K** searches everything: text, comments, table cells, Kanban cards,

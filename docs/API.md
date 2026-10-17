@@ -97,6 +97,14 @@ timeline.
 | `updateRecord` | `id` (any view), `record` (record id or title), `values` | Sets fields by name; `null` or `""` clears one. |
 | `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
 
+**Links in comments and descriptions.** Write `[[Name]]` to link to the board
+titled *Name*, or else the object on this board labelled *Name*. The app
+stores links it picks as `[[Label]](#id)` (an object here), `[[Label]](board:key)`
+(a board) or `[[Label]](board:key#id)` (an object on another board), where
+`key` is the board's live-session id when it is shared and its id in the
+browser otherwise. Reads (`get`, `find`) return comments and descriptions with
+links shown as their labels.
+
 Every operation returns a result: `{ "op", "id"?, "ids"?, "ref"? }`. `ids` lists
 everything a multi-object operation (mind map, flowchart) created.
 
