@@ -39,10 +39,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     ...TOOLS.map((t) => ({
       id: `tool:${t.tool}`,
       label: TOOL_VERBS[t.tool] ?? t.label,
-      group: 'Create',
+      group: t.tool === 'select' || t.tool === 'hand' || t.tool === 'connector' || t.tool === 'pen' ? 'Tools' : 'Create',
       keys: t.key.toUpperCase(),
       aliases: `${t.label} new insert create`,
-      run: () => editor.setTool(t.tool),
+      // Chosen from the palette, a creating tool places its object straight away (in the middle of the view).
+      run: () => {
+        editor.setTool(t.tool)
+        editor.placeHere()
+      },
     })),
     { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
     { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },
@@ -78,6 +82,15 @@ export function commands(editor: Editor, ui: Ui): Command[] {
   if (editor.single?.kind === 'mind') {
     const id = editor.single.id
     list.push({ id: 'tidy-mind', label: 'Tidy mind map', group: 'Mind map', aliases: 'reset layout arrange auto align clean', run: () => editor.tidyMindMap(id) })
+    if (editor.board.items.some((i) => i.parent === id))
+      list.push({
+        id: 'collapse-mind',
+        label: editor.single.collapsed ? 'Expand branch' : 'Collapse branch',
+        group: 'Mind map',
+        keys: '/',
+        aliases: 'collapse expand fold unfold hide show children branch',
+        run: () => editor.toggleCollapsed(id),
+      })
   }
   if (editor.single?.kind === 'flow') {
     const id = editor.single.id

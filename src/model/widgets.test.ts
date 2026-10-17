@@ -87,6 +87,8 @@ describe('kanban', () => {
     let k = K.newKanban()
     const [todo, doing] = k.columns
     let id: string
+    expect(todo.cards).toEqual([])
+    ;[k] = K.addCard(k, todo.id, 'Seed')
     ;[k, id] = K.addCard(k, todo.id, 'Write spec')
     k = K.updateCard(k, id, { due: '2026-10-20', color: '#f00' })
     k = K.updateCard(k, id, { color: '' })
@@ -95,7 +97,7 @@ describe('kanban', () => {
     k = K.moveCard(k, id, doing.id, 0)
     expect(K.findCard(k, id)).toMatchObject({ column: 1, index: 0 })
     k = K.moveCard(k, k.columns[0].cards[0].id, doing.id, 5)
-    expect(k.columns[1].cards.map((c) => c.title)).toEqual(['Write spec', 'Add your first task'])
+    expect(k.columns[1].cards.map((c) => c.title)).toEqual(['Write spec', 'Seed'])
     expect(K.deleteCard(k, id).columns[1].cards).toHaveLength(1)
   })
 

@@ -16,9 +16,9 @@
   --border-strong: rgba(255, 255, 255, 0.16);
   --text: #eceef4;
   --muted: #9ba2b4;
-  --faint: #666d7e;
+  --faint: #808799;
   --accent: #8f97ff;
-  --accent-strong: #7079ff;
+  --accent-strong: #575ee8;
   --accent-soft: rgba(143, 151, 255, 0.16);
   --on-accent: #ffffff;
   --danger: #ff7088;
@@ -44,6 +44,7 @@
   --icon-fill: rgba(143, 151, 255, 0.18);
   --logo-a: #8f97ff;
   --logo-b: #d36cff;
+  --on-gradient: #0d0f13;
   --mark: rgba(255, 213, 79, 0.35);
   --backdrop: rgba(4, 5, 8, 0.6);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
@@ -64,7 +65,7 @@
   --border-strong: rgba(20, 22, 30, 0.16);
   --text: #14161c;
   --muted: #5f6676;
-  --faint: #9aa0ad;
+  --faint: #6b7280;
   --accent: #5a5af0;
   --accent-strong: #4846e0;
   --accent-soft: rgba(90, 90, 240, 0.12);
@@ -90,6 +91,7 @@
   --icon-fill: rgba(90, 90, 240, 0.1);
   --logo-a: #5a5af0;
   --logo-b: #b14dff;
+  --on-gradient: #ffffff;
   --mark: #fff1a8;
   --backdrop: rgba(20, 22, 30, 0.28);
   --shadow: 0 8px 26px rgba(20, 22, 40, 0.1), 0 1px 3px rgba(20, 22, 40, 0.08);
@@ -136,6 +138,7 @@
   --icon-fill: #000000;
   --logo-a: #ffd60a;
   --logo-b: #ff9f0a;
+  --on-gradient: #000000;
   --mark: #ffd60a;
   --backdrop: rgba(0, 0, 0, 0.75);
   --shadow: none;
@@ -184,6 +187,7 @@
   --icon-fill: #ffffff;
   --logo-a: #0030d6;
   --logo-b: #6a00d6;
+  --on-gradient: #ffffff;
   --mark: #ffe066;
   --backdrop: rgba(0, 0, 0, 0.5);
   --shadow: none;
@@ -299,7 +303,7 @@ button.primary {
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent);
+  filter: brightness(1.1);
 }
 
 button.danger:hover:not(:disabled),
@@ -642,12 +646,13 @@ button.on,
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px 6px 4px;
+  padding: 6px 10px;
   text-align: left;
   font-size: 13px;
 }
 
 .menu-item .check {
+  margin-left: -6px;
   display: grid;
   place-items: center;
   width: 16px;
@@ -1870,8 +1875,9 @@ button.on,
 
 .help-grid dl div {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
-  gap: 10px;
+  grid-template-columns: minmax(64px, 40%) 1fr;
+  align-items: baseline;
+  gap: 12px;
   padding: 5px 0;
   font-size: 12.5px;
   border-bottom: 1px solid var(--border);
@@ -2714,7 +2720,7 @@ button.on,
 
 .modal.boards {
   width: 1040px;
-  height: min(780px, 86vh);
+  max-height: min(780px, 86vh);
 }
 
 .modal.boards header {
@@ -2869,11 +2875,22 @@ button.on,
   min-width: 0;
 }
 
-.board-info strong {
+.board-info .board-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  font-weight: 650;
+  text-align: left;
+  padding: 0;
+}
+
+.board-info .board-name:hover {
+  color: var(--accent);
+}
+
+.board-card {
+  cursor: pointer;
 }
 
 .board-info input {
@@ -3285,7 +3302,7 @@ button.on,
   padding: 0 12px 0 9px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--on-accent);
+  color: var(--on-gradient);
   background: linear-gradient(135deg, var(--logo-a), var(--logo-b));
   border-radius: 9px;
 }
@@ -5392,4 +5409,152 @@ button.on,
     flex-wrap: wrap;
     justify-content: center;
   }
+}
+
+.kanban-empty {
+  margin: 4px 0;
+  padding: 14px 8px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--faint);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+.kanban-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.card-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card-move button {
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.card-move button:hover {
+  border-color: var(--accent);
+}
+
+/* Board columns fill the widget, so the whole column reads (and works) as a drop target. */
+.kanban-columns,
+.dv-board {
+  align-items: stretch;
+}
+
+.kanban-cards,
+.dv-cards {
+  flex: 1;
+}
+
+.composer-name {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--accent-soft);
+  border-radius: 10px;
+}
+
+.composer-name label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.composer-name input {
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.ai-msg.error .ai-fix {
+  display: block;
+  margin-top: 6px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Both right-hand panels share one width. */
+:root {
+  --panel-w: 380px;
+}
+
+.notes-panel,
+.ai-panel {
+  width: var(--panel-w);
+}
+
+.app.notes-open .minimap,
+.app.ai-open .minimap {
+  right: calc(var(--panel-w) + 24px);
+}
+
+@media (max-width: 720px) {
+  /* Boards dialog: search on its own row, two template columns with short previews. */
+  .modal.boards header {
+    flex-wrap: wrap;
+  }
+  .modal.boards .boards-search {
+    flex-basis: 100%;
+    order: 3;
+  }
+  .templates {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .templates .thumb,
+  .templates svg {
+    aspect-ratio: 16 / 9;
+    height: auto;
+  }
+  /* The tool rail scrolls sideways: fade its edge so that's visible. */
+  .tool-rail {
+    mask-image: linear-gradient(90deg, #000 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+  }
+  .zoom-bar,
+  .bottom-left {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (max-width: 720px) {
+  .notes-panel,
+  .ai-panel {
+    left: 12px;
+    width: auto;
+  }
+}
+
+.present-spot {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 6px;
+  box-shadow: 0 0 0 200vmax var(--canvas);
+}
+
+.selection-toolbar button.danger {
+  color: var(--danger);
+}
+
+.selection-toolbar .swatch.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }

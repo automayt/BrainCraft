@@ -8,7 +8,7 @@ export const KANBAN_COL_W = 260
 export function newKanban(): KanbanData {
   return {
     columns: [
-      { id: uid(), title: 'To do', cards: [{ id: uid(), title: 'Add your first task' }] },
+      { id: uid(), title: 'To do', cards: [] },
       { id: uid(), title: 'In progress', cards: [] },
       { id: uid(), title: 'Done', cards: [] },
     ],

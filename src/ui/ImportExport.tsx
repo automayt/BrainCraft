@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useDialog } from './useDialog'
 import { looksLikeMermaid, parseMermaid } from '../model/mermaid'
 import { parseOutline } from '../model/mindmap'
 import { toJson } from '../model/serialize'
@@ -31,6 +32,8 @@ function detect(text: string): { label: string; ok: boolean } {
 
 export function ImportExport({ onClose }: { onClose: () => void }) {
   const editor = useEditor()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef)
   const [tab, setTab] = useState<Tab>('import')
   const [text, setText] = useState('')
   const [format, setFormat] = useState<'mermaid' | 'json'>('mermaid')
@@ -43,7 +46,7 @@ export function ImportExport({ onClose }: { onClose: () => void }) {
     <div className="palette-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className="dialog"
-        role="dialog"
+        ref={dialogRef} role="dialog" aria-modal="true"
         aria-label="Import and export"
         onKeyDown={(e) => {
           e.stopPropagation()

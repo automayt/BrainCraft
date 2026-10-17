@@ -1,6 +1,7 @@
 /** The board library, version history, share links and the read-only banner. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
 import { darken } from './BoardView'
@@ -50,9 +51,11 @@ export function Thumb({ thumb, aspect }: { thumb: ThumbRect[]; aspect: number })
 
 function Dialog({ label, onClose, className = '', children }: { label: string; onClose: () => void; className?: string; children: React.ReactNode }) {
   useEscape(onClose)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef)
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${className}`} role="dialog" aria-label={label} onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
+      <div className={`modal ${className}`} ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
         {children}
       </div>
     </div>
@@ -160,7 +163,11 @@ function BoardCard(p: {
 }) {
   const { meta } = p
   return (
-    <div className={`board-card${p.current ? ' current' : ''}`}>
+    <div
+      className={`board-card${p.current ? ' current' : ''}`}
+      // The whole card opens the board (its buttons do their own thing).
+      onClick={(e) => !p.renaming && !(e.target as Element).closest('button, input') && p.onOpen()}
+    >
       <button className="board-open" onClick={p.onOpen} aria-label={`Open ${meta.title}`}>
         <Thumb thumb={meta.thumb} aspect={meta.aspect} />
       </button>
@@ -180,9 +187,9 @@ function BoardCard(p: {
             }}
           />
         ) : (
-          <strong title={meta.title} onDoubleClick={p.onStartRename}>
+          <button className="board-name" title={`Open ${meta.title}`} onClick={p.onOpen}>
             {meta.title}
-          </strong>
+          </button>
         )}
         <small>
           {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} object{meta.items === 1 ? '' : 's'}

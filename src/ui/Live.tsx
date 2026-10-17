@@ -110,7 +110,7 @@ export function LiveSection() {
   return (
     <section className="live-section">
       <h3>
-        <span className="live-dot" aria-hidden="true" />
+        {info && <span className="live-dot" aria-hidden="true" />}
         Work on it together, live
       </h3>
       {info ? (

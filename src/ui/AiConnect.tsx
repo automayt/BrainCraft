@@ -1,6 +1,7 @@
 /** Pairing this tab with the BrainCraft MCP server, so AI assistants can work on the board. */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useDialog } from './useDialog'
 import { type Bridge, DEFAULT_PORT, parsePairing } from '../api/bridge'
 import { useEscape } from './useEscape'
 
@@ -30,6 +31,8 @@ function Snippet({ label, code }: { label: string; code: string }) {
 
 export function AiDialog({ bridge, onClose }: { bridge: Bridge; onClose: () => void }) {
   useEscape(onClose)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef)
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const script = new URL('braincraft-mcp.mjs', location.href).href
@@ -44,7 +47,7 @@ export function AiDialog({ bridge, onClose }: { bridge: Bridge; onClose: () => v
 
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal ai-dialog" role="dialog" aria-label="Connect an AI assistant" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
+      <div className="modal ai-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Connect an AI assistant" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
         <header>
           <h2>Connect an AI assistant</h2>
           <button className="icon-close" aria-label="Close" onClick={onClose}>
