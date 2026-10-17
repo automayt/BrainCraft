@@ -177,6 +177,8 @@ export interface Presenting {
   notes: boolean
   /** Whether the board was read-only before presenting, to put back afterwards. */
   wasReadOnly: boolean
+  /** Where the view was, to go back to afterwards. */
+  camera: Camera
 }
 
 export interface Running {
@@ -733,7 +735,7 @@ export class Editor {
     this.selection = new Set()
     this.selectedConnector = null
     this.tool = 'select'
-    this.presenting = { slides, index, overview: false, laser: false, notes: false, wasReadOnly: this.readOnly }
+    this.presenting = { slides, index, overview: false, laser: false, notes: false, wasReadOnly: this.readOnly, camera: this.camera }
     this.readOnly = true
     this.showSlide(false)
     return true
@@ -744,8 +746,8 @@ export class Editor {
     if (!p) return
     this.presenting = null
     this.readOnly = p.wasReadOnly
-    this.flight++
-    this.emit()
+    // Back to where the board was before presenting.
+    this.flyTo(p.camera)
   }
 
   private slideCamera(): Camera | null {
@@ -1317,7 +1319,15 @@ export class Editor {
     const connectors = new Set(this.selectedConnector !== null ? [this.selectedConnector] : [])
     if (!items.size && !connectors.size) return
     const next = M.selectionAfterDelete(this.board, this.selection)
+    const first = this.selection.size === 1 ? B.getItem(this.board, [...this.selection][0]) : undefined
     this.edit((b) => B.remove(b, items, connectors))
+    // Say what went, so a slip with Delete is noticed (and undone) straight away.
+    const what = first
+      ? `“${N.objectLabel(first)}”${items.size > 1 ? ` and ${items.size - 1} ${first.kind === 'mind' ? 'sub-idea' : 'object'}${items.size > 2 ? 's' : ''}` : ''}`
+      : items.size
+        ? `${items.size} object${items.size === 1 ? '' : 's'}`
+        : 'the line'
+    this.setStatus(`Deleted ${what}  ·  Ctrl+Z to undo`)
     this.selection = new Set(next !== undefined && B.getItem(this.board, next) ? [next] : [])
     this.selectedConnector = null
     this.emit()
@@ -2005,6 +2015,12 @@ export class Editor {
         this.edit((b) => B.translate(b, B.movingSet(b, this.selection), dx, dy))
         return true
       }
+    }
+    // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
+    if (node && !mods.alt && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly) {
+      this.startEditing(node.id)
+      this.setEditingText(key)
+      return true
     }
     if (!mods.alt) {
       const tool = TOOLS.find((t) => t.key === k)

@@ -614,3 +614,67 @@ describe('AI changes', () => {
     expect(e.aiHistory).toEqual([])
   })
 })
+
+describe('review fixes', () => {
+  it('typing on a selected object starts renaming it, replacing the text', () => {
+    const e = editor()
+    const [b, id] = B.addItem(emptyBoard(), B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Old' }))
+    e.load(b)
+    e.select([id])
+    expect(e.keyDown('M', { shift: true, ctrl: false, alt: false })).toBe(true)
+    expect(e.editing?.id).toBe(id)
+    expect(e.editingText).toBe('M')
+    expect(e.tool).toBe('select')
+    e.finishEditing()
+    e.undo()
+    expect(B.getItem(e.board, id)!.text).toBe('Old')
+  })
+
+  it('tool letters still work with nothing selected', () => {
+    const e = editor()
+    e.keyDown('n', { shift: false, ctrl: false, alt: false })
+    expect(e.tool).toBe('sticky')
+  })
+
+  it('says what a delete removed', () => {
+    const e = editor()
+    const [b0, root] = M.createMap(emptyBoard(), { x: 0, y: 0 }, 'Plan')
+    const [b1, kid] = M.addChild(b0, root, undefined, 'Channels')
+    const [b2] = M.addChild(b1, kid, undefined, 'Blog')
+    e.load(b2)
+    e.select([kid])
+    e.keyDown('Delete', { shift: false, ctrl: false, alt: false })
+    expect(e.status).toContain('“Channels” and 1 sub-idea')
+    expect(e.status).toContain('Ctrl+Z')
+  })
+
+  it('gives each main branch made with Enter its own colour', () => {
+    const e = editor()
+    const [b0, root] = M.createMap(emptyBoard(), { x: 0, y: 0 }, 'Plan')
+    const [b1, first] = M.addChild(b0, root, undefined, 'A')
+    e.load(b1)
+    e.select([first])
+    e.keyDown('Enter', { shift: false, ctrl: false, alt: false })
+    e.setEditingText('B')
+    e.finishEditing()
+    const [a, z] = e.board.items.filter((i) => i.parent === root)
+    expect(z.color).not.toBe(a.color)
+    // Deeper ideas keep their branch colour.
+    const [b2, leaf] = M.addChild(e.board, a.id, undefined, 'leaf')
+    const [b3, leaf2] = M.addSibling(b2, leaf, 'leaf 2')
+    expect(B.getItem(b3, leaf2)!.color).toBe(a.color)
+  })
+
+  it('goes back to the earlier view after presenting', () => {
+    const e = editor()
+    const [b] = B.addItem(emptyBoard(), B.newItem('frame', { x: 500, y: 500, w: 800, h: 450 }, { text: 'Slide' }))
+    e.load(b)
+    e.camera = { x: 10, y: 20, zoom: 0.5 }
+    const before = { ...e.camera }
+    expect(e.startPresenting()).toBe(true)
+    expect(e.camera).not.toEqual(before)
+    e.stopPresenting()
+    expect(e.presenting).toBeNull()
+    expect(e.camera).toEqual(before)
+  })
+})
