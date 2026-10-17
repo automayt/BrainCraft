@@ -328,8 +328,10 @@ These become interactive once selected; drag them by their title strip.
 
 ### Whiteboard
 
-- An infinite canvas with a dot grid. Pan, zoom from 5% to 800%, zoom to fit,
-  use the minimap, or pinch on touch screens.
+- An infinite canvas with a dot grid. **Scroll** to zoom at the pointer
+  (5% to 800%), hold the **middle button** (or Space) and drag to pan, and
+  drag on empty space to select with a box. Shift+scroll pans sideways; zoom
+  to fit, the minimap and pinching on touch screens work too.
 - Sticky notes, text, rectangles, ellipses, frames and a freehand pen.
 - **Connectors**: drag the blue dot on a selected item onto another item.
   Drop it on empty space to create a new linked note.

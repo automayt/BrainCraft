@@ -598,8 +598,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Canvas',
     [
-      ['Scroll · Space-drag · middle-drag', 'Pan'],
-      ['Ctrl scroll · pinch · Ctrl + / −', 'Zoom'],
+      ['Scroll · pinch · Ctrl + / −', 'Zoom at the pointer'],
+      ['Middle-drag · Space-drag · Shift scroll', 'Pan'],
       ['Shift 1 · Ctrl 0', 'Zoom to fit · back to 100%'],
       ['Double-click', 'Edit text, or add a sticky note'],
       ['Drag the blue dot', 'Connect; drop on empty space for a linked note'],
