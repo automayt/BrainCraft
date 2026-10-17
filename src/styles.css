@@ -4887,6 +4887,71 @@ button.on,
   border-color: var(--accent);
 }
 
+.notes-panel .description-edit {
+  position: relative;
+}
+
+.notes-panel .description-edit .mention-picker {
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+}
+
+/* Reads like the text box it turns into when clicked. */
+.notes-panel .description-view {
+  min-height: 52px;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: text;
+}
+
+.notes-panel .description-view[role='button']:hover,
+.notes-panel .description-view:focus-visible {
+  background: var(--surface-2);
+  border-color: var(--border);
+  outline: none;
+}
+
+.notes-panel .description-view .note-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* ----- wiki-links ----- */
+
+.wikilink {
+  display: inline;
+  padding: 1px 5px;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 5px;
+}
+
+.wikilink.board::before {
+  content: '▦ ';
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* Nothing is called this yet: dashed, like a page waiting to be written. */
+.wikilink.new {
+  color: var(--text);
+  background: none;
+  border: 1px dashed var(--border-strong);
+}
+
+.wikilink.missing {
+  color: var(--muted);
+  background: var(--surface-2);
+  text-decoration: line-through;
+}
+
 /* ----- align menu ----- */
 
 .align-anchor {

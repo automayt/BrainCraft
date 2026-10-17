@@ -4,7 +4,7 @@
  */
 
 import type { AiChange, Editor } from '../editor/Editor'
-import { emptyBoard } from '../model/board'
+import { emptyBoard, getItem } from '../model/board'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
 import { type KV, openKV } from './kv'
@@ -12,7 +12,9 @@ import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
 import { catchUp } from '../model/catchup'
+import type { BoardRef, LinkTarget } from '../model/notes'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
+import { boardRefs, type CrossLink, LinkIndex } from './links'
 import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
 
 const CURRENT_KEY = 'braincraft:current'
@@ -109,10 +111,12 @@ export class Workspace {
   private tabSynced: Board | null = null
   private tabTimer: ReturnType<typeof setTimeout> | undefined
   private savedTitle = ''
+  private readonly linkIndex: LinkIndex
 
   private constructor(editor: Editor, library: Library) {
     this.editor = editor
     this.library = library
+    this.linkIndex = new LinkIndex(library)
     editor.onBoardChange = (b) => this.changed(b)
     // Reactions and votes need a name before the person gives one: a stable guest name per browser.
     const storage = safeStorage()
@@ -296,6 +300,8 @@ export class Workspace {
 
   async switchTo(id: string) {
     await this.flush()
+    // What you just did on the board you're leaving isn't news when you come back.
+    this.markSeen(true)
     const board = await this.library.load(id)
     if (!board) {
       this.editor.setStatus('That board could not be opened')
@@ -538,6 +544,44 @@ export class Workspace {
     } catch (err) {
       this.editor.setStatus(`Could not open ${file.name}: ${(err as Error).message}`)
     }
+  }
+
+  // ----- wiki-links ---------------------------------------------------------------
+
+  /** The keys links to the open board may use: its id here and its live-session id. */
+  get selfKeys(): string[] {
+    const live = this.liveInfo?.id
+    return [...(this.boardId ? [this.boardId] : []), ...(live ? [live] : [])]
+  }
+
+  /** The other boards in this browser, as [[ links name them. */
+  get otherBoards(): BoardRef[] {
+    return boardRefs(this.boards.filter((m) => m.id !== this.boardId))
+  }
+
+  /** The board in this browser a link key points at. */
+  findBoard(key: string): BoardMeta | undefined {
+    return this.boards.find((m) => m.id === key || m.live?.id === key)
+  }
+
+  /** Follows a link: opens its board when it's another one, then shows its object. */
+  async openLink(to: LinkTarget) {
+    if (to.board && !this.selfKeys.includes(to.board)) {
+      const meta = this.findBoard(to.board)
+      if (!meta) {
+        this.editor.setStatus('That board isn’t in this browser. Ask a friend for its link.')
+        return
+      }
+      await this.switchTo(meta.id)
+    }
+    if (to.item === undefined) return
+    if (getItem(this.editor.board, to.item)) this.editor.focusObject(to.item)
+    else this.editor.setStatus('That object was deleted')
+  }
+
+  /** Comments and descriptions on other boards in this browser that link here. */
+  linksHere(): Promise<CrossLink[]> {
+    return this.linkIndex.to(this.selfKeys, this.boards, this.boardId)
   }
 
   // ----- live sessions ----------------------------------------------------------

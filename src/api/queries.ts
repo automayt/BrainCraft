@@ -48,7 +48,7 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
   return {
     ...summary(i),
     text: i.text,
-    ...(i.description ? { description: i.description } : {}),
+    ...(i.description ? { description: plainNote(i.description) } : {}),
     comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
     data: i.view
       ? dataOf(b, i)
