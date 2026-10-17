@@ -7,7 +7,7 @@
 
 import { getItem, updateItem } from './board'
 import { uid } from './uid'
-import { type Board, type Id, type Item, KIND_LABELS, type Note } from './types'
+import { type Board, type Id, type Item, itemKindLabel, type Note } from './types'
 
 export function addNote(b: Board, id: Id, text: string, author?: string, at = Date.now()): Board {
   const trimmed = text.trim()
@@ -143,7 +143,7 @@ export function objectLabel(i: Item): string {
   const text = i.text.replace(/\s+/g, ' ').trim()
   if (text) return text.length > 48 ? `${text.slice(0, 47)}…` : text
   if (i.kind === 'flow' && i.shape) return `${i.shape[0].toUpperCase()}${i.shape.slice(1)} ${i.id}`
-  return `${KIND_LABELS[i.kind]} ${i.id}`
+  return `${itemKindLabel(i)} ${i.id}`
 }
 
 export interface NoteRef {
@@ -203,7 +203,7 @@ export function mentionCandidates(b: Board, query: string, exclude?: Id, limit =
   const q = query.toLowerCase()
   return b.items
     .filter((i) => i.id !== exclude && i.kind !== 'pen')
-    .filter((i) => !q || objectLabel(i).toLowerCase().includes(q) || KIND_LABELS[i.kind].toLowerCase().includes(q))
+    .filter((i) => !q || objectLabel(i).toLowerCase().includes(q) || itemKindLabel(i).toLowerCase().includes(q))
     .slice(0, limit)
 }
 
@@ -217,7 +217,7 @@ export interface LinkCandidate {
 /** Boards (other than this one) and objects on this board whose name matches `query`, for the [[ picker. */
 export function linkCandidates(b: Board, query: string, boards: readonly BoardRef[], exclude?: Id, limit = 8): LinkCandidate[] {
   const q = query.trim().toLowerCase()
-  const objects = mentionCandidates(b, q, exclude, limit).map((i) => ({ label: objectLabel(i), hint: KIND_LABELS[i.kind], to: { item: i.id } }))
+  const objects = mentionCandidates(b, q, exclude, limit).map((i) => ({ label: objectLabel(i), hint: itemKindLabel(i), to: { item: i.id } }))
   const named = boards
     .filter((r) => !q || r.title.toLowerCase().includes(q))
     .map((r) => ({ label: r.title, hint: r.icon ? `${r.icon} Board` : 'Board', to: { board: r.key } }))

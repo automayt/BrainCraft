@@ -133,8 +133,9 @@ These become interactive once selected; drag them by their title strip.
   mention links to it, and the other object lists it under "Linked from".
   With nothing selected, the panel shows every comment on the board.
 - **Comment blocks (C)** are notes you can place anywhere on the board.
-- **Ctrl+K** searches everything: text, comments, table cells, Kanban cards,
-  timeline events and line labels, filtered by type. With an empty query it
+- **Ctrl+K** searches everything: text, comments, descriptions, statuses,
+  code, table cells, database records, Kanban cards, timeline events and line
+  labels, filtered by type. With an empty query it
   lists every object, so it doubles as the object lookup.
 
 ### Status marks

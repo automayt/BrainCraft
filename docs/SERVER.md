@@ -35,6 +35,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_STATIC` | the script's folder | The built app to serve. |
 | `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant for everyone using this server, paid from this key. See [AI.md](AI.md). |
 | `BRAINCRAFT_AI_PASSWORD` | — | With a key set: people must enter this password before using the assistant. |
+| `BRAINCRAFT_TRUST_PROXY` | off | Set to `1` behind an HTTPS proxy so per-visitor limits (link previews) use the visitor's address from `X-Forwarded-For`. Leave off when the server faces the internet directly. |
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
 
 Put it behind your usual HTTPS proxy (Caddy, nginx, a cloud load balancer).
@@ -107,7 +108,10 @@ careful about what it will fetch:
   that was checked, so the name can't be re-pointed between the check and the
   fetch;
 - redirects are followed at most four times, each checked the same way;
-- it waits at most 5 seconds and reads at most 2 MB, and only HTML is read;
+- it gives up on a quiet site after 5 seconds and on the whole fetch after 8,
+  reads at most 2 MB, and only reads HTML;
+- at most 8 pages are fetched at once, and several people asking for the same
+  page share one fetch;
 - only the preview comes back, never the page; answers are cached for an hour
   (failures for five minutes), and each visitor gets 60 previews a minute.
 

@@ -18,7 +18,8 @@ async function ask(server: string, url: string): Promise<Answer> {
     const res = await fetch(new URL(`api/unfurl?url=${encodeURIComponent(url)}`, server))
     // An older server without previews.
     if (res.status === 404) return 'unsupported'
-    // The page couldn't be read: the card stays as it is, and isn't asked about again.
+    // The page can't be read: the card stays as it is, and isn't asked about again.
+    // (503 means try later; that's handled as a retry below.)
     if (res.status === 422) return {}
     if (!res.ok) return 'retry'
     const p = (await res.json()) as Record<string, unknown>
@@ -61,6 +62,8 @@ export function watchLinkPreviews(editor: Editor, server: () => string | null, s
           // Only if the card is still there, still for this address, and nobody filled it meanwhile.
           const now = getItem(editor.board, job.id)?.link
           if (now && now.url === job.url && !now.checked) editor.fillLink(job.id, answer)
+          // If undo and redo bring the card back without its preview, it's asked for again.
+          asked.delete(job.key)
         }
         pump()
       })
@@ -73,6 +76,8 @@ export function watchLinkPreviews(editor: Editor, server: () => string | null, s
     last = b
     for (const i of b.items) {
       if (i.kind !== 'link' || !i.link || i.link.checked) continue
+      // Whoever added the card fetches its preview, so a live session doesn't ask once per person.
+      if (i.by && i.by !== editor.me) continue
       const key = `${i.id} ${i.link.url}`
       if (asked.has(key)) continue
       asked.add(key)

@@ -9,13 +9,14 @@ type Filter = { label: string; kinds?: (Kind | 'connector')[] }
 
 const FILTERS: Filter[] = [
   { label: 'All' },
-  { label: 'Notes', kinds: ['sticky', 'text'] },
+  { label: 'Sticky notes & text', kinds: ['sticky', 'text'] },
   { label: 'Mind maps', kinds: ['mind'] },
   { label: 'Flowcharts', kinds: ['flow', 'connector'] },
   { label: 'Tables', kinds: ['table'] },
   { label: 'Kanban', kinds: ['kanban'] },
   { label: 'Timelines', kinds: ['timeline'] },
-  { label: 'Comments', kinds: ['comment'] },
+  { label: 'Databases', kinds: ['data'] },
+  { label: 'Comment blocks', kinds: ['comment'] },
   { label: 'Shapes', kinds: ['rect', 'ellipse'] },
   { label: 'Frames', kinds: ['frame'] },
   { label: 'Images', kinds: ['image'] },

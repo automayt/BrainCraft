@@ -13,7 +13,8 @@ export interface Ui {
   theme: Theme
   setTheme: (t: Theme) => void
   openHelp: () => void
-  openImport: () => void
+  /** The import/export dialog, on the Import tab unless told otherwise. */
+  openImport: (tab?: 'import' | 'export') => void
   openFile: () => void
   openImage: () => void
   download: () => void

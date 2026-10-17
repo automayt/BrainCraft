@@ -63,7 +63,8 @@ export function SelectionToolbar() {
   const flows = items.filter((i) => i.kind === 'flow')
   // Clear of the tool rail on the left (on phones it sits at the bottom instead).
   const minX = (editor.viewport.w > 720 ? 68 : 12) + width / 2
-  const maxX = editor.viewport.w - 12 - width / 2
+  // ...and clear of the comments panel or assistant on the right.
+  const maxX = editor.viewport.w - editor.rightInset - 12 - width / 2
   const x = maxX < minX ? minX : Math.min(Math.max(anchor.x, minX), maxX)
   // Above the selection unless that's under the top bar or covers more of the board than below.
   const covered = (top: number) => {
@@ -77,7 +78,8 @@ export function SelectionToolbar() {
   }
   const aboveTop = anchor.y - size.h
   // On phones the tool rail and zoom bar take the bottom ~130px.
-  const fitsBelow = below !== null && below + size.h < editor.viewport.h - (editor.viewport.w > 720 ? 12 : 140)
+  // On desktops the status key, hint and zoom bar sit along the bottom; on phones the tool rail too.
+  const fitsBelow = below !== null && below + size.h < editor.viewport.h - (editor.viewport.w > 720 ? 64 : 140)
   const useBelow = fitsBelow && (aboveTop < 64 || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
   const y = useBelow ? below! : Math.max(anchor.y, 64 + size.h)
   const plain = (i: (typeof items)[number]) => i.kind !== 'image' && i.kind !== 'link' && i.kind !== 'code' && !isWidget(i.kind)
@@ -86,7 +88,7 @@ export function SelectionToolbar() {
   const current = items[0]?.color
 
   return (
-    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y }} onPointerDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - (editor.viewport.w > 720 ? 80 : 24)) }} onPointerDown={(e) => e.stopPropagation()}>
       {colorable && (
       <div className="swatches">
         {palette.map(([name, color]) => (
@@ -180,7 +182,7 @@ export function SelectionToolbar() {
             + Idea
           </button>
           {board.items.some((i) => i.parent === mind.id) && (
-            <button title="Collapse or expand (C)" onClick={() => editor.toggleCollapsed(mind.id)}>
+            <button title="Collapse or expand (/)" onClick={() => editor.toggleCollapsed(mind.id)}>
               {mind.collapsed ? 'Expand' : 'Collapse'}
             </button>
           )}
@@ -227,11 +229,11 @@ export function SelectionToolbar() {
       )}
       {items.length > 0 && !mind && (
         <>
-          <button title="Bring to front" onClick={() => editor.bringToFront()}>
-            Front
+          <button title="Bring to front (draw on top of everything)" onClick={() => editor.bringToFront()}>
+            To front
           </button>
-          <button title="Send to back" onClick={() => editor.sendToBack()}>
-            Back
+          <button title="Send to back (draw under everything)" onClick={() => editor.sendToBack()}>
+            To back
           </button>
         </>
       )}
@@ -252,7 +254,7 @@ export function SelectionToolbar() {
           ✦ To board
         </button>
       )}
-      {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && (
+      {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && !items.every((i) => isWidget(i.kind)) && (
         <button title="Start a dot vote on these: everyone gets a few votes, counts hidden until revealed" onClick={() => editor.startVote()}>
           Vote
         </button>

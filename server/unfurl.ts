@@ -23,7 +23,14 @@ export interface Preview {
   site?: string
 }
 
-export class UnfurlError extends Error {}
+export class UnfurlError extends Error {
+  /** The page might work later (slow, unreachable, or the site had a problem): worth asking again. */
+  readonly temporary: boolean
+  constructor(message: string, temporary = false) {
+    super(message)
+    this.temporary = temporary
+  }
+}
 
 // Addresses that aren't the public internet: private, loopback, link-local,
 // carrier-grade NAT, documentation, multicast, reserved, and IPv6 forms that
@@ -50,7 +57,10 @@ for (const [net, bits] of [
 ] as const)
   BLOCKED4.addSubnet(net, bits, 'ipv4')
 for (const [net, bits] of [
-  ['::', 127],
+  // ::/96 holds :: and ::1, and the old IPv4-compatible form (::10.0.0.1).
+  ['::', 96],
+  ['::ffff:0:0:0', 96],
+  ['64:ff9b:1::', 48],
   ['::ffff:0:0', 96],
   ['64:ff9b::', 96],
   ['100::', 64],
@@ -101,6 +111,8 @@ export interface UnfurlOptions {
   maxRedirects?: number
   /** Allow any port (tests, whose server sits on a random one). */
   anyPort?: boolean
+  /** The whole fetch, redirects included, stops after this long. */
+  totalMs?: number
 }
 
 const systemLookup: Lookup = (host, cb) => dnsLookup(host, { all: true, verbatim: true }, (err, addrs) => cb(err, addrs ?? []))
@@ -113,14 +125,14 @@ interface Fetched {
 }
 
 /** One GET, connecting only to an address `allow` accepts. Reads at most `maxBytes`. */
-function fetchOnce(url: URL, o: Required<UnfurlOptions>): Promise<Fetched> {
+function fetchOnce(url: URL, o: Required<UnfurlOptions>, deadline: number): Promise<Fetched> {
   return new Promise((ok, fail) => {
     const host = url.hostname.replace(/^\[|\]$/g, '')
     // Node connects straight to an IP literal without a lookup, so check those here.
     if (isIP(host) && !o.allow(host)) return fail(new UnfurlError('That address isn’t on the public internet'))
     const lookup = (hostname: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
       o.lookup(hostname, (err, addrs) => {
-        if (err) return cb(new UnfurlError('That site couldn’t be found'))
+        if (err) return cb(new UnfurlError('That site couldn’t be found', true))
         if (!addrs.length || !addrs.every((a) => o.allow(a.address))) return cb(new UnfurlError('That address isn’t on the public internet'))
         if (opts.all) cb(null, addrs)
         else cb(null, addrs[0].address, addrs[0].family)
@@ -159,8 +171,12 @@ function fetchOnce(url: URL, o: Required<UnfurlOptions>): Promise<Fetched> {
         res.on('error', done)
       },
     )
-    req.setTimeout(o.timeoutMs, () => req.destroy(new UnfurlError('That site took too long to answer')))
-    req.on('error', (err) => fail(err instanceof UnfurlError ? err : new UnfurlError('That site couldn’t be reached')))
+    // An idle limit, and a hard stop at the deadline (a site dripping a byte at a time can't hold a fetch open).
+    req.setTimeout(o.timeoutMs, () => req.destroy(new UnfurlError('That site took too long to answer', true)))
+    const left = Math.max(1, deadline - Date.now())
+    const stop = setTimeout(() => req.destroy(new UnfurlError('That site took too long to answer', true)), left)
+    req.on('close', () => clearTimeout(stop))
+    req.on('error', (err) => fail(err instanceof UnfurlError ? err : new UnfurlError('That site couldn’t be reached', true)))
     req.end()
   })
 }
@@ -175,17 +191,20 @@ export async function unfurl(raw: string, options: UnfurlOptions = {}): Promise<
     maxBytes: 2 * 1024 * 1024,
     maxRedirects: 4,
     anyPort: false,
+    totalMs: 8000,
     ...options,
   }
+  const deadline = Date.now() + o.totalMs
   const start = checkUrl(raw, o.anyPort)
   let url = start
   for (let hop = 0; hop <= o.maxRedirects; hop++) {
-    const r = await fetchOnce(url, o)
+    if (Date.now() >= deadline) throw new UnfurlError('That site took too long to answer', true)
+    const r = await fetchOnce(url, o, deadline)
     if (r.status >= 300 && r.status < 400 && r.location) {
       url = checkUrl(new URL(r.location, url).href, o.anyPort)
       continue
     }
-    if (r.status >= 400) throw new UnfurlError(`That page answered ${r.status}`)
+    if (r.status >= 400) throw new UnfurlError(`That page answered ${r.status}`, r.status === 429 || r.status >= 500)
     const site = siteName(url)
     if (!r.body) return { url: start.href, site, title: fileName(url) ?? site }
     return { ...readMeta(r.body, url), url: start.href }
@@ -253,6 +272,8 @@ export function readMeta(html: string, base: URL): Omit<Preview, 'url'> {
 /** Remembers previews (and failures, briefly) so a busy board doesn't refetch the same page. */
 export class PreviewCache {
   private entries = new Map<string, { at: number; value: Preview | UnfurlError }>()
+  /** Fetches already under way, shared by everyone asking for the same page. */
+  private pending = new Map<string, Promise<Preview | UnfurlError>>()
   private readonly max: number
   constructor(max = 500) {
     this.max = max
@@ -260,17 +281,18 @@ export class PreviewCache {
 
   async get(url: string, fetcher: (url: string) => Promise<Preview>, now = Date.now()): Promise<Preview> {
     const hit = this.entries.get(url)
-    const ttl = hit?.value instanceof UnfurlError ? 5 * 60_000 : 60 * 60_000
+    const ttl = hit?.value instanceof UnfurlError ? (hit.value.temporary ? 60_000 : 5 * 60_000) : 60 * 60_000
     if (hit && now - hit.at < ttl) {
       if (hit.value instanceof UnfurlError) throw hit.value
       return hit.value
     }
-    let value: Preview | UnfurlError
-    try {
-      value = await fetcher(url)
-    } catch (err) {
-      value = err instanceof UnfurlError ? err : new UnfurlError('That page couldn’t be read')
+    let job = this.pending.get(url)
+    if (!job) {
+      job = fetcher(url).catch((err: unknown) => (err instanceof UnfurlError ? err : new UnfurlError('That page couldn’t be read')))
+      this.pending.set(url, job)
+      void job.finally(() => this.pending.delete(url))
     }
+    const value = await job
     this.entries.delete(url)
     this.entries.set(url, { at: now, value })
     // Oldest out first (a Map keeps insertion order).

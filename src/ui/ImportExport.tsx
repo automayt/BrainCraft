@@ -10,7 +10,7 @@ type Tab = 'import' | 'export'
 
 /** What pasted text will become, or why it can't be used. */
 function detect(text: string): { label: string; ok: boolean } {
-  if (!text.trim()) return { label: 'Paste Mermaid, an indented list, or BrainCraft JSON', ok: false }
+  if (!text.trim()) return { label: 'Type or paste a list (one sticky note per line), an indented list, Mermaid or BrainCraft JSON', ok: false }
   if (looksLikeMermaid(text)) {
     try {
       const g = parseMermaid(text)
@@ -33,11 +33,11 @@ function detect(text: string): { label: string; ok: boolean } {
   return { label: 'Plain text → sticky note', ok: true }
 }
 
-export function ImportExport({ onClose }: { onClose: () => void }) {
+export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () => void; initialTab?: Tab }) {
   const editor = useEditor()
   const dialogRef = useRef<HTMLDivElement>(null)
   useDialog(dialogRef)
-  const [tab, setTab] = useState<Tab>('import')
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [text, setText] = useState('')
   const [format, setFormat] = useState<'mermaid' | 'json'>('mermaid')
   const [copied, setCopied] = useState(false)

@@ -10,7 +10,9 @@ export function StatusKey() {
   if (!counts.length) return null
   const filter = editor.statusFilter
   return (
-    <div className={`status-key no-canvas${editor.hint ? ' above-hint' : ''}`} role="toolbar" aria-label="Status key" onPointerDown={(e) => e.stopPropagation()}>
+    <div className={`status-key no-canvas${editor.hint ? ' above-hint' : ''}`} role="toolbar" aria-label="Status key"
+      // Centred in the room left of the comments panel or assistant.
+      style={editor.rightInset ? { left: `calc((100% - ${editor.rightInset}px) / 2)` } : undefined} onPointerDown={(e) => e.stopPropagation()}>
       {counts.map(({ info, count }) => (
         <button
           key={info.id}

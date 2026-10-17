@@ -32,7 +32,7 @@ describe('link cards', () => {
     let id: number
     ;[b, id] = addItem(b, linkItem('https://blog.example.com/post', { x: 0, y: 0 }))
     const card = getItem(b, id)!
-    expect(card).toMatchObject({ kind: 'link', text: 'blog.example.com', w: 360, h: 120 })
+    expect(card).toMatchObject({ kind: 'link', text: 'post', w: 360, h: 120 })
     const filled = withPreview(card, { title: 'Rebuilding a 240z', image: 'https://blog.example.com/cover.jpg' })
     expect(filled).toMatchObject({ text: 'Rebuilding a 240z', link: { checked: true, url: 'https://blog.example.com/post' } })
     expect(filled.h).toBe(linkCardSize(filled.link!).h)

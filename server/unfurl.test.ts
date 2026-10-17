@@ -147,3 +147,47 @@ describe('preview cache', () => {
     expect(calls).toBe(3)
   })
 })
+
+describe('preview hardening', () => {
+  it('blocks IPv6 forms that carry private IPv4 addresses', () => {
+    for (const ip of ['::a00:1', '::ffff:0:a00:1', '64:ff9b:1::a00:1']) expect(isPublicAddress(ip), ip).toBe(false)
+  })
+
+  it('shares one fetch between people asking for the same page at once', async () => {
+    const cache = new PreviewCache()
+    let calls = 0
+    let release!: () => void
+    const slow = (url: string) =>
+      new Promise<{ url: string }>((ok) => {
+        calls++
+        release = () => ok({ url })
+      })
+    const a = cache.get('p', slow)
+    const b = cache.get('p', slow)
+    release()
+    expect(await a).toEqual(await b)
+    expect(calls).toBe(1)
+  })
+
+  it('marks slow sites as worth trying again, and gives up on a slow drip at the deadline', async () => {
+    const { createServer } = await import('node:http')
+    const drip = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' })
+      const t = setInterval(() => res.write(' '), 50)
+      res.on('close', () => clearInterval(t))
+    })
+    await new Promise<void>((ok) => drip.listen(0, '127.0.0.1', ok))
+    const port = (drip.address() as import('node:net').AddressInfo).port
+    const started = Date.now()
+    const err = await unfurl(`http://drip.test:${port}/`, {
+      lookup: (_h, cb) => cb(null, [{ address: '127.0.0.1', family: 4 }]),
+      allow: () => true,
+      anyPort: true,
+      totalMs: 400,
+    }).catch((e: unknown) => e)
+    drip.close()
+    expect(err).toBeInstanceOf(UnfurlError)
+    expect((err as UnfurlError).temporary).toBe(true)
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
+})

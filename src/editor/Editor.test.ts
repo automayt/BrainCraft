@@ -831,3 +831,29 @@ describe('pasting code', () => {
     expect(e.single).toMatchObject({ kind: 'code', lang: 'rust', text: 'fn main() {\n    println!("hi");\n}' })
   })
 })
+
+describe('who changed it', () => {
+  it('signs a long drag once at its end, but not reactions or reveals', () => {
+    const e = editor()
+    e.author = 'Sam'
+    e.setTool('sticky')
+    e.pointerDown({ x: 100, y: 100 }, 0, {})
+    e.pointerUp({ x: 100, y: 100 })
+    type(e, 'Note')
+    e.finishEditing()
+    const id = e.single!.id
+    expect(B.getItem(e.board, id)!.by).toBe('Sam')
+    // Alex drags it 400px in small steps.
+    e.author = 'Alex'
+    e.select([])
+    const c = screenCenter(e, id)
+    e.pointerDown(c, 0, {})
+    for (let k = 1; k <= 20; k++) e.pointerMove({ x: c.x + k * 20, y: c.y })
+    e.pointerUp({ x: c.x + 400, y: c.y })
+    expect(B.getItem(e.board, id)!.by).toBe('Alex')
+    // Jo only reacts.
+    e.author = 'Jo'
+    e.toggleReaction('👍', [id])
+    expect(B.getItem(e.board, id)!.by).toBe('Alex')
+  })
+})

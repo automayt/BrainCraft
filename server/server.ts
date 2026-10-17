@@ -110,14 +110,27 @@ setInterval(() => {
 
 const previews = new PreviewCache()
 const PREVIEWS_PER_MINUTE = 60
+/** Pages being fetched at once, across everyone. */
+const PREVIEWS_AT_ONCE = 8
+let previewsRunning = 0
 const previewUse = new Map<string, { start: number; count: number }>()
+/** Behind a proxy (see docs/SERVER.md), the visitor's address is in X-Forwarded-For. */
+const TRUST_PROXY = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_TRUST_PROXY ?? '')
+
+/** Who's asking, for rate limits: the visitor's address, with IPv6 grouped by its /64 network. */
+function visitor(req: IncomingMessage): string {
+  const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : ''
+  const ip = forwarded || req.socket.remoteAddress || ''
+  return ip.includes(':') && !ip.startsWith('::ffff:') ? ip.split(':').slice(0, 4).join(':') : ip
+}
 
 /** A few friends pasting links never get near this; a script hammering the server does. */
-function previewAllowed(ip: string, now = Date.now()): boolean {
-  const use = previewUse.get(ip)
+function previewAllowed(who: string, now = Date.now()): boolean {
+  const use = previewUse.get(who)
   if (!use || now - use.start > 60_000) {
-    if (previewUse.size > 10_000) previewUse.clear()
-    previewUse.set(ip, { start: now, count: 1 })
+    // Forget visitors whose minute is over, rather than resetting everyone.
+    if (previewUse.size > 10_000) for (const [k, u] of previewUse) if (now - u.start > 60_000) previewUse.delete(k)
+    previewUse.set(who, { start: now, count: 1 })
     return true
   }
   return ++use.count <= PREVIEWS_PER_MINUTE
@@ -195,12 +208,26 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // GET /api/unfurl?url=… → a link preview: title, description, picture and site name.
   if (parts[1] === 'unfurl') {
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
-    if (!previewAllowed(req.socket.remoteAddress ?? '')) return send(res, 429, { error: 'Too many link previews at once. Try again in a minute.' })
+    if (!previewAllowed(visitor(req))) return send(res, 429, { error: 'Too many link previews at once. Try again in a minute.' })
     const target = url.searchParams.get('url') ?? ''
     try {
-      return send(res, 200, await previews.get(target, (u) => unfurl(u)))
+      return send(
+        res,
+        200,
+        await previews.get(target, async (u) => {
+          if (previewsRunning >= PREVIEWS_AT_ONCE) throw new UnfurlError('The server is busy reading other pages. Try again soon.', true)
+          previewsRunning++
+          try {
+            return await unfurl(u)
+          } finally {
+            previewsRunning--
+          }
+        }),
+      )
     } catch (err) {
-      return send(res, 422, { error: err instanceof UnfurlError ? err.message : 'That page couldn’t be read' })
+      // 503: worth trying again later; 422: this link won't get a preview.
+      const temporary = err instanceof UnfurlError && err.temporary
+      return send(res, temporary ? 503 : 422, { error: err instanceof UnfurlError ? err.message : 'That page couldn’t be read' })
     }
   }
 

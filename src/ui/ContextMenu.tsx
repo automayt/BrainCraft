@@ -81,6 +81,7 @@ export function ContextMenu() {
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },
       ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
       ...(editor.selection.size > 1 ? [{ label: 'Spin a wheel between these', run: () => editor.addWheel() }] : []),
+      ...(single?.kind === 'sticky' ? [typeof single.back === 'string' ? { label: 'Remove the back (plain sticky note)', run: () => editor.setFlipCards(false) } : { label: 'Make a flip card', run: () => editor.setFlipCards(true) }] : []),
       ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',
       { label: 'Bring to front', run: () => editor.bringToFront() },
@@ -92,13 +93,11 @@ export function ContextMenu() {
       entries.push({ label: 'Convert to linked data', run: () => editor.convertToData(single.id) })
     if (single?.kind === 'data') {
       entries.push(
-        { label: 'Add a table view', run: () => editor.addDataView(single.id, 'table') },
-        { label: 'Add a board view', run: () => editor.addDataView(single.id, 'board') },
-        { label: 'Add a timeline view', run: () => editor.addDataView(single.id, 'timeline') },
+        ...(['table', 'board', 'timeline', 'calendar', 'gallery'] as const).map((t) => ({ label: `Add a ${t} view`, run: () => editor.addDataView(single.id, t) })),
       )
     }
     if (single?.kind === 'mind') {
-      entries.push({ label: 'Copy as outline', run: () => {
+      entries.push({ label: 'Copy outline', run: () => {
           const o = editor.outlineOfSelection()
           if (o) navigator.clipboard?.writeText(o).then(() => editor.setStatus('Copied outline'))
         } })

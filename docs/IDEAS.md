@@ -26,6 +26,34 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [x] **Code blocks.** Code with syntax highlighting and a language label, for
   friends who share snippets.
 
+## From the review (October 2026)
+
+- [ ] **Say who you are when you join.** The first time someone opens a live
+  link, a small card asks what friends should call them (and a colour), and
+  a "you" chip in the top bar changes it later. Stops boards full of "Guest".
+- [ ] **Friend templates** that show off what's new: "Project together" (a
+  parts database with calendar and gallery views, a timeline with "waits
+  for", link cards), "Plan a trip", "Decide together" (brainstorm, vote,
+  wheel) and "Quiz night" (flip cards).
+- [ ] **Totals and money** in databases: sums in table footers and board
+  columns, a money field, and an optional "paid by" that shows who has put in
+  what.
+- [ ] **Undo what a friend deleted:** the server keeps hourly snapshots of
+  each shared board (and one before any big deletion), shown in version
+  history for everyone.
+- [ ] **Checklists inside things:** a tick-list in a sticky, card or record,
+  shown as "3/7" like mind-map progress; pasting "- [ ]" lines makes one.
+- [ ] **Mention people:** @ in a comment also offers people seen on the board,
+  and "Since you were here" opens with "For you: 2 mentions".
+- [ ] **This week:** a small panel on opening a board with what's due, overdue
+  or waiting, from Kanban cards, records and timeline events.
+- [ ] **Plan it with AI** on an empty board: describe the project and the
+  assistant proposes a database, timeline and Kanban as a preview.
+- [ ] **A tidier selection toolbar:** one colour button that opens the
+  swatches, and a "More" menu for the less common actions.
+- [ ] **Status badges stay with their object** (an object on top hides the
+  badges of what's under it).
+
 ## From the earlier list
 
 - [x] **More database views:** calendar and gallery.

@@ -2,7 +2,7 @@
 
 BrainCraft boards can be built and read by scripts and AI assistants. The API
 is a small JSON language of **operations** ("create a mind map", "connect these
-two", "add a comment"). The same operations work in three places:
+two", "add a comment"). The same operations work in four places:
 
 | Where | How |
 | --- | --- |
@@ -99,6 +99,8 @@ timeline.
 | `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
 | `updateRecord` | `id` (any view), `record` (record id or title), `values` | Sets fields by name; `null` or `""` clears one. |
 | `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
+| `react` | `ids`, `emoji`, `by?` | Puts an emoji reaction on the objects (`by` defaults to "AI"). |
+| `createVote` | `options` (ids/refs), `question?`, `each?` | A dot vote: a card above the options. Each person spreads `each` votes; counts stay hidden until someone reveals them. |
 
 **Links in comments and descriptions.** Write `[[Name]]` to link to the board
 titled *Name*, or else the object on this board labelled *Name*. The app

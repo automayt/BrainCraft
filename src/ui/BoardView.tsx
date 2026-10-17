@@ -76,6 +76,11 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
               {item.flipped ? 'Back' : 'Front'}
             </text>
           )}
+          {typeof item.back === 'string' && !item.text && !editing && (
+            <text x={item.x + item.w / 2} y={item.y + item.h / 2} textAnchor="middle" className="flip-hint">
+              Double-click to write the {item.flipped ? 'back' : 'front'}
+            </text>
+          )}
           {item.masked && (
             <foreignObject x={item.x} y={item.y} width={item.w} height={item.h}>
               <div className="masked-note">

@@ -1,4 +1,4 @@
-import { guessLang, LANGS, tokenize } from '../model/code'
+import { guessLang, isLang, LANGS, tokenize } from '../model/code'
 import type { Item } from '../model/types'
 import { useEditor } from './useEditor'
 
@@ -11,7 +11,7 @@ export const codeBodyRect = (i: Item) => ({ x: i.x + 12, y: i.y + CODE_HEAD_H + 
 /** Code with coloured keywords, strings and comments, under a header with its language. */
 export function CodeBlockView({ item, live, editing }: { item: Item; live: boolean; editing: boolean }) {
   const editor = useEditor()
-  const lang = item.lang && LANGS[item.lang] ? item.lang : guessLang(item.text)
+  const lang = isLang(item.lang) ? item.lang : guessLang(item.text)
   const body = codeBodyRect(item)
   return (
     <g>

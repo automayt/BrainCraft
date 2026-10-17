@@ -170,7 +170,7 @@ export function LiveSection() {
       ) : (
         <>
           <p className="muted">
-            Live sessions need a BrainCraft server. Run <code>node braincraft-server.mjs</code> (it also hosts the app), or point this app at one:
+            To edit together live, this app needs a BrainCraft server. Ask whoever runs yours for its address and paste it here (or, on your own computer, start one with <code>npm run serve</code>):
           </p>
           <form
             className="share-row"
