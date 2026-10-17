@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pdfOfJpegs } from './exportImage'
+import { pdfOfJpegs } from './imageExport'
 
 describe('PDF export', () => {
   it('writes one page per image with a correct cross-reference table', async () => {
