@@ -790,3 +790,21 @@ describe('private brainstorm', () => {
     expect(B.getItem(e.viewBoard, note.id)!.masked).toBe(true)
   })
 })
+
+describe('flip cards', () => {
+  it('flips from the button on the card, as one undo step', () => {
+    const e = editor()
+    e.setTool('sticky')
+    e.pointerDown({ x: 100, y: 100 }, 0, {})
+    e.pointerUp({ x: 100, y: 100 })
+    type(e, 'Question')
+    e.finishEditing()
+    const id = e.single!.id
+    e.setFlipCards(true)
+    e.pointerDown({ x: 0, y: 0 }, 0, {}, { kind: 'flip', id })
+    e.pointerUp({ x: 0, y: 0 })
+    expect(B.getItem(e.board, id)).toMatchObject({ flipped: true, back: 'Question', text: '' })
+    e.undo()
+    expect(B.getItem(e.board, id)!.flipped).toBeFalsy()
+  })
+})

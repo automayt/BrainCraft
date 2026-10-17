@@ -47,6 +47,8 @@ function readHandle(target: EventTarget | null): Handle | undefined {
       return { kind, id }
     case 'react':
       return { kind, id, emoji: el.getAttribute('data-emoji') ?? '' }
+    case 'flip':
+      return { kind, id }
     case 'vote':
       return { kind, id, poll: Number(el.getAttribute('data-poll')), delta: el.getAttribute('data-delta') === '-1' ? -1 : 1 }
     case 'collapse':

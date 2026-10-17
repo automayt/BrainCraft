@@ -65,10 +65,16 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
     }
     case 'sticky':
       return (
-        <g>
+        // A flip card turns (a quick squeeze) each time it's flipped.
+        <g key={item.flipped ? 'back' : 'front'} className={typeof item.back === 'string' ? 'flip-face' : undefined}>
           <rect x={item.x} y={item.y + 3} width={item.w} height={item.h} rx={4} fill="rgba(0,0,0,0.09)" />
           <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={4} fill={item.color} className="shape" />
           {text && <Text item={item} className="centered" color={TEXT_ON_FILL} />}
+          {typeof item.back === 'string' && (
+            <text x={item.x + 12} y={item.y + 22} className="flip-side">
+              {item.flipped ? 'Back' : 'Front'}
+            </text>
+          )}
           {item.masked && (
             <foreignObject x={item.x} y={item.y} width={item.w} height={item.h}>
               <div className="masked-note">

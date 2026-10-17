@@ -256,6 +256,10 @@ export interface Item extends Rect {
   brainstorm?: { by: string; revealed?: boolean }
   /** A sticky note written during an open brainstorm: only its writer sees it until the reveal. */
   hiddenBy?: string
+  /** A flip card's other side (a sticky note with this is a flip card). Flipping swaps it with `text`. */
+  back?: string
+  /** A flip card showing its back. */
+  flipped?: boolean
   /** On a comment card: a spinner wheel whose options are the card's lines, and its latest spin. */
   wheel?: { spin?: { at: number; from: number; to: number; result: number } }
   /** Set only on the copy drawn for someone a hidden note is hidden from; never saved. */

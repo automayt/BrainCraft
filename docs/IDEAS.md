@@ -17,7 +17,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [x] **Spinner wheel.** Put names or options on a wheel and spin it; everyone
   in the live session sees the same spin land on the same answer. For "who
   picks the film" and "which task first".
-- [ ] **Flip cards.** A card with a front and a back; click to flip. Good for
+- [x] **Flip cards.** A card with a front and a back; click to flip. Good for
   quizzes, reveals and "answer on the back" games.
 - [ ] **Board icons.** Pick an emoji for each board; it shows in the board list,
   the tab title and wiki-links, so boards are easy to tell apart.

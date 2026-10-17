@@ -28,6 +28,7 @@ import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
 import * as WH from '../model/wheel'
+import * as FL from '../model/flip'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -124,6 +125,7 @@ export type Handle =
   | { kind: 'flowAdd'; dir: F.FlowDir }
   | { kind: 'notes'; id: Id }
   | { kind: 'react'; id: Id; emoji: string }
+  | { kind: 'flip'; id: Id }
   | { kind: 'vote'; id: Id; poll: Id; delta: 1 | -1 }
 
 export type Drag =
@@ -1140,6 +1142,26 @@ export class Editor {
     return this.masked.view
   }
 
+  /** Turns flip cards over (the selected ones by default). */
+  flipCards(ids: Id[] = [...this.selection]) {
+    if (this.readOnly) return
+    const cards = ids.filter((id) => {
+      const i = B.getItem(this.board, id)
+      return i && FL.isFlipCard(i)
+    })
+    if (!cards.length) return
+    this.edit((b) => FL.flip(b, cards))
+  }
+
+  /** Gives the selected sticky notes a back (or takes it off). */
+  setFlipCards(on: boolean) {
+    if (this.readOnly) return
+    const ids = this.selectedItems.filter((i) => i.kind === 'sticky').map((i) => i.id)
+    if (!ids.length) return
+    this.edit((b) => FL.setFlipCard(b, ids, on))
+    this.setStatus(on ? 'Flip card: click ↻ to turn it over and write on the back' : 'Back removed')
+  }
+
   /** Adds a spinner wheel; selected objects' text become its options. */
   addWheel() {
     if (this.readOnly) return
@@ -1900,6 +1922,9 @@ export class Editor {
           return
         case 'react':
           this.toggleReaction(handle.emoji, [handle.id])
+          return
+        case 'flip':
+          this.flipCards([handle.id])
           return
         case 'vote':
           this.vote(handle.poll, handle.id, mods.alt ? -1 : handle.delta)

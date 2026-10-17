@@ -169,6 +169,22 @@ function WheelControls({ card, editor }: { card: Item & { wheel: NonNullable<Ite
   )
 }
 
+/** The turn-over button on each flip card. */
+function FlipButtons({ editor, k }: { editor: Editor; k: number }) {
+  const cards = editor.board.items.filter((i) => i.kind === 'sticky' && typeof i.back === 'string' && !editor.hidden.has(i.id))
+  return (
+    <g>
+      {cards.map((i) => (
+        <g key={i.id} data-handle={editor.readOnly ? undefined : 'flip'} data-id={i.id} className="flip-button" transform={`translate(${i.x + i.w - 30 * k} ${i.y + i.h - 30 * k}) scale(${k})`}>
+          <title>{i.flipped ? 'Turn back to the front' : 'Turn over'}</title>
+          <circle cx="12" cy="12" r="12" />
+          <path d="M6.5 10a6 6 0 0 1 10.6-2.2M17.5 14a6 6 0 0 1-10.6 2.2M17.4 4.6v3.4H14M6.6 19.4V16H10" />
+        </g>
+      ))}
+    </g>
+  )
+}
+
 /** "Only you can see this" on your own notes while a round is open. */
 function MyHiddenNotes({ editor, k }: { editor: Editor; k: number }) {
   const me = editor.me
@@ -222,8 +238,9 @@ export function Social({ editor }: { editor: Editor }) {
   const extras = editor.board.items.some((i) => i.locked) || editor.selectedItems.some((i) => i.group)
   const rounds = editor.board.items.filter((i): i is Item & { brainstorm: NonNullable<Item['brainstorm']> } => !!i.brainstorm && !editor.hidden.has(i.id))
   const roundOpen = rounds.some((r) => !r.brainstorm.revealed)
+  const flips = editor.board.items.some((i) => typeof i.back === 'string')
   const wheels = editor.board.items.filter((i): i is Item & { wheel: NonNullable<Item['wheel']> } => !!i.wheel && !editor.hidden.has(i.id))
-  if (!reacted.length && !polls.length && !extras && !rounds.length && !wheels.length) return null
+  if (!reacted.length && !polls.length && !extras && !rounds.length && !wheels.length && !flips) return null
   return (
     <g className="social">
       {extras && <LocksAndGroups editor={editor} k={k} />}
@@ -231,6 +248,7 @@ export function Social({ editor }: { editor: Editor }) {
         <Reactions key={i.id} item={i} me={me} k={k} />
       ))}
       {roundOpen && <MyHiddenNotes editor={editor} k={k} />}
+      {flips && <FlipButtons editor={editor} k={k} />}
       {wheels.map((w) => editor.editing?.id !== w.id && <WheelControls key={w.id} card={w} editor={editor} />)}
       {rounds.map((r) => editor.editing?.id !== r.id && <BrainstormControls key={r.id} card={r} editor={editor} />)}
       {polls.map((p) => (
