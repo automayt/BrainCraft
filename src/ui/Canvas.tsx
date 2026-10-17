@@ -13,6 +13,8 @@ import { type Rect, center, rectFromPoints } from '../model/geom'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
 import { Social } from './Social'
+import { StatusMarks } from './StatusMarks'
+import { StatusKey } from './StatusKey'
 import { CatchUpOverlay } from './CatchUp'
 import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
@@ -247,8 +249,10 @@ export function Canvas() {
             selection={editor.selection}
             view={cull}
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
+            statusFilter={editor.statusFilter}
           />
           <Social editor={editor} />
+          <StatusMarks editor={editor} />
           <CatchUpOverlay editor={editor} />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
@@ -265,6 +269,7 @@ export function Canvas() {
       <SelectionToolbar />
       <ShapePicker />
       <Minimap />
+      <StatusKey />
     </div>
   )
 }

@@ -6315,3 +6315,138 @@ button.on,
   color: var(--accent);
   background: var(--accent-soft);
 }
+
+/* ----- status marks ----- */
+
+.status-badge path,
+.status-dot path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.status-badge circle {
+  stroke: var(--canvas);
+  stroke-width: 1.5;
+}
+
+.status-badge.dimmed,
+.branch-progress.dimmed {
+  opacity: 0.25;
+}
+
+.status-dot .status-none {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2.5;
+}
+
+.branch-progress rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+}
+
+.branch-progress text {
+  font-weight: 650;
+  fill: var(--muted);
+}
+
+.branch-progress.all-done rect {
+  fill: #16a34a;
+  stroke: #16a34a;
+}
+
+.branch-progress.all-done text {
+  fill: #fff;
+}
+
+.status-dropped {
+  opacity: 0.45;
+}
+
+.filtered-out {
+  opacity: 0.15;
+  transition: opacity 0.15s;
+}
+
+.selection-toolbar .status-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.align-menu.status-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+}
+
+.align-menu.status-menu button {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.status-key {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 4px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.status-key button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+.status-key button strong {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.status-key button.on {
+  background: var(--accent-soft);
+}
+
+.status-key button.off {
+  opacity: 0.55;
+}
+
+.status-key-clear {
+  color: var(--accent);
+}
+
+/* Phones: the tool rail and zoom bar take the bottom edge. */
+@media (max-width: 720px) {
+  .status-key {
+    bottom: 132px;
+  }
+}
+
+/* The shortcut hint sits on the bottom edge too: stand above it. */
+.status-key.above-hint {
+  bottom: 54px;
+}

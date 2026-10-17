@@ -3,6 +3,7 @@
 import { getItem } from './board'
 import { display, getDataset, recordTitle } from './dataset'
 import { objectLabel, plainNote } from './notes'
+import { statusInfo } from './status'
 import { type Board, type Id, type Item, type Kind, KIND_LABELS } from './types'
 
 export interface SearchResult {
@@ -27,6 +28,8 @@ interface Field {
 function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
   const out: Field[] = [{ where: i.kind === 'frame' ? 'Title' : 'Text', text: i.text }]
   if (i.description) out.push({ where: 'Description', text: plainNote(i.description) })
+  const status = statusInfo(i.status)
+  if (status) out.push({ where: 'Status', text: status.label })
   for (const n of i.notes ?? []) out.push({ where: 'Comment', text: plainNote(n.text) })
   if (i.table) {
     const cols = new Map(i.table.columns.map((c) => [c.id, c.name]))

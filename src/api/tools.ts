@@ -47,7 +47,7 @@ createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}
 createImage {src: https or data URL, w?, h?}
 createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}
-update {id, text?, description?, color?, x?, y?, w?, h?, locked?} — description is free text shown above an object's comments; locked objects can't be moved or changed by accident
+update {id, text?, description?, color?, x?, y?, w?, h?, locked?, status?} — description is free text shown above an object's comments; locked objects can't be moved or changed by accident; status marks where it stands: todo, doing, waiting, undecided, done, dropped, or none to clear (not on frames, drawings or data widgets)
 delete {ids: [...]} — deleting a mind-map idea deletes its branch
 addComment {id, text, author?} — a timestamped work note on an object; mention another object with @[Label](#id). In comments and descriptions, [[Name]] links to the board or object called Name (boards first)
 createDatabase {title, fields?: [name | {name, type: text|number|date|select|person|checkbox, options?}], records?: [{FieldName: value}], views?: [table|board|timeline], groupBy?} — one set of records shown as linked views that stay in sync (a board groups by a select/person field; a timeline uses the first two date fields). Types are guessed from values when not given. The first field is the record title.

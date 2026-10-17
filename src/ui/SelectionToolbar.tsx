@@ -2,6 +2,7 @@ import * as B from '../model/board'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
+import { canHaveStatus, STATUSES, statusInfo } from '../model/status'
 import { hasSketch, sketchToBoard } from './sketch'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
@@ -234,6 +235,7 @@ export function SelectionToolbar() {
           </button>
         </>
       )}
+      {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
       {items.length > 0 && <ReactMenu />}
       {hasSketch(editor) && (
         <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
@@ -320,6 +322,81 @@ function AlignMenu({ count }: { count: number }) {
             {icon('M3 2h12M3 16h12M6 7h6v4H6z')}
           </button>
         </div>,
+          document.body,
+        )}
+    </span>
+  )
+}
+
+/** A small round status icon, as drawn on the board. */
+export function StatusDot({ status, size = 16 }: { status: string | undefined; size?: number }) {
+  const s = statusInfo(status)
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" className="status-dot">
+      {s ? (
+        <>
+          <circle cx="10" cy="10" r="10" style={{ fill: s.color }} />
+          <path d={s.icon} transform="translate(2 2)" />
+        </>
+      ) : (
+        <circle cx="10" cy="10" r="8.5" className="status-none" />
+      )}
+    </svg>
+  )
+}
+
+/** Where the selection stands: to do, in progress, done… */
+function StatusMenu() {
+  const editor = useEditor()
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const marked = editor.selectedItems.filter((i) => canHaveStatus(i.kind))
+  const same = marked.every((i) => i.status === marked[0]?.status) ? marked[0]?.status : undefined
+  return (
+    <span className="align-anchor">
+      <button
+        title="Status: where this stands"
+        aria-label="Status"
+        aria-expanded={!!at}
+        className={`status-button${at ? ' on' : ''}`}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8 })
+        }}
+      >
+        <StatusDot status={same} />
+        {statusInfo(same)?.label ?? 'Status'}
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu status-menu no-canvas" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+            {STATUSES.map((st) => (
+              <button
+                key={st.id}
+                role="menuitemradio"
+                aria-checked={same === st.id}
+                className={same === st.id ? 'on' : ''}
+                onClick={() => {
+                  editor.markStatus(st.id)
+                  setAt(null)
+                }}
+              >
+                <StatusDot status={st.id} />
+                {st.label}
+              </button>
+            ))}
+            {marked.some((i) => i.status) && (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  editor.markStatus(null)
+                  setAt(null)
+                }}
+              >
+                <StatusDot status={undefined} />
+                No status
+              </button>
+            )}
+          </div>,
           document.body,
         )}
     </span>

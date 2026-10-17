@@ -15,6 +15,7 @@ import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid } from '../model/mermaid'
 import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
 import { linkItem, urlIn } from '../model/linkCard'
+import { parseStatus, setStatus } from '../model/status'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
@@ -82,7 +83,7 @@ export type Op =
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
-  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean }
+  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
 
@@ -356,6 +357,11 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
             delete next.locked
             return next
           })
+        if (op.status !== undefined) {
+          const status = op.status === null || op.status === '' || op.status === 'none' ? null : parseStatus(String(op.status))
+          if (status === undefined) fail(index, op, '"status" should be todo, doing, waiting, undecided, done, dropped or none')
+          b = setStatus(b, [id], status)
+        }
         done({ id })
         break
       }

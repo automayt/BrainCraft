@@ -4,6 +4,7 @@ import { copyImage } from './ExportImage'
 
 import { type Editor, TOOLS } from '../editor/Editor'
 import { KIND_LABELS } from '../model/types'
+import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { THEMES } from './theme'
 import type { Ui } from './uiContext'
 
@@ -100,6 +101,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
   if (editor.selection.size)
     for (const emoji of ['👍', '❤️', '🎉'])
       list.push({ id: `react-${emoji}`, label: `React ${emoji}`, group: 'Selection', aliases: 'react reaction emoji like love', run: () => editor.toggleReaction(emoji) })
+  if (editor.selectedItems.some((i) => canHaveStatus(i.kind))) {
+    for (const st of STATUSES)
+      list.push({ id: `status-${st.id}`, label: `Mark as ${st.label.toLowerCase()}`, group: 'Selection', aliases: 'status mark progress state tick done finished complete todo task', run: () => editor.markStatus(st.id) })
+    if (editor.selectedItems.some((i) => i.status)) list.push({ id: 'status-none', label: 'Clear status', group: 'Selection', aliases: 'status remove unmark', run: () => editor.markStatus(null) })
+  }
+  for (const { info } of statusCounts(editor.board))
+    list.push({ id: `show-${info.id}`, label: `Show only what's ${info.label.toLowerCase()}`, group: 'View', aliases: 'filter status highlight focus', run: () => editor.setStatusFilter(info.id) })
+  if (editor.statusFilter) list.push({ id: 'show-all', label: 'Show everything (clear status filter)', group: 'View', aliases: 'filter status clear reset', run: () => editor.setStatusFilter(null) })
   if (editor.single?.kind === 'mind') {
     const id = editor.single.id
     list.push({ id: 'tidy-mind', label: 'Tidy mind map', group: 'Mind map', aliases: 'reset layout arrange auto align clean', run: () => editor.tidyMindMap(id) })

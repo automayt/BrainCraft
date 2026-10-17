@@ -7,7 +7,7 @@ import { toOutline } from '../model/mindmap'
 import { objectLabel, plainNote } from '../model/notes'
 import { search } from '../model/search'
 import { toCsv } from '../model/table'
-import type { Board, Id, Item, Kind } from '../model/types'
+import type { Board, Id, Item, Kind, Status } from '../model/types'
 
 export interface ObjectSummary {
   id: Id
@@ -18,6 +18,7 @@ export interface ObjectSummary {
   w: number
   h: number
   commentCount: number
+  status?: Status
 }
 
 export interface ObjectDetail extends ObjectSummary {
@@ -36,6 +37,7 @@ export const summary = (i: Item): ObjectSummary => ({
   w: Math.round(i.w),
   h: Math.round(i.h),
   commentCount: i.notes?.length ?? 0,
+  ...(i.status ? { status: i.status } : {}),
 })
 
 export function listObjects(b: Board, kind?: Kind): ObjectSummary[] {
