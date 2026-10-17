@@ -45,6 +45,7 @@ createTable {columns: [names], rows?: [[cells]], title?}
 createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}]}
 createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}], followKanban?: [kanban ids/refs]} — an entry without end is a milestone; followed Kanban boards show their dated cards live
 createImage {src: https or data URL, w?, h?}
+createCode {code, lang?} — a code block with syntax colouring (javascript, typescript, python, rust, go, c, sql, shell, css, json; guessed when left out)
 createSpinner {options: [text, …]} — a spinner wheel card; anyone can spin it and everyone sees the same answer
 createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}

@@ -19,6 +19,7 @@ import { CatchUpOverlay } from './CatchUp'
 import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
 import { FONT_FAMILY, LINE_HEIGHT } from './measure'
 import { Minimap } from './Minimap'
+import { CODE_FONT, codeBodyRect } from './CodeBlockView'
 import { TOOL_ICONS } from './icons'
 import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
@@ -691,6 +692,12 @@ function TextEditor({ editor }: { editor: Editor }) {
       align = 'left'
       vcenter = false
       break
+    case 'code':
+      box = editor.screenRect(codeBodyRect(item))
+      align = 'left'
+      vcenter = false
+      color = '#e6e8ee'
+      break
     case 'mind': {
       const depth = mindDepths(editor.board).get(item.id) ?? 0
       const s = nodeStyle(depth)
@@ -712,7 +719,7 @@ function TextEditor({ editor }: { editor: Editor }) {
       <textarea
         ref={ref}
         value={item.text}
-        spellCheck
+        spellCheck={item.kind !== 'code'}
         rows={1}
         placeholder={item.kind === 'mind' ? 'Type an idea' : ''}
         style={{
@@ -720,13 +727,22 @@ function TextEditor({ editor }: { editor: Editor }) {
           fontWeight,
           textAlign: align,
           color,
-          fontFamily: FONT_FAMILY,
-          lineHeight: LINE_HEIGHT,
+          fontFamily: item.kind === 'code' ? CODE_FONT : FONT_FAMILY,
+          lineHeight: item.kind === 'code' ? 1.5 : LINE_HEIGHT,
+          whiteSpace: item.kind === 'code' ? 'pre' : undefined,
           caretColor: item.kind === 'mind' && color !== 'var(--ink)' ? color : ACCENT,
         }}
         onChange={(ev) => editor.setEditingText(ev.target.value)}
         onKeyDown={(ev) => {
           ev.stopPropagation()
+          // In code, Tab indents (two spaces) instead of leaving the box.
+          if (item.kind === 'code' && ev.key === 'Tab' && !ev.shiftKey) {
+            ev.preventDefault()
+            const ta = ev.currentTarget
+            ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end')
+            editor.setEditingText(ta.value)
+            return
+          }
           if (editor.editingKey(ev.key, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey })) ev.preventDefault()
         }}
         onBlur={() => {
