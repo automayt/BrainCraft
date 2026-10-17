@@ -14,7 +14,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
 - [x] **Private brainstorm.** Everyone writes sticky notes that only they can
   read; others see blank cards until the host reveals them all at once. Stops
   the first idea from steering everyone else. Same idea as hidden votes.
-- [ ] **Spinner wheel.** Put names or options on a wheel and spin it; everyone
+- [x] **Spinner wheel.** Put names or options on a wheel and spin it; everyone
   in the live session sees the same spin land on the same answer. For "who
   picks the film" and "which task first".
 - [ ] **Flip cards.** A card with a front and a back; click to flip. Good for

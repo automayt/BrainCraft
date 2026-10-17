@@ -16,6 +16,7 @@ import { insertMermaid, parseMermaid } from '../model/mermaid'
 import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
+import { newWheel } from '../model/wheel'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
@@ -69,6 +70,7 @@ export type Op =
     } & Placed)
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
   | ({ op: 'createLink'; url: string; w?: number; h?: number } & Placed)
+  | ({ op: 'createSpinner'; options: string[] } & Placed)
   | ({
       op: 'createDatabase'
       title?: string
@@ -313,6 +315,14 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'createSpinner': {
+        if (!Array.isArray(op.options) || op.options.filter((o) => typeof o === 'string' && o.trim()).length < 2) fail(index, op, '"options" should list two or more choices')
+        let id: Id
+        ;[b, id] = newWheel(b, { x: 0, y: 0 }, op.options.map(String))
+        place([id], op.at)
+        done({ id })
+        break
+      }
       case 'createLink': {
         const url = urlIn(text(op.url, 'url'))
         if (!url) fail(index, op, '"url" should be one http(s) web address')
@@ -508,6 +518,7 @@ export const OPS: Op['op'][] = [
   'createTimeline',
   'createImage',
   'createLink',
+  'createSpinner',
   'connect',
   'update',
   'delete',

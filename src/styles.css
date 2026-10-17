@@ -6482,3 +6482,43 @@ button.on,
   font-weight: 600;
   fill: #fff;
 }
+
+/* ----- spinner wheel ----- */
+
+.wheel-slice path {
+  stroke: rgba(30, 30, 36, 0.25);
+  stroke-width: 1;
+}
+
+.wheel-slice text {
+  font-weight: 600;
+  fill: #1e1e24;
+}
+
+.wheel-slice.won path {
+  stroke: #1e1e24;
+  stroke-width: 3;
+}
+
+.wheel-rim {
+  fill: none;
+  stroke: rgba(30, 30, 36, 0.55);
+  stroke-width: 3;
+}
+
+.wheel-hub {
+  fill: #fff;
+  stroke: rgba(30, 30, 36, 0.55);
+  stroke-width: 2;
+}
+
+.wheel-pointer {
+  fill: #1e1e24;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.wheel-answer strong {
+  font-weight: 700;
+}

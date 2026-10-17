@@ -13,6 +13,7 @@ import { TimelineView } from './widgets/TimelineView'
 import { DataViewWidget } from './widgets/DataView'
 import { type Board, type Connector, type Id, type Item, type Status, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
 import { LinkCardView } from './LinkCardView'
+import { WheelFace } from './WheelFace'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -136,7 +137,7 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
 /** Where a comment block's text goes. */
 export function commentBodyRect(i: Item) {
   // A vote card keeps its bottom strip for the vote controls.
-  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46 - (i.poll || i.brainstorm ? 48 : 0)) }
+  return { x: i.x + 12, y: i.y + 38, w: Math.max(1, i.w - 24), h: Math.max(1, i.h - 46 - (i.poll || i.brainstorm || i.wheel ? 48 : 0)) }
 }
 
 export function formatTime(at: number, now = Date.now()): string {
@@ -165,11 +166,12 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
               <path d="M4 5h16v11H10l-4 4v-4H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             )}
           </svg>
-          <span>{item.poll ? (item.poll.ended ? 'Vote · closed' : 'Vote') : item.brainstorm ? (item.brainstorm.revealed ? 'Brainstorm · revealed' : 'Private brainstorm') : 'Comment'}</span>
+          <span>{item.poll ? (item.poll.ended ? 'Vote · closed' : 'Vote') : item.brainstorm ? (item.brainstorm.revealed ? 'Brainstorm · revealed' : 'Private brainstorm') : item.wheel ? 'Spinner' : 'Comment'}</span>
           {item.createdAt && <time>{formatTime(item.createdAt)}</time>}
         </div>
       </foreignObject>
-      {!editing && (
+      {!editing && item.wheel && <WheelFace item={item} box={body} />}
+      {!editing && !item.wheel && (
         <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
           <div className="item-text comment-body" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
             {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : item.brainstorm ? 'What are we brainstorming?' : 'Write a comment…'}</span>}
