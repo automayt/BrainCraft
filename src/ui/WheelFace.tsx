@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Item } from '../model/types'
-import { sliceColor, wheelAngle, wheelOptions } from '../model/wheel'
+import { sliceColor, spinStart, wheelAngle, wheelOptions } from '../model/wheel'
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -10,12 +10,14 @@ export function WheelFace({ item, box }: { item: Item; box: { x: number; y: numb
   const [now, setNow] = useState(() => Date.now())
   // Animate only while a spin is running; then sit still.
   useEffect(() => {
-    if (!spin || wheelAngle(spin).done) return
+    if (!spin) return
+    const start = spinStart(spin)
+    if (wheelAngle(spin, Date.now(), start).done) return
     let frame = 0
     const tick = () => {
       const t = Date.now()
       setNow(t)
-      if (!wheelAngle(spin, t).done) frame = requestAnimationFrame(tick)
+      if (!wheelAngle(spin, t, start).done) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
@@ -26,7 +28,7 @@ export function WheelFace({ item, box }: { item: Item; box: { x: number; y: numb
   const r = Math.max(10, Math.min(box.w, box.h) / 2 - 12)
   const cx = box.x + box.w / 2
   const cy = box.y + box.h / 2 + 6
-  const { angle, done } = wheelAngle(spin, now)
+  const { angle, done } = wheelAngle(spin, now, spin ? spinStart(spin) : 0)
   const seg = 360 / n
   const rad = (deg: number) => ((deg - 90) * Math.PI) / 180
   const at = (deg: number, rr = r) => `${cx + rr * Math.cos(rad(deg))} ${cy + rr * Math.sin(rad(deg))}`
@@ -35,6 +37,8 @@ export function WheelFace({ item, box }: { item: Item; box: { x: number; y: numb
   const room = r * 0.86 - 8
   const fontFor = (label: string) => Math.max(10, Math.min(maxFont, room / (label.length * 0.5)))
   const winner = spin && done ? spin.result : -1
+  // Once the wheel stops, labels on its left half turn round so they read left to right.
+  const flip = (mid: number) => done && (((mid + angle) % 360) + 360) % 360 > 180
 
   return (
     <g className="wheel">
@@ -52,9 +56,9 @@ export function WheelFace({ item, box }: { item: Item; box: { x: number; y: numb
                 <text
                   x={cx}
                   y={cy - r + 12}
-                  transform={`rotate(${mid} ${cx} ${cy}) rotate(-90 ${cx} ${cy - r + 12})`}
+                  transform={`rotate(${mid} ${cx} ${cy}) rotate(${flip(mid) ? 90 : -90} ${cx} ${cy - r + 12})`}
                   fontSize={fontFor(label)}
-                  textAnchor="end"
+                  textAnchor={flip(mid) ? 'start' : 'end'}
                   dominantBaseline="middle"
                 >
                   {clip(label, Math.floor(room / (fontFor(label) * 0.5)))}

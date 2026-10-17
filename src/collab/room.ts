@@ -4,6 +4,7 @@
  */
 
 import { type Op, type OpResult, applyOps } from '../api/ops'
+import { cleanPatches } from '../model/sanitize'
 import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
@@ -116,11 +117,13 @@ export class Room {
     if (msg.t === 'patch') {
       if (m.role !== 'edit') return m.send({ t: 'error', message: 'This link can only view the board' })
       if (!Array.isArray(msg.patches) || msg.patches.length > MAX_PATCHES) return m.send({ t: 'error', message: 'Bad patch' })
-      this.data.board = applyPatches(this.data.board, msg.patches)
+      // Checked before anyone else sees them: a bad field from one person can't crash the rest.
+      const patches = cleanPatches(msg.patches)
+      this.data.board = applyPatches(this.data.board, patches)
       this.data.version++
       this.changed()
       m.send({ t: 'ack', seq: msg.seq, version: this.data.version })
-      this.broadcast({ t: 'patch', patches: msg.patches, from: id, version: this.data.version }, id)
+      this.broadcast({ t: 'patch', patches, from: id, version: this.data.version }, id)
     }
   }
 

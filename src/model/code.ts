@@ -94,10 +94,14 @@ const ALIASES: Record<string, string> = {
 }
 
 /** The language id for a name or file extension, if known. */
-export function langId(name: string | undefined): string | undefined {
-  if (!name) return undefined
+/** Whether `id` is one of our languages (own keys only: never "constructor" and friends). */
+export const isLang = (id: unknown): id is string => typeof id === 'string' && Object.hasOwn(LANGS, id)
+
+export function langId(name: unknown): string | undefined {
+  if (typeof name !== 'string' || !name) return undefined
   const k = name.trim().toLowerCase()
-  return LANGS[k] ? k : ALIASES[k]
+  if (isLang(k)) return k
+  return Object.hasOwn(ALIASES, k) ? ALIASES[k] : undefined
 }
 
 /** A best guess at the language of `code`, from tell-tale words. */
@@ -125,7 +129,8 @@ export function guessLang(code: string): string {
 
 /** Splits code into coloured tokens. Never throws; unknown text is plain. */
 export function tokenize(code: string, lang: string): Token[] {
-  const L = LANGS[lang] ?? LANGS.text
+  if (typeof code !== 'string') return []
+  const L = isLang(lang) ? LANGS[lang] : LANGS.text
   if (lang === 'text') return [{ t: 'plain', s: code }]
   const words = new Set(L.keywords.split(' ').filter(Boolean))
   const caseless = lang === 'sql'
@@ -188,4 +193,18 @@ export function fencedCode(text: string): { lang: string; code: string } | null 
   const m = /^\s*```([\w+#-]*)[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(text)
   if (!m) return null
   return { lang: langId(m[1]) ?? guessLang(m[2]), code: m[2] }
+}
+
+/** A good size for a block showing `code` (a loop, not a spread: pasted code can be huge). */
+export function codeSize(code: string): { w: number; h: number } {
+  let longest = 0
+  let lines = 1
+  let run = 0
+  for (let k = 0; k < code.length; k++) {
+    if (code[k] === '\n') {
+      lines++
+      run = 0
+    } else if (++run > longest) longest = run
+  }
+  return { w: Math.min(900, Math.max(360, 60 + longest * 8.6)), h: Math.min(700, Math.max(160, 60 + lines * 21)) }
 }

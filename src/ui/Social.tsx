@@ -4,7 +4,7 @@ import type { Editor } from '../editor/Editor'
 import { bounds as getBoardBounds, getItem } from '../model/board'
 import * as RX from '../model/reactions'
 import * as BS from '../model/brainstorm'
-import { SPIN_MS, wheelOptions } from '../model/wheel'
+import { SPIN_MS, spinStart, wheelOptions } from '../model/wheel'
 import { useEffect, useState } from 'react'
 import type { Item } from '../model/types'
 import { commentBodyRect } from './BoardView'
@@ -142,7 +142,7 @@ function WheelControls({ card, editor }: { card: Item & { wheel: NonNullable<Ite
   const spin = card.wheel.spin
   const options = wheelOptions(card)
   const [, rerender] = useState(0)
-  const left = spin ? spin.at + SPIN_MS - Date.now() : 0
+  const left = spin ? spinStart(spin) + SPIN_MS - Date.now() : 0
   // Show the answer once the wheel has stopped.
   useEffect(() => {
     if (left <= 0) return
@@ -150,7 +150,7 @@ function WheelControls({ card, editor }: { card: Item & { wheel: NonNullable<Ite
     return () => clearTimeout(t)
   }, [left])
   const spinning = left > 0
-  const answer = spin && !spinning ? options[spin.result] : undefined
+  const answer = spin && !spinning ? (spin.label ?? options[spin.result]) : undefined
   return (
     <foreignObject x={card.x + 10} y={body.y + body.h + 4} width={Math.max(1, card.w - 20)} height={44}>
       <div className="vote-controls no-canvas" onPointerDown={(e) => e.stopPropagation()}>
@@ -171,7 +171,8 @@ function WheelControls({ card, editor }: { card: Item & { wheel: NonNullable<Ite
 
 /** The turn-over button on each flip card. */
 function FlipButtons({ editor, k }: { editor: Editor; k: number }) {
-  const cards = editor.board.items.filter((i) => i.kind === 'sticky' && typeof i.back === 'string' && !editor.hidden.has(i.id))
+  // From the masked view: nobody can turn over someone else's hidden note.
+  const cards = editor.viewBoard.items.filter((i) => i.kind === 'sticky' && typeof i.back === 'string' && !i.masked && !editor.hidden.has(i.id))
   return (
     <g>
       {cards.map((i) => (
@@ -188,7 +189,8 @@ function FlipButtons({ editor, k }: { editor: Editor; k: number }) {
 /** "Only you can see this" on your own notes while a round is open. */
 function MyHiddenNotes({ editor, k }: { editor: Editor; k: number }) {
   const me = editor.me
-  const mine = editor.board.items.filter((i) => i.hiddenBy === me && !editor.hidden.has(i.id))
+  const open = BS.openRound(editor.board)
+  const mine = editor.board.items.filter((i) => BS.isMyHidden(i, me, open) && !editor.hidden.has(i.id))
   return (
     <g>
       {mine.map((i) => (

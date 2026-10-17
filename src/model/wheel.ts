@@ -18,8 +18,9 @@ export interface Spin {
   /** Wheel angle in degrees before and after the spin. */
   from: number
   to: number
-  /** The option it lands on. */
+  /** The option it lands on, and its words (the options may change later). */
   result: number
+  label?: string
 }
 
 /** The wheel's options: the card's non-empty lines. */
@@ -60,15 +61,34 @@ export function spinWheel(b: Board, id: Id, now = Date.now(), random = Math.rand
   const target = 360 - (result * seg + within)
   const turns = 5 + Math.floor(random() * 3)
   const to = from - (from % 360) + turns * 360 + target
-  return updateItem(b, id, (x) => ({ ...x, wheel: { ...x.wheel, spin: { at: now, from, to, result } } }))
+  const label = wheelOptions(i)[result]
+  return updateItem(b, id, (x) => ({ ...x, wheel: { ...x.wheel, spin: { at: now, from, to, result, label } } }))
 }
 
 const easeOut = (t: number) => 1 - (1 - t) ** 4
 
+const seen = new Map<string, number>()
+
+/**
+ * When this browser counts a spin as starting: when it first saw a recent one
+ * (so everyone watches the whole spin, whatever their clock says), or the
+ * spin's own time for an old one (shown already stopped).
+ */
+export function spinStart(spin: Spin, now = Date.now()): number {
+  const key = `${spin.at}:${spin.to}`
+  let t = seen.get(key)
+  if (t === undefined) {
+    t = Math.abs(now - spin.at) < 30_000 ? Math.min(now, Math.max(spin.at, now - 250)) : spin.at
+    if (seen.size > 200) seen.clear()
+    seen.set(key, t)
+  }
+  return t
+}
+
 /** Where the wheel points at time `now`, and whether it has stopped. */
-export function wheelAngle(spin: Spin | undefined, now = Date.now()): { angle: number; done: boolean } {
+export function wheelAngle(spin: Spin | undefined, now = Date.now(), start = spin?.at ?? 0): { angle: number; done: boolean } {
   if (!spin) return { angle: 0, done: true }
-  const t = Math.min(1, Math.max(0, (now - spin.at) / SPIN_MS))
+  const t = Math.min(1, Math.max(0, (now - start) / SPIN_MS))
   return { angle: spin.from + (spin.to - spin.from) * easeOut(t), done: t >= 1 }
 }
 

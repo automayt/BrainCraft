@@ -87,7 +87,8 @@ function BoardIcon() {
               <button
                 key={e}
                 className={e === icon ? 'on' : ''}
-                aria-label={e}
+                aria-label={`Use ${e} as the board icon`}
+                title={e === icon ? 'The icon now' : undefined}
                 onClick={() => {
                   editor.setBoardIcon(e)
                   setOpen(false)
@@ -209,7 +210,7 @@ export function TopLeft() {
             <hr />
             {!ws.readOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
             <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
-            <MenuItem label="Export as Mermaid…" onClick={run(ui.openImport)} />
+            <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
             <hr />
             <MenuItem label="Keyboard shortcuts" keys="?" onClick={run(ui.openHelp)} />
           </Popover>
@@ -221,14 +222,22 @@ export function TopLeft() {
 
 export function TopRight() {
   const editor = useEditor()
+  const ws = useWorkspace()
   const ui = useUi()
   const [themes, setThemes] = useState(false)
   return (
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <LiveBar onOpen={ui.openShare} />
+      {!ws.liveInfo && !ws.readOnly && (
+        <button className="share-btn has-tip" aria-label="Share" onMouseDown={keepFocus} onClick={ui.openShare}>
+          <span>Share</span>
+          <Tip label="Invite friends to this board" />
+        </button>
+      )}
       <button
         className={`ask-btn has-tip${ui.assistant ? ' on' : ''}`}
+        aria-label="Ask AI"
         aria-pressed={ui.assistant}
         onPointerEnter={() => void preloadAi()}
         onFocus={() => void preloadAi()}
@@ -239,12 +248,12 @@ export function TopRight() {
         <span>Ask AI</span>
         <Tip label="Chat with this board" keys="Ctrl J" />
       </button>
-      <button className="present-btn has-tip" onMouseDown={keepFocus} onClick={ui.present}>
+      <button className="present-btn has-tip" aria-label="Present" onMouseDown={keepFocus} onClick={ui.present}>
         <PlayIcon />
         <span>Present</span>
         <Tip label="Frames become slides" keys="Shift P" />
       </button>
-      <button className="search-pill" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
+      <button className="search-pill" aria-label="Search or run a command" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />
         <span>Search or run a command</span>
         <kbd>Ctrl K</kbd>
@@ -534,7 +543,9 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['E', 'Send an emote from your cursor (nothing selected)'],
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],
       ['Ctrl Shift L', 'Lock or unlock the selection'],
-      ['/', 'Cursor chat: say something next to your pointer'],
+      ['/', 'Cursor chat: say something next to your pointer (nothing selected)'],
+      ['Enter', 'Place the current tool in the middle of the view'],
+      ['Type', 'With one object selected, typing replaces its text'],
       ['Right-click', 'Actions for whatever is under the pointer'],
       ['Shift C', 'Comments on the selected object'],
       ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],
@@ -557,6 +568,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Drag the blue dot', 'Connect; drop on empty space for a linked note'],
       ['Shift-click · drag a box', 'Select several'],
       ['Arrows (+ Shift)', 'Nudge by 1 (10)'],
+      ['Ctrl arrows (+ Shift)', 'Nudge by 10 (50), mind-map ideas too'],
       ['Alt while dragging', 'Move without snapping'],
     ],
   ],
@@ -574,7 +586,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Mind maps',
     [
       ['M then click', 'Start a mind map'],
-      ['Tab', 'Add a child idea'],
+      ['Tab · Shift Tab', 'Add a child idea · a sibling'],
       ['Enter', 'Add a sibling (while typing: finish, then add the next)'],
       ['Shift Enter', 'New line while typing'],
       ['Arrows', 'Move between ideas'],
@@ -593,6 +605,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Drag a blue arrow to empty space', 'Pick the next shape (1–7)'],
       ['Double-click a line', 'Label it (e.g. Yes / No)'],
       ['Paste Mermaid', 'Builds the flowchart'],
+      ['Shift R', 'Run the flowchart step by step (1–9 pick a way, Backspace goes back)'],
     ],
   ],
   [
@@ -602,8 +615,30 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Drag the title strip', 'Move it (double-click to rename)'],
       ['Table: Enter · ↑ ↓', 'Move between rows (Enter on the last adds one)'],
       ['Paste spreadsheet cells', 'Creates a table'],
-      ['Kanban: drag a card', 'Move it to another column'],
+      ['Kanban: drag a card · Alt arrows', 'Move it to another column or up and down'],
       ['Timeline: drag · drag the ends', 'Reschedule · change length'],
+      ['Timeline: Waits for… · Line up', 'Link events · move them so none starts too early'],
+      ['B then click', 'A database: table, board, timeline, calendar or gallery views'],
+      ['Calendar: drag · double-click a day', 'Move a record · add one on that day'],
+    ],
+  ],
+  [
+    'Pasting',
+    [
+      ['A list, one idea per line', 'Sticky notes in a grid (indent it for a mind map)'],
+      ['A web address', 'A link card; videos and music play on it'],
+      ['A fenced block (three backticks)', 'A code block in its language'],
+      ['Images · spreadsheet cells', 'Pictures · a table'],
+    ],
+  ],
+  [
+    'Together',
+    [
+      ['Status on the toolbar', 'Mark to do, in progress, done…; the key at the bottom filters'],
+      ['Right-click → Private brainstorm', 'Notes stay hidden until someone reveals them'],
+      ['Right-click → Spinner wheel', 'Spin, and everyone sees the same answer'],
+      ['Flip card on the toolbar', 'Give a sticky note a back; ↻ turns it over'],
+      ['Select several → Vote', 'A dot vote; counts stay hidden until revealed'],
     ],
   ],
   [
@@ -611,6 +646,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Enter', 'Post (Shift Enter for a new line)'],
       ['@', 'Mention another object'],
+      ['[[', 'Link a board or object (in comments and descriptions)'],
       ['C then click', 'Place a comment block'],
     ],
   ],

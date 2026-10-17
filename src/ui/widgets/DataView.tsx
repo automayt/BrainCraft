@@ -622,7 +622,9 @@ interface DayDrag {
 function CalendarBody({ c }: { c: Ctx }) {
   const { start } = D.dateFields(c.ds, c.view)
   const now = today()
-  const month = c.view.month ?? D.monthOf(now)
+  // Paging months is each viewer's own business: not a change to the board.
+  const [paged, setPaged] = useState<string | null>(null)
+  const month = paged ?? c.view.month ?? D.monthOf(now)
   const [drag, setDrag] = useState<DayDrag | null>(null)
   const dragRef = useRef<DayDrag | null>(null)
   const group = D.groupField(c.ds, c.view)
@@ -641,7 +643,8 @@ function CalendarBody({ c }: { c: Ctx }) {
 
   const cells = D.monthGrid(month)
   const byDay = D.recordsByDay(c.ds, c.view, cells)
-  const [y, m] = month.split('-').map(Number)
+  const undated = D.bars(c.ds, c.view).undated
+  const [y, m] = (D.isMonth(month) ? month : D.monthOf(now)).split('-').map(Number)
   const title = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
   const dayAt = (x: number, yy: number) => {
@@ -686,13 +689,13 @@ function CalendarBody({ c }: { c: Ctx }) {
       <div className="dv-cal-head">
         <strong>{title}</strong>
         <span className="dv-cal-nav">
-          <button title="Previous month" onClick={() => c.setView((v) => ({ ...v, month: D.addMonths(month, -1) }))}>
+          <button title="Previous month" onClick={() => setPaged(D.addMonths(month, -1))}>
             ‹
           </button>
-          <button title="This month" onClick={() => c.setView((v) => ({ ...v, month: undefined }))}>
+          <button title="This month" onClick={() => setPaged(D.monthOf(now))}>
             Today
           </button>
-          <button title="Next month" onClick={() => c.setView((v) => ({ ...v, month: D.addMonths(month, 1) }))}>
+          <button title="Next month" onClick={() => setPaged(D.addMonths(month, 1))}>
             ›
           </button>
         </span>
@@ -739,6 +742,11 @@ function CalendarBody({ c }: { c: Ctx }) {
           )
         })}
       </div>
+      {undated > 0 && (
+        <p className="dv-undated muted">
+          {undated} without a {start.name.toLowerCase()} date{c.live ? ' (switch to the table to add one)' : ''}
+        </p>
+      )}
     </div>
   )
 }

@@ -790,7 +790,7 @@ function EmptyBoard() {
           </button>
         ))}
       </div>
-      <button className="link" onClick={ui.openImport}>
+      <button className="link" onClick={() => ui.openImport()}>
         Import Mermaid, an outline or AI-generated JSON…
       </button>
     </div>

@@ -1271,7 +1271,9 @@ button.on,
   display: flex;
   align-items: center;
   gap: 2px;
-  max-width: calc(100% - 16px);
+  /* One row, scrolling sideways if it must: never squeezed into a column near an edge. */
+  width: max-content;
+  max-width: calc(100vw - 24px);
   padding: 5px 6px;
   overflow-x: auto;
   white-space: nowrap;
@@ -6396,6 +6398,7 @@ button.on,
   position: absolute;
   bottom: 12px;
   left: 50%;
+  width: max-content;
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
@@ -6446,9 +6449,11 @@ button.on,
   }
 }
 
-/* The shortcut hint sits on the bottom edge too: stand above it. */
-.status-key.above-hint {
-  bottom: 54px;
+/* The shortcut hint sits on the bottom edge too (desktops only: phones hide it): stand above it. */
+@media (min-width: 721px) {
+  .status-key.above-hint {
+    bottom: 54px;
+  }
 }
 
 /* ----- private brainstorm ----- */
@@ -6979,4 +6984,36 @@ button.on,
   font-size: 14px;
   color: var(--muted);
   border-style: dashed;
+}
+
+/* ----- when the board can't be drawn ----- */
+
+.board-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  background: var(--canvas);
+}
+
+.board-error h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.board-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.flip-hint {
+  font-size: 12px;
+  fill: rgba(30, 30, 36, 0.45);
 }

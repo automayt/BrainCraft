@@ -59,3 +59,24 @@ describe('private brainstorm', () => {
     expect(getItem(maskFor(b, 'Sam'), note)!.text).toBe('Alex idea')
   })
 })
+
+describe('brainstorm rounds', () => {
+  it('doesn’t hide notes from an earlier round again, and masks the back too', () => {
+    let b = emptyBoard()
+    let card1: number, card2: number
+    ;[b, card1] = startBrainstorm(b, { x: 0, y: 0 }, 'Sam')
+    const before = b
+    ;[b] = addItem(b, { ...sticky('round one'), back: 'secret back' })
+    b = stampNew(before, b, 'Sam')
+    const note = b.items[b.items.length - 1]
+    expect(note.hiddenRound).toBe(card1)
+    expect(getItem(maskFor(b, 'Alex'), note.id)).toMatchObject({ text: '', masked: true })
+    expect(getItem(maskFor(b, 'Alex'), note.id)!.back).toBeUndefined()
+    // The first card is deleted without a reveal, then a new round starts.
+    b = { ...b, items: b.items.filter((i) => i.id !== card1) }
+    ;[b, card2] = startBrainstorm(b, { x: 0, y: 0 }, 'Jo')
+    expect(card2).not.toBe(card1)
+    expect(getItem(maskFor(b, 'Alex'), note.id)!.text).toBe('round one')
+    expect(roundStats(b)).toEqual({ notes: 0, people: 0 })
+  })
+})

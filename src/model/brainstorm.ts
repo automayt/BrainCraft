@@ -33,26 +33,35 @@ export function startBrainstorm(b: Board, at: Vec, by: string, prompt = ''): [Bo
   )
 }
 
-/** While a round is open, sticky notes that `after` added (and `before` didn't have) are stamped as `me`'s. */
+/** While a round is open, sticky notes that `after` added (and `before` didn't have) are stamped as `me`'s, in that round. */
 export function stampNew(before: Board, after: Board, me: string): Board {
-  if (before === after || !openRound(after)) return after
+  // Cheap check first: this runs on every change, and most add nothing.
+  if (before === after || after.items.length <= before.items.length) return after
+  const round = openRound(after)
+  if (!round) return after
   const had = new Set(before.items.map((i) => i.id))
   let out = after
   for (const i of after.items) {
-    if (i.kind === 'sticky' && !had.has(i.id) && !i.hiddenBy) out = updateItem(out, i.id, (x) => ({ ...x, hiddenBy: me }))
+    if (i.kind === 'sticky' && !had.has(i.id) && !i.hiddenBy) out = updateItem(out, i.id, (x) => ({ ...x, hiddenBy: me, hiddenRound: round.id }))
   }
   return out
 }
 
-/** Whether `me` should see `item` blanked: someone else's note in an open round. */
-export const isMasked = (item: Item, me: string, open: boolean) => open && !!item.hiddenBy && item.hiddenBy !== me
+/** Whether a hidden note belongs to the open round (notes from a round whose card was deleted don't). */
+const inRound = (item: Item, open: Item | undefined) => !!open && !!item.hiddenBy && (item.hiddenRound === undefined || item.hiddenRound === open.id)
+
+/** Whether `me` should see `item` blanked: someone else's note in the open round. */
+export const isMasked = (item: Item, me: string, open: Item | undefined) => inRound(item, open) && item.hiddenBy !== me
+
+/** Whether `item` is one of `me`'s own hidden notes in the open round. */
+export const isMyHidden = (item: Item, me: string, open: Item | undefined) => inRound(item, open) && item.hiddenBy === me
 
 /**
  * The board as `me` may see it: other people's hidden notes have their text
  * (and comments) taken out. For drawing and searching only; never save it.
  */
 export function maskFor(b: Board, me: string): Board {
-  const open = !!openRound(b)
+  const open = openRound(b)
   if (!open || !b.items.some((i) => isMasked(i, me, open))) return b
   return {
     ...b,
@@ -61,14 +70,16 @@ export function maskFor(b: Board, me: string): Board {
       const masked: Item = { ...i, text: '', masked: true }
       delete masked.notes
       delete masked.description
+      delete masked.back
       return masked
     }),
   }
 }
 
-/** How many hidden notes the round has, and from how many people. */
+/** How many hidden notes the open round has, and from how many people. */
 export function roundStats(b: Board): { notes: number; people: number } {
-  const hidden = b.items.filter((i) => i.hiddenBy)
+  const open = openRound(b)
+  const hidden = b.items.filter((i) => inRound(i, open))
   return { notes: hidden.length, people: new Set(hidden.map((i) => i.hiddenBy)).size }
 }
 
@@ -77,10 +88,11 @@ export function reveal(b: Board, card: Id): Board {
   if (!getItem(b, card)?.brainstorm) return b
   let out = b
   for (const i of b.items) {
-    if (!i.hiddenBy) continue
+    if (!i.hiddenBy && i.hiddenRound === undefined) continue
     out = updateItem(out, i.id, (x) => {
       const next: Item = { ...x }
       delete next.hiddenBy
+      delete next.hiddenRound
       return next
     })
   }

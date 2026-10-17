@@ -16,6 +16,7 @@ import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { NotesPanel } from './NotesPanel'
+import { BoardErrorBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
 import { ExportDialog } from './ExportImage'
@@ -58,6 +59,7 @@ function App({ ws }: { ws: Workspace }) {
   useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}`)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
+  const [importTab, setImportTab] = useState<'import' | 'export'>('import')
   const [runsFor, setRunsFor] = useState<number | null>(null)
   const [bridge] = useState(() => new Bridge(ws))
   const [, setBridgeVersion] = useState(0)
@@ -73,7 +75,10 @@ function App({ ws }: { ws: Workspace }) {
       setThemeState(t)
     },
     openHelp: () => setDialog('help'),
-    openImport: () => setDialog('import'),
+    openImport: (tab?: unknown) => {
+      setImportTab(tab === 'export' ? 'export' : 'import')
+      setDialog('import')
+    },
     openFile: () => {
       void ws.pickFile().then((picked) => picked || fileInput.current?.click())
     },
@@ -124,8 +129,8 @@ function App({ ws }: { ws: Workspace }) {
   }, [editor.notesOpen])
   useEffect(() => {
     const wide = editor.viewport.w > 720
-    editor.rightInset = wide && (assistant || editor.notesOpen) ? 404 : 0
-  }, [editor, assistant, editor.notesOpen])
+    editor.setRightInset(wide && (assistant || editor.notesOpen) ? 404 : 0)
+  }, [editor, assistant, editor.notesOpen, editor.viewport.w])
 
   // Fonts change text measurements, so lay mind maps out again once Inter has loaded.
   useEffect(() => {
@@ -304,7 +309,9 @@ function App({ ws }: { ws: Workspace }) {
             for (const f of files) void ws.openFile(f)
           }}
         >
-          <Canvas />
+          <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
+            <Canvas />
+          </BoardErrorBoundary>
           <TopLeft />
           <TopRight />
           <ToolRail />
@@ -323,7 +330,7 @@ function App({ ws }: { ws: Workspace }) {
           <RunPanel />
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
           {dialog === 'help' && <Help onClose={close} />}
-          {dialog === 'import' && <ImportExport onClose={close} />}
+          {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}
           {dialog === 'share' && <ShareDialog onClose={close} />}

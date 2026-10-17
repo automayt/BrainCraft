@@ -1,6 +1,7 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
+import { cleanIcon, cleanItem } from './sanitize'
 import { type Board, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
 
 export function toJson(b: Board): string {
@@ -42,7 +43,8 @@ function isDataset(x: unknown): x is Dataset {
 export function fromJson(json: string): Board {
   const raw = JSON.parse(json) as Partial<Board>
   if (!raw || !Array.isArray(raw.items) || !Array.isArray(raw.connectors)) throw new Error('Not a BrainCraft board')
-  const items = raw.items.filter(isItem)
+  // Newer optional fields are checked too: a bad one never reaches the screen.
+  const items = raw.items.filter(isItem).map(cleanItem).filter((i): i is Item => !!i)
   const ids = new Set(items.map((i) => i.id))
   // Mind-map nodes whose parent is missing become roots.
   for (const i of items) {
@@ -63,7 +65,7 @@ export function fromJson(json: string): Board {
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
-    ...(typeof raw.icon === 'string' && raw.icon && raw.icon.length <= 16 ? { icon: raw.icon } : {}),
+    ...(cleanIcon(raw.icon) ? { icon: cleanIcon(raw.icon) } : {}),
     items: kept,
     connectors: connectors.filter((c) => keptIds.has(c.from) && keptIds.has(c.to)),
     nextId: Math.max(typeof raw.nextId === 'number' ? raw.nextId : 0, maxId + 1),

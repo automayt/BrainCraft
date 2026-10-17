@@ -16,19 +16,18 @@ import {
   resolveName,
   toEditable,
 } from '../model/notes'
-import { type Id, type Item, KIND_LABELS, type Note } from '../model/types'
+import { type Id, type Item, itemKindLabel, type Note } from '../model/types'
 import type { CrossLink } from '../store/links'
 import { formatTime } from './BoardView'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 
-const AUTHOR_KEY = 'braincraft:author'
 
 /** One wiki-link, resolved against this board and the boards in this browser. */
 function WikiLink({ to, label }: { to: LinkTarget | null; label: string }) {
   const editor = useEditor()
   const ws = useWorkspace()
-  const target = to ?? resolveName(label, editor.board, ws.otherBoards)
+  const target = to ?? resolveName(label, editor.viewBoard, ws.otherBoards)
   if (!target) {
     // A [[Name]] nothing is called yet: following it starts that board, the way wikis do.
     return (
@@ -44,7 +43,7 @@ function WikiLink({ to, label }: { to: LinkTarget | null; label: string }) {
   }
   const elsewhere = target.board !== undefined && !ws.selfKeys.includes(target.board)
   const meta = elsewhere ? ws.findBoard(target.board!) : undefined
-  const item = !elsewhere && target.item !== undefined ? getItem(editor.board, target.item) : undefined
+  const item = !elsewhere && target.item !== undefined ? getItem(editor.viewBoard, target.item) : undefined
   const missing = elsewhere ? !meta : target.item !== undefined && !item
   const shown = elsewhere ? (target.item !== undefined ? `${meta?.title ?? 'Board'} › ${label}` : (meta?.title ?? label)) : item ? objectLabel(item) : label
   const title = missing
@@ -54,7 +53,7 @@ function WikiLink({ to, label }: { to: LinkTarget | null; label: string }) {
     : elsewhere
       ? `Open the board “${meta!.title}”`
       : item
-        ? `Go to ${KIND_LABELS[item.kind].toLowerCase()}`
+        ? `Go to ${itemKindLabel(item).toLowerCase()}`
         : 'This board'
   return (
     <button className={`wikilink${elsewhere ? (meta?.icon ? ' board has-icon' : ' board') : ''}${missing ? ' missing' : ''}`} title={title} disabled={missing} onClick={() => void ws.openLink(target)}>
@@ -72,12 +71,12 @@ function NoteText({ text, onOpen }: { text: string; onOpen: (id: Id) => void }) 
       {parseNote(text).map((part, k) => {
         if ('text' in part) return <span key={k}>{part.text}</span>
         if ('link' in part) return <WikiLink key={k} to={part.link} label={part.label} />
-        const target = getItem(editor.board, part.mention)
+        const target = getItem(editor.viewBoard, part.mention)
         return (
           <button
             key={k}
             className={`mention${target ? '' : ' missing'}`}
-            title={target ? `Go to ${KIND_LABELS[target.kind].toLowerCase()}` : 'This object was deleted'}
+            title={target ? `Go to ${itemKindLabel(target).toLowerCase()}` : 'This object was deleted'}
             disabled={!target}
             onClick={() => onOpen(part.mention)}
           >
@@ -112,9 +111,9 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
   const wiki = /\[\[([^[\]\n]*)$/.exec(before)
   const mention = wiki ? null : /@([^\s@]*)$/.exec(before)
   const candidates: LinkCandidate[] = wiki
-    ? linkCandidates(editor.board, wiki[1], ws.otherBoards, exclude)
+    ? linkCandidates(editor.viewBoard, wiki[1], ws.otherBoards, exclude)
     : mention
-      ? mentionCandidates(editor.board, mention[1], exclude).map((i) => ({ label: objectLabel(i), hint: KIND_LABELS[i.kind], to: { item: i.id } }))
+      ? mentionCandidates(editor.viewBoard, mention[1], exclude).map((i) => ({ label: objectLabel(i), hint: itemKindLabel(i), to: { item: i.id } }))
       : []
 
   const insert = (c: LinkCandidate) => {
@@ -185,7 +184,7 @@ function NoteRow({ note, onDelete, onOpen, about }: { note: Note; onDelete?: () 
   return (
     <li className="note">
       <div className="note-meta">
-        <strong>{note.author || 'You'}</strong>
+        <strong>{note.author || 'Someone'}</strong>
         <time dateTime={new Date(note.at).toISOString()} title={new Date(note.at).toLocaleString()}>
           {formatTime(note.at)}
         </time>
@@ -268,7 +267,6 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
             e.preventDefault()
             if (!name.trim()) return
             setAuthor(name.trim())
-            editor.setAuthor(name.trim())
             setAskName(false)
             send()
           }}
@@ -400,28 +398,18 @@ export function NotesPanel() {
   const editor = useEditor()
   const open = (id: Id) => editor.focusObject(id)
   const target = editor.single
-  const [author, setAuthor] = useState(() => {
-    try {
-      return localStorage.getItem(AUTHOR_KEY) ?? ''
-    } catch {
-      return ''
-    }
-  })
-  useEffect(() => {
-    editor.setAuthor(author)
-    try {
-      localStorage.setItem(AUTHOR_KEY, author)
-    } catch {
-      // Storage blocked: the name lasts for this visit only.
-    }
-  }, [author, editor])
-
   const ws = useWorkspace()
+  // One name everywhere: the workspace stores it (the share dialog sets the same one).
+  const author = editor.author
+  const setAuthor = (name: string) => ws.setName(name)
+  const [draft, setDraft] = useState(author)
+  useEffect(() => setDraft(author), [author])
+
   const cross = useLinksHere(editor.notesOpen)
 
   if (!editor.notesOpen) return null
   const notes = target ? [...(target.notes ?? [])].reverse() : []
-  const links = target ? backlinks(editor.board, target.id, ws.selfKeys, ws.otherBoards) : []
+  const links = target ? backlinks(editor.viewBoard, target.id, ws.selfKeys, ws.otherBoards) : []
   // With an object selected, links to it; otherwise every link to this board.
   const fromElsewhere = target ? cross.filter((l) => l.to.item === target.id) : cross
 
@@ -432,7 +420,7 @@ export function NotesPanel() {
           <h2>Comments</h2>
           {target ? (
             <button className="panel-target" onClick={() => open(target.id)} title="Go to this object">
-              {KIND_LABELS[target.kind]} · {objectLabel(target)}
+              {itemKindLabel(target)} · {objectLabel(target)}
             </button>
           ) : (
             <span className="muted">{editor.selection.size > 1 ? 'Select one object to comment on it' : 'All comments on this board'}</span>
@@ -485,7 +473,16 @@ export function NotesPanel() {
       <footer>
         <label>
           Posting as
-          <input value={author} placeholder="Your name" onChange={(e) => setAuthor(e.target.value)} />
+          <input
+            value={draft}
+            placeholder="Your name"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => draft.trim() !== author && setAuthor(draft)}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
         </label>
       </footer>
     </aside>
@@ -552,7 +549,7 @@ function CrossRow({ link }: { link: CrossLink }) {
 
 function AllNotes({ onOpen }: { onOpen: (id: Id) => void }) {
   const editor = useEditor()
-  const notes = allNotes(editor.board)
+  const notes = allNotes(editor.viewBoard)
   if (!notes.length)
     return <p className="empty muted">Nothing yet. Select any object and add a comment, or press Shift+C with it selected.</p>
   return (

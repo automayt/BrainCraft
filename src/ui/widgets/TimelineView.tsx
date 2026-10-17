@@ -6,6 +6,12 @@ import { EditorContext } from '../useEditor'
 import { Menu, Widget } from './Widget'
 
 const LABEL_W = 130
+
+/** "19 Oct", the way people say dates (the year only when it isn't this one). */
+const friendly = (iso: string) => {
+  const d = new Date(`${iso}T00:00`)
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+}
 const ROW_H = 30
 const LANE_PAD = 8
 
@@ -323,8 +329,8 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
           <div className="tl-selected">
             <strong>{sel.title}</strong>
             <span className="muted">
-              {sel.start}
-              {sel.end ? ` → ${sel.end}` : ' (milestone)'}
+              {friendly(sel.start)}
+              {sel.end ? ` → ${friendly(sel.end)}` : ' (milestone)'}
             </span>
             <span className="swatches">
               {BRANCHES.map(([name, color]) => (

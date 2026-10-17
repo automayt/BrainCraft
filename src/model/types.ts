@@ -265,12 +265,14 @@ export interface Item extends Rect {
   brainstorm?: { by: string; revealed?: boolean }
   /** A sticky note written during an open brainstorm: only its writer sees it until the reveal. */
   hiddenBy?: string
+  /** The brainstorm card (round) a hidden note was written in. */
+  hiddenRound?: Id
   /** A flip card's other side (a sticky note with this is a flip card). Flipping swaps it with `text`. */
   back?: string
   /** A flip card showing its back. */
   flipped?: boolean
   /** On a comment card: a spinner wheel whose options are the card's lines, and its latest spin. */
-  wheel?: { spin?: { at: number; from: number; to: number; result: number } }
+  wheel?: { spin?: { at: number; from: number; to: number; result: number; label?: string } }
   /** Set only on the copy drawn for someone a hidden note is hidden from; never saved. */
   masked?: boolean
 }
@@ -448,6 +450,17 @@ export function defaultFontSize(k: Kind): number {
   }
 }
 
+/** What an object is called in lists: comment cards that became a vote, brainstorm or wheel, and flip cards, get their own names. */
+export function itemKindLabel(i: Pick<Item, 'kind' | 'poll' | 'brainstorm' | 'wheel' | 'back'>): string {
+  if (i.kind === 'comment') {
+    if (i.poll) return 'Vote'
+    if (i.brainstorm) return 'Private brainstorm'
+    if (i.wheel) return 'Spinner wheel'
+  }
+  if (i.kind === 'sticky' && typeof i.back === 'string') return 'Flip card'
+  return KIND_LABELS[i.kind]
+}
+
 export const KIND_LABELS: Record<Kind, string> = {
   sticky: 'Sticky note',
   rect: 'Rectangle',
@@ -455,7 +468,7 @@ export const KIND_LABELS: Record<Kind, string> = {
   text: 'Text',
   frame: 'Frame',
   pen: 'Drawing',
-  mind: 'Mind map node',
+  mind: 'Mind map idea',
   flow: 'Flowchart shape',
   comment: 'Comment',
   image: 'Image',

@@ -435,8 +435,12 @@ export function shiftDates(ds: Dataset, v: DataView, recordId: string, days: num
 /** "2026-10" for a day number. */
 export const monthOf = (day: number) => fromDay(day).slice(0, 7)
 
+/** A real month written YYYY-MM. */
+export const isMonth = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(s)
+
 /** The month `delta` months from `month` (YYYY-MM). */
 export function addMonths(month: string, delta: number): string {
+  if (!isMonth(month)) month = monthOf(today())
   const [y, m] = month.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + delta, 1))
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
@@ -444,6 +448,8 @@ export function addMonths(month: string, delta: number): string {
 
 /** The 6 weeks shown for a month, Monday first: day numbers, and whether each is in the month. */
 export function monthGrid(month: string): { day: number; inMonth: boolean }[] {
+  // Anything that isn't a real month shows this month instead of failing.
+  if (!isMonth(month)) month = monthOf(today())
   const first = toDay(`${month}-01`)
   // 1970-01-01 (day 0) was a Thursday; Monday-based weekday of the 1st:
   const weekday = (((first + 3) % 7) + 7) % 7

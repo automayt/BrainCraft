@@ -17,7 +17,7 @@ import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseO
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
-import { langId } from '../model/code'
+import { codeSize, langId } from '../model/code'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
@@ -174,6 +174,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       results.push({ op: op.op, ...result, ...('ref' in op && op.ref ? { ref: op.ref } : {}) })
     }
     const r0 = (w: number, h: number) => ({ x: 0, y: 0, w, h })
+    /** A width or height given by the caller, if it's a sensible number. */
+    const size = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, 20000) : undefined)
 
     switch (op.op) {
       case 'createNote': {
@@ -320,18 +322,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'createCode': {
         const code = text(op.code, 'code', false)
         const lang = langId(op.lang)
-        const lines = code.split('\n')
-        const w = op.w ?? Math.min(900, Math.max(360, 60 + Math.max(...lines.map((l) => l.length)) * 8.6))
-        const h = op.h ?? Math.min(700, Math.max(160, 60 + lines.length * 21))
-        const id = add(B.newItem('code', r0(w, h), { text: code, ...(lang ? { lang } : {}) }))
+        const fit = codeSize(code)
+        const id = add(B.newItem('code', r0(size(op.w) ?? fit.w, size(op.h) ?? fit.h), { text: code, ...(lang ? { lang } : {}) }))
         place([id], op.at)
         done({ id })
         break
       }
       case 'createSpinner': {
-        if (!Array.isArray(op.options) || op.options.filter((o) => typeof o === 'string' && o.trim()).length < 2) fail(index, op, '"options" should list two or more choices')
+        const options = Array.isArray(op.options) ? op.options.filter((o): o is string => typeof o === 'string' && !!o.trim()) : []
+        if (options.length < 2) fail(index, op, '"options" should list two or more choices (text)')
         let id: Id
-        ;[b, id] = newWheel(b, { x: 0, y: 0 }, op.options.map(String))
+        ;[b, id] = newWheel(b, { x: 0, y: 0 }, options)
         place([id], op.at)
         done({ id })
         break
@@ -340,7 +341,9 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         const url = urlIn(text(op.url, 'url'))
         if (!url) fail(index, op, '"url" should be one http(s) web address')
         const item = linkItem(url, { x: 0, y: 0 })
-        const id = add({ ...item, x: 0, y: 0, ...(op.w ? { w: op.w } : {}), ...(op.h ? { h: op.h } : {}) })
+        const w = size(op.w)
+        const h = size(op.h)
+        const id = add({ ...item, x: 0, y: 0, ...(w ? { w } : {}), ...(h ? { h } : {}) })
         place([id], op.at)
         done({ id })
         break

@@ -15,8 +15,8 @@ export function CatchUpBanner() {
     ...c.added.map((id) => ({ id, what: 'New' })),
     ...c.changed.map((id) => ({ id, what: 'Changed' })),
     ...c.comments.map((x) => ({ id: x.id, what: `${x.count} comment${x.count === 1 ? '' : 's'}` })),
-  ].filter((r) => B.getItem(editor.board, r.id))
-  const people = catchUpPeople(c, editor.board).filter((n) => n !== editor.me)
+  ].filter((r) => B.getItem(editor.viewBoard, r.id))
+  const people = catchUpPeople(c, editor.viewBoard).filter((n) => n !== editor.me)
   return (
     <div className="catchup no-canvas" role="status">
       <div className="catchup-head">
@@ -33,7 +33,7 @@ export function CatchUpBanner() {
           </button>
           <button
             title="Ask the AI assistant for a short summary"
-            onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.board)}`, undefined, 'What changed since I was last here?')}
+            onClick={() => editor.askAi(`Summarise in a few bullets what changed on this board since I last looked, linking each object:\n\n${catchUpText(c, editor.viewBoard)}`, undefined, 'What changed since I was last here?')}
           >
             Summarise with AI
           </button>
@@ -48,8 +48,8 @@ export function CatchUpBanner() {
             <li key={`${r.what}${r.id}`}>
               <button onClick={() => editor.focusObject(r.id)}>
                 <span className={`catchup-tag ${r.what === 'New' ? 'new' : r.what === 'Changed' ? 'changed' : 'comment'}`}>{r.what}</span>
-                <span className="catchup-label">{objectLabel(B.getItem(editor.board, r.id)!)}</span>
-                {r.what !== 'Changed' && r.what !== 'New' ? null : B.getItem(editor.board, r.id)!.by && <small className="catchup-by">{B.getItem(editor.board, r.id)!.by}</small>}
+                <span className="catchup-label">{objectLabel(B.getItem(editor.viewBoard, r.id)!)}</span>
+                {r.what !== 'Changed' && r.what !== 'New' ? null : B.getItem(editor.viewBoard, r.id)!.by && <small className="catchup-by">{B.getItem(editor.viewBoard, r.id)!.by}</small>}
               </button>
             </li>
           ))}
@@ -61,7 +61,9 @@ export function CatchUpBanner() {
               </span>
             </li>
           ))}
-          {rows.length + c.removed.length > 18 && <li className="muted">…and more</li>}
+          {(rows.length > 12 || c.removed.length > 6) && (
+            <li className="muted">…and {Math.max(0, rows.length - 12) + Math.max(0, c.removed.length - 6)} more</li>
+          )}
         </ul>
       )}
     </div>
@@ -76,7 +78,7 @@ export function CatchUpOverlay({ editor }: { editor: Editor }) {
   const sw = 2.5 / z
   const pad = 6 / z
   const box = (id: number, cls: string) => {
-    const i = B.getItem(editor.board, id)
+    const i = B.getItem(editor.viewBoard, id)
     if (!i || editor.hidden.has(id)) return null
     const r = B.itemBounds(i)
     return <rect key={`${cls}${id}`} className={cls} x={r.x - pad} y={r.y - pad} width={r.w + 2 * pad} height={r.h + 2 * pad} rx={8 / z} strokeWidth={sw} />

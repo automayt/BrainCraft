@@ -31,7 +31,7 @@ const TOOL_VERBS: Record<string, string> = {
   table: 'Add table',
   kanban: 'Add Kanban board',
   timeline: 'Add timeline',
-  data: 'Add database (linked table, board and timeline)',
+  data: 'Add database (table, board, timeline, calendar and gallery views)',
   connector: 'Connect objects',
   pen: 'Draw with the pen',
   frame: 'Add frame',
@@ -89,7 +89,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
     { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },
-    { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: ui.openImport },
+    { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: () => ui.openImport('export') },
     { id: 'help', label: 'Keyboard shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys help', run: ui.openHelp },
   ]
   if (hasSketch(editor))
@@ -146,7 +146,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     list.push({ id: 'to-data', label: 'Convert to linked data', group: 'Data', aliases: 'database dataset records views sync link', run: () => editor.convertToData(single.id) })
   }
   if (single?.kind === 'data') {
-    for (const t of ['table', 'board', 'timeline'] as const)
+    for (const t of ['table', 'board', 'timeline', 'calendar', 'gallery'] as const)
       list.push({ id: `view-${t}`, label: `Add a ${t} view of this data`, group: 'Data', aliases: 'database linked view kanban gantt', run: () => editor.addDataView(single.id, t) })
   }
   if (editor.selection.size > 1) {

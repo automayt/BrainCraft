@@ -23,11 +23,13 @@ export interface CatchUp {
 const MOVE = 60
 
 const CONTENT_SKIP = new Set(['x', 'y', 'w', 'h', 'offset', 'notes', 'by'])
+/** Not authorship either: reactions and votes are other people's, and a reveal only uncovers a note. */
+const STAMP_SKIP = new Set([...CONTENT_SKIP, 'reactions', 'votes', 'hiddenBy', 'hiddenRound', 'masked'])
 
-function contentChanged(a: Item, z: Item): boolean {
+function contentChanged(a: Item, z: Item, skip: ReadonlySet<string> = CONTENT_SKIP): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(z)])
   for (const k of keys) {
-    if (CONTENT_SKIP.has(k)) continue
+    if (skip.has(k)) continue
     if (JSON.stringify((a as unknown as Record<string, unknown>)[k]) !== JSON.stringify((z as unknown as Record<string, unknown>)[k])) return true
   }
   return false
@@ -73,7 +75,7 @@ export function stampAuthors(before: Board, after: Board, me: string): Board {
   const items = after.items.map((z) => {
     const a = old.get(z.id)
     if (a === z || z.by === me) return z
-    if (a && !contentChanged(a, z) && !moved(a, z)) return z
+    if (a && !contentChanged(a, z, STAMP_SKIP) && !moved(a, z)) return z
     touched = true
     return { ...z, by: me }
   })

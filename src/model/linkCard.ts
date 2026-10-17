@@ -87,7 +87,18 @@ export function linkCardSize(card: LinkCard): { w: number; h: number } {
 }
 
 /** What a card is called in lists, search and the AI's view of the board. */
-export const linkLabel = (card: LinkCard) => card.title?.trim() || siteOf(card.url)
+/** What a card is called before (or without) a preview: the address's last readable part, else its site. */
+function fromPath(url: string): string | undefined {
+  try {
+    const last = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() ?? '')
+    const words = last.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[-_+]+/g, ' ').trim()
+    return words.length > 1 && !/^d+$/.test(words) ? words : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export const linkLabel = (card: LinkCard) => card.title?.trim() || fromPath(card.url) || siteOf(card.url)
 
 /** Only web addresses are ever used as links or pictures, whatever a board file says. */
 export const safeUrl = (u: string | undefined): string | null => (u ? urlIn(u) : null)

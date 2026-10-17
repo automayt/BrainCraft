@@ -15,6 +15,7 @@ import { type Rect, expand, intersects } from '../model/geom'
 import { slides } from '../model/slides'
 import type { Board, Id } from '../model/types'
 import { BoardView } from './BoardView'
+import { StatusMarks } from './StatusMarks'
 import { EditorContext } from './useEditor'
 
 const PAD = 32
@@ -80,7 +81,8 @@ const xhtml = (markup: string) => markup.replace(/(<foreignObject\b[^>]*>)\s*<([
 
 /** A standalone SVG of `area` (or of the objects' bounds), drawn the way the board shows them now. */
 export async function boardSvg(editor: Editor, opts: { ids?: ReadonlySet<Id>; area?: Rect } = {}): Promise<Picture | null> {
-  let board = subset(editor.board, opts.ids)
+  // The masked view: an export never shows other people's hidden brainstorm notes.
+  let board = subset(editor.viewBoard, opts.ids)
   const bounds = opts.area ?? B.bounds(board)
   if (!bounds) return null
   const r = opts.area ?? expand(bounds, PAD)
@@ -94,7 +96,9 @@ export async function boardSvg(editor: Editor, opts: { ids?: ReadonlySet<Id>; ar
     selectedConnector: null,
     selection: new Set<Id>(),
   })
-  const body = renderToStaticMarkup(createElement(EditorContext.Provider, { value: editor }, view))
+  // Status badges are drawn over the board on screen; the picture gets them too.
+  const marks = createElement(StatusMarks, { editor, board, zoom: 1 })
+  const body = renderToStaticMarkup(createElement(EditorContext.Provider, { value: editor }, view, marks))
   const css = (await styles()).replace(/]]>/g, ']] >')
   const w = Math.round(r.w)
   const h = Math.round(r.h)

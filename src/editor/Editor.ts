@@ -30,7 +30,7 @@ import * as BS from '../model/brainstorm'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
-import { fencedCode, langId } from '../model/code'
+import { codeSize, fencedCode, langId } from '../model/code'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -249,6 +249,13 @@ export class Editor {
   viewport = { w: 1200, h: 800 }
   /** Pixels on the right covered by a side panel (comments, assistant); framing keeps clear of them. */
   rightInset = 0
+
+  /** Room taken on the right by the comments panel or assistant; floating bars keep clear of it. */
+  setRightInset(px: number) {
+    if (px === this.rightInset) return
+    this.rightInset = px
+    this.emit()
+  }
   penColor = INKS[0][1]
   penWidth = 4
   /** The symbol the flowchart tool places. */
@@ -418,14 +425,20 @@ export class Editor {
   private apply(b: Board) {
     if (this.readOnly) return
     // During a private brainstorm, notes written here are marked as this person's.
-    // and everything changed here is signed with their name for "Since you were here".
-    const next = M.layoutAll(CU.stampAuthors(this.board, BS.stampNew(this.board, b, this.me), this.me), this.measure)
+    const next = M.layoutAll(BS.stampNew(this.board, b, this.me), this.measure)
     if (next === this.board) return
     this.board = next
     this.onBoardChange?.(next)
   }
 
   private commit(before: Board) {
+    // Each undo step signs what it really changed with this person's name, for
+    // "Since you were here" (a drag counts once, at its end, however far it went).
+    const signed = CU.stampAuthors(before, this.board, this.me)
+    if (signed !== this.board && !this.readOnly) {
+      this.board = signed
+      this.onBoardChange?.(signed)
+    }
     this.history.commit(before, this.board)
   }
 
@@ -983,7 +996,7 @@ export class Editor {
     const item = B.getItem(this.board, id)
     if (!item || !hasText(item.kind)) return
     if (item.locked) return this.setStatus('Locked — unlock it to edit')
-    if (BS.isMasked(item, this.me, !!BS.openRound(this.board))) return this.setStatus(`That's ${item.hiddenBy}'s note — hidden until the brainstorm is revealed`)
+    if (BS.isMasked(item, this.me, BS.openRound(this.board))) return this.setStatus(`That's ${item.hiddenBy}'s note — hidden until the brainstorm is revealed`)
     this.selection = new Set([id])
     this.selectedConnector = null
     this.editing = { id, before: opts.before ?? this.board, created: opts.created ?? false }
@@ -1159,9 +1172,7 @@ export class Editor {
   /** Adds a code block at the pointer, sized to its code. */
   addCode(code = '', lang?: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
     if (this.readOnly) return
-    const lines = code.split('\n')
-    const w = Math.min(900, Math.max(360, 60 + Math.max(...lines.map((l) => l.length)) * 8.6))
-    const h = Math.min(700, Math.max(160, 60 + lines.length * 21))
+    const { w, h } = codeSize(code)
     let id: Id = -1
     this.edit((b) => {
       const [next, newId] = B.addItem(b, B.newItem('code', rectFromCenter(at, w, h), { text: code, ...(langId(lang) ? { lang: langId(lang) } : {}) }))
@@ -1185,8 +1196,8 @@ export class Editor {
   flipCards(ids: Id[] = [...this.selection]) {
     if (this.readOnly) return
     const cards = ids.filter((id) => {
-      const i = B.getItem(this.board, id)
-      return i && FL.isFlipCard(i)
+      const i = B.getItem(this.viewBoard, id)
+      return i && FL.isFlipCard(i) && !i.masked
     })
     if (!cards.length) return
     this.edit((b) => FL.flip(b, cards))
@@ -1204,7 +1215,12 @@ export class Editor {
   /** Adds a spinner wheel; selected objects' text become its options. */
   addWheel() {
     if (this.readOnly) return
-    const options = this.selectedItems.map((i) => N.objectLabel(i)).filter((t) => t && !/^(Sticky note|Text|Rectangle|Ellipse) d+$/.test(t))
+    // Each selected object's own words (not other people's hidden notes); empty ones are skipped.
+    const options = this.selectedItems
+      .map((i) => B.getItem(this.viewBoard, i.id))
+      .filter((i): i is Item => !!i && !i.masked)
+      .map((i) => i.text.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
     let id: Id = -1
     this.edit((b) => {
       const [next, card] = WH.newWheel(b, this.pointer ?? center(this.visibleWorld), options)
@@ -1231,7 +1247,7 @@ export class Editor {
     }
     let id: Id = -1
     this.edit((b) => {
-      const [next, card] = BS.startBrainstorm(b, center(this.visibleWorld), this.me, prompt)
+      const [next, card] = BS.startBrainstorm(b, this.pointer ?? center(this.visibleWorld), this.me, prompt)
       id = card
       return next
     })
@@ -1816,7 +1832,8 @@ export class Editor {
   /** The selection, serialised for the system clipboard. */
   copyText(): string | null {
     if (!this.selection.size) return null
-    return clipToText(B.copy(this.board, this.selection))
+    // Other people's hidden brainstorm notes copy as blank cards.
+    return clipToText(B.copy(this.viewBoard, this.selection))
   }
 
   /**
@@ -1863,11 +1880,13 @@ export class Editor {
     const fenced = fencedCode(text)
     if (fenced) {
       this.addCode(fenced.code, fenced.lang, at)
+      this.setStatus('Pasted as a code block')
       return
     }
     const url = urlIn(text)
     if (url) {
       this.addLink(url, at)
+      this.setStatus('Pasted as a link card')
       return
     }
     if (looksTabular(text)) {
