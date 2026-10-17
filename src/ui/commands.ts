@@ -1,3 +1,4 @@
+import { copyImage } from './ExportImage'
 /** Everything the app can do, by name: shared by the command palette and menus. */
 
 import { type Editor, TOOLS } from '../editor/Editor'
@@ -48,6 +49,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
         editor.placeHere()
       },
     })),
+    { id: 'export-image', label: 'Export image or PDF…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print', run: ui.openExport },
+    { id: 'copy-image', label: editor.selection.size ? 'Copy selection as image' : 'Copy board as image', group: 'Board', aliases: 'png picture screenshot clipboard share chat', run: () => void copyImage(editor, editor.selection.size ? new Set(editor.selection) : undefined) },
     { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
     { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },
     { id: 'redo', label: 'Redo', group: 'Edit', keys: 'Ctrl Shift Z', run: () => editor.redo() },

@@ -24,6 +24,8 @@ export interface Ui {
   openVersions: () => void
   openShare: () => void
   openAi: () => void
+  /** PNG, SVG, clipboard and PDF export. */
+  openExport: () => void
   /** The in-app AI assistant panel (Ctrl+J). */
   assistant: boolean
   toggleAssistant: () => void

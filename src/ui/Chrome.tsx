@@ -140,6 +140,7 @@ export function TopLeft() {
             {!ws.readOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             <hr />
             {!ws.readOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
+            <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
             <MenuItem label="Export as Mermaid…" onClick={run(ui.openImport)} />
             <hr />
             <MenuItem label="Keyboard shortcuts" keys="?" onClick={run(ui.openHelp)} />
@@ -461,6 +462,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Ctrl K', 'Search the board or run any command'],
       ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
+      ['Ctrl Shift E', 'Export the board or selection as an image or PDF'],
       ['Right-click', 'Actions for whatever is under the pointer'],
       ['Shift C', 'Comments on the selected object'],
       ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'],
