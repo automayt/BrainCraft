@@ -84,7 +84,10 @@ export function Canvas() {
       const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
       const dx = (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * scale
       const dy = (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * scale
-      editor.wheel({ x: e.clientX - r.left, y: e.clientY - r.top }, dx, dy, e.ctrlKey || e.metaKey)
+      // Scrolling zooms at the pointer; Ctrl scroll is a trackpad pinch; Shift scroll (or a
+      // sideways trackpad swipe) moves the board.
+      const how = e.ctrlKey || e.metaKey ? 'pinch' : e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) ? 'pan' : 'zoom'
+      editor.wheel({ x: e.clientX - r.left, y: e.clientY - r.top }, dx, dy, how)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
@@ -192,6 +195,9 @@ export function Canvas() {
       className="canvas"
       style={{ cursor }}
       onPointerDown={onPointerDown}
+      // Holding the middle button pans the board, not the browser's autoscroll.
+      onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+      onAuxClick={(e) => e.button === 1 && e.preventDefault()}
       onPointerMove={onPointerMove}
       onPointerLeave={() => editor.pointerLeave()}
       onPointerUp={onPointerUp}

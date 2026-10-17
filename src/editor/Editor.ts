@@ -2466,10 +2466,15 @@ export class Editor {
     }
   }
 
-  wheel(screen: Vec, dx: number, dy: number, zoomGesture: boolean) {
+  /**
+   * The mouse wheel: `zoom` zooms at the pointer (about 16% a notch), `pinch` follows a trackpad
+   * pinch (small, frequent steps), `pan` moves the board.
+   */
+  wheel(screen: Vec, dx: number, dy: number, how: 'zoom' | 'pinch' | 'pan') {
     this.flight++
     this.onUserCamera?.()
-    if (zoomGesture) this.camera = zoomAt(this.camera, screen, Math.exp(-dy * 0.01))
+    if (how === 'pinch') this.camera = zoomAt(this.camera, screen, Math.exp(-dy * 0.01))
+    else if (how === 'zoom') this.camera = zoomAt(this.camera, screen, Math.exp(-Math.max(-120, Math.min(120, dy)) * 0.0015))
     else this.camera = { ...this.camera, x: this.camera.x - dx, y: this.camera.y - dy }
     this.emit()
   }

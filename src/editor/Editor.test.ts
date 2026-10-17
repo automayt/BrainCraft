@@ -1018,6 +1018,45 @@ describe('flowchart shape panel', () => {
   })
 })
 
+describe('mouse', () => {
+  it('zooms at the pointer on scroll, pans on Shift scroll, and pans while the middle button is held', () => {
+    const e = editor()
+    e.wheel({ x: 200, y: 100 }, 0, -100, 'zoom')
+    expect(e.camera.zoom).toBeCloseTo(Math.exp(0.15))
+    // The point under the pointer (world 200, 100) stays put.
+    expect(e.camera.x + 200 * e.camera.zoom).toBeCloseTo(200)
+    // A big jump (a fast wheel) zooms no more than one notch's worth.
+    const z = e.camera.zoom
+    e.wheel({ x: 200, y: 100 }, 0, 1000, 'zoom')
+    expect(e.camera.zoom).toBeCloseTo(z * Math.exp(-0.18))
+    const at = { ...e.camera }
+    e.wheel({ x: 0, y: 0 }, 40, 0, 'pan')
+    expect(e.camera).toMatchObject({ x: at.x - 40, zoom: at.zoom })
+    // Middle button: pan.
+    e.pointerDown({ x: 100, y: 100 }, 1, {})
+    e.pointerMove({ x: 130, y: 90 })
+    e.pointerUp({ x: 130, y: 90 })
+    expect(e.camera).toMatchObject({ x: at.x - 40 + 30, y: at.y - 10 })
+  })
+
+  it('draws a selection box with the left button on empty space', () => {
+    const e = editor()
+    const ids: number[] = []
+    e.edit((b) => {
+      for (const x of [0, 200]) {
+        let id: number
+        ;[b, id] = B.addItem(b, B.newItem('sticky', { x, y: 0, w: 100, h: 100 }))
+        ids.push(id)
+      }
+      return b
+    })
+    e.pointerDown({ x: -20, y: -20 }, 0, {})
+    e.pointerMove({ x: 320, y: 120 })
+    e.pointerUp({ x: 320, y: 120 })
+    expect([...e.selection].sort()).toEqual(ids)
+  })
+})
+
 describe('touch', () => {
   it('moves the board with one finger on empty space, and clears the selection on a tap', () => {
     const e = editor()
