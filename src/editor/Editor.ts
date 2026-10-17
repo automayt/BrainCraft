@@ -29,6 +29,7 @@ import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
+import { listLines, stickyGrid } from '../model/stickyGrid'
 import { type Patch, applyPatches, diff } from '../collab/patch'
 import type { PeerInfo, Signal } from '../collab/protocol'
 import {
@@ -1857,6 +1858,18 @@ export class Editor {
       } catch (err) {
         this.setStatus(`Couldn't read that Mermaid: ${(err as Error).message}`)
       }
+      return
+    }
+    const lines = listLines(text)
+    if (lines) {
+      let ids: Id[] = []
+      this.edit((b) => {
+        const [next, made] = stickyGrid(b, lines, at)
+        ids = made
+        return next
+      })
+      this.select(ids)
+      this.setStatus(`Pasted ${ids.length} sticky notes, one per line (indent a list to get a mind map)`)
       return
     }
     const outline = M.parseOutline(text)

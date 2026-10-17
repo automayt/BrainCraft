@@ -21,7 +21,7 @@ small group of friends using BrainCraft together. Ticked ones are built.
   quizzes, reveals and "answer on the back" games.
 - [x] **Board icons.** Pick an emoji for each board; it shows in the board list,
   the tab title and wiki-links, so boards are easy to tell apart.
-- [ ] **Many stickies at once.** Type or paste a list, one idea per line, and
+- [x] **Many stickies at once.** Type or paste a list, one idea per line, and
   get a tidy grid of sticky notes (pasting a list today makes a mind map).
 - [ ] **Code blocks.** Code with syntax highlighting and a language label, for
   friends who share snippets.
