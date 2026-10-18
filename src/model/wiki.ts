@@ -298,6 +298,31 @@ export function trashed(b: Board): Page[] {
     .sort((a, z) => (z.trashed ?? 0) - (a.trashed ?? 0))
 }
 
+export interface PageHit {
+  page: Page
+  /** Where the words were found: the title, or the words around them on the page. */
+  snippet: string
+  score: number
+}
+
+/** Pages whose title or words contain every word of `query`: titles first, then the best matches. */
+export function searchPages(b: Board, query: string, limit = 40): PageHit[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return []
+  const out: PageHit[] = []
+  for (const page of pageOrder(b)) {
+    const title = page.title.toLowerCase()
+    const text = pageText(b, page.id)
+    const lower = text.toLowerCase()
+    if (!words.every((w) => title.includes(w) || lower.includes(w))) continue
+    const inTitle = words.every((w) => title.includes(w))
+    const at = lower.indexOf(words[0])
+    const snippet = inTitle || at < 0 ? pagePath(b, page.id).slice(0, -1).map((p) => p.title).join(' › ') : `${at > 30 ? '…' : ''}${text.slice(Math.max(0, at - 30), at + 80).replace(/\s+/g, ' ').trim()}…`
+    out.push({ page, snippet, score: (inTitle ? 100 : 0) + (title.startsWith(words[0]) ? 20 : 0) - title.length / 100 })
+  }
+  return out.sort((a, z) => z.score - a.score).slice(0, limit)
+}
+
 /** A page by its exact title (case-insensitive), trash left out. */
 export function pageByTitle(b: Board, title: string): Page | undefined {
   const t = title.trim().toLowerCase()

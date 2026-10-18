@@ -60,6 +60,7 @@ function liveHost(ws: Workspace): ToolHost {
       return info(b.id)
     },
     createBoard: async (title, template) => {
+      if (template === 'wiki') return info(await ws.newWiki(title))
       const t = TEMPLATES.find((x) => x.id === (template ?? 'blank')) ?? TEMPLATES[0]
       const id = await ws.newBoard({ ...boardFromTemplate(t, editor.measure), title })
       return info(id)

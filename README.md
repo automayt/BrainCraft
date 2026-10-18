@@ -212,11 +212,24 @@ shares live exactly like a board.
   `{{children}}` for the pages under this one and `{{toc}}` for its headings.
   It saves as you type; Esc when you're done.
 - **Links:** type `[[` to link to another page or a board. A `[[Name]]` that
-  no page has yet offers to make that page. **Copy link** (and the **#** next
-  to any heading) copies a link you can paste into any page or canvas
-  comment. Each page lists the pages that link to it.
-- Linking pages from canvas comments, and showing canvas objects inside pages,
-  come next (see [docs/IDEAS.md](docs/IDEAS.md)).
+  no page has yet offers to make that page. **Ctrl+K** searches the wiki's
+  pages.
+- **Links you can paste anywhere:** **Copy link** (and the **#** next to any
+  heading) copies a web link. Paste it in a chat and it opens that page for
+  anyone who has the wiki (a friend in the live session does); paste it in
+  the address bar of an open tab and it goes there. Pasted into a page or a
+  canvas comment it becomes a named link. **Copy link to this object** in a
+  canvas object's right-click menu does the same for objects, so pages can
+  point at sticky notes, frames or anything else.
+- **On the canvas:** a page link in a comment or description shows as
+  "📘 Wiki › Page" and opens the page beside the board, read-only, with
+  **Open in the wiki**. Paste a page link onto the canvas for a **page card**
+  with its title and opening words (they catch up when the page changes).
+- **Backlinks both ways:** a page lists the pages, canvas comments and other
+  wikis that link to it; an object's Comments panel lists the wiki pages
+  that mention it.
+- Showing canvas objects inside pages comes next (see
+  [docs/IDEAS.md](docs/IDEAS.md)).
 
 ### Linked data: one dataset, many views
 

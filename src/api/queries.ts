@@ -4,10 +4,11 @@ import * as B from '../model/board'
 import * as D from '../model/dataset'
 import { toMermaid } from '../model/mermaid'
 import { toOutline } from '../model/mindmap'
-import { objectLabel, plainNote } from '../model/notes'
+import { linksIn, objectLabel, plainNote } from '../model/notes'
 import { search } from '../model/search'
 import { toCsv } from '../model/table'
 import type { Board, Id, Item, Kind, Status } from '../model/types'
+import * as W from '../model/wiki'
 
 export interface ObjectSummary {
   id: Id
@@ -82,7 +83,43 @@ function dataOf(b: Board, i: Item) {
 }
 
 export function findObjects(b: Board, query: string) {
+  if (W.isWiki(b)) return W.searchPages(b, query).map((h) => ({ page: h.page.id, title: h.page.title, snippet: h.snippet }))
   return search(b, query).map((r) => ({ id: r.id, kind: r.kind, label: r.title, where: r.where, snippet: r.snippet }))
+}
+
+/** A wiki's pages as a tree: ids, titles, who changed each last and how long it is. */
+export function listPages(b: Board) {
+  const node = (n: W.PageNode): unknown => {
+    const body = W.getBody(b, n.page.id)
+    return {
+      page: n.page.id,
+      title: n.page.title,
+      ...(n.page.icon ? { icon: n.page.icon } : {}),
+      ...(body?.at ? { edited: new Date(body.at).toISOString(), ...(body.by ? { by: body.by } : {}) } : {}),
+      characters: body?.text.length ?? 0,
+      ...(n.children.length ? { children: n.children.map(node) } : {}),
+    }
+  }
+  return { title: b.title, pages: W.pageTree(b).map(node), trash: W.trashed(b).map((p) => ({ page: p.id, title: p.title })) }
+}
+
+/** One wiki page: where it sits, its Markdown, its sub-pages and the pages linking to it. */
+export function getPage(b: Board, ref: string) {
+  const own = W.getPage(b, ref)
+  const page = own && !own.trashed ? own : W.pageByTitle(b, ref)
+  if (!page) return null
+  const body = W.getBody(b, page.id)
+  return {
+    page: page.id,
+    title: page.title,
+    path: W.pagePath(b, page.id).slice(0, -1).map((p) => p.title),
+    text: body?.text ?? '',
+    ...(body?.at ? { edited: new Date(body.at).toISOString(), ...(body.by ? { by: body.by } : {}) } : {}),
+    children: W.childrenOf(b, page.id).map((p) => ({ page: p.id, title: p.title })),
+    linkedFrom: W.pageOrder(b)
+      .filter((p) => p.id !== page.id && linksIn(W.pageText(b, p.id)).some((t) => t.page === page.id && !t.board))
+      .map((p) => ({ page: p.id, title: p.title })),
+  }
 }
 
 export function mermaidOf(b: Board, ids?: Id[]): string {
@@ -101,6 +138,7 @@ export function listLinks(b: Board) {
 
 /** A compact description of the whole board: what an assistant reads first. */
 export function describeBoard(b: Board, kind?: Kind) {
+  if (W.isWiki(b)) return { kind: 'wiki', ...listPages(b), note: 'This is a wiki: read pages with read_page, change them with createPage, updatePage, movePage and deletePage.' }
   const counts: Partial<Record<Kind, number>> = {}
   for (const i of b.items) counts[i.kind] = (counts[i.kind] ?? 0) + 1
   return {

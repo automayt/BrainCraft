@@ -56,7 +56,7 @@ describe('work notes', () => {
     expect(plainNote(text)).toBe('Needs sign-off from @Approve spend first')
     b = addNote(b, a, text, undefined, 5)
     b = addNote(b, c, 'unrelated', undefined, 9)
-    expect(backlinks(b, c).map((r) => r.item.id)).toEqual([a])
+    expect(backlinks(b, c).map((r) => r.item!.id)).toEqual([a])
     expect(allNotes(b).map((r) => r.note.at)).toEqual([9, 5])
   })
 

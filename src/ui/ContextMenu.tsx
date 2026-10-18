@@ -6,6 +6,8 @@ import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { useWorkspace } from './useWorkspace'
+import { copyText } from './copyText'
 import { useEscape } from './useEscape'
 import { focusFirst, moveFocus } from './menuKeys'
 
@@ -31,6 +33,7 @@ function tidy(entries: Entry[]): Entry[] {
 export function ContextMenu() {
   const editor = useEditor()
   const ui = useUi()
+  const ws = useWorkspace()
   const m = ui.menu
   useEscape(ui.closeMenu, !!m)
   const listRef = useRef<HTMLDivElement>(null)
@@ -98,6 +101,17 @@ export function ContextMenu() {
       paste,
       { label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() },
       { label: 'Copy as image', run: () => void copyImage(editor, new Set(editor.selection)) },
+      ...(single && ws.webLink()
+        ? [
+            {
+              label: 'Copy link to this object',
+              run: () =>
+                void copyText(ws.webLink({ item: single.id })!).then((ok) =>
+                  editor.setStatus(ok ? 'Copied a link — paste it in a chat, a wiki page or a comment' : 'Couldn’t copy the link'),
+                ),
+            },
+          ]
+        : []),
       ...(hasSketch(editor) ? [{ label: 'Turn sketch into a board (AI)', run: () => void sketchToBoard(editor) }] : []),
       editor.selectedItems.every((i) => i.locked)
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }

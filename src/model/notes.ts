@@ -7,7 +7,7 @@
 
 import { getItem, updateItem } from './board'
 import { uid } from './uid'
-import { type Board, type Id, type Item, itemKindLabel, type Note } from './types'
+import { type Board, type Id, type Item, itemKindLabel, type Note, type Page } from './types'
 
 export function addNote(b: Board, id: Id, text: string, author?: string, at = Date.now()): Board {
   const trimmed = text.trim()
@@ -146,11 +146,13 @@ export function fromEditable(text: string, picks: ReadonlyMap<string, string>): 
   return text.replace(pattern, (s) => picks.get(s)!)
 }
 
-/** A board other links can point at: its link key and title. */
+/** A board other links can point at: its link key and title (and a wiki's pages). */
 export interface BoardRef {
   key: string
   title: string
   icon?: string
+  kind?: 'wiki'
+  pages?: { id: string; title: string; icon?: string }[]
 }
 
 /**
@@ -160,8 +162,14 @@ export interface BoardRef {
 export function resolveName(name: string, b: Board, boards: readonly BoardRef[]): LinkTarget | null {
   const n = clean(name).toLowerCase()
   if (!n) return null
+  // In a wiki, its own pages come first.
+  const own = b.pages?.find((p) => !p.trashed && p.title.trim().toLowerCase() === n)
+  if (own) return { page: own.id }
   const board = boards.find((r) => r.title.trim().toLowerCase() === n)
   if (board) return { board: board.key }
+  // A page of another wiki, when only one has that title.
+  const pages = boards.flatMap((r) => (r.pages ?? []).filter((p) => p.title.trim().toLowerCase() === n).map((p) => ({ board: r.key, page: p.id })))
+  if (pages.length === 1) return pages[0]
   const item = b.items.find((i) => i.kind !== 'pen' && (clean(i.text).toLowerCase() === n || objectLabel(i).toLowerCase() === n))
   return item ? { item: item.id } : null
 }
@@ -187,9 +195,10 @@ export function allNotes(b: Board): NoteRef[] {
   return out.sort((a, z) => z.note.at - a.note.at)
 }
 
-/** A link found on a board: on `item`, in one of its comments (`note`) or else its description. */
+/** A link found on a board: on `item`, in one of its comments (`note`) or else its description; or on a wiki `page`. */
 export interface LinkRef {
-  item: Item
+  item?: Item
+  page?: Page
   note?: Note
   to: LinkTarget
 }
@@ -207,6 +216,15 @@ export function boardLinks(b: Board, boards: readonly BoardRef[] = []): LinkRef[
     if (item.description) scan(item, item.description)
     for (const note of item.notes ?? []) scan(item, note.text, note)
   }
+  // A wiki's pages link too.
+  const bodies = new Map((b.bodies ?? []).map((x) => [x.id, x.text]))
+  for (const page of b.pages ?? []) {
+    if (page.trashed) continue
+    for (const p of parseNote(bodies.get(page.id) ?? '')) {
+      const to = 'mention' in p ? { item: p.mention } : 'link' in p ? (p.link ?? resolveName(p.label, b, boards)) : null
+      if (to) out.push({ page, to })
+    }
+  }
   return out
 }
 
@@ -218,9 +236,9 @@ export function boardLinks(b: Board, boards: readonly BoardRef[] = []): LinkRef[
 export function backlinks(b: Board, id: Id, self: readonly string[] = [], boards: readonly BoardRef[] = []): LinkRef[] {
   const seen = new Set<string>()
   return boardLinks(b, boards)
-    .filter((r) => r.item.id !== id && r.to.item === id && (!r.to.board || self.includes(r.to.board)))
+    .filter((r) => !!r.item && r.item.id !== id && r.to.item === id && (!r.to.board || self.includes(r.to.board)))
     .filter((r) => {
-      const key = `${r.item.id}:${r.note?.id ?? ''}`
+      const key = `${r.item!.id}:${r.note?.id ?? ''}`
       return !seen.has(key) && !!seen.add(key)
     })
     .sort((a, z) => (a.note?.at ?? Infinity) - (z.note?.at ?? Infinity))
@@ -249,9 +267,15 @@ export function linkCandidates(b: Board, query: string, boards: readonly BoardRe
   const objects = mentionCandidates(b, q, exclude, limit).map((i) => ({ label: objectLabel(i), hint: itemKindLabel(i), to: { item: i.id } }))
   const named = boards
     .filter((r) => !q || r.title.toLowerCase().includes(q))
-    .map((r) => ({ label: r.title, hint: r.icon ? `${r.icon} Board` : 'Board', to: { board: r.key } }))
-  // Boards first, but never crowding out the objects entirely.
-  return [...named.slice(0, Math.max(4, limit - objects.length)), ...objects].slice(0, limit)
+    .map((r) => ({ label: r.title, hint: `${r.icon ? `${r.icon} ` : ''}${r.kind === 'wiki' ? 'Wiki' : 'Board'}`, to: { board: r.key } }))
+  // Wiki pages, once there's something to look for (there may be many).
+  const pages = q
+    ? boards.flatMap((r) =>
+        (r.pages ?? []).filter((p) => p.title.toLowerCase().includes(q)).map((p) => ({ label: p.title || 'Untitled', hint: `📘 ${r.title}`, to: { board: r.key, page: p.id } })),
+      )
+    : []
+  // Boards and pages first, but never crowding out the objects entirely.
+  return [...[...named, ...pages].slice(0, Math.max(4, limit - objects.length)), ...objects].slice(0, limit)
 }
 
 export const hasNotes =(b: Board, id: Id) => !!getItem(b, id)?.notes?.length

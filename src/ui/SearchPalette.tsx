@@ -4,6 +4,7 @@ import { type Id, type Kind, KIND_LABELS } from '../model/types'
 import { commands, matchCommands } from './commands'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { isWiki, pageOrder, pagePath, searchPages } from '../model/wiki'
 
 type Filter = { label: string; kinds?: (Kind | 'connector')[] }
 
@@ -78,7 +79,27 @@ export function SearchPalette() {
           .slice(0, commandOnly ? 40 : 5)
           .map((c) => ({ key: `cmd:${c.id}`, run: c.run, title: c.label, kind: c.group, keys: c.keys }))
       : []
-  const objects: Row[] = commandOnly
+  const wiki = isWiki(editor.board)
+  // In a wiki, the search is over its pages.
+  const pages: Row[] =
+    !wiki || commandOnly
+      ? []
+      : query.trim()
+        ? searchPages(editor.board, query).map((h) => ({
+            key: `p:${h.page.id}`,
+            run: () => editor.openPage(h.page.id),
+            title: `${h.page.icon ? `${h.page.icon} ` : ''}${h.page.title || 'Untitled'}`,
+            kind: 'Page',
+            detail: h.snippet ? <span>{highlight(h.snippet, query)}</span> : undefined,
+          }))
+        : pageOrder(editor.board).map((p) => ({
+            key: `p:${p.id}`,
+            run: () => editor.openPage(p.id),
+            title: `${p.icon ? `${p.icon} ` : ''}${p.title || 'Untitled'}`,
+            kind: 'Page',
+            detail: <span className="where">{pagePath(editor.board, p.id).slice(0, -1).map((x) => x.title).join(' › ')}</span>,
+          }))
+  const objects: Row[] = commandOnly || wiki
     ? []
     : query.trim()
     ? search(editor.viewBoard, query, kinds).map((r, k) => ({
@@ -99,7 +120,7 @@ export function SearchPalette() {
         kind: KIND_LABELS[e.kind],
         detail: e.notes ? <span className="where">{e.notes} comment{e.notes === 1 ? '' : 's'}</span> : undefined,
       }))
-  const rows = [...cmds, ...objects]
+  const rows = [...cmds, ...pages, ...objects]
 
   const close = () => editor.setSearchOpen(false)
   const go = (row: Row | undefined) => {
@@ -151,7 +172,11 @@ export function SearchPalette() {
           ))}
         </div>
         <div className="palette-caption muted">
-          {commandOnly ? 'Commands' : query.trim() ? `${objects.length} match${objects.length === 1 ? '' : 'es'}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}` : `All objects (${rows.length}) · type > for commands`}
+          {commandOnly
+            ? 'Commands'
+            : query.trim()
+              ? `${objects.length + pages.length} match${objects.length + pages.length === 1 ? '' : 'es'}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}`
+              : `All ${wiki ? 'pages' : 'objects'} (${rows.length}) · type > for commands`}
           <span>↑↓ choose · Enter go · Tab filter · Esc close</span>
         </div>
         <ul ref={list} className="results" role="listbox">

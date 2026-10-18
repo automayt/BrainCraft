@@ -22,7 +22,8 @@ import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
 import { uid } from '../model/uid'
-import { cleanConnector, cleanItem } from '../model/sanitize'
+import { cleanBody, cleanConnector, cleanItem, cleanPage } from '../model/sanitize'
+import * as W from '../model/wiki'
 import {
   type Arrowheads,
   BRANCHES,
@@ -91,6 +92,11 @@ export type Op =
   | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
+  /** Wiki pages (in a wiki only). `page`, `parent` and `before` take a page id, a `ref` or an exact title. */
+  | { op: 'createPage'; title: string; parent?: string; before?: string; text?: string; icon?: string; ref?: string }
+  | { op: 'updatePage'; page: string; title?: string; text?: string; append?: string; icon?: string | null }
+  | { op: 'movePage'; page: string; parent?: string | null; before?: string }
+  | { op: 'deletePage'; page: string }
 
 export interface OpResult {
   op: Op['op']
@@ -99,6 +105,8 @@ export interface OpResult {
   /** Ids of everything created, for multi-object operations like flowcharts and mind maps. */
   ids?: Id[]
   ref?: string
+  /** The wiki page made or changed. */
+  page?: string
 }
 
 export interface ApplyContext {
@@ -129,6 +137,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
   if (!Array.isArray(ops)) throw new OpError('Expected a list of operations')
   let b = board
   const refs = new Map<string, Id>()
+  const pageRefs = new Map<string, string>()
   const results: OpResult[] = []
   const existing = B.bounds(board)
   // New objects without a position go in a column to the right of the existing content.
@@ -136,6 +145,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
 
   ops.forEach((op, index) => {
     if (!op || typeof op !== 'object' || typeof op.op !== 'string') fail(index, op ?? {}, 'each operation needs an "op" name')
+    // A wiki has pages, not a canvas.
+    if (W.isWiki(b) && !PAGE_OPS.has(op.op)) fail(index, op, `this is a wiki: use ${[...PAGE_OPS].join(', ')}`)
     try {
       run(op, index)
     } catch (err) {
@@ -169,7 +180,12 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     if (!clean) throw new OpError("The operations made a connector that isn't valid; check its ends")
     return clean
   })
-  return { board: layoutAll({ ...b, items, connectors }, ctx.measure), results }
+  // Pages are kept as a save would keep them too.
+  const oldPages = new Set(board.pages ?? [])
+  const oldBodies = new Set(board.bodies ?? [])
+  const pages = b.pages?.map((p) => (oldPages.has(p) ? p : (cleanPage(p) ?? fail(0, { op: 'page' }, `page "${p.title}" isn't valid`))))
+  const bodies = b.bodies?.map((x) => (oldBodies.has(x) ? x : (cleanBody(x) ?? fail(0, { op: 'page' }, 'a page’s text isn’t valid'))))
+  return { board: layoutAll({ ...b, items, connectors, ...(pages ? { pages } : {}), ...(bodies ? { bodies } : {}) }, ctx.measure), results }
 
   function run(op: Op, index: number) {
 
@@ -582,11 +598,57 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'createPage':
+      case 'updatePage':
+      case 'movePage':
+      case 'deletePage': {
+        if (!W.isWiki(b)) fail(index, op, 'pages belong to wikis; open a wiki, or make one with create_board and template "wiki"')
+        const findPage = (v: unknown, field: string): string => {
+          if (typeof v !== 'string' || !v.trim()) fail(index, op, `"${field}" should be a page id, a "ref" or a page's title`)
+          const own = W.getPage(b, v)
+          const id = pageRefs.get(v) ?? (own && !own.trashed ? v : W.pageByTitle(b, v)?.id)
+          if (!id) fail(index, op, `"${field}" refers to ${JSON.stringify(v)}, which isn't a page in this wiki`)
+          return id
+        }
+        const now = ctx.now ?? Date.now()
+        if (op.op === 'createPage') {
+          const parent = op.parent === undefined || op.parent === null ? undefined : findPage(op.parent, 'parent')
+          const before = op.before === undefined ? undefined : findPage(op.before, 'before')
+          let id: string
+          ;[b, id] = W.addPage(b, { title: text(op.title, 'title'), parent, before, text: text(op.text, 'text', false), icon: typeof op.icon === 'string' ? op.icon : undefined }, now, 'AI')
+          if (!id) fail(index, op, `the wiki is full (${W.MAX_PAGES} pages)`)
+          if (op.ref) pageRefs.set(op.ref, id)
+          results.push({ op: op.op, page: id, ...(op.ref ? { ref: op.ref } : {}) })
+        } else if (op.op === 'updatePage') {
+          const id = findPage(op.page, 'page')
+          if (op.title !== undefined || op.icon !== undefined) b = W.setPageMeta(b, id, { ...(op.title !== undefined ? { title: text(op.title, 'title') } : {}), ...(op.icon !== undefined ? { icon: op.icon === null ? null : text(op.icon, 'icon') } : {}) })
+          if (op.text !== undefined || op.append !== undefined) {
+            const base = op.text !== undefined ? text(op.text, 'text') : W.pageText(b, id)
+            const extra = op.append !== undefined ? text(op.append, 'append') : ''
+            const joined = extra ? `${base}${base && !base.endsWith('\n') ? '\n' : ''}${extra}` : base
+            b = W.setPageBody(b, id, joined, now, 'AI')
+          }
+          results.push({ op: op.op, page: id })
+        } else if (op.op === 'movePage') {
+          const id = findPage(op.page, 'page')
+          const parent = op.parent === undefined || op.parent === null ? undefined : findPage(op.parent, 'parent')
+          if (parent !== undefined && W.withDescendants(b, id).has(parent)) fail(index, op, 'a page can’t go inside one of its own sub-pages')
+          b = W.movePage(b, id, parent, op.before === undefined ? undefined : findPage(op.before, 'before'))
+          results.push({ op: op.op, page: id })
+        } else {
+          const id = findPage(op.page, 'page')
+          b = W.trashPage(b, id, now)
+          results.push({ op: op.op, page: id })
+        }
+        break
+      }
       default:
         fail(index, op, `unknown operation. Known: ${OPS.join(', ')}`)
     }
   }
 }
+
+const PAGE_OPS = new Set<string>(['createPage', 'updatePage', 'movePage', 'deletePage'])
 
 export const OPS: Op['op'][] = [
   'createNote',
@@ -613,6 +675,10 @@ export const OPS: Op['op'][] = [
   'deleteRecords',
   'react',
   'createVote',
+  'createPage',
+  'updatePage',
+  'movePage',
+  'deletePage',
 ]
 
 /** Pulls a list of operations out of pasted JSON: `{"ops": […]}`, a bare list, or one operation. */

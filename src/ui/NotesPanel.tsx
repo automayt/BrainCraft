@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ClipboardEvent, type KeyboardEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { emptyBoard, getItem } from '../model/board'
 import {
   allNotes,
@@ -21,6 +21,7 @@ import type { CrossLink } from '../store/links'
 import { formatTime } from './BoardView'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
+import { targetFromUrl } from '../store/deepLink'
 
 
 /** One wiki-link, resolved against this board and the boards in this browser. */
@@ -38,6 +39,23 @@ function WikiLink({ to, label }: { to: LinkTarget | null; label: string }) {
         onClick={() => void ws.newBoard({ ...emptyBoard(), title: label })}
       >
         {label}
+      </button>
+    )
+  }
+  if (target.page !== undefined) {
+    // A wiki page: opens beside the board, so you can read it without leaving.
+    const wiki = target.board ? ws.findBoard(target.board) : undefined
+    const page = wiki?.outline?.find((p) => p.id === target.page)
+    const gone = !wiki || !page
+    return (
+      <button
+        className={`wikilink page${gone ? ' missing' : ''}`}
+        title={!wiki ? 'That wiki isn’t in this browser' : !page ? 'That page was deleted or is in the trash' : `Read “${page.title}” beside the board`}
+        disabled={!wiki}
+        onClick={() => editor.peekPage({ board: target.board!, page: target.page!, ...(target.heading ? { heading: target.heading } : {}) })}
+      >
+        📘 {wiki ? `${wiki.title} › ` : ''}
+        {page?.title ?? label}
       </button>
     )
   }
@@ -150,7 +168,7 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
     candidates.length > 0 ? (
       <ul className="mention-picker" role="listbox">
         {candidates.map((c, k) => (
-          <li key={`${c.to.board ?? ''}#${c.to.item ?? ''}`}>
+          <li key={`${c.to.board ?? ''}#${c.to.item ?? ''}/${c.to.page ?? ''}`}>
             <button
               role="option"
               aria-selected={k === pick}
@@ -168,9 +186,27 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
       </ul>
     ) : null
 
+  /** A BrainCraft web link pasted in becomes a named link (to a page, an object or a board). */
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const to = targetFromUrl(e.clipboardData.getData('text/plain'))
+    if (!to) return
+    e.preventDefault()
+    const [a, z] = [e.currentTarget.selectionStart, e.currentTarget.selectionEnd]
+    void ws.labelFor(to).then((label) => {
+      // An object on this board needs no board in its link.
+      const target = to.board && ws.selfKeys.includes(to.board) && to.page === undefined ? { item: to.item } : to
+      const shown = `[[${label}]]`
+      picks.current.set(shown, linkToken(label, target))
+      const v = ref.current?.value ?? text
+      setText(`${v.slice(0, a)}${shown}${v.slice(z)}`)
+      pendingCaret.current = a + shown.length
+    })
+  }
+
   return {
     list,
     onKey,
+    onPaste,
     encode: (t: string) => fromEditable(t, picks.current),
     picks: picks.current,
     track: (el: HTMLTextAreaElement) => {
@@ -265,6 +301,7 @@ function Composer({ target, author, setAuthor }: { target: Item; author: string;
         }}
         onSelect={(e) => picker.track(e.target as HTMLTextAreaElement)}
         onKeyDown={onKeyDown}
+        onPaste={picker.onPaste}
       />
       {picker.list}
       {askName && (
@@ -382,6 +419,7 @@ function Description({ id, value }: { id: Id; value: string }) {
               picker.track(e.target)
             }}
             onSelect={(e) => picker.track(e.target as HTMLTextAreaElement)}
+            onPaste={picker.onPaste}
             onBlur={finish}
             onKeyDown={(e) => {
               e.stopPropagation()
@@ -461,7 +499,7 @@ export function NotesPanel() {
                 <h3>Linked from</h3>
                 <ul className="notes">
                   {links.map((r) => (
-                    <LinkRow key={`${r.item.id}:${r.note?.id ?? 'description'}`} link={r} onOpen={open} />
+                    <LinkRow key={`${r.item!.id}:${r.note?.id ?? 'description'}`} link={r} onOpen={open} />
                   ))}
                 </ul>
               </>
@@ -475,7 +513,7 @@ export function NotesPanel() {
             <h3>Linked from other boards</h3>
             <ul className="notes">
               {fromElsewhere.map((l) => (
-                <CrossRow key={`${l.boardId}:${l.from}:${l.note?.id ?? 'description'}:${l.to.item ?? ''}`} link={l} />
+                <CrossRow key={`${l.boardId}:${l.from ?? l.fromPage}:${l.note?.id ?? 'description'}:${l.to.item ?? ''}`} link={l} />
               ))}
             </ul>
           </>
@@ -522,7 +560,9 @@ function useLinksHere(open: boolean): CrossLink[] {
 
 /** A comment (or description) on this board that links to the selected object. */
 function LinkRow({ link, onOpen }: { link: LinkRef; onOpen: (id: Id) => void }) {
-  const { item, note } = link
+  const { note } = link
+  // Links found on this board come from objects (backlinks never list pages here).
+  const item = link.item!
   if (note) return <NoteRow note={note} about={item} onOpen={onOpen} />
   return (
     <li className="note">
@@ -540,19 +580,26 @@ function LinkRow({ link, onOpen }: { link: LinkRef; onOpen: (id: Id) => void }) 
 /** A comment (or description) on another board that links here. */
 function CrossRow({ link }: { link: CrossLink }) {
   const ws = useWorkspace()
+  const editor = useEditor()
   const { note } = link
   return (
     <li className="note">
       <div className="note-meta">
-        <strong>{note ? note.author || 'Someone' : 'Description'}</strong>
+        <strong>{note ? note.author || 'Someone' : link.fromPage !== undefined ? 'Wiki page' : 'Description'}</strong>
         {note && (
           <time dateTime={new Date(note.at).toISOString()} title={new Date(note.at).toLocaleString()}>
             {formatTime(note.at)}
           </time>
         )}
-        <button className="note-about" onClick={() => void ws.openLink({ board: link.boardId, item: link.from })} title="Open that board at this object">
-          {link.boardTitle} › {link.fromLabel}
-        </button>
+        {link.fromPage !== undefined ? (
+          <button className="note-about" onClick={() => editor.peekPage({ board: link.boardId, page: link.fromPage! })} title="Read that wiki page beside the board">
+            📘 {link.boardTitle} › {link.fromLabel}
+          </button>
+        ) : (
+          <button className="note-about" onClick={() => void ws.openLink({ board: link.boardId, item: link.from })} title="Open that board at this object">
+            {link.boardTitle} › {link.fromLabel}
+          </button>
+        )}
       </div>
       <p className="note-text">{link.text}</p>
     </li>

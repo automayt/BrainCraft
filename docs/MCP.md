@@ -48,10 +48,11 @@ It works two ways:
 | --- | --- |
 | `read_board` | Title, counts by kind, every object (id, kind, label, position, size, comments) and the lines between them. |
 | `get_object` | One object in full: text, comments, and its data (table as CSV, Kanban columns and cards, timeline lanes and entries, mind-map outline). |
-| `find` | Searches all text, comments, cells, cards and labels. |
+| `find` | Searches all text, comments, cells, cards and labels (in a wiki: page titles and text). |
+| `list_pages` / `read_page` | A wiki's page tree (ids, titles, who edited each and when), and one page in full: its Markdown, sub-pages and the pages linking to it. |
 | `apply_ops` | Creates, connects, updates and deletes objects using the [operations](API.md). All or nothing, and one undo step. |
 | `export_mermaid` | Flowcharts as Mermaid source. |
-| `list_boards` / `open_board` / `create_board` | The boards in your browser (or `.braincraft` files in the working folder). New boards can start from a template. |
+| `list_boards` / `open_board` / `create_board` | The boards in your browser (or `.braincraft` files in the working folder). New boards can start from a template; template `wiki` makes a wiki. |
 | `connect_browser` | Connection status and the pairing link. |
 
 Every board tool accepts an optional `file`. Relative paths resolve against

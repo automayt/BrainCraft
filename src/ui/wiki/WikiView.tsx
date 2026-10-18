@@ -5,6 +5,9 @@ import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
 import { formatTime } from '../BoardView'
 import { copyText } from '../copyText'
+import type { CrossLink } from '../../store/links'
+import type { Workspace } from '../../store/workspace'
+import type { Editor } from '../../editor/Editor'
 import { useEditor } from '../useEditor'
 import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
@@ -99,6 +102,19 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     )
   }, [board, page.id, ws.selfKeys])
 
+  // Canvas comments and other wikis' pages that link here (from boards in this browser).
+  const [elsewhere, setElsewhere] = useState<CrossLink[]>([])
+  useEffect(() => {
+    let live = true
+    ws.linksHere().then(
+      (l) => live && setElsewhere(l.filter((x) => x.to.page === page.id)),
+      () => live && setElsewhere([]),
+    )
+    return () => {
+      live = false
+    }
+  }, [ws, ws.boards, page.id])
+
   const actions: MarkdownActions = {
     link: (to, label, key) => <PageLink key={key} to={to} label={label} from={page} />,
     mention: (_id, label, key) => (
@@ -109,13 +125,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     toggle: ro ? undefined : (line) => editor.setPageText(page.id, toggleTask(text, line)),
     children: () => <SubPages pages={kids} />,
     headings: heads,
-    copyHeading: (slug, words) => {
-      // A link token that works anywhere: in this wiki, other wikis and canvas comments.
-      const key = ws.linkKey ?? undefined
-      void copyText(linkToken(`${page.title || 'Untitled'} › ${words}`, { ...(key ? { board: key } : {}), page: page.id, heading: slug })).then((ok) =>
-        editor.setStatus(ok ? 'Copied a link to that heading — paste it into any page or comment' : 'Couldn’t copy the link'),
-      )
-    },
+    copyHeading: (slug, words) => copyPlace(ws, editor, `${page.title || 'Untitled'} › ${words}`, { page: page.id, heading: slug }),
   }
 
   const saveTitle = () => {
@@ -162,13 +172,8 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
             </button>
           )}
           <button
-            onClick={() => {
-              const key = ws.linkKey ?? undefined
-              void copyText(linkToken(page.title || 'Untitled', { ...(key ? { board: key } : {}), page: page.id })).then((ok) =>
-                editor.setStatus(ok ? 'Copied a link to this page — paste it into any page or comment' : 'Couldn’t copy the link'),
-              )
-            }}
-            title="Copy a link to this page, to paste into pages and comments"
+            onClick={() => copyPlace(ws, editor, page.title || 'Untitled', { page: page.id })}
+            title="Copy a link to this page: paste it in a chat, a page or a comment"
           >
             Copy link
           </button>
@@ -212,7 +217,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
           <SubPages pages={kids} />
         </section>
       )}
-      {linkedFrom.length > 0 && (
+      {(linkedFrom.length > 0 || elsewhere.length > 0) && (
         <section className="wiki-section" aria-label="Linked from">
           <h2 className="wiki-section-title">Linked from</h2>
           <ul className="wiki-backlinks">
@@ -223,10 +228,34 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
                 </button>
               </li>
             ))}
+            {elsewhere.map((l) => (
+              <li key={`${l.boardId}:${l.from ?? l.fromPage}:${l.note?.id ?? ''}`}>
+                <button
+                  className="link"
+                  title={l.text}
+                  onClick={() => void ws.openLink(l.fromPage !== undefined ? { board: l.boardId, page: l.fromPage } : { board: l.boardId, item: l.from })}
+                >
+                  {l.fromPage !== undefined ? '📘' : '🗺'} {l.boardTitle} › {l.fromLabel}
+                </button>
+              </li>
+            ))}
           </ul>
         </section>
       )}
     </article>
+  )
+}
+
+/**
+ * Copies a link to a page (or a heading on it): a web link that opens it for anyone who has the
+ * wiki, and that turns into a named link when pasted into a page or a comment. A snapshot with no
+ * address of its own gets a link for pages and comments only.
+ */
+function copyPlace(ws: Workspace, editor: Editor, label: string, place: { page: string; heading?: string }) {
+  const web = ws.webLink(place)
+  const key = ws.linkKey ?? undefined
+  void copyText(web ?? linkToken(label, { ...(key ? { board: key } : {}), ...place })).then((ok) =>
+    editor.setStatus(ok ? 'Copied a link — paste it in a chat, a page or a comment' : 'Couldn’t copy the link'),
   )
 }
 

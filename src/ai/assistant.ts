@@ -16,6 +16,7 @@ import type { Rect } from '../model/geom'
 import { boardText } from './boardText'
 import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
+import { isWiki } from '../model/wiki'
 
 export const AI_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', hint: 'Most capable (default)' },
@@ -76,7 +77,7 @@ export interface Callbacks {
   proposal(p: Proposal): void
 }
 
-const READ_TOOLS = ['read_board', 'get_object', 'find']
+const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page']
 
 const READ_BOARD: Anthropic.Beta.BetaTool = {
   name: 'read_board',
@@ -163,11 +164,14 @@ const STATUS: Record<string, string> = {
   read_board: 'Reading the board…',
   get_object: 'Looking closer…',
   find: 'Searching…',
+  list_pages: 'Reading the pages…',
+  read_page: 'Reading a page…',
   propose_changes: 'Preparing changes…',
 }
 
 /** Counts what a set of patches adds, changes and removes (objects and records). */
 export function countChanges(before: Board, patches: Patch[]) {
+  const fresh = new Set<string>()
   let added = 0
   let changed = 0
   let removed = 0
@@ -180,7 +184,14 @@ export function countChanges(before: Board, patches: Patch[]) {
     } else if (p.k === 'rec') {
       if (p.v === null) removed++
       else added++
-    }
+    } else if (p.k === 'page') {
+      // Wiki pages: new, trashed (or deleted), or renamed and moved.
+      const was = before.pages?.find((x) => x.id === p.id)
+      if (!was) fresh.add(p.id)
+      if (!was) added++
+      else if (p.v === null || (p.v.trashed && !was.trashed)) removed++
+      else changed++
+    } else if (p.k === 'body' && !fresh.has(p.id) && !patches.some((q) => q.k === 'page' && q.id === p.id)) changed++
   }
   return { added, changed, removed }
 }
@@ -229,7 +240,8 @@ export class Assistant {
     }
     if (!READ_TOOLS.includes(name)) return { content: `Unknown tool "${name}"`, is_error: true }
     if (!input || typeof input !== 'object') return { content: 'Tool input must be an object', is_error: true }
-    if (name === 'read_board') {
+    // A wiki is read as its page tree (the generic tool describes it).
+    if (name === 'read_board' && !isWiki(this.host.board())) {
       const x = input as { kind?: unknown; area?: unknown }
       const a = x.area as Record<string, unknown> | undefined
       if (a !== undefined && (typeof a !== 'object' || !['x', 'y', 'w', 'h'].every((k) => typeof a?.[k] === 'number')))

@@ -277,6 +277,8 @@ export function cleanItem(raw: unknown): Item | null {
     const link = cleanLink(raw.link)
     if (!link) return null
     out.link = link
+    const page = raw.page
+    if (isObj(page) && typeof page.board === 'string' && /^[\w-]{1,64}$/.test(page.board) && isPageId(page.page)) out.page = { board: page.board, page: page.page }
   }
   const reactions = cleanReactions(raw.reactions)
   if (reactions) out.reactions = reactions

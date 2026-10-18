@@ -5,7 +5,9 @@
 
 import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
-import { emptyWiki, getPage } from '../model/wiki'
+import { emptyWiki, getPage, pageText } from '../model/wiki'
+import { headings, parseMarkdown } from '../model/markdown'
+import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
 import { type KV, openKV } from './kv'
@@ -13,9 +15,9 @@ import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
 import { catchUp } from '../model/catchup'
-import type { BoardRef, LinkTarget } from '../model/notes'
+import { type BoardRef, type LinkTarget, objectLabel } from '../model/notes'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
-import { boardRefs, type CrossLink, LinkIndex } from './links'
+import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
 
 const CURRENT_KEY = 'braincraft:current'
@@ -213,27 +215,107 @@ export class Workspace {
     const ws = new Workspace(editor, new Library(kv ?? (await openKV())))
     await ws.recover()
     ws.server = await findServer()
+    if (await ws.openHash(hash)) return ws
+    await ws.openLast()
+    return ws
+  }
+
+  /**
+   * Opens what a link's hash points at: a live session (and maybe a page or object in it), a
+   * snapshot, or a place on a board in this browser. Returns whether it opened anything.
+   */
+  async openHash(hash: string): Promise<boolean> {
     const live = liveFromHash(hash)
     if (live) {
-      const server = live.server ?? ws.server
+      const server = live.server ?? this.server
       if (server) {
-        await ws.joinLive(live, server)
-        return ws
+        await this.joinLive(live, server)
+        // The page shows as soon as the session brings it (until then, the wiki's first page).
+        const place = placeFromParams(new URLSearchParams(hash.replace(/^#/, '')))
+        if (place.page !== undefined) this.editor.openPage(place.page, place.heading ?? null)
+        return true
       }
-      editor.setStatus('That live link needs its BrainCraft server, which isn’t reachable from here')
+      this.editor.setStatus('That live link needs its BrainCraft server, which isn’t reachable from here')
     }
     const shared = sharedFromHash(hash)
     if (shared) {
       try {
-        ws.view(await decodeBoard(shared))
-        await ws.refresh()
-        return ws
+        this.view(await decodeBoard(shared))
+        await this.refresh()
+        return true
       } catch {
-        editor.setStatus('That share link is damaged or incomplete — opening your boards instead')
+        this.editor.setStatus('That share link is damaged or incomplete — opening your boards instead')
       }
     }
-    await ws.openLast()
-    return ws
+    const open = openFromHash(hash)
+    if (open) {
+      if (!this.boards.length) await this.refresh()
+      if (!this.findBoard(open.board!)) {
+        this.editor.setStatus('That link is to a board that isn’t in this browser. Ask a friend for the live link.')
+        return false
+      }
+      await this.openLink(open)
+      this.clearShareHash()
+      return true
+    }
+    return false
+  }
+
+  /** A web link to the open board, or a place on it, for anyone who has it in their browser. */
+  webLink(place: Place = {}): string | null {
+    const key = this.linkKey
+    if (!key || typeof location === 'undefined') return null
+    const url = new URL(location.href)
+    url.hash = openHash(key, place)
+    return url.toString()
+  }
+
+  /** The live session's view or edit link, opening at a place (a page, a heading, an object). */
+  inviteLink(role: 'edit' | 'view', place: Place = {}): string | null {
+    const link = this.liveLink(role)
+    const rest = placeParams(place)
+    return link && rest ? `${link}&${rest}` : link
+  }
+
+  /** What a page card shows for a page: where it is, its title and its opening words. */
+  async pagePreview(to: { board: string; page: string }): Promise<{ site: string; title: string; description: string } | null> {
+    const b = await this.readBoard(to.board)
+    const page = b && getPage(b, to.page)
+    if (!b || !page) return null
+    return { site: `📘 ${b.title || 'Wiki'}`, title: `${page.icon ? `${page.icon} ` : ''}${page.title || 'Untitled'}`, description: excerpt(b, page.id, 160) }
+  }
+
+  /** Drops a card for a wiki page on the board, from a pasted page link. */
+  async addPageCard(to: LinkTarget, url: string) {
+    if (!to.board || to.page === undefined) return
+    const page = { board: to.board, page: to.page }
+    const preview = await this.pagePreview(page)
+    this.editor.addPageCard(page, url, preview ?? { site: '📘 Wiki page', title: 'A page that isn’t in this browser' })
+  }
+
+  /** Brings page cards on the open board up to date with their pages (titles and opening words). */
+  async refreshPageCards() {
+    for (const item of this.editor.board.items) {
+      if (!item.page || !item.link) continue
+      const preview = await this.pagePreview(item.page)
+      if (preview && (preview.title !== item.link.title || preview.description !== item.link.description || preview.site !== item.link.site)) this.editor.fillLink(item.id, preview)
+    }
+  }
+
+  /** What to call a link to `to` when it's pasted: the page's or object's name. */
+  async labelFor(to: LinkTarget): Promise<string> {
+    const b = to.board && !this.selfKeys.includes(to.board) ? await this.readBoard(to.board) : this.editor.board
+    const meta = to.board ? this.findBoard(to.board) : undefined
+    if (b && to.page !== undefined) {
+      const page = getPage(b, to.page)
+      const heading = to.heading ? headings(parseMarkdown(pageText(b, to.page))).find((h) => h.slug === to.heading)?.text : undefined
+      return `${page?.title || 'Untitled'}${heading ? ` › ${heading}` : ''}`
+    }
+    if (b && to.item !== undefined) {
+      const item = getItem(b, to.item)
+      return item ? objectLabel(item) : 'Object'
+    }
+    return meta?.title ?? b?.title ?? 'Board'
   }
 
   // ----- change notification (for React's useSyncExternalStore) -------------------
@@ -339,6 +421,8 @@ export class Workspace {
     if (meta?.live) this.connectLive(meta.live)
     else void this.checkCatchUp()
     await this.refresh()
+    // Page cards catch up with pages edited since this board was last open.
+    if (!this.editor.readOnly) void this.refreshPageCards()
   }
 
   /** Loads into the editor without the load itself counting as a change to save. */
@@ -616,6 +700,23 @@ export class Workspace {
     else this.editor.setStatus('That object was deleted')
   }
 
+  private readBoards = new Map<string, { updated: number; board: Board }>()
+
+  /**
+   * Another board (or wiki) in this browser, by its link key: read once and kept until it changes.
+   * For page previews and page cards; the open board is the editor's own.
+   */
+  async readBoard(key: string): Promise<Board | null> {
+    const meta = this.findBoard(key)
+    if (!meta) return null
+    if (meta.id === this.boardId) return this.editor.board
+    const hit = this.readBoards.get(meta.id)
+    if (hit && hit.updated === meta.updated) return hit.board
+    const board = await this.library.load(meta.id)
+    if (board) this.readBoards.set(meta.id, { updated: meta.updated, board })
+    return board
+  }
+
   /** The key other boards and links use for the open one (its live id when shared). */
   get linkKey(): string | null {
     return this.liveInfo?.id ?? this.boardId
@@ -794,7 +895,7 @@ export class Workspace {
   }
 
   private clearShareHash() {
-    if (typeof location !== 'undefined' && (sharedFromHash(location.hash) || liveFromHash(location.hash))) {
+    if (typeof location !== 'undefined' && (sharedFromHash(location.hash) || liveFromHash(location.hash) || openFromHash(location.hash))) {
       history.replaceState(null, '', location.pathname + location.search)
     }
   }

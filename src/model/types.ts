@@ -270,6 +270,8 @@ export interface Item extends Rect {
   timeline?: TimelineData
   /** The web address and preview of a `link` card. */
   link?: LinkCard
+  /** A link card for a wiki page (its title and opening words), opened beside the board. */
+  page?: { board: string; page: string }
   /** A code block's language (an id from model/code; guessed when missing). */
   lang?: string
   /** Emoji reactions: who put each one on. */

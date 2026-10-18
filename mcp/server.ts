@@ -19,6 +19,7 @@ import { createInterface } from 'node:readline'
 import { applyOps } from '../src/api/ops'
 import { type BoardInfo, OPS_GUIDE, TOOL_DEFS, type ToolHost, ToolError, runTool } from '../src/api/tools'
 import { emptyBoard } from '../src/model/board'
+import { emptyWiki } from '../src/model/wiki'
 import { layoutAll } from '../src/model/mindmap'
 import { approxMeasure as measure } from '../src/model/approxMeasure'
 import { fromJson, toJson } from '../src/model/serialize'
@@ -206,7 +207,7 @@ function fileHost(f: string): ToolHost {
     createBoard: async (title, template) => {
       if (existsSync(path) && statSync(path).size > 0) throw new ToolError(`${path} already exists`)
       const t = TEMPLATES.find((x) => x.id === (template ?? 'blank')) ?? TEMPLATES[0]
-      const b = template ? boardFromTemplate(t, measure) : emptyBoard()
+      const b = template === 'wiki' ? emptyWiki(title) : template ? boardFromTemplate(t, measure) : emptyBoard()
       writeAtomic(path, toJson({ ...b, title }))
       return info(title)
     },

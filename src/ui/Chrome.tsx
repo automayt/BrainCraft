@@ -679,6 +679,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Enter · Tab', 'Continue a list or checklist · indent it'],
       ['Ctrl B · Ctrl I', 'Bold · italic'],
       ['Esc · Ctrl Enter', 'Done writing (it saves as you type)'],
+      ['Copy link · paste', 'A page link: opens it from a chat; in a page or comment it becomes a link; on a board, a page card'],
     ],
   ],
   [

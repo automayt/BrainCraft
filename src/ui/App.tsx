@@ -19,6 +19,8 @@ import { ImportExport } from './ImportExport'
 import { altLetter } from './keys'
 import { isWiki } from '../model/wiki'
 import { WikiView } from './wiki/WikiView'
+import { PagePeek } from './wiki/PagePeek'
+import { targetFromUrl } from '../store/deepLink'
 import { NotesPanel } from './NotesPanel'
 import { BoardErrorBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
@@ -60,7 +62,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -134,8 +136,8 @@ function App({ ws }: { ws: Workspace }) {
   }, [editor.notesOpen])
   useEffect(() => {
     const wide = editor.viewport.w > 720
-    editor.setRightInset(wide && (assistant || editor.notesOpen) ? 404 : 0)
-  }, [editor, assistant, editor.notesOpen, editor.viewport.w])
+    editor.setRightInset(wide && (assistant || editor.notesOpen || !!editor.peek) ? 404 : 0)
+  }, [editor, assistant, editor.notesOpen, editor.peek, editor.viewport.w])
 
   // Fonts change text measurements, so lay mind maps out again once Inter has loaded.
   useEffect(() => {
@@ -170,6 +172,9 @@ function App({ ws }: { ws: Workspace }) {
       if (!document.fullscreenElement && editor.presenting) editor.stopPresenting()
     }
     document.addEventListener('fullscreenchange', onFullscreen)
+    // A BrainCraft link pasted into the address bar of an open tab opens too.
+    const onHash = () => void ws.openHash(location.hash)
+    window.addEventListener('hashchange', onHash)
     window.addEventListener('pagehide', onHide)
     document.addEventListener('visibilitychange', onVisibility)
     // Scripts and AI assistants drive the board through window.BrainCraft (see docs/API.md).
@@ -304,8 +309,11 @@ function App({ ws }: { ws: Workspace }) {
       }
       const text = e.clipboardData?.getData('text/plain')
       if (text) {
-        editor.pasteText(text)
         e.preventDefault()
+        // A link to a wiki page becomes a card for that page.
+        const to = targetFromUrl(text)
+        if (to?.page !== undefined) void ws.addPageCard(to, text.trim())
+        else editor.pasteText(text)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -316,6 +324,7 @@ function App({ ws }: { ws: Workspace }) {
     return () => {
       document.removeEventListener('fullscreenchange', onFullscreen)
       window.removeEventListener('pagehide', onHide)
+      window.removeEventListener('hashchange', onHash)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
@@ -330,7 +339,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
+          className={`app${editor.notesOpen || editor.peek ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -352,6 +361,7 @@ function App({ ws }: { ws: Workspace }) {
               <ToolRail />
               <BottomLeft />
               <NotesPanel />
+              <PagePeek />
             </>
           )}
           {assistant && !editor.presenting && (

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { continueList, parseMarkdown } from '../../model/markdown'
 import { linkToken } from '../../model/notes'
+import { targetFromUrl } from '../../store/deepLink'
 import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
 import { useEditor } from '../useEditor'
@@ -205,6 +206,20 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           }}
           onSelect={(e) => track(e.currentTarget)}
           onKeyDown={onKeyDown}
+          onPaste={(e) => {
+            // A BrainCraft web link (a page, a heading, a canvas object) goes in as a named link.
+            const to = targetFromUrl(e.clipboardData.getData('text/plain'))
+            if (!to) return
+            e.preventDefault()
+            const [a, z] = [e.currentTarget.selectionStart, e.currentTarget.selectionEnd]
+            void ws.labelFor(to).then((label) => {
+              // A page of this very wiki needs no wiki in its link.
+              const target = to.board && ws.selfKeys.includes(to.board) ? { ...to, board: undefined } : to
+              const token = linkToken(label, target)
+              const cur = draftRef.current
+              change(cur.slice(0, a) + token + cur.slice(z), a + token.length)
+            })
+          }}
           onBlur={() => push()}
         />
         {pick && picks.length > 0 && (

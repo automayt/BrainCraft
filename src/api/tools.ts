@@ -8,7 +8,8 @@ import { TEMPLATES } from '../model/templates'
 import type { Board, Id, Kind } from '../model/types'
 import { KIND_LABELS } from '../model/types'
 import { type Op, type OpResult, opsFromText } from './ops'
-import { describeBoard, findObjects, getObject, mermaidOf } from './queries'
+import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf } from './queries'
+import { isWiki } from '../model/wiki'
 
 export interface BoardInfo {
   id: string
@@ -55,7 +56,13 @@ addComment {id, text, author?} — a timestamped comment on an object; mention a
 createDatabase {title, fields?: [name | {name, type: text|number|date|select|person|checkbox, options?}], records?: [{FieldName: value}], views?: [table|board|timeline|calendar|gallery], groupBy?} — one set of records shown as linked views that stay in sync (a board groups by a select/person field; a timeline uses the first two date fields; a calendar puts records on their first date field's days; a gallery shows cards, with a picture from any field holding an image address). Types are guessed from values when not given. The first field is the record title.
 react {ids: [...], emoji: "👍", by?} — an emoji reaction on objects (by defaults to "AI")
 createVote {options: [ids/refs], question?, each?} — a dot vote: a card above the options; each person spreads "each" votes (default about a third of the options, 1–5), counts hidden until someone reveals them
-addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values: {FieldName: value or null}} · deleteRecords {id: view, records: [ids or titles]}`
+addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values: {FieldName: value or null}} · deleteRecords {id: view, records: [ids or titles]}
+
+Wikis (boards of pages instead of a canvas; only these ops work on them). "page", "parent" and "before" take a page id, a "ref" from earlier in the batch, or an exact page title:
+createPage {title, parent?, before?, text?, icon?, ref?} — a page (under "parent", before "before" or last), its text in Markdown
+updatePage {page, title?, text?, append?, icon?} — "text" replaces the page's Markdown, "append" adds to the end
+movePage {page, parent?: page or null for the top, before?} · deletePage {page} — moves it (and its sub-pages) to the trash
+Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), an object on a canvas board with [[Label]](board:KEY#ID).`
 
 const fileProp = {
   file: {
@@ -116,6 +123,20 @@ export const TOOL_DEFS: ToolDef[] = [
     readOnly: true,
   },
   {
+    name: 'list_pages',
+    title: 'List wiki pages',
+    description: 'A wiki’s pages as a tree: each page’s id, title, when and by whom it was last edited, how long it is, and its sub-pages; plus the trash.',
+    inputSchema: { type: 'object', properties: { ...fileProp } },
+    readOnly: true,
+  },
+  {
+    name: 'read_page',
+    title: 'Read wiki page',
+    description: 'One wiki page in full: where it sits, its Markdown, its sub-pages and the pages that link to it. "page" is its id or exact title.',
+    inputSchema: { type: 'object', properties: { page: { type: 'string' }, ...fileProp }, required: ['page'] },
+    readOnly: true,
+  },
+  {
     name: 'list_boards',
     title: 'List boards',
     description: 'Every board saved in the browser (or every .braincraft file in the working folder when no browser is connected).',
@@ -131,10 +152,10 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'create_board',
     title: 'Create board',
-    description: `Creates a new board and opens it. Optional template: ${TEMPLATES.map((t) => `${t.id} (${t.hint.toLowerCase()})`).join(', ')}. In file mode, pass "file" as the new file's path.`,
+    description: `Creates a new board and opens it. Optional template: ${TEMPLATES.map((t) => `${t.id} (${t.hint.toLowerCase()})`).join(', ')}, or wiki (pages in a tree, written in Markdown). In file mode, pass "file" as the new file's path.`,
     inputSchema: {
       type: 'object',
-      properties: { title: { type: 'string' }, template: { type: 'string', enum: TEMPLATES.map((t) => t.id) }, ...fileProp },
+      properties: { title: { type: 'string' }, template: { type: 'string', enum: [...TEMPLATES.map((t) => t.id), 'wiki'] }, ...fileProp },
       required: ['title'],
     },
   },
@@ -172,6 +193,18 @@ export async function runTool(host: ToolHost, name: string, args: Record<string,
     case 'apply_ops': {
       const results = await host.apply(opsArg(args.ops))
       return { where: host.where(), results }
+    }
+    case 'list_pages': {
+      const b = host.board()
+      if (!isWiki(b)) throw new ToolError('This board isn’t a wiki. Open one with open_board, or make one with create_board and template "wiki".')
+      return { where: host.where(), ...listPages(b) }
+    }
+    case 'read_page': {
+      const b = host.board()
+      if (!isWiki(b)) throw new ToolError('This board isn’t a wiki.')
+      const p = getPage(b, str(args.page, 'page'))
+      if (!p) throw new ToolError(`No page "${String(args.page)}" in this wiki. Call list_pages for the ids.`)
+      return p
     }
     case 'export_mermaid': {
       const ids = Array.isArray(args.ids) ? (args.ids as number[]) : undefined

@@ -15,12 +15,17 @@ saves, versions, syncs and shares like any board. Built in phases:
   to boards, "new page" links, copyable page and heading links, "Linked
   from"; a trash; typing undoes as one step per burst; tab sync and live sync
   through the server.
-- [ ] **Phase 2: links everywhere.** Page links in canvas comments and
-  descriptions; links you can paste in chats (`#open=KEY&page=…`) with a
-  `hashchange` listener; backlinks both ways (a canvas object lists the pages
-  that mention it); page cards on the canvas and a page preview panel;
-  `createPage`/`updatePage`/`movePage`/`deletePage` operations and
+- [x] **Phase 2: links everywhere.** Page links in canvas comments and
+  descriptions (and wiki pages in the `[[` picker); web links to pages,
+  headings and objects (`#open=KEY&page=…`) that open in a new or open tab
+  and turn into named links when pasted into pages and comments; backlinks
+  both ways; page cards on the canvas and a page preview panel; Ctrl+K over
+  pages; `createPage`/`updatePage`/`movePage`/`deletePage` operations and
   `list_pages`/`read_page` tools for AI assistants and MCP.
+- [ ] **Later for links:** an `@` picker in pages that finds objects on every
+  board (today: Copy link to this object, then paste), and invite links that
+  open a page (`inviteLink` exists in the workspace; the share dialog could
+  offer it).
 - [ ] **Phase 3: embeds.** `![[Label]](board:KEY#ID)` shows a frame, mind map,
   table, Kanban board, timeline or whole board inside a page, drawn by the
   real board renderer; snapshots for friends who don't have the board (with

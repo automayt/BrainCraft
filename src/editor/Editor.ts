@@ -490,6 +490,7 @@ export class Editor {
     this.page = null
     this.pageHeading = null
     this.lastTyping = null
+    this.peek = null
     this.status = status
     this.zoomToFit()
     this.onBoardChange?.(this.board)
@@ -1144,6 +1145,7 @@ export class Editor {
 
   toggleNotes(open = !this.notesOpen) {
     this.notesOpen = open
+    if (open) this.peek = null
     this.emit()
   }
 
@@ -1389,6 +1391,16 @@ export class Editor {
   /** The last typing on a page, so a burst of it undoes as one step. */
   private lastTyping: { page: string; at: number; board: Board } | null = null
 
+  /** A wiki page shown beside the canvas (from a link on it), without leaving the board. */
+  peek: { board: string; page: string; heading?: string } | null = null
+
+  peekPage(to: { board: string; page: string; heading?: string } | null) {
+    this.peek = to
+    // One panel on the right at a time.
+    if (to) this.notesOpen = false
+    this.emit()
+  }
+
   /** The page being shown: the one picked, or else the wiki's first. */
   get currentPage(): Page | undefined {
     if (!W.isWiki(this.board)) return undefined
@@ -1584,6 +1596,19 @@ export class Editor {
     let id = -1
     this.edit((b) => {
       const [next, newId] = B.addItem(b, linkItem(url, at))
+      id = newId
+      return next
+    })
+    this.tool = 'select'
+    this.select([id])
+    return id
+  }
+
+  /** A card for a wiki page (from a pasted page link): its title and opening words, opened beside the board. */
+  addPageCard(page: { board: string; page: string }, url: string, preview: Partial<LinkCard>, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    let id = -1
+    this.edit((b) => {
+      const [next, newId] = B.addItem(b, { ...withPreview({ ...linkItem(url, at), id: 0 } as Item, { ...preview, checked: true }), page })
       id = newId
       return next
     })

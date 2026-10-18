@@ -102,8 +102,27 @@ timeline.
 | `react` | `ids`, `emoji`, `by?` | Puts an emoji reaction on the objects (`by` defaults to "AI"). |
 | `createVote` | `options` (ids/refs), `question?`, `each?` | A dot vote: a card above the options. Each person spreads `each` votes; counts stay hidden until someone reveals them. |
 
+**Wikis.** A wiki is a board with pages instead of a canvas; only these
+operations work on it, and they work only on wikis. `page`, `parent` and
+`before` take a page id, a `ref` from earlier in the batch, or an exact title.
+Results carry the page's id as `page`.
+
+| Operation | Fields | Does |
+| --- | --- | --- |
+| `createPage` | `title`, `parent?`, `before?`, `text?` (Markdown), `icon?`, `ref?` | A page under `parent` (or at the top), before `before` or last. |
+| `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?` | `text` replaces the page's Markdown; `append` adds a line at the end. |
+| `movePage` | `page`, `parent?` (`null` for the top), `before?` | Moves it with its sub-pages. A page can't go inside its own sub-pages. |
+| `deletePage` | `page` | Moves it and its sub-pages to the trash. |
+
+Page Markdown links a page with `[[Title]](page:ID)` (or `[[Title]]` by name),
+a heading with `[[Title › Heading]](page:ID#anchor)`, a page of another wiki
+with `[[Title]](board:KEY/page:ID)`, and an object on a canvas board with
+`[[Label]](board:KEY#ID)`. The same links work in canvas comments and
+descriptions.
+
 **Links in comments and descriptions.** Write `[[Name]]` to link to the board
-titled *Name*, or else the object on this board labelled *Name*. The app
+titled *Name*, a wiki page with that title (when only one wiki has it), or else
+the object on this board labelled *Name*. The app
 stores links it picks as `[[Label]](#id)` (an object here), `[[Label]](board:key)`
 (a board) or `[[Label]](board:key#id)` (an object on another board), where
 `key` is the board's live-session id when it is shared and its id in the
