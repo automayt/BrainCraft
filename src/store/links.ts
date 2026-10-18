@@ -2,11 +2,11 @@
 
 import { boardLinks, type BoardRef, type LinkTarget, objectLabel, plainNote } from '../model/notes'
 import type { Board, Id, Note } from '../model/types'
-import { pageText } from '../model/wiki'
+import { plainText } from '../model/wiki'
 
 /** The start of a page's words, as plain text. */
 export function excerpt(b: Board, page: string, max = 200): string {
-  const plain = plainNote(pageText(b, page)).replace(/[#>*_`|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const plain = plainText(b, page)
   return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain
 }
 import type { BoardMeta, Library } from './library'

@@ -78,6 +78,8 @@
   --success: #12a37a;
   --warning-text: #9a5b00;
   --success-text: #0b7d5c;
+  /* Links in text: dark enough to read on a pale page. */
+  --accent-text: #3a38c4;
   --ink: #1e1e24;
   --line: #787882;
   --frame-fill: #ffffff;
@@ -7268,10 +7270,11 @@ button.on,
 
 .page-twisty {
   flex: none;
-  width: 18px;
-  height: 22px;
+  width: 24px;
+  height: 28px;
   padding: 0;
-  font-size: 11px;
+  font-size: 14px;
+  border-radius: 6px;
   color: var(--muted);
   background: none;
   border: none;
@@ -7425,7 +7428,13 @@ button.on,
 }
 
 .wiki-title {
+  display: block;
   width: 100%;
+  field-sizing: content;
+  min-height: 1.4em;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.25;
   padding: 4px 6px;
   margin-left: -6px;
   font: inherit;
@@ -7590,14 +7599,14 @@ button.on,
   list-style: none;
 }
 
-.md li.task > input {
+.md li.task .task-label > input {
   margin: 0 8px 0 0;
   vertical-align: -2px;
   accent-color: var(--accent);
   cursor: pointer;
 }
 
-.md li.task.done > span {
+.md li.task.done .task-label > span {
   color: var(--muted);
   text-decoration: line-through;
 }
@@ -7728,7 +7737,10 @@ button.on,
   display: inline;
   padding: 0 2px;
   font: inherit;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 2px;
   background: var(--accent-soft);
   border: none;
   border-radius: 4px;
@@ -8197,6 +8209,7 @@ button.on,
   cursor: pointer;
 }
 
+.embed-choices button.on,
 .embed-choices button:hover,
 .embed-choices button:focus-visible {
   background: var(--accent-soft);
@@ -8215,5 +8228,145 @@ button.on,
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--muted);
+}
+
+/* ----- wiki: review fixes ----- */
+
+.page-tree-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-tree-tools .page-new {
+  margin-right: auto;
+}
+
+.wiki-readonly {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
+
+.move-page-hint {
+  margin: 0 16px 8px;
+  font-size: 13px;
+}
+
+.embed-choices button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+@media (hover: none) {
+  .md-anchor {
+    opacity: 0.6;
+  }
+  .page-tree-tip {
+    display: none;
+  }
+}
+
+.wiki-drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* A closed drawer is out of the way for the keyboard and screen readers too. */
+  .page-tree {
+    visibility: hidden;
+    transition:
+      transform 0.2s var(--ease),
+      visibility 0s 0.2s;
+  }
+  .wiki.drawer-open .page-tree {
+    visibility: visible;
+    transition: transform 0.2s var(--ease);
+  }
+  .wiki-drawer-backdrop {
+    position: absolute;
+    inset: 110px 0 0;
+    z-index: 5;
+    display: block;
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Tables in pages: whole words in cells (the page wraps anywhere, cells shouldn't), and empty
+   rows as tall as full ones. */
+.md th,
+.md td {
+  min-width: 8ch;
+  overflow-wrap: normal;
+}
+
+.md td:empty::after {
+  content: '\00a0';
+}
+
+.md .wiki-subpages {
+  padding-left: 0;
+}
+
+/* A small embed may be shorter than the usual minimum. */
+.embed-view {
+  min-height: 60px;
+}
+
+/* Page text in the side panel beside a board: headings read as headings, not panel labels. */
+.notes-panel .md :is(h2, h3, h4, h5, h6) {
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+
+.notes-panel .md h2 {
+  font-size: 19px;
+}
+
+.notes-panel .md h3 {
+  font-size: 16.5px;
+}
+
+/* The row picked with the keyboard stands out from the one under the pointer. */
+.page-picker button:hover:not(.on) {
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+
+/* Done stays in reach while writing on a small screen. */
+@media (max-width: 720px) {
+  .page-editor-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    padding: 8px 0;
+    background: var(--canvas);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Under about 1000px the page buttons go under the title, which keeps the full width. */
+@media (max-width: 1000px) {
+  .wiki-page-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wiki-page-actions {
+    justify-content: flex-start;
+  }
+}
+
+.templates-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.templates-title small {
+  margin-left: 6px;
+  font-weight: 400;
   color: var(--muted);
 }

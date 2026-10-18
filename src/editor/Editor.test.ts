@@ -611,6 +611,20 @@ describe('AI changes', () => {
     expect(texts(e)).toContain('From AI')
   })
 
+  it('keeps typing done on a page after the AI proposed a change to it', async () => {
+    const W = await import('../model/wiki')
+    const e = new Editor(W.emptyWiki('Trip', 1), fakeMeasure)
+    const home = e.board.pages![0].id
+    e.setPageText(home, 'Plan\n- flights')
+    const proposed = applyOps(e.board, [{ op: 'updatePage', page: home, append: '- hotel' }], { measure: fakeMeasure }).board
+    const patches = diff(e.board, proposed)
+    const bases = { [home]: W.pageText(e.board, home) }
+    // Meanwhile the person keeps writing at the top.
+    e.setPageText(home, 'Plan for Lisbon\n- flights')
+    expect(e.applyAi('p1', 'Add the hotel', patches, bases)).toBe(true)
+    expect(W.pageText(e.board, home)).toBe('Plan for Lisbon\n- flights\n- hotel')
+  })
+
   it('forgets AI history when another board loads', () => {
     const e = editor()
     e.aiHistory = [{ id: 'x', at: 0, summary: 's', forward: [], inverse: [], undone: false }]

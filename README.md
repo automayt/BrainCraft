@@ -197,27 +197,33 @@ These become interactive once selected; drag them by their title strip.
 
 ### Wikis: pages in a tree
 
-A wiki sits in **Your boards** next to your canvas boards (Ctrl+O → **Wiki**).
+A wiki sits in **Your boards** next to your canvas boards (Ctrl+O → **New wiki**).
 Instead of a canvas it has pages, nested as deep as you like, written in
 Markdown. It saves, keeps versions, goes to files, syncs between tabs and
 shares live exactly like a board.
 
 - **The page list** on the left: **+ New page**, **+** on a page for a page
   under it, drag a page onto another to nest it (or above and below it to
-  reorder), or use **Alt+Shift+arrows**. Deleted pages go to the **Trash**,
-  with their sub-pages, until you delete them for good.
+  reorder), use **Alt+Shift+arrows**, or **Move…** on the page (the way to do
+  it on a phone, where the list is behind **☰ Pages**). Undo and redo sit at
+  the top of the list. Deleted pages go to the **Trash**, with their
+  sub-pages, until you delete them for good.
 - **Writing:** **Edit** (or double-click the page) opens the Markdown on the
   left and how it reads on the right. Headings, lists, `- [ ]` checklists
-  (tick them while reading), tables, code, quotes, `> [!tip]` callouts,
-  `{{children}}` for the pages under this one and `{{toc}}` for its headings.
-  It saves as you type; Esc when you're done.
+  (tick them while reading), tables, code, quotes, callouts (`> [!tip]`,
+  `> [!note]`, `> [!warning]`, `> [!danger]`), `{{children}}` for the pages
+  under this one and `{{toc}}` for its headings. **Insert** (or `/` at the
+  start of a line) adds any of them. It saves as you type; **Done** or Esc
+  when you're finished. If a friend writes on the same page at the same
+  time, both people's lines are kept.
 - **Links:** type `[[` to link to another page or a board. A `[[Name]]` that
   no page has yet offers to make that page. **Ctrl+K** searches the wiki's
   pages.
 - **Links you can paste anywhere:** **Copy link** (and the **#** next to any
-  heading) copies a web link. Paste it in a chat and it opens that page for
-  anyone who has the wiki (a friend in the live session does); paste it in
-  the address bar of an open tab and it goes there. Pasted into a page or a
+  heading) copies a web link. In a live session it's an invite link that
+  opens that page for friends too; otherwise it opens the page for anyone who
+  already has the wiki in their browser. Pasted in the address bar of an open
+  tab it goes there. Pasted into a page or a
   canvas comment it becomes a named link. **Copy link to this object** in a
   canvas object's right-click menu does the same for objects, so pages can
   point at sticky notes, frames or anything else.
@@ -233,9 +239,12 @@ shares live exactly like a board.
   for a wiki page** and paste it on a line of its own. Frames (with what's in
   them), mind maps, flowcharts, timelines and whole boards are drawn just as
   on the canvas; tables, Kanban boards and databases show as real tables.
-  Each embed has **Open on board** and **Expand**. The wiki keeps a copy of
-  what it shows, so friends who don't have that board still see it (with
-  every hidden brainstorm note left blank).
+  Each embed has **Open on board** and **Expand**. Embedding saves a copy of
+  what it shows in the wiki, so friends who don't have that board still see
+  it: the object itself, without its comments, notes or votes, and with every
+  hidden brainstorm note left blank. Whoever saved the copy keeps it up to
+  date as they read the page; anyone else who has the board gets an **Update
+  the copy** button. Just reading a page never copies a board into it.
 - **`/` menu:** headings, checklists, lists, tables, code, quotes, tips and
   warnings, dividers, links to pages, a new sub-page, the sub-page list and
   contents, and embeds.
@@ -375,10 +384,11 @@ shares live exactly like a board.
 
 ### Whiteboard
 
-- An infinite canvas with a dot grid. **Scroll** to zoom at the pointer
-  (5% to 800%), hold the **middle button** (or Space) and drag to pan, and
-  drag on empty space to select with a box. Shift+scroll pans sideways; zoom
-  to fit, the minimap and pinching on touch screens work too.
+- An infinite canvas with a dot grid. **Scroll** the mouse wheel to zoom at
+  the pointer (5% to 800%), hold the **middle button** (or Space) and drag to
+  pan, and drag on empty space to select with a box. On a trackpad, swipe
+  with two fingers to move around and pinch to zoom. Shift+scroll pans
+  sideways; zoom to fit, the minimap and pinching on touch screens work too.
 - Sticky notes, text, rectangles, ellipses, frames and a freehand pen.
 - **Connectors**: drag the blue dot on a selected item onto another item.
   Drop it on empty space to create a new linked note.

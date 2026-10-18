@@ -63,7 +63,7 @@ Wikis (boards of pages instead of a canvas; only these ops work on them). "page"
 createPage {title, parent?, before?, text?, icon?, ref?} — a page (under "parent", before "before" or last), its text in Markdown
 updatePage {page, title?, text?, append?, icon?} — "text" replaces the page's Markdown, "append" adds to the end
 movePage {page, parent?: page or null for the top, before?} · deletePage {page} — moves it (and its sub-pages) to the trash
-Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), an object on a canvas board with [[Label]](board:KEY#ID). A line ![[Label]](board:KEY#ID) on its own shows that object inside the page (![[Label]](board:KEY) a whole board).`
+Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] / [!note] / [!warning] / [!danger] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), a page in another wiki with [[Title]](board:KEY/page:ID), an object on a canvas board with [[Label]](board:KEY#ID). A line ![[Label]](board:KEY#ID) on its own shows that object inside the page (![[Label]](board:KEY) a whole board; ![[Label|420]](board:KEY#ID) sets its height in pixels).`
 
 const fileProp = {
   file: {

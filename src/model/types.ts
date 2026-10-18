@@ -99,6 +99,8 @@ export interface Page {
 export interface Snap {
   key: string
   at: number
+  /** Who saved it; only they refresh it as they read, so viewing a page never shares a board. */
+  by?: string
   items: Item[]
   connectors: Connector[]
   datasets?: Dataset[]

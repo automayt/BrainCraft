@@ -52,16 +52,15 @@ function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
 function List({ list, a }: { list: Extract<Block, { t: 'list' }>; a: MarkdownActions }) {
   const items = list.items.map((it: ListItem, k) => (
     <li key={k} className={it.task !== undefined ? `task${it.task ? ' done' : ''}` : undefined}>
-      {it.task !== undefined && (
-        <input
-          type="checkbox"
-          checked={it.task}
-          disabled={!a.toggle}
-          aria-label={it.task ? 'Done (click to untick)' : 'To do (click to tick)'}
-          onChange={() => a.toggle?.(it.line)}
-        />
+      {it.task !== undefined ? (
+        // The item's own words name its box (links inside still work on their own).
+        <label className="task-label">
+          <input type="checkbox" checked={it.task} disabled={!a.toggle} onChange={() => a.toggle?.(it.line)} />
+          <span>{inline(it.c, a)}</span>
+        </label>
+      ) : (
+        <span>{inline(it.c, a)}</span>
       )}
-      <span>{inline(it.c, a)}</span>
       {it.sub && <BlockView b={it.sub} a={a} />}
     </li>
   ))
@@ -170,7 +169,7 @@ function BlockView({ b, a }: { b: Block; a: MarkdownActions }): ReactNode {
           {a.headings.map((h) => (
             <a key={h.slug} href={`#h-${h.slug}`} style={{ paddingLeft: (h.level - 1) * 14 }} onClick={(e) => {
                 e.preventDefault()
-                document.getElementById(`h-${h.slug}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                document.getElementById(`h-${h.slug}`)?.scrollIntoView({ behavior: smoothScroll(), block: 'start' })
               }}>
               {h.text}
             </a>
@@ -190,3 +189,6 @@ export function Markdown({ blocks, actions }: { blocks: Block[]; actions: Markdo
     </div>
   )
 }
+
+/** Smooth scrolling, unless the person asked for less motion. */
+export const smoothScroll = (): ScrollBehavior => (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')

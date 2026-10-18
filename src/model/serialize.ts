@@ -3,7 +3,7 @@ import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
 import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanSnap } from './sanitize'
 import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type Snap } from './types'
-import { MAX_PAGES } from './wiki'
+import { MAX_PAGES, MAX_SNAPS } from './wiki'
 
 export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
@@ -45,7 +45,7 @@ export function fromJson(json: string): Board {
     (x): x is PageBody => !!x && knownPages.has(x.id) && !bodyIds.has(x.id) && !!bodyIds.add(x.id),
   )
   const snapKeys = new Set<string>()
-  const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_PAGES).map(cleanSnap) : []).filter(
+  const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_SNAPS).map(cleanSnap) : []).filter(
     (s): s is Snap => !!s && !snapKeys.has(s.key) && !!snapKeys.add(s.key),
   )
   return {
@@ -58,7 +58,8 @@ export function fromJson(json: string): Board {
     nextId: Math.max(Number.isSafeInteger(raw.nextId) && (raw.nextId as number) <= MAX_ID ? (raw.nextId as number) : 0, maxId + 1),
     ...(datasets.length ? { datasets } : {}),
     ...(wiki ? { kind: 'wiki' as const } : {}),
-    ...(wiki || pages.length ? { pages, bodies } : {}),
+    // Only a wiki keeps pages: a board that smuggles some in loses them on load.
+    ...(wiki ? { pages, bodies } : {}),
     ...(snaps.length ? { snaps } : {}),
   }
 }

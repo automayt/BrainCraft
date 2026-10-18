@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
+import { newWheelMemo, wheelHow } from './wheelHow'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
@@ -77,6 +78,7 @@ export function Canvas() {
   // Wheel needs a non-passive listener to stop the page from scrolling or zooming.
   useEffect(() => {
     const el = ref.current!
+    const memo = newWheelMemo()
     const onWheel = (e: WheelEvent) => {
       if ((e.target as Element).closest('.no-canvas')) return
       e.preventDefault()
@@ -84,9 +86,9 @@ export function Canvas() {
       const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
       const dx = (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * scale
       const dy = (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * scale
-      // Scrolling zooms at the pointer; Ctrl scroll is a trackpad pinch; Shift scroll (or a
-      // sideways trackpad swipe) moves the board.
-      const how = e.ctrlKey || e.metaKey ? 'pinch' : e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) ? 'pan' : 'zoom'
+      // A mouse wheel zooms at the pointer; Ctrl scroll is a trackpad pinch; a trackpad swipe or
+      // Shift scroll moves the board.
+      const how = wheelHow(e as WheelEvent & { wheelDeltaY?: number }, memo)
       editor.wheel({ x: e.clientX - r.left, y: e.clientY - r.top }, dx, dy, how)
     }
     el.addEventListener('wheel', onWheel, { passive: false })

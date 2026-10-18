@@ -22,7 +22,7 @@ export const WIKI_TEMPLATES: WikiTemplate[] = [
   {
     id: 'wiki',
     label: 'Blank wiki',
-    hint: 'Pages in a tree, written in Markdown',
+    hint: 'Pages to write things down together',
     title: 'Untitled wiki',
     pages: [],
   },
@@ -115,6 +115,9 @@ export function wikiFromTemplate(id: string, title?: string, now = Date.now()): 
       if (p.children) add(p.children, id)
     }
   }
-  add(t.pages)
+  // The first page is the home page; the rest sit under it, so its {{children}} lists them.
+  const [home, ...rest] = t.pages
+  add([home])
+  add(rest, b.pages![0].id)
   return b
 }

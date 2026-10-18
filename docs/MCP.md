@@ -52,7 +52,7 @@ It works two ways:
 | `list_pages` / `read_page` | A wiki's page tree (ids, titles, who edited each and when), and one page in full: its Markdown, sub-pages and the pages linking to it. |
 | `apply_ops` | Creates, connects, updates and deletes objects using the [operations](API.md). All or nothing, and one undo step. |
 | `export_mermaid` | Flowcharts as Mermaid source. |
-| `list_boards` / `open_board` / `create_board` | The boards in your browser (or `.braincraft` files in the working folder). New boards can start from a template; template `wiki` makes a wiki. |
+| `list_boards` / `open_board` / `create_board` | The boards in your browser (or `.braincraft` files in the working folder). New boards can start from a template; the wiki templates are `wiki` (blank), `wiki-trip`, `wiki-move`, `wiki-party` and `wiki-club`. |
 | `connect_browser` | Connection status and the pairing link. |
 
 Every board tool accepts an optional `file`. Relative paths resolve against

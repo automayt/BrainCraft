@@ -5,12 +5,19 @@
  */
 
 import { emptyBoard } from './board'
+import { plainMarkdown } from './markdown'
 import type { Board, Page, PageBody } from './types'
 import { uid } from './uid'
 
 /** Pages a wiki may hold, and characters a page may hold. */
 export const MAX_PAGES = 5_000
 export const BODY_MAX = 200_000
+/** How deep pages nest (the top level is 0). */
+export const MAX_NESTING = 63
+/** All the pages' words together, so a wiki stays small enough to save and send. */
+export const WIKI_TEXT_MAX = 20_000_000
+/** Embed snapshots one wiki keeps. */
+export const MAX_SNAPS = 1_000
 
 /** Page ids: short, URL-safe, never an object's own property names. */
 export const isPageId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,64}$/.test(v) && v !== '__proto__' && v !== 'constructor' && v !== 'prototype'
@@ -24,12 +31,20 @@ export function emptyWiki(title = 'Untitled wiki', now = Date.now()): Board {
     ...emptyBoard(title),
     kind: 'wiki',
     pages: [home],
-    bodies: [{ id: home.id, text: `# ${title}\n\nStart writing here. Add pages in the sidebar, and link them with [[ .\n`, at: now }],
+    bodies: [{ id: home.id, text: `# ${title}\n\nStart writing here: press Edit, or double-click the page.\n\n- Type / at the start of a line for headings, checklists, tables and things from your boards\n- Type [[ to link to another page\n- Add more pages in the page list\n`, at: now }],
   }
 }
 
-export const getPage = (b: Board, id: string | undefined): Page | undefined => (id === undefined ? undefined : b.pages?.find((p) => p.id === id))
-export const getBody = (b: Board, id: string): PageBody | undefined => b.bodies?.find((x) => x.id === id)
+export const getPage = (b: Board, id: string | undefined): Page | undefined => (id === undefined || !b.pages ? undefined : tree(b).byId.get(id))
+
+const bodyMaps = new WeakMap<PageBody[], Map<string, PageBody>>()
+export function getBody(b: Board, id: string): PageBody | undefined {
+  const list = b.bodies
+  if (!list) return undefined
+  let map = bodyMaps.get(list)
+  if (!map) bodyMaps.set(list, (map = new Map(list.map((x) => [x.id, x]))))
+  return map.get(id)
+}
 export const pageText = (b: Board, id: string) => getBody(b, id)?.text ?? ''
 
 const byRank = (a: Page, z: Page) => a.rank - z.rank || (a.id < z.id ? -1 : a.id > z.id ? 1 : 0)
@@ -45,6 +60,7 @@ export function parentOf(b: Board, page: Page): string | undefined {
 
 /** Each page's real parent and each parent's sub-pages in order, worked out once per list of pages. */
 interface Tree {
+  byId: Map<string, Page>
   parent: Map<string, string | undefined>
   /** Sub-pages by parent ('' for the top level), in order, trash included. */
   kids: Map<string, Page[]>
@@ -74,7 +90,28 @@ function tree(b: Board): Tree {
         at = at.parent === undefined ? undefined : byId.get(at.parent)
       }
     }
+    // A page added under one that went to the trash meanwhile stays in sight, at the top level.
+    if (ok && !p.trashed && byId.get(p.parent!)!.trashed) ok = false
     parent.set(p.id, ok ? p.parent : undefined)
+  }
+  // Nesting deeper than MAX_NESTING comes back up to the top level, so no page is out of reach.
+  const depth = new Map<string, number>()
+  for (const p of pages) {
+    const chain: string[] = []
+    let at: string | undefined = p.id
+    while (at !== undefined && !depth.has(at)) {
+      chain.push(at)
+      at = parent.get(at)
+    }
+    let d = at === undefined ? -1 : depth.get(at)!
+    for (let k = chain.length - 1; k >= 0; k--) {
+      d++
+      if (d > MAX_NESTING) {
+        parent.set(chain[k], undefined)
+        d = 0
+      }
+      depth.set(chain[k], d)
+    }
   }
   const kids = new Map<string, Page[]>()
   for (const p of pages) {
@@ -84,7 +121,7 @@ function tree(b: Board): Tree {
     else kids.set(key, [p])
   }
   for (const list of kids.values()) list.sort(byRank)
-  const t = { parent, kids }
+  const t = { byId, parent, kids }
   trees.set(pages, t)
   return t
 }
@@ -103,7 +140,7 @@ export interface PageNode {
 /** The wiki's pages as a tree (trash left out). */
 export function pageTree(b: Board): PageNode[] {
   const build = (parent: string | undefined, depth: number): PageNode[] =>
-    depth > 64 ? [] : childrenOf(b, parent).map((page) => ({ page, children: build(page.id, depth + 1) }))
+    depth > MAX_NESTING ? [] : childrenOf(b, parent).map((page) => ({ page, children: build(page.id, depth + 1) }))
   return build(undefined, 0)
 }
 
@@ -119,7 +156,7 @@ export function pageOrder(b: Board): Page[] {
 export function pagePath(b: Board, id: string): Page[] {
   const out: Page[] = []
   let at = getPage(b, id)
-  while (at && out.length < 64) {
+  while (at && out.length <= MAX_NESTING) {
     out.unshift(at)
     const up = parentOf(b, at)
     at = up === undefined ? undefined : getPage(b, up)
@@ -188,7 +225,9 @@ export interface NewPage {
 export function addPage(b: Board, p: NewPage, now = Date.now(), by?: string): [Board, string] {
   if ((b.pages?.length ?? 0) >= MAX_PAGES) return [b, '']
   const parent = getPage(b, p.parent) ? p.parent : undefined
-  const id = p.id && isPageId(p.id) && !getPage(b, p.id) ? p.id : uid()
+  // Twelve hex digits, and never one already used here (friends adding pages at once rarely collide).
+  let id = p.id && isPageId(p.id) && !getPage(b, p.id) ? p.id : ''
+  while (!id || getPage(b, id)) id = uid() + uid().slice(0, 4)
   let rank: number
   ;[b, rank] = rankFor(b, parent, p.before)
   const page: Page = { id, ...(parent !== undefined ? { parent } : {}), rank, title: p.title.slice(0, 500), ...(p.icon ? { icon: p.icon } : {}), created: now }
@@ -305,6 +344,16 @@ export interface PageHit {
   score: number
 }
 
+/** A page's words as plain text, worked out once per version of them. */
+const plainBodies = new WeakMap<PageBody, string>()
+export function plainText(b: Board, id: string): string {
+  const body = getBody(b, id)
+  if (!body) return ''
+  let hit = plainBodies.get(body)
+  if (hit === undefined) plainBodies.set(body, (hit = plainMarkdown(body.text)))
+  return hit
+}
+
 /** Pages whose title or words contain every word of `query`: titles first, then the best matches. */
 export function searchPages(b: Board, query: string, limit = 40): PageHit[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -312,7 +361,7 @@ export function searchPages(b: Board, query: string, limit = 40): PageHit[] {
   const out: PageHit[] = []
   for (const page of pageOrder(b)) {
     const title = page.title.toLowerCase()
-    const text = pageText(b, page.id)
+    const text = plainText(b, page.id)
     const lower = text.toLowerCase()
     if (!words.every((w) => title.includes(w) || lower.includes(w))) continue
     const inTitle = words.every((w) => title.includes(w))

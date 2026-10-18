@@ -3,8 +3,9 @@
  * The fragment never reaches a server, so sharing needs no backend and leaks nothing to one.
  */
 
+import { embedKeys } from '../model/markdown'
 import { fromJson } from '../model/serialize'
-import type { Board } from '../model/types'
+import type { Board, Item } from '../model/types'
 
 export const SHARE_PARAM = 'view'
 
@@ -72,13 +73,31 @@ export function sharedFromHash(hash: string): string | null {
   return m ? m[1] : null
 }
 
-/** The board without pictures, for links that would otherwise be huge. */
+/** The board without pictures, for links that would otherwise be huge (a wiki's embed copies too). */
 export function withoutImages(b: Board): Board {
   const images = new Set(b.items.filter((i) => i.kind === 'image').map((i) => i.id))
-  if (!images.size) return b
+  const pictured = b.snaps?.some((s) => s.items.some((i) => i.src))
+  if (!images.size && !pictured) return b
+  const plain = (i: Item) => {
+    const light = { ...i }
+    delete light.src
+    return light
+  }
   return {
     ...b,
     items: b.items.filter((i) => !images.has(i.id)),
     connectors: b.connectors.filter((c) => !images.has(c.from) && !images.has(c.to)),
+    ...(pictured ? { snaps: b.snaps!.map((s) => ({ ...s, items: s.items.map(plain) })) } : {}),
   }
+}
+
+/** A wiki as a link carries it: no pages from the trash, and only the embed copies pages use. */
+export function forSharing(b: Board): Board {
+  if (b.kind !== 'wiki') return b
+  const pages = (b.pages ?? []).filter((p) => !p.trashed)
+  const kept = new Set(pages.map((p) => p.id))
+  const bodies = (b.bodies ?? []).filter((x) => kept.has(x.id))
+  const used = new Set(bodies.flatMap((x) => embedKeys(x.text)))
+  const snaps = (b.snaps ?? []).filter((s) => used.has(s.key))
+  return { ...b, pages, bodies, snaps: snaps.length ? snaps : undefined }
 }

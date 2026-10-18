@@ -578,6 +578,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Press and hold → Select several', 'Then tap objects to add them, or drag a box'],
       ['Press and hold', 'Actions for whatever is under your finger (the right-click menu)'],
       ['Double-tap', 'Edit text, or add a sticky note'],
+      ['☰ Pages', 'In a wiki on a phone: the list of pages'],
     ],
   ],
   ['Tools (with nothing selected)', TOOLS.map((t) => [t.key.toUpperCase(), t.label])],
@@ -608,7 +609,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Canvas',
     [
-      ['Scroll · pinch · Ctrl + / −', 'Zoom at the pointer'],
+      ['Scroll · pinch', 'Zoom at the pointer'],
+      ['Ctrl + / −', 'Zoom in and out around the middle of the view'],
       ['Middle-drag · Space-drag · Shift scroll', 'Pan'],
       ['Shift 1 · Ctrl 0', 'Zoom to fit · back to 100%'],
       ['Double-click', 'Edit text, or add a sticky note'],
@@ -673,14 +675,22 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   [
     'Wikis',
     [
-      ['Ctrl O → Wiki', 'Start a wiki: pages in a tree, written in Markdown'],
+      ['Ctrl O → New wiki', 'Start a wiki: pages in a tree, to write things down together'],
+      ['Edit · double-click the page', 'Write on the page (it saves as you type)'],
+      ['Enter', 'In the title: start writing the page'],
+      ['/ (at the start of a line) · Insert', 'Add a heading, checklist, table, sub-page… or embed something from a board'],
       ['[[', 'While writing: link to a page or a board'],
-      ['/ (at the start of a line)', 'Insert a heading, checklist, table, sub-page… or embed something from a board'],
-      ['Alt Shift ↑ / ↓ · ← / →', 'In the page list: move a page up or down · out or in'],
-      ['Enter · Tab', 'Continue a list or checklist · indent it'],
+      ['Enter · Tab · Shift Tab', 'Continue a list or checklist · indent · outdent'],
       ['Ctrl B · Ctrl I', 'Bold · italic'],
-      ['Esc · Ctrl Enter', 'Done writing (it saves as you type)'],
-      ['Copy link · paste', 'A page link: opens it from a chat; in a page or comment it becomes a link; on a board, a page card'],
+      ['Esc · Ctrl Enter · Done', 'Stop writing'],
+      ['Ctrl K', 'Find a page in this wiki'],
+      ['Arrows · Home · End', 'In the page list: move between pages, open and close them'],
+      ['Alt Shift ↑ ↓ ← →', 'In the page list: move a page up, down, out or in'],
+      ['Drag a page · Move…', 'Put it under another page, or somewhere else in the list'],
+      ['#', 'Beside a heading: copy a link to it'],
+      ['Copy link', 'A link to the page (in a live session it opens for friends too); pasted in a page or comment it becomes a link, on a board a page card'],
+      ['Right-click → Copy embed for a wiki page', 'On a board: show that object in a page'],
+      ['Trash', 'Pages go to the Trash at the bottom of the page list first, so they can be restored'],
     ],
   ],
   [
@@ -713,12 +723,22 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   ],
 ]
 
-const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|Backspace|Home|End|F2|F10|Arrows|arrow|arrows|scroll|[A-Z0-9]|[↑↓←→/?+−]|1–7|1–9)$/.test(token)
+const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|Backspace|Home|End|F2|F10|Arrows|arrow|arrows|scroll|[A-Z0-9]|[↑↓←→/?+−#]|1–7|1–9)$/.test(token)
+
+/** What a wiki's Help shows: wiki keys first, without the canvas-only sections. */
+const CANVAS_ONLY = new Set(['Tools (with nothing selected)', 'Canvas', 'Presenting', 'Mind maps', 'Flowcharts', 'Tables, Kanban, timelines', 'Pasting', 'Together'])
+const WIKI_EVERYWHERE = new Set(['Ctrl K · Ctrl F', 'Ctrl J', 'Ctrl Z / Ctrl Shift Z · Ctrl Y', 'Ctrl S · Ctrl Shift S', 'Ctrl O'])
+function sections(wiki: boolean): typeof SHORTCUTS {
+  const list = touchFirst() ? SHORTCUTS : [...SHORTCUTS.slice(1), SHORTCUTS[0]]
+  if (!wiki) return list
+  const kept = list.filter(([title]) => !CANVAS_ONLY.has(title)).map(([title, rows]): (typeof SHORTCUTS)[number] => [title, title === 'Everywhere' ? rows.filter(([k]) => WIKI_EVERYWHERE.has(k)) : rows])
+  return [...kept.filter(([t]) => t === 'Wikis'), ...kept.filter(([t]) => t !== 'Wikis')]
+}
 
 /** On a touch screen the touch gestures come first; elsewhere they come last. */
 const touchFirst = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches
 
-export function Help({ onClose }: { onClose: () => void }) {
+export function Help({ onClose, wiki = false }: { onClose: () => void; wiki?: boolean }) {
   useEscape(onClose)
   const dialogRef = useRef<HTMLDivElement>(null)
   useDialog(dialogRef)
@@ -732,7 +752,7 @@ export function Help({ onClose }: { onClose: () => void }) {
           </button>
         </header>
         <div className="help-grid">
-          {(touchFirst() ? SHORTCUTS : [...SHORTCUTS.slice(1), SHORTCUTS[0]]).map(([title, rows]) => (
+          {sections(wiki).map(([title, rows]) => (
             <section key={title}>
               <h3>{title}</h3>
               <dl>

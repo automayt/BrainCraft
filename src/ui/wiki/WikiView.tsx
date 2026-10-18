@@ -1,7 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { MovePage } from './MovePage'
+import { useEscape } from '../useEscape'
 import { headings, parseMarkdown, toggleTask } from '../../model/markdown'
-import { type LinkTarget, linkToken, linksIn } from '../../model/notes'
-import type { Page } from '../../model/types'
+import { type LinkTarget, linkToken, parseNote } from '../../model/notes'
+import type { Page, PageBody } from '../../model/types'
 import * as W from '../../model/wiki'
 import { formatTime } from '../BoardView'
 import { copyText } from '../copyText'
@@ -10,7 +12,7 @@ import type { Workspace } from '../../store/workspace'
 import type { Editor } from '../../editor/Editor'
 import { useEditor } from '../useEditor'
 import { useWorkspace } from '../useWorkspace'
-import { Markdown, type MarkdownActions } from './Markdown'
+import { Markdown, type MarkdownActions, smoothScroll } from './Markdown'
 import { PageEditor } from './PageEditor'
 import { PageTree } from './PageTree'
 import { ObjectEmbed } from './ObjectEmbed'
@@ -18,12 +20,29 @@ import { ObjectEmbed } from './ObjectEmbed'
 const LAST_PAGE = 'braincraft:page:'
 
 /** A wiki: its pages in a tree on the left, the open page on the right. */
+
+/** What a page's words link to, read once per version of them (pages re-read on every change otherwise). */
+const bodyLinks = new WeakMap<PageBody, { to: LinkTarget[]; names: string[] }>()
+function linksOf(body: PageBody) {
+  let hit = bodyLinks.get(body)
+  if (!hit) {
+    hit = { to: [], names: [] }
+    for (const part of parseNote(body.text)) {
+      if (!('link' in part)) continue
+      if (part.link) hit.to.push(part.link)
+      else hit.names.push(part.label)
+    }
+    bodyLinks.set(body, hit)
+  }
+  return hit
+}
 export function WikiView() {
   const editor = useEditor()
   const ws = useWorkspace()
   const page = editor.currentPage
   const [editing, setEditing] = useState(false)
   const [drawer, setDrawer] = useState(false)
+  useEscape(() => setDrawer(false), drawer)
 
   // Each wiki opens on the page you were last on.
   useEffect(() => {
@@ -53,14 +72,22 @@ export function WikiView() {
   useEffect(() => {
     const h = editor.pageHeading
     if (!h) return
-    requestAnimationFrame(() => document.getElementById(`h-${h}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => document.getElementById(`h-${h}`)?.scrollIntoView({ behavior: smoothScroll(), block: 'start' }))
   }, [editor.pageHeading, page?.id])
 
   return (
     <div className={`wiki no-canvas${drawer ? ' drawer-open' : ''}`}>
-      <button className="wiki-drawer-btn" aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>
+      <button
+        className="wiki-drawer-btn"
+        aria-expanded={drawer}
+        onClick={() => {
+          setDrawer(!drawer)
+          if (!drawer) requestAnimationFrame(() => document.querySelector<HTMLElement>('.page-filter')?.focus())
+        }}
+      >
         ☰ Pages
       </button>
+      {drawer && <div className="wiki-drawer-backdrop" onPointerDown={() => setDrawer(false)} />}
       <PageTree current={page} />
       <main className="wiki-main">
         {page ? (
@@ -94,13 +121,31 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   const kids = W.childrenOf(board, page.id)
   const [title, setTitle] = useState(page.title)
   useEffect(() => setTitle(page.title), [page.title])
+  const [moving, setMoving] = useState(false)
+  const titleRef = useRef<HTMLTextAreaElement>(null)
+  // A page just made: its title is ready to type.
+  useEffect(() => {
+    if (!editor.focusTitle || ro) return
+    editor.focusTitle = false
+    titleRef.current?.focus()
+    titleRef.current?.select()
+  }, [editor, ro, page.id])
+  const doneEditing = () => {
+    setEditing(false)
+    // Back to where writing started from, not the top of the page.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('.wiki-page-actions .primary')?.focus())
+  }
 
   // Pages of this wiki that link here.
   const linkedFrom = useMemo(() => {
     const self = new Set(ws.selfKeys)
-    return W.pageOrder(board).filter(
-      (p) => p.id !== page.id && linksIn(W.pageText(board, p.id)).some((t) => t.page === page.id && (!t.board || self.has(t.board))),
-    )
+    return W.pageOrder(board).filter((p) => {
+      const body = W.getBody(board, p.id)
+      if (p.id === page.id || !body) return false
+      const { to, names } = linksOf(body)
+      // Links typed by name (`[[Plan]]`) count too, the way the page reads them.
+      return to.some((t) => t.page === page.id && (!t.board || self.has(t.board))) || names.some((n) => W.pageByTitle(board, n)?.id === page.id)
+    })
   }, [board, page.id, ws.selfKeys])
 
   // Canvas comments and other wikis' pages that link here (from boards in this browser).
@@ -131,11 +176,17 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   }
 
   const saveTitle = () => {
-    if (title !== page.title) editor.setPageTitle(page.id, title.trim() || 'Untitled')
+    if (title.trim() !== page.title) editor.setPageTitle(page.id, title.trim())
   }
 
   return (
     <article className="wiki-page" aria-labelledby="wiki-page-title">
+      {moving && <MovePage page={page} onClose={() => setMoving(false)} />}
+      {ro && (
+        <p className="wiki-readonly muted" role="status">
+          {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : 'You’re reading this wiki. Ask for the edit link to write in it.'}
+        </p>
+      )}
       {path.length > 1 && (
         <nav className="wiki-crumbs" aria-label="This page is under">
           {path.slice(0, -1).map((p) => (
@@ -149,14 +200,17 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
         </nav>
       )}
       <header className="wiki-page-head">
-        <input
+        {/* A text box that grows onto more lines, so a long title shows in full. */}
+        <textarea
+          ref={titleRef}
           id="wiki-page-title"
           className="wiki-title"
+          rows={1}
           value={title}
           readOnly={ro}
           placeholder="Untitled"
           aria-label="Page title"
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => setTitle(e.target.value.replace(/\s*\n\s*/g, ' '))}
           onBlur={saveTitle}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
@@ -164,7 +218,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               saveTitle()
               setEditing(true)
             }
-            if (e.key === 'Escape') (e.target as HTMLInputElement).blur()
+            if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur()
           }}
         />
         <div className="wiki-page-actions">
@@ -173,9 +227,14 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               Edit
             </button>
           )}
+          {editing && (
+            <button className="primary" onClick={doneEditing}>
+              Done
+            </button>
+          )}
           <button
             onClick={() => copyPlace(ws, editor, page.title || 'Untitled', { page: page.id })}
-            title="Copy a link to this page: paste it in a chat, a page or a comment"
+            title="Copy a link to this page, for a chat (in a live session), a page or a comment"
           >
             Copy link
           </button>
@@ -184,6 +243,9 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               <button title="Add a page under this one" onClick={() => editor.addWikiPage({ parent: page.id })}>
                 + Sub-page
               </button>
+              <button title="Put this page somewhere else in the wiki" onClick={() => setMoving(true)}>
+                Move…
+              </button>
               <button className="danger-quiet" title="Move this page (and its sub-pages) to the trash" onClick={() => editor.trashPage(page.id)}>
                 Trash
               </button>
@@ -191,13 +253,13 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
           )}
         </div>
         <p className="wiki-meta muted">
-          {body?.at ? `Edited ${body.by ? `by ${body.by} · ` : ''}${formatTime(body.at)}` : 'Not written yet'}
+          {body?.by || (body?.at && body.at > page.created) ? `Edited ${body.by ? `by ${body.by} · ` : ''}${formatTime(body.at)}` : body?.text.trim() ? `Added ${formatTime(page.created)}` : 'Not written yet'}
           {kids.length > 0 && ` · ${kids.length} sub-page${kids.length === 1 ? '' : 's'}`}
         </p>
       </header>
 
       {editing ? (
-        <PageEditor key={page.id} page={page} text={text} actions={actions} onDone={() => setEditing(false)} />
+        <PageEditor key={page.id} page={page} text={text} actions={actions} onDone={doneEditing} />
       ) : text.trim() ? (
         <div className="wiki-body" onDoubleClick={(e) => !ro && !(e.target as Element).closest('a, button, input') && setEditing(true)}>
           <Markdown blocks={blocks} actions={actions} />
@@ -254,11 +316,16 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
  * address of its own gets a link for pages and comments only.
  */
 function copyPlace(ws: Workspace, editor: Editor, label: string, place: { page: string; heading?: string }) {
-  const web = ws.webLink(place)
+  // In a live session, the session's own link (it opens for any friend); else one for friends who have the wiki.
+  const live = ws.liveInfo ? ws.inviteLink(ws.liveInfo.role === 'edit' ? 'edit' : 'view', place) : null
+  const web = live ?? ws.webLink(place)
   const key = ws.linkKey ?? undefined
-  void copyText(web ?? linkToken(label, { ...(key ? { board: key } : {}), ...place })).then((ok) =>
-    editor.setStatus(ok ? 'Copied a link — paste it in a chat, a page or a comment' : 'Couldn’t copy the link'),
-  )
+  const message = live
+    ? 'Copied a link to the live wiki at this page — anyone you send it to can open it'
+    : web
+      ? 'Copied — it opens for friends who already have this wiki; paste it into a page or comment for a link'
+      : 'Copied a link to paste into a page or comment'
+  void copyText(web ?? linkToken(label, { ...(key ? { board: key } : {}), ...place })).then((ok) => editor.setStatus(ok ? message : 'Couldn’t copy the link'))
 }
 
 function SubPages({ pages }: { pages: Page[] }) {
@@ -267,7 +334,7 @@ function SubPages({ pages }: { pages: Page[] }) {
   return (
     <ul className="wiki-subpages">
       {pages.map((p) => {
-        const words = W.pageText(editor.board, p.id).replace(/[#>*_`[\]()|-]+/g, ' ').replace(/\s+/g, ' ').trim()
+        const words = W.plainText(editor.board, p.id)
         return (
           <li key={p.id}>
             <button onClick={() => editor.openPage(p.id)}>

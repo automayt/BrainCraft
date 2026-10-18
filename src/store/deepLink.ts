@@ -7,6 +7,7 @@
 
 import type { LinkTarget } from '../model/notes'
 import { isPageId } from '../model/wiki'
+import { liveFromHash } from '../collab/protocol'
 
 /** Where a link goes: a board by its link key, and maybe a page, heading or object on it. */
 export interface Place {
@@ -24,7 +25,7 @@ export function placeFromParams(params: URLSearchParams): Place {
   const item = Number(params.get('item'))
   return {
     ...(isPageId(page) ? { page } : {}),
-    ...(heading && /^[\w-]{1,64}$/.test(heading) ? { heading } : {}),
+    ...(heading && /^[\p{L}\p{M}\p{N}_-]{1,64}$/u.test(heading) ? { heading } : {}),
     ...(params.has('item') && Number.isSafeInteger(item) && item >= 0 ? { item } : {}),
   }
 }
@@ -39,7 +40,7 @@ export function openFromHash(hash: string): LinkTarget | null {
 
 /** The hash (without `#`) for a place. */
 export function placeParams(p: Place): string {
-  return [p.page !== undefined ? `page=${p.page}` : '', p.heading ? `h=${p.heading}` : '', p.item !== undefined ? `item=${p.item}` : ''].filter(Boolean).join('&')
+  return [p.page !== undefined ? `page=${p.page}` : '', p.heading ? `h=${encodeURIComponent(p.heading)}` : '', p.item !== undefined ? `item=${p.item}` : ''].filter(Boolean).join('&')
 }
 
 export function openHash(board: string, p: Place = {}): string {
@@ -50,9 +51,15 @@ export function openHash(board: string, p: Place = {}): string {
 /** The target of a BrainCraft web link pasted as text, or null for anything else. */
 export function targetFromUrl(text: string): LinkTarget | null {
   const t = text.trim()
-  if (!/^https?:\/\/\S+#open=/.test(t)) return null
+  if (!/^https?:\/\/\S+#(open|live)=/.test(t)) return null
   try {
-    return openFromHash(new URL(t).hash)
+    const hash = new URL(t).hash
+    const open = openFromHash(hash)
+    if (open) return open
+    // A live session's link to a page: the session id is the wiki's link key.
+    const live = liveFromHash(hash)
+    const place = placeFromParams(new URLSearchParams(hash.replace(/^#/, '')))
+    return live && place.page !== undefined ? { board: live.id, ...place } : null
   } catch {
     return null
   }

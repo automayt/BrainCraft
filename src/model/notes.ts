@@ -43,9 +43,10 @@ export interface LinkTarget {
 // `@[Label](#12)` mentions; `[[Label]](#12)` / `[[Label]](board:key)` / `[[Label]](board:key#12)`
 // wiki-links; `[[Label]](page:id#heading)` / `[[Label]](board:key/page:id)` page links; and
 // `[[Name]]` links typed by hand that are matched to a page, board or object by name.
+// Labels are bounded (and one line): unbounded ones made "@[@[@[…" take seconds to scan.
 const TOKEN =
-  /@\[([^\]]*)\]\(#(\d+)\)|\[\[([^[\]\n]*)\]\]\((?:board:([\w-]+))?(?:\/?page:([\w-]+)(?:#([\w-]+))?|#(\d+))?\)|\[\[([^[\]\n]+)\]\]/g
-const TOKEN_AT = new RegExp(TOKEN.source, 'y')
+  /@\[([^\]\n]{0,300})\]\(#(\d+)\)|\[\[([^[\]\n]{0,300})\]\]\((?:board:([\w-]+))?(?:\/?page:([\w-]+)(?:#([\p{L}\p{M}\p{N}_-]+))?|#(\d+))?\)|\[\[([^[\]\n]{1,300})\]\]/gu
+const TOKEN_AT = new RegExp(TOKEN.source, 'yu')
 
 const clean = (label: string) => label.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim()
 

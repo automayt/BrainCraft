@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
+import { isWiki } from '../model/wiki'
 import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
 import { darken } from './BoardView'
 import { ink, mindRootFill } from './paint'
@@ -107,7 +108,12 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
       </header>
       <div className="boards-body">
         {!query && (
-          <section className="templates" aria-label="Start a new board">
+          <h3 className="templates-title" id="new-board-title">
+            New board <small>a canvas to draw and brainstorm on</small>
+          </h3>
+        )}
+        {!query && (
+          <section className="templates" aria-labelledby="new-board-title">
             {TEMPLATES.map((t) => (
               <button key={t.id} className="template" onClick={() => create(t)}>
                 <TemplateThumb id={t.id} />
@@ -118,7 +124,12 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           </section>
         )}
         {!query && (
-          <section className="templates wiki-templates" aria-label="Start a new wiki">
+          <h3 className="templates-title" id="new-wiki-title">
+            New wiki <small>pages to write things down: plans, lists, notes</small>
+          </h3>
+        )}
+        {!query && (
+          <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
             {WIKI_TEMPLATES.map((t) => (
               <button
                 key={t.id}
@@ -229,7 +240,7 @@ function BoardCard(p: {
           <input
             autoFocus
             defaultValue={meta.title}
-            aria-label="Board name"
+            aria-label={meta.kind === 'wiki' ? 'Wiki name' : 'Board name'}
             onBlur={(e) => p.onRename(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
@@ -438,12 +449,13 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
 export function ReadOnlyBanner() {
   const ws = useWorkspace()
   const ui = useUi()
+  const editor = ws.editor
   if (!ws.readOnly) return null
   return (
     <div className="readonly-banner island no-canvas" role="status">
       <span className="readonly-dot" aria-hidden="true" />
       <span>
-        <strong>Shared board</strong> · view only
+        <strong>{isWiki(editor.board) ? 'Shared wiki' : 'Shared board'}</strong> · view only
       </span>
       <button className="primary" onClick={() => void ws.keepCopy()}>
         Save a copy to edit

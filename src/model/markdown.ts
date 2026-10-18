@@ -49,6 +49,11 @@ const CALLOUTS: readonly CalloutKind[] = ['note', 'tip', 'warning', 'danger']
 
 /** Nesting deeper than this (lists in quotes in lists…) is shown flat. */
 const MAX_DEPTH = 8
+/** How far emphasis may run before its closing mark; past that the mark is just a character. */
+const EMPHASIS_REACH = 2_000
+/** A table wider or longer than this is read as text, past the cap: a page can't make millions of cells. */
+const TABLE_COLS = 64
+const TABLE_ROWS = 2_000
 
 // ----- inline ----------------------------------------------------------------------------------
 
@@ -95,6 +100,11 @@ export function parseInline(s: string, depth = 0): Inline[] {
         continue
       }
     }
+    // An embed written inside a sentence shows as a plain link, without its "!".
+    if (ch === '!' && s.startsWith('[[', i + 1) && tokenAt(s, i + 1)) {
+      i++
+      continue
+    }
     if (ch === '@' || ch === '[') {
       const tok = tokenAt(s, i)
       if (tok && !('text' in tok.part)) {
@@ -118,7 +128,12 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const m = /^(?:https?:\/\/|mailto:)[^\s<>"']+/i.exec(s.slice(i, i + 2100))
       if (m) {
         // Trailing punctuation belongs to the sentence, not the address.
-        const url = m[0].replace(/[.,;:!?)\]'"]+$/, '')
+        // A closing bracket stays when it closes one in the address (`…/Foo_(bar)`).
+        let url = m[0]
+        while (/[.,;:!?)\]'"]$/.test(url)) {
+          if (url.endsWith(')') && url.split('(').length > url.split(')').length - 1) break
+          url = url.slice(0, -1)
+        }
         push({ t: 'a', href: url, c: [{ t: 'text', s: url }] })
         i += url.length
         continue
@@ -127,7 +142,8 @@ export function parseInline(s: string, depth = 0): Inline[] {
     const two = s.slice(i, i + 2)
     if (two === '**' || two === '__' || two === '~~') {
       const end = s.indexOf(two, i + 2)
-      if (end > i + 2 && s[i + 2] !== ' ' && s[end - 1] !== ' ') {
+      // Emphasis closes within a reasonable stretch; looking further on every star is what gets slow.
+      if (end > i + 2 && end - i < EMPHASIS_REACH && s[i + 2] !== ' ' && s[end - 1] !== ' ') {
         push({ t: two === '~~' ? 's' : 'b', c: nest(s.slice(i + 2, end)) })
         i = end + 2
         continue
@@ -137,8 +153,8 @@ export function parseInline(s: string, depth = 0): Inline[] {
       // `_` only at word edges, so snake_case stays as it is.
       if (ch === '*' || i === 0 || !/\w/.test(s[i - 1])) {
         let end = s.indexOf(ch, i + 1)
-        while (end > 0 && (s[end - 1] === ' ' || (ch === '_' && /\w/.test(s[end + 1] ?? '')) || s[end + 1] === ch)) end = s.indexOf(ch, end + (s[end + 1] === ch ? 2 : 1))
-        if (end > i + 1) {
+        while (end > 0 && end - i < EMPHASIS_REACH && (s[end - 1] === ' ' || (ch === '_' && /\w/.test(s[end + 1] ?? '')) || s[end + 1] === ch)) end = s.indexOf(ch, end + (s[end + 1] === ch ? 2 : 1))
+        if (end > i + 1 && end - i < EMPHASIS_REACH) {
           push({ t: 'i', c: nest(s.slice(i + 1, end)) })
           i = end + 1
           continue
@@ -172,14 +188,14 @@ export function inlineText(c: Inline[]): string {
     .join('')
 }
 
-/** A heading's anchor: lower case, words joined by hyphens. */
+/** A heading's anchor: lower case, words joined by hyphens, in any alphabet. */
 export function slugify(text: string): string {
   return (
     text
       .toLowerCase()
       .normalize('NFKD')
       .replace(/[̀-ͯ]/g, '')
-      .replace(/[^\w\s-]/g, '')
+      .replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, '')
       .trim()
       .replace(/[\s_]+/g, '-')
       .replace(/-+/g, '-')
@@ -190,7 +206,19 @@ export function slugify(text: string): string {
 // ----- blocks ----------------------------------------------------------------------------------
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)/
-const HEADING = /^ {0,3}(#{1,6})(?:\s+(.*?))?\s*#*\s*$/
+// Linear on purpose: a lazy group before trailing spaces and #s took minutes on one long line.
+const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
+
+/** A heading's words without the closing #s some people write (`## Plan ##`), scanned by hand. */
+function headingText(raw: string): string {
+  let end = raw.length
+  while (end > 0 && (raw[end - 1] === ' ' || raw[end - 1] === '\t')) end--
+  let hashes = end
+  while (hashes > 0 && raw[hashes - 1] === '#') hashes--
+  // Closing #s count only after a space (or as the whole text).
+  if (hashes < end && (hashes === 0 || raw[hashes - 1] === ' ' || raw[hashes - 1] === '\t')) end = hashes
+  return raw.slice(0, end).trim()
+}
 const HR = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
 const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
 const QUOTE = /^ {0,3}> ?(.*)$/
@@ -253,7 +281,7 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
     }
     const h = HEADING.exec(line)
     if (h) {
-      const c = parseInline(h[2] ?? '')
+      const c = parseInline(headingText(h[2] ?? ''))
       out.push({ t: 'h', level: h[1].length, c, slug: slugify(inlineText(c)), line: at })
       i++
       continue
@@ -286,12 +314,12 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
       out.push(kind ? { t: 'callout', kind, title: parseInline(callout![2]), children, line: at } : { t: 'quote', children, line: at })
       continue
     }
-    if (line.includes('|') && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]) && lines[i + 1].includes('-')) {
+    if (line.includes('|') && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]) && lines[i + 1].includes('-') && cells(line).length <= TABLE_COLS) {
       const head = cells(line)
       const align: Align[] = cells(lines[i + 1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : null))
       const rows: Inline[][][] = []
       i += 2
-      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+      while (i < lines.length && rows.length < TABLE_ROWS && lines[i].trim() && lines[i].includes('|')) {
         const row = cells(lines[i++])
         rows.push(head.map((_, k) => parseInline(row[k] ?? '')))
       }
@@ -405,22 +433,56 @@ export function headings(blocks: Block[]): Heading[] {
   return headingBlocks(blocks).map((b) => ({ level: b.level, text: inlineText(b.c), slug: b.slug }))
 }
 
-/** Gives repeated anchors a number, in place: the second "Budget" is `budget-2`. */
+/**
+ * Gives repeated anchors a number, in place: the second "Budget" is `budget-2` (or `budget-3` if a
+ * heading is already called "Budget 2").
+ */
 export function uniqueSlugs(list: { slug: string }[]) {
-  const seen = new Map<string, number>()
+  const taken = new Set(list.map((h) => h.slug))
+  const used = new Set<string>()
   for (const h of list) {
-    const n = (seen.get(h.slug) ?? 0) + 1
-    seen.set(h.slug, n)
-    if (n > 1) h.slug = `${h.slug}-${n}`
+    if (used.has(h.slug)) {
+      let n = 2
+      while (taken.has(`${h.slug}-${n}`) || used.has(`${h.slug}-${n}`)) n++
+      h.slug = `${h.slug}-${n}`
+    }
+    used.add(h.slug)
   }
 }
 
+/**
+ * A page's words as plain text, for snippets and search: no heading or list marks, no tick boxes,
+ * table cells side by side, links and embeds by their names.
+ */
+export function plainMarkdown(text: string): string {
+  const out: string[] = []
+  for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
+    if (TABLE_RULE.test(raw) && raw.includes('-')) continue
+    if (MACRO.test(raw) || FENCE.test(raw) || HR.test(raw)) continue
+    const embed = EMBED.exec(raw)
+    if (embed) {
+      out.push(embed[1])
+      continue
+    }
+    let line = raw.replace(/^(?: {0,3}> ?)+/, '').replace(/^ {0,3}#{1,6}[ \t]+/, '').replace(/^\s*(?:[-*+]|\d{1,9}[.)])\s+/, '').replace(/^\[[ xX]\]\s+/, '').replace(/^\[!\w+\]\s*/, '')
+    if (line.includes('|')) line = cells(line).filter(Boolean).join(' · ')
+    out.push(line)
+  }
+  return inlineText(parseInline(out.join('\n').slice(0, BODY_PLAIN_MAX)))
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+/** How much of a page {@link plainMarkdown} reads (snippets need the start; search the lot, up to here). */
+const BODY_PLAIN_MAX = 250_000
+
 /** Ticks or unticks the checklist item on `line` (0-based). Returns the text unchanged if there isn't one. */
 export function toggleTask(text: string, line: number): string {
-  const lines = text.split('\n')
+  // Lines counted the way the page reads them (old Mac line endings too).
+  const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const l = lines[line]
   if (l === undefined) return text
-  const m = /^(\s*(?:[-*+]|\d{1,9}[.)])\s+\[)([ xX])(\].*)$/.exec(l)
+  // In a quote or callout too.
+  const m = /^((?: {0,3}> ?)*\s*(?:[-*+]|\d{1,9}[.)])\s+\[)([ xX])(\].*)$/.exec(l)
   if (!m) return text
   lines[line] = `${m[1]}${m[2] === ' ' ? 'x' : ' '}${m[3]}`
   return lines.join('\n')

@@ -1,5 +1,6 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { continueList, parseMarkdown } from '../../model/markdown'
+import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { continueList, parseMarkdown, toggleTask } from '../../model/markdown'
+import { merge3 } from '../../model/merge'
 import { linkToken } from '../../model/notes'
 import { targetFromUrl } from '../../store/deepLink'
 import type { Page } from '../../model/types'
@@ -8,7 +9,8 @@ import { useEditor } from '../useEditor'
 import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
 import { EmbedPicker } from './EmbedPicker'
-import { embedToken } from '../../model/embed'
+import { embedToken, makeSnap } from '../../model/embed'
+import { caretPoint } from '../caretPoint'
 
 interface SlashItem {
   label: string
@@ -22,21 +24,21 @@ interface SlashItem {
 /** What "/" at the start of a line offers. */
 const SLASH: SlashItem[] = [
   { label: 'Heading', hint: '##', text: '## ' },
-  { label: 'Smaller heading', hint: '###', text: '### ' },
   { label: 'Checklist', hint: '- [ ]', text: '- [ ] ' },
-  { label: 'Bulleted list', hint: '-', text: '- ' },
-  { label: 'Numbered list', hint: '1.', text: '1. ' },
-  { label: 'Table', hint: '| |', text: '| Column | Column |\n| --- | --- |\n|  |  |\n', caret: 2 },
-  { label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
-  { label: 'Quote', hint: '>', text: '> ' },
-  { label: 'Tip', hint: '> [!tip]', text: '> [!tip] ' },
-  { label: 'Warning', hint: '> [!warning]', text: '> [!warning] ' },
-  { label: 'Divider', hint: '---', text: '---\n' },
+  { label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
   { label: 'Link to a page', hint: '[[', text: '[[', action: 'link' },
   { label: 'New sub-page', hint: 'Adds a page under this one, linked here', action: 'subpage' },
+  { label: 'Table', hint: '| |', text: '| Column | Column |\n| --- | --- |\n|  |  |\n', caret: 2 },
+  { label: 'Bulleted list', hint: '-', text: '- ' },
+  { label: 'Numbered list', hint: '1.', text: '1. ' },
+  { label: 'Smaller heading', hint: '###', text: '### ' },
+  { label: 'Tip', hint: '> [!tip]', text: '> [!tip] ' },
+  { label: 'Warning', hint: '> [!warning]', text: '> [!warning] ' },
+  { label: 'Quote', hint: '>', text: '> ' },
+  { label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
+  { label: 'Divider', hint: '---', text: '---\n' },
   { label: 'Sub-page list', hint: '{{children}}', text: '{{children}}\n' },
   { label: 'Contents', hint: '{{toc}}', text: '{{toc}}\n' },
-  { label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
 ]
 
 /** How long after the last key a draft goes out (to the board, other tabs and friends). */
@@ -63,24 +65,46 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   /** Where an embed being picked goes. */
   const [embedAt, setEmbedAt] = useState<number | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
+  const preview = useRef<HTMLDivElement>(null)
+  const ids = useId()
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const unsent = useRef(false)
 
   const draftRef = useRef(draft)
   draftRef.current = draft
+  /** The page's text as last agreed (what both our draft and a friend's change started from). */
+  const base = useRef(text)
   const push = (value = draftRef.current) => {
     clearTimeout(timer.current)
     if (!unsent.current) return
     unsent.current = false
+    // Only to the page this editor was opened on, and only while it's still there.
+    if (!W.getPage(editor.board, page.id)) return
+    base.current = value
     editor.setPageText(page.id, value)
   }
 
-  // A friend's (or another tab's) change shows up when there's nothing of ours waiting.
+  // A friend's (or another tab's) change: taken as is when nothing of ours is waiting, else merged
+  // with our draft line by line, so neither person's typing is lost.
   useEffect(() => {
-    if (!unsent.current && text !== draftRef.current) setDraft(text)
+    if (text === base.current) return
+    if (!unsent.current) {
+      setDraft(text)
+      draftRef.current = text
+    } else {
+      const merged = merge3(base.current, draftRef.current, text)
+      setDraft(merged)
+      draftRef.current = merged
+    }
+    base.current = text
   }, [text])
-  // Leaving the page (or the editor) sends what's waiting.
+  // Leaving the page (or the editor, or closing the tab) sends what's waiting.
   useEffect(() => () => push(), [page.id])
+  useEffect(() => {
+    const flush = () => push()
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  })
   useEffect(() => area.current?.focus({ preventScroll: true }), [page.id])
 
   const change = (value: string, caret?: number) => {
@@ -111,10 +135,19 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     const caret = el.selectionStart
     const before = el.value.slice(0, caret)
     const m = /\[\[([^[\]\n]{0,60})$/.exec(before)
-    setPick(m ? { from: caret - m[0].length, query: m[1], k: 0 } : null)
+    const keep = (old: { from: number; query: string; k: number } | null, from: number, query: string) => ({ from, query, k: old && old.from === from && old.query === query ? old.k : 0 })
+    setPick((old) => (m ? keep(old, caret - m[0].length, m[1]) : null))
     // "/" at the start of a line: the menu of things to insert.
     const s = m ? null : /(?:^|\n)\/([\w ]{0,24})$/.exec(before)
-    setSlash(s ? { from: caret - s[1].length - 1, query: s[1], k: 0 } : null)
+    setSlash((old) => (s ? keep(old, caret - s[1].length - 1, s[1]) : null))
+  }
+
+  /** The Insert button: the same menu as "/", at the caret. */
+  const openInsert = () => {
+    const el = area.current!
+    setPick(null)
+    setSlash({ from: el.selectionStart, query: '', k: 0 })
+    el.focus()
   }
 
   const slashItems = slash ? SLASH.filter((x) => !slash.query.trim() || x.label.toLowerCase().includes(slash.query.trim().toLowerCase())) : []
@@ -122,25 +155,28 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   /** Runs a / menu item in place of the "/query" typed. */
   const runSlash = (item: SlashItem) => {
     if (!slash) return
-    const caret = area.current!.selectionStart
-    const before = draft.slice(0, slash.from)
+    const caret = Math.max(area.current!.selectionStart, slash.from)
+    // Opened from the Insert button in the middle of a line: what it adds starts a new one.
+    const lead = slash.from > 0 && draft[slash.from - 1] !== '\n' ? '\n' : ''
+    const before = draft.slice(0, slash.from) + lead
     const after = draft.slice(caret)
+    const from = slash.from + lead.length
     setSlash(null)
     if (item.action === 'embed') {
-      change(before + after, slash.from)
-      setEmbedAt(slash.from)
+      change(before + after, from)
+      setEmbedAt(from)
       return
     }
     if (item.action === 'subpage') {
       const id = editor.addWikiPage({ title: 'Untitled', parent: page.id })
       editor.openPage(page.id)
       const token = `${linkToken('Untitled', { page: id })}\n`
-      change(before + token + after, slash.from + token.length)
+      change(before + token + after, from + token.length)
       return
     }
     const text = item.text!
-    change(before + text + after, slash.from + (item.caret ?? text.length))
-    if (item.action === 'link') requestAnimationFrame(() => setPick({ from: slash.from, query: '', k: 0 }))
+    change(before + text + after, from + (item.caret ?? text.length))
+    if (item.action === 'link') requestAnimationFrame(() => setPick({ from, query: '', k: 0 }))
   }
 
   const insert = (p: Pick) => {
@@ -247,6 +283,24 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
 
   const blocks = useMemo(() => parseMarkdown(draft), [draft])
 
+  // The open menu sits just under the line being typed (above it near the bottom of the screen).
+  const menu = slash && slashItems.length > 0 ? 'slash' : pick && picks.length > 0 ? 'pick' : null
+  const active = menu === 'slash' ? slash!.k : menu === 'pick' ? pick!.k : -1
+  const count = menu === 'slash' ? slashItems.length : menu === 'pick' ? picks.length : 0
+  const [place, setPlace] = useState<CSSProperties>({})
+  useLayoutEffect(() => {
+    const el = area.current
+    if (!menu || !el) return
+    const c = caretPoint(el)
+    const top = el.offsetTop + Math.min(Math.max(c.top, 0), el.clientHeight - c.height)
+    const left = Math.max(8, Math.min(el.offsetLeft + c.left, el.offsetLeft + el.clientWidth - 330))
+    const below = window.innerHeight - (el.getBoundingClientRect().top + c.top + c.height) > 300
+    setPlace(below ? { top: top + c.height + 4, left, right: 'auto' } : { top: top - 4, left, right: 'auto', transform: 'translateY(-100%)' })
+  }, [menu, slash?.from, pick?.from, draft])
+  useEffect(() => {
+    if (active >= 0) document.getElementById(`${ids}-opt-${active}`)?.scrollIntoView({ block: 'nearest' })
+  }, [active, ids])
+
   return (
     <div className={`page-editor tab-${tab}`}>
       <div className="page-editor-tabs" role="tablist">
@@ -273,19 +327,34 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           }}>
             [[ ]]
           </button>
-          <span className="muted page-editor-hint">Markdown: # heading · - list · - [ ] checklist · | table | · ``` code · &gt; [!tip]</span>
+          <button title="Insert a heading, checklist, table, embed… (or type / at the start of a line)" aria-haspopup="listbox" onMouseDown={(e) => e.preventDefault()} onClick={openInsert}>
+            Insert ▾
+          </button>
+          <span className="muted page-editor-hint">Type / for headings, checklists, tables and embeds · [[ to link a page</span>
         </div>
         <textarea
           ref={area}
           className="page-text"
           value={draft}
           aria-label={`Text of ${page.title || 'this page'}`}
+          aria-autocomplete="list"
+          aria-controls={menu ? `${ids}-menu` : undefined}
+          aria-activedescendant={menu ? `${ids}-opt-${active}` : undefined}
           spellCheck
           onChange={(e) => {
             change(e.target.value)
             track(e.target)
           }}
-          onSelect={(e) => track(e.currentTarget)}
+          onClick={(e) => track(e.currentTarget)}
+          onKeyUp={(e) => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) || (!menu && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) track(e.currentTarget)
+          }}
+          onScroll={(e) => {
+            // The preview follows the text on wide screens.
+            const t = e.currentTarget
+            const v = preview.current
+            if (v && v.offsetParent && t.scrollHeight > t.clientHeight) v.scrollTop = (t.scrollTop / (t.scrollHeight - t.clientHeight)) * (v.scrollHeight - v.clientHeight)
+          }}
           onKeyDown={onKeyDown}
           onPaste={(e) => {
             // A BrainCraft web link (a page, a heading, a canvas object) goes in as a named link.
@@ -303,10 +372,13 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           }}
           onBlur={() => push()}
         />
-        {slash && slashItems.length > 0 && (
-          <ul className="page-picker" role="listbox" aria-label="Insert">
+        <span className="sr-only" aria-live="polite">
+          {menu ? `${count} ${count === 1 ? 'choice' : 'choices'}, arrows to move, Enter to pick` : ''}
+        </span>
+        {menu === 'slash' && slash && (
+          <ul className="page-picker" id={`${ids}-menu`} style={place} role="listbox" aria-label="Insert">
             {slashItems.map((x, k) => (
-              <li key={x.label} role="option" aria-selected={k === slash.k}>
+              <li key={x.label} id={`${ids}-opt-${k}`} role="option" aria-selected={k === slash.k}>
                 <button className={k === slash.k ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => runSlash(x)}>
                   <span>{x.label}</span>
                   <small className="muted">{x.hint}</small>
@@ -319,24 +391,37 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           <EmbedPicker
             onClose={() => {
               setEmbedAt(null)
+              setSlash(null)
+              setPick(null)
               area.current?.focus()
             }}
             onPick={(c) => {
               const at = embedAt
               setEmbedAt(null)
+              setSlash(null)
+              setPick(null)
               const cur = draftRef.current
               // On a line of its own.
               const lead = at > 0 && cur[at - 1] !== '\n' ? '\n' : ''
               const text = `${lead}${embedToken(c.label, c.board, c.item)}\n`
-              change(cur.slice(0, at) + text + cur.slice(at), at + text.length)
-              requestAnimationFrame(() => area.current?.focus())
+              const next = cur.slice(0, at) + text + cur.slice(at)
+              change(next, at + text.length)
+              // Choosing to embed is choosing to share: save the wiki's copy now (after the text,
+              // or the copy would count as unused and be dropped).
+              push(next)
+              void ws.readBoard(c.board).then((b) => {
+                const meta = ws.findBoard(c.board)
+                const s = b && meta && makeSnap(b, c.board, c.item, meta.updated, editor.me)
+                if (s && !editor.readOnly) editor.keepSnap(s)
+              })
+              area.current?.focus({ preventScroll: true })
             }}
           />
         )}
-        {pick && picks.length > 0 && (
-          <ul className="page-picker" role="listbox" aria-label="Link to">
+        {menu === 'pick' && pick && (
+          <ul className="page-picker" id={`${ids}-menu`} style={place} role="listbox" aria-label="Link to">
             {picks.map((p, k) => (
-              <li key={p.token + k} role="option" aria-selected={k === pick.k}>
+              <li key={p.token + k} id={`${ids}-opt-${k}`} role="option" aria-selected={k === pick.k}>
                 <button className={k === pick.k ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(p)}>
                   <span>{p.label}</span>
                   <small className="muted">{p.hint}</small>
@@ -346,8 +431,8 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           </ul>
         )}
       </div>
-      <div className="page-editor-preview" aria-label="Preview">
-        <Markdown blocks={blocks} actions={{ ...actions, copyHeading: undefined }} />
+      <div ref={preview} className="page-editor-preview" aria-label="Preview">
+        <Markdown blocks={blocks} actions={{ ...actions, copyHeading: undefined, toggle: actions.toggle && ((line) => change(toggleTask(draftRef.current, line))) }} />
       </div>
       <div className="page-editor-foot">
         <span className="muted">Saved as you type · Esc or Ctrl Enter when done</span>

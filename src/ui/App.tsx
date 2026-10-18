@@ -204,7 +204,8 @@ function App({ ws }: { ws: Workspace }) {
         editor.setSearchOpen(!editor.searchOpen)
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+      // Image and PDF export is for canvases; a wiki has nothing to draw.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e' && !isWiki(editor.board)) {
         e.preventDefault()
         setDialog('export')
         return
@@ -380,7 +381,7 @@ function App({ ws }: { ws: Workspace }) {
             </>
           )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
-          {dialog === 'help' && <Help onClose={close} />}
+          {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}

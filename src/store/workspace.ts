@@ -19,7 +19,7 @@ import { catchUp } from '../model/catchup'
 import { type BoardRef, type LinkTarget, objectLabel } from '../model/notes'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
-import { decodeBoard, sharedFromHash, shareUrl, withoutImages } from './share'
+import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
 
 const CURRENT_KEY = 'braincraft:current'
 /** Where boards lived before there was a library. */
@@ -296,10 +296,17 @@ export class Workspace {
 
   /** Brings page cards on the open board up to date with their pages (titles and opening words). */
   async refreshPageCards() {
+    // In a live session every friend would rewrite the cards from their own copy of the wiki.
+    if (this.live) return
+    const board = this.boardId
     for (const item of this.editor.board.items) {
       if (!item.page || !item.link) continue
       const preview = await this.pagePreview(item.page)
-      if (preview && (preview.title !== item.link.title || preview.description !== item.link.description || preview.site !== item.link.site)) this.editor.fillLink(item.id, preview)
+      // Stop if another board opened meanwhile: ids are only unique within one board.
+      if (this.boardId !== board || this.live) return
+      const now = getItem(this.editor.board, item.id)
+      if (!now?.page || !now.link || now.page !== item.page) continue
+      if (preview && (preview.title !== now.link.title || preview.description !== now.link.description || preview.site !== now.link.site)) this.editor.fillLink(item.id, preview)
     }
   }
 
@@ -714,7 +721,12 @@ export class Workspace {
     const hit = this.readBoards.get(meta.id)
     if (hit && hit.updated === meta.updated) return hit.board
     const board = await this.library.load(meta.id)
-    if (board) this.readBoards.set(meta.id, { updated: meta.updated, board })
+    if (board) {
+      // A few recent boards, not every one read this session (pictures and all).
+      this.readBoards.delete(meta.id)
+      this.readBoards.set(meta.id, { updated: meta.updated, board })
+      while (this.readBoards.size > 12) this.readBoards.delete(this.readBoards.keys().next().value!)
+    }
     return board
   }
 
@@ -890,7 +902,8 @@ export class Workspace {
 
   /** A read-only link holding the whole board (as this person sees it: others' hidden brainstorm notes stay blank). */
   async shareLink(opts: { images: boolean }): Promise<string> {
-    const b = opts.images ? this.editor.viewBoard : withoutImages(this.editor.viewBoard)
+    const view = forSharing(this.editor.viewBoard)
+    const b = opts.images ? view : withoutImages(view)
     const base = typeof location === 'undefined' ? 'https://braincraft.invalid/' : location.href
     return shareUrl(b, base)
   }

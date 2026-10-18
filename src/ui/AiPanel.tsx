@@ -229,7 +229,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
 
   const apply = (p: Proposal) => {
     if (editor.readOnly) return editor.setStatus('This board is read-only')
-    if (editor.applyAi(p.id, p.summary, p.patches)) p.status = 'applied'
+    if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) p.status = 'applied'
     else editor.setStatus('Nothing left to change')
     refresh()
   }

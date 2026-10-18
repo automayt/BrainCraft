@@ -26,6 +26,25 @@ describe('wiki pages', () => {
     expect(titles(W.pageOrder(b))).toEqual(['Home', 'Plan', 'Food', 'Beds'])
   })
 
+  it('keeps a page in sight when its parent went to the trash as it was added', () => {
+    const { b, plan } = wiki()
+    // One friend trashes Plan while another adds a page under it.
+    const [added, extra] = W.addPage(b, { title: 'Extra', parent: plan }, 5)
+    const merged = applyPatches(W.trashPage(b, plan, 6), diff(b, added))
+    expect(titles(W.pageOrder(merged))).toContain('Extra')
+    // Deleting Plan for good leaves it alone, and restoring Plan takes it back under.
+    expect(W.getPage(W.deletePage(merged, plan), extra)).toBeDefined()
+    expect(titles(W.pagePath(W.restorePage(merged, plan), extra))).toEqual(['Plan', 'Extra'])
+  })
+
+  it('brings pages nested too deep back to the top level, so none is lost', () => {
+    let b = W.emptyWiki('Deep', 1)
+    let parent: string | undefined
+    for (let k = 0; k < 70; k++) [b, parent] = W.addPage(b, { title: `P${k}`, parent }, 2 + k)
+    expect(W.pageOrder(b)).toHaveLength(71)
+    expect(W.searchPages(b, 'P69').length).toBeGreaterThan(0)
+  })
+
   it('moves pages, never under themselves, and puts them where asked', () => {
     let { b, home, plan, food, beds } = wiki()
     b = W.movePage(b, beds, plan, food)
@@ -129,7 +148,8 @@ describe('wiki pages', () => {
       { k: 'page', id: 'c', v: 'nope' },
       { k: 'body', id: 'd', v: { id: 'd', text: 5 } },
     ])
-    expect(patches).toEqual([{ k: 'body', id: 'd', v: { id: 'd', text: '', at: 0 } }])
+    // A body without text is refused, not turned into an empty page.
+    expect(patches).toEqual([])
   })
 
   it('stops adding pages when the wiki is full', () => {
@@ -172,6 +192,20 @@ describe('wiki pages in the editor, rooms and the library', () => {
     expect(titles(W.pageOrder(room.data.board))).toEqual(['Home', 'Food'])
     room.receive('v', { t: 'patch', seq: 1, patches: diff(next, W.setPageMeta(next, next.pages![1].id, { title: 'Hacked' })) })
     expect(titles(W.pageOrder(room.data.board))).toEqual(['Home', 'Food'])
+  })
+
+  it('keeps pages out of canvas boards, live and on load', async () => {
+    const { Room } = await import('../collab/room')
+    const { emptyBoard } = await import('./board')
+    const { fakeMeasure } = await import('./test-helpers')
+    const { fromJson, toJson } = await import('./serialize')
+    const board = emptyBoard('Plan')
+    const room = new Room({ id: 'r', board, version: 0, editKey: 'e'.repeat(20), viewKey: 'v'.repeat(20), nextSlot: 1, created: 0, updated: 0 }, fakeMeasure)
+    room.join({ id: 'a', role: 'edit', send: () => {} })
+    const [smuggled] = W.addPage({ ...board, pages: [], bodies: [] }, { title: 'Junk', text: 'x'.repeat(1000) }, 2)
+    room.receive('a', { t: 'patch', seq: 1, patches: diff(board, smuggled) })
+    expect(room.data.board.pages ?? []).toEqual([])
+    expect(fromJson(toJson(smuggled)).pages).toBeUndefined()
   })
 
   it('saves a wiki in the library with an outline of its pages', async () => {

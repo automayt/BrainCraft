@@ -394,9 +394,10 @@ export function cleanPage(v: unknown): Page | null {
 
 /** A wiki page's words. */
 export function cleanBody(v: unknown): PageBody | null {
-  if (!isObj(v) || !isPageId(v.id)) return null
+  // A body without text is refused rather than wiping the page.
+  if (!isObj(v) || !isPageId(v.id) || typeof v.text !== 'string') return null
   const by = str(v.by, 60)
-  return { id: v.id, text: str(v.text, BODY_MAX) ?? '', at: num(v.at) ?? 0, ...(by ? { by } : {}) }
+  return { id: v.id, text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX), at: num(v.at) ?? 0, ...(by ? { by } : {}) }
 }
 
 /** A wiki's copy of an embedded object, checked like the board it came from. */
@@ -411,7 +412,8 @@ export function cleanSnap(v: unknown): Snap | null {
     .map(cleanConnector)
     .filter((c): c is Connector => !!c && ids.has(c.from) && ids.has(c.to))
   const datasets = arr(v.datasets).map(cleanDataset).filter((d): d is Dataset => !!d)
-  return { key: v.key, at: num(v.at) ?? 0, items, connectors, ...(datasets.length ? { datasets } : {}) }
+  const by = str(v.by, 60)
+  return { key: v.key, at: num(v.at) ?? 0, ...(by ? { by } : {}), items, connectors, ...(datasets.length ? { datasets } : {}) }
 }
 
 export function cleanPatches(patches: readonly unknown[]): Patch[] {

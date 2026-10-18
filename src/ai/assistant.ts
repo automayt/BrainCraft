@@ -16,7 +16,7 @@ import type { Rect } from '../model/geom'
 import { boardText } from './boardText'
 import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
-import { isWiki } from '../model/wiki'
+import { isWiki, pageText } from '../model/wiki'
 
 export const AI_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', hint: 'Most capable (default)' },
@@ -47,6 +47,8 @@ export interface Proposal {
   ops: Op[]
   /** The changes it makes to the board as it was when proposed. */
   patches: Patch[]
+  /** Each changed page's words when proposed, so typing done since is merged in rather than lost. */
+  bases?: Record<string, string>
   counts: { added: number; changed: number; removed: number }
   status: 'pending' | 'applied' | 'discarded'
 }
@@ -222,7 +224,8 @@ export class Assistant {
       const after = layoutAll(applyOps(before, x.ops as Op[], { measure: this.host.measure, protect: view && maskedIds(view) }).board, this.host.measure)
       const patches = diff(before, after)
       if (!patches.length) return 'Those operations change nothing on the board.'
-      return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, counts: countChanges(before, patches), status: 'pending' }
+      const bases = Object.fromEntries(patches.flatMap((p) => (p.k === 'body' ? [[p.id, pageText(before, p.id)]] : [])))
+      return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, ...(Object.keys(bases).length ? { bases } : {}), counts: countChanges(before, patches), status: 'pending' }
     } catch (err) {
       // Anything an op trips over goes back to Claude to fix, never out of the conversation.
       if (err instanceof OpError) return err.message

@@ -27,8 +27,9 @@ import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
+import { merge3 } from '../model/merge'
 import * as W from '../model/wiki'
-import { setSnap, unusedSnaps } from '../model/embed'
+import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys } from '../model/markdown'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
@@ -671,9 +672,14 @@ export class Editor {
    * Applies an AI proposal as one undoable step and records it in the AI history.
    * The patches were made against the board when proposed; edits since then are kept.
    */
-  applyAi(id: string, summary: string, patches: Patch[]): boolean {
+  applyAi(id: string, summary: string, patches: Patch[], bases?: Record<string, string>): boolean {
     if (this.readOnly) return false
     const before = this.board
+    // A page someone typed on since the proposal keeps both their words and the proposal's.
+    patches = patches.map((p) => {
+      const base = p.k === 'body' && p.v ? bases?.[p.id] : undefined
+      return base === undefined || p.k !== 'body' || !p.v ? p : { ...p, v: { ...p.v, text: merge3(base, W.pageText(before, p.id), p.v.text) } }
+    })
     this.finishEditing()
     this.aiPreview = null
     this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
@@ -1391,6 +1397,8 @@ export class Editor {
   page: string | null = null
   /** A heading to scroll to on that page, once it's shown. */
   pageHeading: string | null = null
+  /** A page was just made: its title takes the keyboard. */
+  focusTitle = false
   /** The last typing on a page, so a burst of it undoes as one step. */
   private lastTyping: { page: string; at: number; board: Board } | null = null
 
@@ -1421,10 +1429,12 @@ export class Editor {
   addWikiPage(opts: { title?: string; parent?: string; before?: string; text?: string } = {}): string {
     let id = ''
     this.edit((b) => {
-      const [next, made] = W.addPage(b, { title: opts.title ?? 'Untitled', parent: opts.parent, before: opts.before, text: opts.text }, Date.now(), this.author.trim() || undefined)
+      const [next, made] = W.addPage(b, { title: opts.title ?? '', parent: opts.parent, before: opts.before, text: opts.text }, Date.now(), this.author.trim() || undefined)
       id = made
       return next
     })
+    // A page without a name yet: its title is the first thing to type.
+    if (id && opts.title === undefined) this.focusTitle = true
     if (id) this.openPage(id)
     else if (!this.readOnly) this.setStatus(`This wiki is full (${W.MAX_PAGES.toLocaleString('en')} pages)`)
     return id
@@ -1465,7 +1475,7 @@ export class Editor {
     const count = W.withDescendants(this.board, id).size
     this.edit((b) => W.trashPage(b, id))
     if (this.page === id) this.page = null
-    this.setStatus(`Moved “${page.title || 'Untitled'}”${count > 1 ? ` and ${count - 1} sub-page${count > 2 ? 's' : ''}` : ''} to the trash — Ctrl Z brings it back`)
+    this.setStatus(`Moved “${page.title || 'Untitled'}”${count > 1 ? ` and ${count - 1} sub-page${count > 2 ? 's' : ''}` : ''} to the trash — restore it from the Trash in the page list`)
   }
 
   restorePage(id: string) {
@@ -1480,8 +1490,12 @@ export class Editor {
   keepSnap(snap: EmbedSnap) {
     if (this.readOnly || !W.isWiki(this.board)) return
     const used = new Set((this.board.bodies ?? []).flatMap((x) => embedKeys(x.text)))
-    let next = setSnap(this.board, snap)
-    const stale = unusedSnaps(next, used)
+    const old = getSnap(this.board, snap.key)
+    const same = !used.has(snap.key) || (old && old.at === snap.at && old.by === snap.by)
+    const stale = unusedSnaps(this.board, used)
+    // Nothing new to keep and nothing to drop: no change, no save, no break in the undo step.
+    if (same && !stale.length) return
+    let next = same ? this.board : setSnap(this.board, snap)
     if (stale.length) next = { ...next, snaps: (next.snaps ?? []).filter((s) => !stale.includes(s.key)) }
     if (!next.snaps?.length) delete next.snaps
     this.apply(next)

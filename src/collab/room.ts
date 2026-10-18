@@ -8,7 +8,7 @@ import { cleanPatches } from '../model/sanitize'
 import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
-import { MAX_PAGES } from '../model/wiki'
+import { MAX_PAGES, MAX_SNAPS, WIKI_TEXT_MAX } from '../model/wiki'
 import { type Patch, applyPatches, diff } from './patch'
 import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage, type Signal } from './protocol'
 
@@ -123,7 +123,9 @@ export class Room {
       if (m.role !== 'edit') return m.send({ t: 'error', message: 'This link can only view the board', seq })
       if (!Array.isArray(msg.patches) || msg.patches.length > MAX_PATCHES) return m.send({ t: 'error', message: 'Bad patch', seq })
       // Checked before anyone else sees them: a bad field from one person can't crash the rest.
-      const patches = cleanPatches(msg.patches)
+      const isWiki = this.data.board.kind === 'wiki'
+      // Pages and embed copies belong to wikis only.
+      const patches = cleanPatches(msg.patches).filter((p) => isWiki || (p.k !== 'page' && p.k !== 'body' && p.k !== 'snap'))
       let next: Board
       try {
         next = applyPatches(this.data.board, patches)
@@ -135,6 +137,13 @@ export class Room {
       const pages = next.pages?.length ?? 0
       if (pages > MAX_PAGES && pages > (this.data.board.pages?.length ?? 0))
         return m.send({ t: 'error', message: `This wiki is full (${MAX_PAGES.toLocaleString('en')} pages)`, seq })
+      const snaps = next.snaps?.length ?? 0
+      if (snaps > MAX_SNAPS && snaps > (this.data.board.snaps?.length ?? 0)) return m.send({ t: 'error', message: 'This wiki has too many embeds', seq })
+      if (isWiki && patches.some((p) => p.k === 'body')) {
+        const size = (b: Board) => (b.bodies ?? []).reduce((n, x) => n + x.text.length, 0)
+        const now = size(next)
+        if (now > WIKI_TEXT_MAX && now > size(this.data.board)) return m.send({ t: 'error', message: 'This wiki is full', seq })
+      }
       this.data.board = next
       this.data.version++
       this.changed()

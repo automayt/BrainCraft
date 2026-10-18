@@ -23,9 +23,8 @@ saves, versions, syncs and shares like any board. Built in phases:
   pages; `createPage`/`updatePage`/`movePage`/`deletePage` operations and
   `list_pages`/`read_page` tools for AI assistants and MCP.
 - [ ] **Later for links:** an `@` picker in pages that finds objects on every
-  board (today: Copy link to this object, then paste), and invite links that
-  open a page (`inviteLink` exists in the workspace; the share dialog could
-  offer it).
+  board (today: Copy link to this object, then paste). (Invite links that open
+  a page are built: Copy link in a live session.)
 - [x] **Phase 3: embeds.** `![[Label]](board:KEY#ID)` shows a frame, mind map,
   flowchart, timeline or whole board inside a page, drawn by the real board
   renderer, with Open on board and Expand; tables, Kanban boards and database
@@ -36,9 +35,46 @@ saves, versions, syncs and shares like any board. Built in phases:
 - [ ] **Later for embeds:** live embeds of boards in a live session that isn't
   open here (a background view-only connection), editing table and database
   embeds in place, and query blocks (open tasks across boards).
-- [ ] **Phase 4: robustness.** A line-by-line merge so two friends typing on
-  one page both keep their words; page history with diffs; "Since you were
-  here" for pages; search across wikis; Markdown import and export.
+- [ ] **Phase 4: robustness.** Page history with diffs; "Since you were
+  here" for pages; search across wikis; Markdown import and export. (Built
+  already: a line-by-line merge, so two friends typing on one page, or an AI
+  change arriving after you typed, keep everyone's words.)
+
+### From the review (2026-10-18)
+
+Ideas from the wiki review, roughly by value for a small group against effort:
+
+- [ ] **Who's on this page:** friends' colour dots beside pages in the list
+  and "Sam is editing" in the page header, from the live presence that
+  already exists.
+- [ ] **Owners and dates on checklist items:** `- [ ] Book van @Sam
+  2026-11-02` shows a person and a date, flags overdue items, and Ctrl+K gets
+  "My tasks".
+- [ ] **Comments on a page** (or on one heading), reusing the canvas comments
+  panel, so friends can discuss without editing the text.
+- [ ] **RSVP block:** `{{rsvp}}` shows Going / Maybe / No for each person,
+  synced live, for the party and club templates.
+- [ ] **Expense split:** a budget table's "Paid by" column feeds a "who owes
+  whom" summary for trips and moves.
+- [ ] **Countdown:** `{{countdown 2026-12-20}}` shows "23 days to go".
+- [ ] **Turn a canvas selection into a page:** right-click stickies or a mind
+  map → "Make a wiki page" as a checklist or outline, linked back.
+- [ ] **Duplicate a page** with its sub-pages, or "New page like this" for
+  Day 2, Day 3 and meeting notes.
+- [ ] **Print a page** cleanly (no page list, embeds full width) for
+  itineraries and packing lists.
+- [ ] **Share one page read-only** as a link holding just that page and its
+  embeds, for people outside the group.
+- [ ] **Fill table cells while reading,** so a budget or guest list doesn't
+  mean editing pipes; tick checklists in the page preview beside a board.
+- [ ] **Embeds you can explore:** pan and zoom in Expand, a Fit / 100% switch,
+  thumbnails in the embed picker, and picking a flowchart shape offers the
+  whole flowchart.
+- [ ] **Friendlier links while writing:** show `[[Page]](page:…)` and embed
+  lines as named chips in the editor instead of ids, and a sticky phone bar
+  with Done, `[[`, `/` and a checklist button.
+- [ ] **Page icons** picked in the app (today only templates and the API set
+  them), and asking for the wiki's name when making a blank one.
 
 ## Next up
 

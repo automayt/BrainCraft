@@ -1,4 +1,4 @@
-import { type DragEvent, type KeyboardEvent, useMemo, useState } from 'react'
+import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
 import { useEditor } from '../useEditor'
@@ -29,7 +29,22 @@ export function PageTree({ current }: { current: Page | undefined }) {
     })
 
   const siblingsOf = (p: Page) => W.childrenOf(board, W.parentOf(board, p))
-  const focusRow = (id: string) => requestAnimationFrame(() => document.querySelector<HTMLElement>(`.page-tree [data-page="${id}"]`)?.focus())
+  // A row that moved under another page is drawn anew, so focus follows it once it's there.
+  const pendingFocus = useRef<string | null>(null)
+  const rowEl = (id: string) => document.querySelector<HTMLElement>(`.page-tree [data-page="${id}"]`)
+  useEffect(() => {
+    const id = pendingFocus.current
+    const el = id ? rowEl(id) : null
+    if (!el) return
+    pendingFocus.current = null
+    if (document.activeElement !== el) el.focus()
+  })
+  const focusRow = (id: string) => {
+    pendingFocus.current = id
+    requestAnimationFrame(() => rowEl(id)?.focus())
+    // Not for ever: a row that never shows up mustn't grab focus later.
+    setTimeout(() => pendingFocus.current === id && (pendingFocus.current = null), 400)
+  }
 
   /** Rows in the order they're shown, for the arrow keys. */
   const visible: Page[] = []
@@ -102,7 +117,7 @@ export function PageTree({ current }: { current: Page | undefined }) {
     const openNow = isOpen(p.id)
     const over = drag?.over === p.id ? drag.where : undefined
     return (
-      <li key={p.id} role="treeitem" aria-level={depth + 1} aria-expanded={kids ? openNow : undefined} aria-selected={current?.id === p.id}>
+      <li key={p.id}>
         <div
           className={`page-row${current?.id === p.id ? ' on' : ''}${over ? ` drop-${over}` : ''}${drag?.id === p.id ? ' dragging' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
@@ -127,27 +142,32 @@ export function PageTree({ current }: { current: Page | undefined }) {
           onDragEnd={() => setDrag(null)}
         >
           {kids ? (
-            <button className="page-twisty" tabIndex={-1} aria-label={openNow ? 'Collapse' : 'Expand'} onClick={() => toggle(p.id)}>
+            <button className="page-twisty" tabIndex={-1} aria-label={`${openNow ? 'Collapse' : 'Expand'} ${p.title || 'Untitled'}`} aria-expanded={openNow} onClick={() => toggle(p.id)}>
               {openNow ? '▾' : '▸'}
             </button>
           ) : (
             <span className="page-twisty" aria-hidden="true" />
           )}
-          <button className="page-title" data-page={p.id} onClick={() => editor.openPage(p.id)} onKeyDown={(e) => onKey(e, p)}>
+          <button
+            className="page-title"
+            data-page={p.id}
+            aria-current={current?.id === p.id ? 'page' : undefined}
+            aria-label={`${p.title || 'Untitled'}${kids ? `, ${n.children.length} sub-page${n.children.length === 1 ? '' : 's'}${openNow ? '' : ', collapsed'}` : ''}`}
+            onClick={() => editor.openPage(p.id)}
+            onKeyDown={(e) => onKey(e, p)}
+          >
             <span className="page-icon" aria-hidden="true">
               {p.icon ?? '📄'}
             </span>
             <span className="page-name">{p.title || 'Untitled'}</span>
           </button>
           {!ro && (
-            <button className="page-add" title="Add a sub-page" aria-label={`Add a page under ${p.title || 'Untitled'}`} onClick={() => editor.addWikiPage({ parent: p.id })}>
+            <button className="page-add" tabIndex={-1} title="Add a sub-page" aria-label={`Add a page under ${p.title || 'Untitled'}`} onClick={() => editor.addWikiPage({ parent: p.id })}>
               +
             </button>
           )}
         </div>
-        {kids && openNow && (
-          <ul role="group">{n.children.map((c) => row(c, depth + 1))}</ul>
-        )}
+        {kids && openNow && <ul>{n.children.map((c) => row(c, depth + 1))}</ul>}
       </li>
     )
   }
@@ -160,9 +180,17 @@ export function PageTree({ current }: { current: Page | undefined }) {
       <div className="page-tree-head">
         <input className="page-filter" placeholder="Find a page" aria-label="Find a page" value={filter} onChange={(e) => setFilter(e.target.value)} />
         {!ro && (
-          <button className="page-new" title="New page at the top level" onClick={() => editor.addWikiPage()}>
-            + New page
-          </button>
+          <div className="page-tree-tools">
+            <button className="page-new" title="New page at the top level" onClick={() => editor.addWikiPage()}>
+              + New page
+            </button>
+            <button className="icon-btn" aria-label="Undo" title="Undo (Ctrl Z)" disabled={!editor.history.canUndo} onClick={() => editor.undo()}>
+              ↶
+            </button>
+            <button className="icon-btn" aria-label="Redo" title="Redo (Ctrl Shift Z)" disabled={!editor.history.canRedo} onClick={() => editor.redo()}>
+              ↷
+            </button>
+          </div>
         )}
       </div>
       {q ? (
@@ -181,7 +209,7 @@ export function PageTree({ current }: { current: Page | undefined }) {
           {!found.length && <li className="muted page-none">No page is called that</li>}
         </ul>
       ) : (
-        <ul role="tree" aria-label="Pages" className="page-list">
+        <ul className="page-list">
           {tree.map((n) => row(n, 0))}
           {/* Dropping below the last page puts it last at the top level. */}
           {drag && (
@@ -214,9 +242,9 @@ export function PageTree({ current }: { current: Page | undefined }) {
                       <button onClick={() => editor.restorePage(p.id)}>Restore</button>
                       <button
                         className="danger"
-                        onClick={() => window.confirm(`Delete “${p.title || 'Untitled'}” and its sub-pages for good?`) && editor.deletePageForever(p.id)}
+                        onClick={() => window.confirm(`Delete “${p.title || 'Untitled'}” and its sub-pages for good? This can’t be undone.`) && editor.deletePageForever(p.id)}
                       >
-                        Delete
+                        Delete forever
                       </button>
                     </span>
                   )}
@@ -226,7 +254,7 @@ export function PageTree({ current }: { current: Page | undefined }) {
           )}
         </div>
       )}
-      {!ro && <p className="page-tree-tip muted">Drag pages to nest them, or Alt Shift + arrows.</p>}
+      {!ro && <p className="page-tree-tip muted">Drag pages to nest them, use Alt Shift + arrows, or Move… on a page.</p>}
     </nav>
   )
 }

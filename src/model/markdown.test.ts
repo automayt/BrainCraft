@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Block, continueList, headings, inlineText, parseInline, parseMarkdown, safeHref, slugify, toggleTask } from './markdown'
+import { type Block, continueList, headings, inlineText, parseInline, parseMarkdown, plainMarkdown, safeHref, slugify, toggleTask } from './markdown'
 
 const kinds = (blocks: Block[]) => blocks.map((b) => b.t)
 
@@ -93,6 +93,54 @@ describe('markdown', () => {
     expect(continueList('3. three', 8)).toEqual({ text: '3. three\n4. ', caret: 12 })
     expect(continueList('- ', 2)).toEqual({ text: '', caret: 0 })
     expect(continueList('plain', 5)).toBeNull()
+  })
+
+  it('stays fast on lines built to make the parser backtrack', () => {
+    const time = (f: () => void) => {
+      const t = performance.now()
+      f()
+      return performance.now() - t
+    }
+    expect(time(() => parseMarkdown(`# a${' '.repeat(20000)}b`))).toBeLessThan(300)
+    expect(time(() => parseInline('@['.repeat(100000)))).toBeLessThan(500)
+    expect(time(() => parseInline('*a '.repeat(30000)))).toBeLessThan(500)
+    const wide = `|${'|'.repeat(10000)}\n|---|\n${'|\n'.repeat(1000)}`
+    let cells = 0
+    expect(
+      time(() => {
+        for (const b of parseMarkdown(wide)) if (b.t === 'table') cells += b.rows.length * b.head.length
+      }),
+    ).toBeLessThan(500)
+    expect(cells).toBeLessThan(200_000)
+    // Closing #s still come off a heading.
+    expect(parseMarkdown('## Plan ##')[0]).toMatchObject({ t: 'h', level: 2, slug: 'plan' })
+    expect(parseMarkdown('# C#')[0]).toMatchObject({ slug: 'c' })
+  })
+
+  it('gives every heading its own anchor, in any alphabet', () => {
+    const slugs = headings(parseMarkdown('# Budget\n# Budget\n# Budget 2\n# Бюджет\n# 予算')).map((h) => h.slug)
+    expect(slugs).toEqual(['budget', 'budget-3', 'budget-2', 'бюджет', '予算'])
+    expect(new Set(slugs).size).toBe(slugs.length)
+    // And links to them still read.
+    expect(parseInline('[[Plan › Бюджет]](page:p1#бюджет)')[0]).toMatchObject({ t: 'link', to: { page: 'p1', heading: 'бюджет' } })
+  })
+
+  it('ticks checklist items inside quotes and callouts, and with old line endings', () => {
+    expect(toggleTask('> [!tip] Bring\n> - [ ] Towel', 1)).toBe('> [!tip] Bring\n> - [x] Towel')
+    const blocks = parseMarkdown('Intro\r- [ ] A\r- [ ] B')
+    const b = blocks[1].t === 'list' ? blocks[1].items[1] : undefined
+    expect(b?.line).toBe(2)
+    expect(toggleTask('Intro\r- [ ] A\r- [ ] B', 2)).toBe('Intro\n- [ ] A\n- [x] B')
+  })
+
+  it('reads pages as plain text for snippets and search', () => {
+    const md = '# Packing\n- [ ] Passport\n- [x] **Towel**\n\n| Who | What |\n| --- | --- |\n| Sam | Tent |\n![[Map]](board:k#3)\nSee [[Plan]](page:p1) and !x ![[Inline]](board:k#4)'
+    expect(plainMarkdown(md)).toBe('Packing Passport Towel Who · What Sam · Tent Map See Plan and !x Inline')
+  })
+
+  it('keeps a bracket that belongs to a web address', () => {
+    expect(parseInline('see https://en.wikipedia.org/wiki/Foo_(bar).')[1]).toMatchObject({ t: 'a', href: 'https://en.wikipedia.org/wiki/Foo_(bar)' })
+    expect(parseInline('(see https://example.com)')[1]).toMatchObject({ t: 'a', href: 'https://example.com' })
   })
 
   it('copes with hostile pages quickly and without throwing', () => {

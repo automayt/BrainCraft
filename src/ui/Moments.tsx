@@ -178,7 +178,8 @@ export function Moments() {
       <div className="moments-layer">{out}</div>
       {editor.chatting && <ChatInput x={me.x} y={me.y} color={editor.myColor} />}
       <EmotePicker />
-      <div className="top-stack">
+      {/* Clear of a side panel (comments, a page beside the board). */}
+      <div className="top-stack" style={editor.rightInset ? { right: 76 + editor.rightInset } : undefined}>
         <LiveViewerBanner />
         <CatchUpBanner />
         <TimerBadge />

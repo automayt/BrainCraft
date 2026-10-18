@@ -55,6 +55,23 @@ describe('embeds', () => {
     expect(snap.items.find((i) => i.id === mine)).toMatchObject({ text: '', masked: true })
   })
 
+  it('copies what an object shows, not the talk around it, and records who saved it', () => {
+    let b = emptyBoard('Plan')
+    const talk: Partial<Item> = {
+      description: 'private plan',
+      notes: [{ id: 'n1', author: 'Sam', text: 'between us', at: 1 }],
+      reactions: { '👍': ['Sam'] },
+      votes: { s1: { Sam: 2 } },
+    }
+    ;[b] = addItem(b, note(0, 'Lisbon', talk))
+    const snap = makeSnap(b, 'plan', undefined, 3, 'Sam')!
+    expect(snap.by).toBe('Sam')
+    expect(snap.items[0].text).toBe('Lisbon')
+    for (const k of ['description', 'notes', 'reactions', 'votes'] as const) expect(snap.items[0][k]).toBeUndefined()
+    // Hostile or old copies: `by` is checked like any other field.
+    expect(cleanPatches([{ k: 'snap', id: 'plan', v: { ...snap, by: 42 } }])[0]).not.toHaveProperty('v.by')
+  })
+
   it('leaves big pictures out of a snapshot', () => {
     let b = emptyBoard('Photos')
     const big = 'data:image/png;base64,' + 'A'.repeat(SNAP_MAX_TOTAL)
@@ -79,6 +96,11 @@ describe('embeds', () => {
     expect(applyPatches(wiki, patches).snaps![0].items).toHaveLength(3)
     expect(fromJson(toJson(e.board)).snaps![0].items.map((i) => i.text).sort()).toEqual(['Lisbon', 'Places', 'Porto'])
     expect(snapBoard(e.board.snaps![0]).items).toHaveLength(3)
+    // The same copy again, or one no page uses, changes nothing (no save, no new board).
+    const before = e.board
+    e.keepSnap(snap)
+    e.keepSnap({ ...snap, key: 'plan1#999' })
+    expect(e.board).toBe(before)
     // Junk is refused.
     expect(cleanPatches([{ k: 'snap', id: 'bad key!', v: snap }, { k: 'snap', id: 'other', v: snap }])).toEqual([])
     // The page stops embedding it: the next refresh drops it.
@@ -95,7 +117,10 @@ describe('embeds', () => {
       expect(W.pageOrder(b).length).toBe(Math.max(1, t.pages.length))
     }
     const trip = wikiFromTemplate('wiki-trip', 'Lisbon')
-    expect(W.pageText(trip, W.pageOrder(trip)[0].id)).toContain('# Lisbon')
+    const home = W.pageOrder(trip)[0]
+    expect(W.pageText(trip, home.id)).toContain('# Lisbon')
+    // The home page's {{children}} lists the rest.
+    expect(W.childrenOf(trip, home.id).map((p) => p.title)).toEqual(['Plan', 'Packing', 'Budget', 'Bookings'])
     expect(wikiFromTemplate('nope').title).toBe('Untitled wiki')
   })
 })

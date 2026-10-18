@@ -118,6 +118,23 @@ describe('share links', () => {
     expect(out.items.map((i) => i.id)).toEqual([note])
     expect(out.connectors).toEqual([])
   })
+
+  it('shares a wiki without its trash, unused embed copies, or (if asked) their pictures', async () => {
+    const W = await import('../model/wiki')
+    const { forSharing } = await import('./share')
+    let w = W.emptyWiki('Trip', 1)
+    let gone: string
+    ;[w] = W.addPage(w, { title: 'Kept', text: '![[Photo]](board:k#1)' }, 2)
+    ;[w, gone] = W.addPage(w, { title: 'Secret', text: 'old plans ![[Old]](board:k#2)' }, 3)
+    w = W.trashPage(w, gone, 4)
+    const snap = (key: string) => ({ key, at: 1, items: [{ ...newItem('image', { x: 0, y: 0, w: 10, h: 10 }, { src: 'data:image/png;base64,AAAA' }), id: 1 }], connectors: [] })
+    w = { ...w, snaps: [snap('k#1'), snap('k#2')] }
+    const out = forSharing(w)
+    expect(out.pages!.map((p) => p.title)).toEqual(['Home', 'Kept'])
+    expect(JSON.stringify(out)).not.toContain('old plans')
+    expect(out.snaps!.map((s) => s.key)).toEqual(['k#1'])
+    expect(withoutImages(out).snaps![0].items[0].src).toBeUndefined()
+  })
 })
 
 describe('templates', () => {
