@@ -41,6 +41,8 @@ export type Block =
   | { t: 'hr'; line: number }
   /** `{{children}}`: this page's sub-pages; `{{toc}}`: its headings. */
   | { t: 'children' | 'toc'; line: number }
+  /** `![[Label|height]](board:KEY#ID)`: a canvas object (or a whole board) shown in the page. */
+  | { t: 'embed'; label: string; board: string; item?: Id; height?: number; line: number }
 
 export type CalloutKind = 'note' | 'tip' | 'warning' | 'danger'
 const CALLOUTS: readonly CalloutKind[] = ['note', 'tip', 'warning', 'danger']
@@ -194,6 +196,17 @@ const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
 const QUOTE = /^ {0,3}> ?(.*)$/
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
 const MACRO = /^\s*\{\{\s*(children|toc)\s*\}\}\s*$/i
+const EMBED = /^\s*!\[\[([^[\]\n|]*)(?:\|(\d{2,4}))?\]\]\(board:([\w-]{1,64})(?:#(\d{1,16}))?\)\s*$/
+
+/** The snapshot keys (`board` or `board#item`) of every embed in some page text. */
+export function embedKeys(text: string): string[] {
+  const out: string[] = []
+  for (const line of text.split('\n')) {
+    const m = EMBED.exec(line)
+    if (m) out.push(m[4] ? `${m[3]}#${m[4]}` : m[3])
+  }
+  return out
+}
 
 const indentOf = (line: string) => {
   let n = 0
@@ -213,6 +226,7 @@ const cells = (line: string) => {
 }
 
 const startsBlock = (line: string, next: string | undefined) =>
+  EMBED.test(line) ||
   FENCE.test(line) || HEADING.test(line) || HR.test(line) || LIST.test(line) || QUOTE.test(line) || MACRO.test(line) || (line.includes('|') && next !== undefined && TABLE_RULE.test(next) && next.includes('-'))
 
 /** Parses a page's Markdown. `offset` is the line the text starts on (for nested blocks). */
@@ -246,6 +260,13 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
     }
     if (HR.test(line)) {
       out.push({ t: 'hr', line: at })
+      i++
+      continue
+    }
+    const embed = EMBED.exec(line)
+    if (embed) {
+      const height = embed[2] ? Math.max(120, Math.min(1200, Number(embed[2]))) : undefined
+      out.push({ t: 'embed', label: embed[1].trim(), board: embed[3], ...(embed[4] ? { item: Number(embed[4]) } : {}), ...(height ? { height } : {}), line: at })
       i++
       continue
     }

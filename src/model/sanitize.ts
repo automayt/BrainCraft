@@ -22,6 +22,7 @@ import type {
   Page,
   PageBody,
   Poll,
+  Snap,
   RunRecord,
   SelectOption,
   Status,
@@ -30,6 +31,7 @@ import type {
 } from './types'
 import { defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
+import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 
 export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code']
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
@@ -397,6 +399,21 @@ export function cleanBody(v: unknown): PageBody | null {
   return { id: v.id, text: str(v.text, BODY_MAX) ?? '', at: num(v.at) ?? 0, ...(by ? { by } : {}) }
 }
 
+/** A wiki's copy of an embedded object, checked like the board it came from. */
+export function cleanSnap(v: unknown): Snap | null {
+  if (!isObj(v) || !isSnapKey(v.key)) return null
+  const ids = new Set<number>()
+  const items = arr(v.items)
+    .slice(0, SNAP_MAX_ITEMS)
+    .map(cleanItem)
+    .filter((i): i is Item => !!i && !ids.has(i.id) && !!ids.add(i.id))
+  const connectors = arr(v.connectors)
+    .map(cleanConnector)
+    .filter((c): c is Connector => !!c && ids.has(c.from) && ids.has(c.to))
+  const datasets = arr(v.datasets).map(cleanDataset).filter((d): d is Dataset => !!d)
+  return { key: v.key, at: num(v.at) ?? 0, items, connectors, ...(datasets.length ? { datasets } : {}) }
+}
+
 export function cleanPatches(patches: readonly unknown[]): Patch[] {
   const out: Patch[] = []
   for (const raw of patches) {
@@ -451,6 +468,15 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         else {
           const v = cleanRecord(p.v)
           if (v && v.id === p.id) out.push({ k: 'rec', ds: p.ds, id: p.id, v })
+        }
+        break
+      }
+      case 'snap': {
+        if (!isSnapKey(p.id)) break
+        if (p.v === null) out.push({ k: 'snap', id: p.id, v: null })
+        else {
+          const v = cleanSnap(p.v)
+          if (v && v.key === p.id) out.push({ k: 'snap', id: p.id, v })
         }
         break
       }

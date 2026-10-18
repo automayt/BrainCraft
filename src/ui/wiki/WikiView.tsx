@@ -13,6 +13,7 @@ import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
 import { PageEditor } from './PageEditor'
 import { PageTree } from './PageTree'
+import { ObjectEmbed } from './ObjectEmbed'
 
 const LAST_PAGE = 'braincraft:page:'
 
@@ -124,6 +125,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     ),
     toggle: ro ? undefined : (line) => editor.setPageText(page.id, toggleTask(text, line)),
     children: () => <SubPages pages={kids} />,
+    embed: (block) => <ObjectEmbed block={block} />,
     headings: heads,
     copyHeading: (slug, words) => copyPlace(ws, editor, `${page.title || 'Untitled'} › ${words}`, { page: page.id, heading: slug }),
   }

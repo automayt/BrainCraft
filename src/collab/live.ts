@@ -11,7 +11,7 @@ import type { Editor } from '../editor/Editor'
 import type { Rect, Vec } from '../model/geom'
 import type { Board, Id } from '../model/types'
 import { type Patch, applyPatches, diff, keyOf, sameValue, valuesOf } from './patch'
-import { cleanBody, cleanConnector, cleanItem, cleanPage } from '../model/sanitize'
+import { cleanBody, cleanConnector, cleanItem, cleanPage, cleanSnap } from '../model/sanitize'
 import { type ClientMessage, type LiveLink, type PeerInfo, type Presence, type Role, type ServerMessage } from './protocol'
 
 export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
@@ -170,7 +170,7 @@ export class LiveSession {
         const now = valuesOf(this.editor.board)
         // Objects as the server keeps them (cleaned), so a value nobody changed compares equal.
         const kept = (p: Patch, v: unknown) =>
-          !v ? v : p.k === 'item' ? cleanItem(v) : p.k === 'conn' ? cleanConnector(v) : p.k === 'page' ? cleanPage(v) : p.k === 'body' ? cleanBody(v) : v
+          !v ? v : p.k === 'item' ? cleanItem(v) : p.k === 'conn' ? cleanConnector(v) : p.k === 'page' ? cleanPage(v) : p.k === 'body' ? cleanBody(v) : p.k === 'snap' ? cleanSnap(v) : v
         const same = (p: Patch, a: unknown, z: unknown) => sameValue(kept(p, a), kept(p, z))
         const ours = new Map<string, unknown[]>()
         const replay: Patch[] = []

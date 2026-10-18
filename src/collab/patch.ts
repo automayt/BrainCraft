@@ -4,7 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody } from '../model/types'
+import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, Snap } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -26,6 +26,8 @@ export type Patch =
   /** A wiki page's title and place; its words go separately, so renaming and typing never clash. */
   | { k: 'page'; id: string; v: Page | null }
   | { k: 'body'; id: string; v: PageBody | null }
+  /** A copy of what a page embeds, kept for friends who don't have that board. */
+  | { k: 'snap'; id: string; v: Snap | null }
 
 /** What a patch is about: two patches with the same key replace each other. */
 export function keyOf(p: Patch): string {
@@ -48,6 +50,8 @@ export function keyOf(p: Patch): string {
       return `p:${p.id}`
     case 'body':
       return `b:${p.id}`
+    case 'snap':
+      return `s:${p.id}`
   }
 }
 
@@ -154,6 +158,16 @@ export function diff(a: Board, z: Board): Patch[] {
   // Wiki pages before their words: a new page must exist before its body arrives.
   diffById(a.pages, z.pages, (id, v) => ({ k: 'page', id, v }), out)
   diffById(a.bodies, z.bodies, (id, v) => ({ k: 'body', id, v }), out)
+  if (a.snaps !== z.snaps) {
+    const before = new Map((a.snaps ?? []).map((s) => [s.key, s]))
+    const after = new Set<string>()
+    for (const s of z.snaps ?? []) {
+      after.add(s.key)
+      const old = before.get(s.key)
+      if (old !== s && !same(old, s)) out.push({ k: 'snap', id: s.key, v: s })
+    }
+    for (const s of a.snaps ?? []) if (!after.has(s.key)) out.push({ k: 'snap', id: s.key, v: null })
+  }
   return out
 }
 
@@ -230,6 +244,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let icon = b.icon
   let pages = b.pages
   let bodies = b.bodies
+  let snaps = b.snaps
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -292,6 +307,12 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         bodies = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
         break
       }
+      case 'snap': {
+        const list = snaps ?? []
+        const at = list.findIndex((x) => x.key === p.id)
+        snaps = p.v === null ? list.filter((x) => x.key !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
     }
   }
   const items = itemList.result() as Item[]
@@ -309,6 +330,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   else delete next.pages
   if (bodies?.length || b.kind === 'wiki') next.bodies = bodies ?? []
   else delete next.bodies
+  if (snaps?.length) next.snaps = snaps
+  else delete next.snaps
   return next
 }
 
@@ -352,6 +375,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return pages.get(p.id) ?? null
       case 'body':
         return bodies.get(p.id) ?? null
+      case 'snap':
+        return (b.snaps ?? []).find((s) => s.key === p.id) ?? null
     }
   }
 }

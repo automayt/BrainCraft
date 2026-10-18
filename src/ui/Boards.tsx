@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
+import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
 import { darken } from './BoardView'
 import { ink, mindRootFill } from './paint'
@@ -114,23 +115,36 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                 <small>{t.hint}</small>
               </button>
             ))}
-            <button
-              className="template"
-              onClick={() => {
-                onClose()
-                void ws.newWiki()
-              }}
-            >
-              <span className="thumb wiki-thumb" aria-hidden="true">
-                <i />
-                <i />
-                <i className="sub" />
-                <i className="sub" />
-                <i />
-              </span>
-              <strong>Wiki</strong>
-              <small>Pages in a tree, written in Markdown</small>
-            </button>
+          </section>
+        )}
+        {!query && (
+          <section className="templates wiki-templates" aria-label="Start a new wiki">
+            {WIKI_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                className="template"
+                onClick={() => {
+                  onClose()
+                  void ws.newWiki(undefined, t.id)
+                }}
+              >
+                <span className="thumb wiki-thumb" aria-hidden="true">
+                  {t.pages.length ? (
+                    t.pages.slice(0, 5).map((p) => <span key={p.title}>{p.icon} {p.title}</span>)
+                  ) : (
+                    <>
+                      <i />
+                      <i />
+                      <i className="sub" />
+                      <i className="sub" />
+                      <i />
+                    </>
+                  )}
+                </span>
+                <strong>{t.id === 'wiki' ? 'Wiki' : `${t.label} wiki`}</strong>
+                <small>{t.hint}</small>
+              </button>
+            ))}
           </section>
         )}
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}

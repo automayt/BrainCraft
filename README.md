@@ -228,8 +228,19 @@ shares live exactly like a board.
 - **Backlinks both ways:** a page lists the pages, canvas comments and other
   wikis that link to it; an object's Comments panel lists the wiki pages
   that mention it.
-- Showing canvas objects inside pages comes next (see
-  [docs/IDEAS.md](docs/IDEAS.md)).
+- **Canvas objects inside pages:** type `/` at the start of a line and pick
+  **Embed from a board…**, or right-click an object on a board → **Copy embed
+  for a wiki page** and paste it on a line of its own. Frames (with what's in
+  them), mind maps, flowcharts, timelines and whole boards are drawn just as
+  on the canvas; tables, Kanban boards and databases show as real tables.
+  Each embed has **Open on board** and **Expand**. The wiki keeps a copy of
+  what it shows, so friends who don't have that board still see it (with
+  every hidden brainstorm note left blank).
+- **`/` menu:** headings, checklists, lists, tables, code, quotes, tips and
+  warnings, dividers, links to pages, a new sub-page, the sub-page list and
+  contents, and embeds.
+- **Templates:** Your boards has a row of wikis to start from: blank, a trip,
+  moving house, a party and a club handbook.
 
 ### Linked data: one dataset, many views
 

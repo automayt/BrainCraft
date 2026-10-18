@@ -7,6 +7,37 @@ import * as W from '../../model/wiki'
 import { useEditor } from '../useEditor'
 import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
+import { EmbedPicker } from './EmbedPicker'
+import { embedToken } from '../../model/embed'
+
+interface SlashItem {
+  label: string
+  hint: string
+  text?: string
+  /** Where the caret goes in `text` (its end when missing). */
+  caret?: number
+  action?: 'link' | 'subpage' | 'embed'
+}
+
+/** What "/" at the start of a line offers. */
+const SLASH: SlashItem[] = [
+  { label: 'Heading', hint: '##', text: '## ' },
+  { label: 'Smaller heading', hint: '###', text: '### ' },
+  { label: 'Checklist', hint: '- [ ]', text: '- [ ] ' },
+  { label: 'Bulleted list', hint: '-', text: '- ' },
+  { label: 'Numbered list', hint: '1.', text: '1. ' },
+  { label: 'Table', hint: '| |', text: '| Column | Column |\n| --- | --- |\n|  |  |\n', caret: 2 },
+  { label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
+  { label: 'Quote', hint: '>', text: '> ' },
+  { label: 'Tip', hint: '> [!tip]', text: '> [!tip] ' },
+  { label: 'Warning', hint: '> [!warning]', text: '> [!warning] ' },
+  { label: 'Divider', hint: '---', text: '---\n' },
+  { label: 'Link to a page', hint: '[[', text: '[[', action: 'link' },
+  { label: 'New sub-page', hint: 'Adds a page under this one, linked here', action: 'subpage' },
+  { label: 'Sub-page list', hint: '{{children}}', text: '{{children}}\n' },
+  { label: 'Contents', hint: '{{toc}}', text: '{{toc}}\n' },
+  { label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
+]
 
 /** How long after the last key a draft goes out (to the board, other tabs and friends). */
 const PUSH_MS = 300
@@ -28,6 +59,9 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const [draft, setDraft] = useState(text)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
   const [pick, setPick] = useState<{ from: number; query: string; k: number } | null>(null)
+  const [slash, setSlash] = useState<{ from: number; query: string; k: number } | null>(null)
+  /** Where an embed being picked goes. */
+  const [embedAt, setEmbedAt] = useState<number | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const unsent = useRef(false)
@@ -78,6 +112,35 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     const before = el.value.slice(0, caret)
     const m = /\[\[([^[\]\n]{0,60})$/.exec(before)
     setPick(m ? { from: caret - m[0].length, query: m[1], k: 0 } : null)
+    // "/" at the start of a line: the menu of things to insert.
+    const s = m ? null : /(?:^|\n)\/([\w ]{0,24})$/.exec(before)
+    setSlash(s ? { from: caret - s[1].length - 1, query: s[1], k: 0 } : null)
+  }
+
+  const slashItems = slash ? SLASH.filter((x) => !slash.query.trim() || x.label.toLowerCase().includes(slash.query.trim().toLowerCase())) : []
+
+  /** Runs a / menu item in place of the "/query" typed. */
+  const runSlash = (item: SlashItem) => {
+    if (!slash) return
+    const caret = area.current!.selectionStart
+    const before = draft.slice(0, slash.from)
+    const after = draft.slice(caret)
+    setSlash(null)
+    if (item.action === 'embed') {
+      change(before + after, slash.from)
+      setEmbedAt(slash.from)
+      return
+    }
+    if (item.action === 'subpage') {
+      const id = editor.addWikiPage({ title: 'Untitled', parent: page.id })
+      editor.openPage(page.id)
+      const token = `${linkToken('Untitled', { page: id })}\n`
+      change(before + token + after, slash.from + token.length)
+      return
+    }
+    const text = item.text!
+    change(before + text + after, slash.from + (item.caret ?? text.length))
+    if (item.action === 'link') requestAnimationFrame(() => setPick({ from: slash.from, query: '', k: 0 }))
   }
 
   const insert = (p: Pick) => {
@@ -120,6 +183,24 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash && slashItems.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSlash({ ...slash, k: (slash.k + (e.key === 'ArrowDown' ? 1 : slashItems.length - 1)) % slashItems.length })
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        runSlash(slashItems[Math.min(slash.k, slashItems.length - 1)])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSlash(null)
+        return
+      }
+    }
     if (pick && picks.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
@@ -222,6 +303,36 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           }}
           onBlur={() => push()}
         />
+        {slash && slashItems.length > 0 && (
+          <ul className="page-picker" role="listbox" aria-label="Insert">
+            {slashItems.map((x, k) => (
+              <li key={x.label} role="option" aria-selected={k === slash.k}>
+                <button className={k === slash.k ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => runSlash(x)}>
+                  <span>{x.label}</span>
+                  <small className="muted">{x.hint}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {embedAt !== null && (
+          <EmbedPicker
+            onClose={() => {
+              setEmbedAt(null)
+              area.current?.focus()
+            }}
+            onPick={(c) => {
+              const at = embedAt
+              setEmbedAt(null)
+              const cur = draftRef.current
+              // On a line of its own.
+              const lead = at > 0 && cur[at - 1] !== '\n' ? '\n' : ''
+              const text = `${lead}${embedToken(c.label, c.board, c.item)}\n`
+              change(cur.slice(0, at) + text + cur.slice(at), at + text.length)
+              requestAnimationFrame(() => area.current?.focus())
+            }}
+          />
+        )}
         {pick && picks.length > 0 && (
           <ul className="page-picker" role="listbox" aria-label="Link to">
             {picks.map((p, k) => (

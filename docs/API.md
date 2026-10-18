@@ -114,6 +114,10 @@ Results carry the page's id as `page`.
 | `movePage` | `page`, `parent?` (`null` for the top), `before?` | Moves it with its sub-pages. A page can't go inside its own sub-pages. |
 | `deletePage` | `page` | Moves it and its sub-pages to the trash. |
 
+A line `![[Label|height]](board:KEY#ID)` on its own embeds a canvas object
+(a frame with what's in it, a mind map, a table…) in the page, and
+`![[Label]](board:KEY)` a whole board; `|height` (in pixels) is optional.
+
 Page Markdown links a page with `[[Title]](page:ID)` (or `[[Title]]` by name),
 a heading with `[[Title › Heading]](page:ID#anchor)`, a page of another wiki
 with `[[Title]](board:KEY/page:ID)`, and an object on a canvas board with

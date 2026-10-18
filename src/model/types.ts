@@ -95,6 +95,15 @@ export interface Page {
   trashed?: number
 }
 
+/** A copy of what a page's embed shows, kept in the wiki. `key` is `board` or `board#item`. */
+export interface Snap {
+  key: string
+  at: number
+  items: Item[]
+  connectors: Connector[]
+  datasets?: Dataset[]
+}
+
 /** A wiki page's words, in Markdown, and who last changed them. */
 export interface PageBody {
   id: string
@@ -341,6 +350,8 @@ export interface Board {
   pages?: Page[]
   /** The pages' words, one per page (same id). */
   bodies?: PageBody[]
+  /** Copies of what the pages embed, for friends who don't have those boards. */
+  snaps?: Snap[]
 }
 
 export const FORMAT_VERSION = 1

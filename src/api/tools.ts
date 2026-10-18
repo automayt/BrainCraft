@@ -5,6 +5,7 @@
  */
 
 import { TEMPLATES } from '../model/templates'
+import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import type { Board, Id, Kind } from '../model/types'
 import { KIND_LABELS } from '../model/types'
 import { type Op, type OpResult, opsFromText } from './ops'
@@ -62,7 +63,7 @@ Wikis (boards of pages instead of a canvas; only these ops work on them). "page"
 createPage {title, parent?, before?, text?, icon?, ref?} — a page (under "parent", before "before" or last), its text in Markdown
 updatePage {page, title?, text?, append?, icon?} — "text" replaces the page's Markdown, "append" adds to the end
 movePage {page, parent?: page or null for the top, before?} · deletePage {page} — moves it (and its sub-pages) to the trash
-Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), an object on a canvas board with [[Label]](board:KEY#ID).`
+Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), an object on a canvas board with [[Label]](board:KEY#ID). A line ![[Label]](board:KEY#ID) on its own shows that object inside the page (![[Label]](board:KEY) a whole board).`
 
 const fileProp = {
   file: {
@@ -152,10 +153,10 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'create_board',
     title: 'Create board',
-    description: `Creates a new board and opens it. Optional template: ${TEMPLATES.map((t) => `${t.id} (${t.hint.toLowerCase()})`).join(', ')}, or wiki (pages in a tree, written in Markdown). In file mode, pass "file" as the new file's path.`,
+    description: `Creates a new board and opens it. Optional template: ${[...TEMPLATES, ...WIKI_TEMPLATES].map((t) => `${t.id} (${t.hint.toLowerCase()})`).join(', ')}. The wiki ones make a wiki (pages in a tree, written in Markdown). In file mode, pass "file" as the new file's path.`,
     inputSchema: {
       type: 'object',
-      properties: { title: { type: 'string' }, template: { type: 'string', enum: [...TEMPLATES.map((t) => t.id), 'wiki'] }, ...fileProp },
+      properties: { title: { type: 'string' }, template: { type: 'string', enum: [...TEMPLATES, ...WIKI_TEMPLATES].map((t) => t.id) }, ...fileProp },
       required: ['title'],
     },
   },

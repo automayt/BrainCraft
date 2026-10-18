@@ -8,6 +8,8 @@ import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { copyText } from './copyText'
+import { embedToken } from '../model/embed'
+import { objectLabel } from '../model/notes'
 import { useEscape } from './useEscape'
 import { focusFirst, moveFocus } from './menuKeys'
 
@@ -108,6 +110,13 @@ export function ContextMenu() {
               run: () =>
                 void copyText(ws.webLink({ item: single.id })!).then((ok) =>
                   editor.setStatus(ok ? 'Copied a link — paste it in a chat, a wiki page or a comment' : 'Couldn’t copy the link'),
+                ),
+            },
+            {
+              label: 'Copy embed for a wiki page',
+              run: () =>
+                void copyText(embedToken(objectLabel(single), ws.linkKey!, single.id)).then((ok) =>
+                  editor.setStatus(ok ? 'Copied — paste it on a line of its own in a wiki page to show this there' : 'Couldn’t copy it'),
                 ),
             },
           ]

@@ -26,11 +26,16 @@ saves, versions, syncs and shares like any board. Built in phases:
   board (today: Copy link to this object, then paste), and invite links that
   open a page (`inviteLink` exists in the workspace; the share dialog could
   offer it).
-- [ ] **Phase 3: embeds.** `![[Label]](board:KEY#ID)` shows a frame, mind map,
-  table, Kanban board, timeline or whole board inside a page, drawn by the
-  real board renderer; snapshots for friends who don't have the board (with
-  every hidden brainstorm note blanked); database views as real tables; a
-  `/` menu; wiki templates (trip, move, party, club).
+- [x] **Phase 3: embeds.** `![[Label]](board:KEY#ID)` shows a frame, mind map,
+  flowchart, timeline or whole board inside a page, drawn by the real board
+  renderer, with Open on board and Expand; tables, Kanban boards and database
+  views as real tables; snapshots kept in the wiki for friends who don't have
+  the board (every hidden brainstorm note blanked, big pictures left out,
+  unused copies dropped); Copy embed on the canvas; a `/` menu with an embed
+  picker; wiki templates (trip, move, party, club).
+- [ ] **Later for embeds:** live embeds of boards in a live session that isn't
+  open here (a background view-only connection), editing table and database
+  embeds in place, and query blocks (open tasks across boards).
 - [ ] **Phase 4: robustness.** A line-by-line merge so two friends typing on
   one page both keep their words; page history with diffs; "Since you were
   here" for pages; search across wikis; Markdown import and export.

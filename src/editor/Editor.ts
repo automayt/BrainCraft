@@ -28,6 +28,8 @@ import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
 import * as W from '../model/wiki'
+import { setSnap, unusedSnaps } from '../model/embed'
+import { embedKeys } from '../model/markdown'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
@@ -45,6 +47,7 @@ import {
   type Kind,
   type LinkCard,
   type Page,
+  type Snap as EmbedSnap,
   type Status,
   type TableData,
   type TimelineData,
@@ -1468,6 +1471,21 @@ export class Editor {
   restorePage(id: string) {
     this.edit((b) => W.restorePage(b, id))
     this.openPage(id)
+  }
+
+  /**
+   * Keeps a wiki's copy of an embedded object up to date (for friends without that board). Not an
+   * undo step: it follows the board it copies. Copies no page embeds any more go at the same time.
+   */
+  keepSnap(snap: EmbedSnap) {
+    if (this.readOnly || !W.isWiki(this.board)) return
+    const used = new Set((this.board.bodies ?? []).flatMap((x) => embedKeys(x.text)))
+    let next = setSnap(this.board, snap)
+    const stale = unusedSnaps(next, used)
+    if (stale.length) next = { ...next, snaps: (next.snaps ?? []).filter((s) => !stale.includes(s.key)) }
+    if (!next.snaps?.length) delete next.snaps
+    this.apply(next)
+    this.emit()
   }
 
   deletePageForever(id: string) {

@@ -675,6 +675,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Ctrl O → Wiki', 'Start a wiki: pages in a tree, written in Markdown'],
       ['[[', 'While writing: link to a page or a board'],
+      ['/ (at the start of a line)', 'Insert a heading, checklist, table, sub-page… or embed something from a board'],
       ['Alt Shift ↑ / ↓ · ← / →', 'In the page list: move a page up or down · out or in'],
       ['Enter · Tab', 'Continue a list or checklist · indent it'],
       ['Ctrl B · Ctrl I', 'Bold · italic'],

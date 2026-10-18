@@ -16,6 +16,8 @@ export interface MarkdownActions {
   headings: Heading[]
   /** Copies a link to a heading; missing hides the # button. */
   copyHeading?: (slug: string, text: string) => void
+  /** Draws an embedded canvas object; missing shows it as a link. */
+  embed?: (block: Extract<Block, { t: 'embed' }>) => ReactNode
 }
 
 function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
@@ -160,6 +162,8 @@ function BlockView({ b, a }: { b: Block; a: MarkdownActions }): ReactNode {
       )
     case 'children':
       return a.children()
+    case 'embed':
+      return a.embed ? a.embed(b) : <p>{a.link({ board: b.board, ...(b.item !== undefined ? { item: b.item } : {}) }, b.label || 'Embedded board', 0)}</p>
     case 'toc':
       return a.headings.length ? (
         <nav className="md-toc" aria-label="On this page">

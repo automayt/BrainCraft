@@ -1,8 +1,8 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage } from './sanitize'
-import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody } from './types'
+import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanSnap } from './sanitize'
+import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type Snap } from './types'
 import { MAX_PAGES } from './wiki'
 
 export function toJson(b: Board): string {
@@ -44,6 +44,10 @@ export function fromJson(json: string): Board {
   const bodies = (Array.isArray(raw.bodies) ? raw.bodies.map(cleanBody) : []).filter(
     (x): x is PageBody => !!x && knownPages.has(x.id) && !bodyIds.has(x.id) && !!bodyIds.add(x.id),
   )
+  const snapKeys = new Set<string>()
+  const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_PAGES).map(cleanSnap) : []).filter(
+    (s): s is Snap => !!s && !snapKeys.has(s.key) && !!snapKeys.add(s.key),
+  )
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
@@ -55,6 +59,7 @@ export function fromJson(json: string): Board {
     ...(datasets.length ? { datasets } : {}),
     ...(wiki ? { kind: 'wiki' as const } : {}),
     ...(wiki || pages.length ? { pages, bodies } : {}),
+    ...(snaps.length ? { snaps } : {}),
   }
 }
 

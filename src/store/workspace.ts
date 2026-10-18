@@ -5,7 +5,8 @@
 
 import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
-import { emptyWiki, getPage, pageText } from '../model/wiki'
+import { getPage, pageText } from '../model/wiki'
+import { wikiFromTemplate } from '../model/wikiTemplates'
 import { headings, parseMarkdown } from '../model/markdown'
 import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
@@ -452,8 +453,8 @@ export class Workspace {
   }
 
   /** Starts a new wiki (pages in a tree) and opens it. */
-  newWiki(title = 'Untitled wiki') {
-    return this.newBoard(emptyWiki(title))
+  newWiki(title?: string, template = 'wiki') {
+    return this.newBoard(wikiFromTemplate(template, title))
   }
 
   /** Saves a shared board into this browser's library and opens it for editing. */
