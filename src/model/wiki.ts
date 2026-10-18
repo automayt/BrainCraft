@@ -366,7 +366,11 @@ export function searchPages(b: Board, query: string, limit = 40): PageHit[] {
     if (!words.every((w) => title.includes(w) || lower.includes(w))) continue
     const inTitle = words.every((w) => title.includes(w))
     const at = lower.indexOf(words[0])
-    const snippet = inTitle || at < 0 ? pagePath(b, page.id).slice(0, -1).map((p) => p.title).join(' › ') : `${at > 30 ? '…' : ''}${text.slice(Math.max(0, at - 30), at + 80).replace(/\s+/g, ' ').trim()}…`
+    // The words around the match, starting at a whole word.
+    let from = Math.max(0, at - 30)
+    const space = from > 0 ? text.indexOf(' ', from) : -1
+    if (space >= 0 && space < at) from = space + 1
+    const snippet = inTitle || at < 0 ? pagePath(b, page.id).slice(0, -1).map((p) => p.title).join(' › ') : `${from > 0 ? '…' : ''}${text.slice(from, at + 80).replace(/\s+/g, ' ').trim()}…`
     out.push({ page, snippet, score: (inTitle ? 100 : 0) + (title.startsWith(words[0]) ? 20 : 0) - title.length / 100 })
   }
   return out.sort((a, z) => z.score - a.score).slice(0, limit)

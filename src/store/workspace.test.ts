@@ -67,6 +67,33 @@ describe('workspace', () => {
     expect(editor.board.title).toBe('Changed')
   })
 
+  it('follows one wiki page through the versions and puts an old one back', async () => {
+    const { ws, editor } = await workspace()
+    await ws.newWiki('Trip')
+    const page = editor.board.pages![0].id
+    const tick = () => new Promise((r) => setTimeout(r, 3))
+    editor.setPageText(page, 'Flights')
+    await ws.saveVersion('First')
+    await tick()
+    editor.setPageText(page, 'Flights\nHotel')
+    await ws.saveVersion('Second')
+    await tick()
+    // A version where this page didn't change folds into the change before it.
+    editor.addWikiPage({ title: 'Other' })
+    await ws.saveVersion('Third')
+    editor.setPageText(page, 'Train instead')
+    const history = await ws.pageHistory(page)
+    expect(history.map((h) => h.text)).toEqual(['Flights\nHotel', 'Flights'])
+    expect(history.map((h) => h.v.name)).toEqual(['Third', 'First'])
+    expect((await ws.versions())[0]).toMatchObject({ kind: 'wiki', items: 2 })
+    editor.restorePageVersion(page, history[1].title, history[1].text, 'then')
+    expect(editor.board.bodies!.find((b) => b.id === page)!.text).toBe('Flights')
+    // The other page is untouched, and one undo brings the newer words back.
+    expect(editor.board.pages!.some((p) => p.title === 'Other')).toBe(true)
+    editor.undo()
+    expect(editor.board.bodies!.find((b) => b.id === page)!.text).toBe('Train instead')
+  })
+
   it('opens share links read-only and can keep a copy', async () => {
     const hash = `#view=${await encodeBoard(emptyBoard('From a friend'))}`
     const { ws, editor } = await workspace(hash)

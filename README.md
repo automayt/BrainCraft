@@ -250,6 +250,18 @@ shares live exactly like a board.
   contents, and embeds.
 - **Templates:** Your boards has a row of wikis to start from: blank, a trip,
   moving house, a party and a club handbook.
+- **History of a page:** **⋯ → History** lists each saved version where the
+  page changed (who, when, lines added and removed), shows what changed, and
+  **Put this version back** restores just that page as one undo step.
+- **Since you were here:** opening a wiki after friends worked on it lists the
+  new, changed and removed pages, marks them in the page list, and **what
+  changed** shows the lines that are different since your last visit.
+- **Search across wikis:** Ctrl+K in any board or wiki also finds pages in
+  your other wikis.
+- **Markdown files in and out:** **⋯ → Download page (.md)**, or **Download
+  wiki (.zip)** for every page as a Markdown file with sub-pages in folders.
+  Drop `.md` files on a wiki (or **⋯ → Add Markdown files…**) and each becomes
+  a page; links between pages travel as `[[Title]]`, so they still work.
 
 ### Linked data: one dataset, many views
 

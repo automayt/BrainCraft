@@ -66,3 +66,27 @@ describe('who changed it', () => {
     expect(stampAuthors(commented, commented, 'Sam')).toBe(commented)
   })
 })
+
+describe('since you were here, in a wiki', () => {
+  it('lists new, rewritten and removed pages, and who wrote them', async () => {
+    const W = await import('./wiki')
+    const { catchUpPeople } = await import('./catchup')
+    let before = W.emptyWiki('Trip', 1)
+    let plan: string, food: string, beds: string
+    ;[before, plan] = W.addPage(before, { title: 'Plan', text: 'Fly' }, 2)
+    ;[before, food] = W.addPage(before, { title: 'Food', text: 'Tapas' }, 3)
+    ;[before, beds] = W.addPage(before, { title: 'Beds' }, 4)
+    let now = W.setPageBody(before, plan, 'Fly, then train', 10, 'Ana')
+    now = W.trashPage(now, food, 11)
+    let fresh: string
+    ;[now, fresh] = W.addPage(now, { title: 'Packing' }, 12, 'Sam')
+    const c = catchUp(before, now, 5)!
+    expect(c.pages).toEqual({ added: [fresh], changed: [plan], removed: [{ id: food, title: 'Food' }] })
+    expect(catchUpSummary(c)).toBe('1 new page · 1 page changed · 1 page removed')
+    expect(catchUpPeople(c, now)).toEqual(['Sam', 'Ana'])
+    expect(catchUpText(c, now)).toContain('Changed pages: Plan (by Ana)')
+    // Nothing new: no news (a rename counts, though).
+    expect(catchUp(before, before, 5)).toBeNull()
+    expect(catchUp(before, W.setPageMeta(before, beds, { title: 'Sleeping' }), 5)!.pages!.changed).toEqual([beds])
+  })
+})

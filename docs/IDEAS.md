@@ -35,10 +35,14 @@ saves, versions, syncs and shares like any board. Built in phases:
 - [ ] **Later for embeds:** live embeds of boards in a live session that isn't
   open here (a background view-only connection), editing table and database
   embeds in place, and query blocks (open tasks across boards).
-- [ ] **Phase 4: robustness.** Page history with diffs; "Since you were
-  here" for pages; search across wikis; Markdown import and export. (Built
-  already: a line-by-line merge, so two friends typing on one page, or an AI
-  change arriving after you typed, keep everyone's words.)
+- [x] **Phase 4: robustness.** A line-by-line merge, so two friends typing on
+  one page (or an AI change arriving after you typed) keep everyone's words;
+  page history with diffs and putting one page back; "Since you were here"
+  for pages; Ctrl+K search across wikis; Markdown files in and out (a page as
+  .md, a whole wiki as a .zip of .md files, .md files dropped in as pages).
+- [ ] **Later for robustness:** the merge on the server too (today it happens
+  in each browser as text arrives), history for page renames and moves, and
+  importing a .zip of Markdown back as a page tree.
 
 ### From the review (2026-10-18)
 

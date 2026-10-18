@@ -48,6 +48,38 @@ function hunks(base: string[], side: string[]): Hunk[] {
   return out
 }
 
+export interface DiffLine {
+  t: 'same' | 'add' | 'del'
+  s: string
+}
+
+/** The lines `after` adds to and removes from `before`, in reading order, for showing a change. */
+export function lineDiff(before: string, after: string): DiffLine[] {
+  const b = before.split('\n')
+  const out: DiffLine[] = []
+  let pos = 0
+  for (const h of hunks(b, after.split('\n'))) {
+    for (const s of b.slice(pos, h.start)) out.push({ t: 'same', s })
+    for (const s of b.slice(h.start, h.end)) out.push({ t: 'del', s })
+    for (const s of h.lines) out.push({ t: 'add', s })
+    pos = h.end
+  }
+  for (const s of b.slice(pos)) out.push({ t: 'same', s })
+  return out
+}
+
+/** How many lines a change adds and removes. */
+export function diffCounts(before: string, after: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  if (before === after) return { added, removed }
+  for (const h of hunks(before.split('\n'), after.split('\n'))) {
+    added += h.lines.length
+    removed += h.end - h.start
+  }
+  return { added, removed }
+}
+
 /** One side's version of base lines [start, end), applying its hunks there. */
 function region(base: string[], side: Hunk[], start: number, end: number): string[] {
   const out: string[] = []

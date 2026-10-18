@@ -49,7 +49,9 @@ export interface PageOutline {
 export interface VersionMeta {
   at: number
   title: string
+  /** Objects on the board (pages, for a wiki). */
   items: number
+  kind?: 'wiki'
   /** Versions saved by hand have a name and are never pruned. */
   name?: string
 }
@@ -207,7 +209,7 @@ export class Library {
     const all = await Promise.all(keys.map((k) => this.kv.get<StoredVersion>(k)))
     return all
       .filter((v): v is StoredVersion => !!v)
-      .map(({ at, title, items, name }) => ({ at, title, items, ...(name ? { name } : {}) }))
+      .map(({ at, title, items, kind, name }) => ({ at, title, items, ...(kind ? { kind } : {}), ...(name ? { name } : {}) }))
       .reverse()
   }
 
@@ -216,7 +218,8 @@ export class Library {
     let at = this.now()
     // Two versions in the same millisecond would share a key.
     while (await this.kv.get(versionKey(id, at))) at++
-    const v: StoredVersion = { at, title: board.title, items: board.items.length, json: toJson(board), ...(name ? { name } : {}) }
+    const wiki = isWiki(board)
+    const v: StoredVersion = { at, title: board.title, items: wiki ? pageOrder(board).length : board.items.length, ...(wiki ? { kind: 'wiki' as const } : {}), json: toJson(board), ...(name ? { name } : {}) }
     await this.kv.set(versionKey(id, at), v)
     await this.prune(id)
     return { at, title: v.title, items: v.items, ...(name ? { name } : {}) }

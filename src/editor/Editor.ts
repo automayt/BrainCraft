@@ -1462,6 +1462,33 @@ export class Editor {
     this.emit()
   }
 
+  /** Adds pages (from Markdown files) under `parent`, in order, as one undo step; returns their ids. */
+  importPages(pages: { title: string; text: string }[], parent?: string): string[] {
+    if (this.readOnly || !W.isWiki(this.board) || !pages.length) return []
+    const ids: string[] = []
+    const by = this.author.trim() || undefined
+    this.lastTyping = null
+    this.edit((b) => {
+      for (const p of pages) {
+        let id: string
+        ;[b, id] = W.addPage(b, { title: p.title, text: p.text, parent }, Date.now(), by)
+        if (id) ids.push(id)
+      }
+      return b
+    })
+    const skipped = pages.length - ids.length
+    this.setStatus(`Added ${ids.length} page${ids.length === 1 ? '' : 's'} from Markdown${skipped ? ` (${skipped} didn’t fit: the wiki is full)` : ''}`)
+    return ids
+  }
+
+  /** Puts a page's title and words back as they were in an old version, as one undo step. */
+  restorePageVersion(id: string, title: string, text: string, when: string) {
+    if (this.readOnly || !W.getPage(this.board, id)) return
+    this.lastTyping = null
+    this.edit((b) => W.setPageMeta(W.setPageBody(b, id, text, Date.now(), this.author.trim() || undefined), id, { title }))
+    this.setStatus(`Put back the page as written ${when} — Ctrl Z to undo`)
+  }
+
   /** Moves a page (and its sub-pages) under `parent` (undefined: the top), before `before` or last. */
   movePageTo(id: string, parent: string | undefined, before?: string) {
     const was = this.board

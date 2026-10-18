@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
-import { isWiki } from '../model/wiki'
+import { isWiki, pageOrder, pagePath } from '../model/wiki'
 import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
 import { darken } from './BoardView'
 import { ink, mindRootFill } from './paint'
@@ -289,13 +289,14 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
   const [versions, setVersions] = useState<VersionMeta[] | null>(null)
   const [name, setName] = useState('')
-  const [preview, setPreview] = useState<{ v: VersionMeta; thumb: ReturnType<typeof thumbnail> } | null>(null)
+  const [preview, setPreview] = useState<{ v: VersionMeta; thumb: ReturnType<typeof thumbnail>; pages?: string[] } | null>(null)
   const reload = () => void ws.versions().then(setVersions)
   useEffect(reload, [ws])
 
   const show = async (v: VersionMeta) => {
     const b = await ws.previewVersion(v)
-    if (b) setPreview({ v, thumb: thumbnail(b) })
+    // A wiki has no drawing to show: its pages instead.
+    if (b) setPreview({ v, thumb: thumbnail(b), ...(isWiki(b) ? { pages: pageOrder(b).map((p) => `${'  '.repeat(pagePath(b, p.id).length - 1)}${p.icon ?? '📄'} ${p.title || 'Untitled'}`) } : {}) })
   }
 
   return (
@@ -327,7 +328,8 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
               <button className="version-pick" onClick={() => void show(v)} onFocus={() => void show(v)}>
                 <strong>{v.name ?? 'Autosave'}</strong>
                 <small>
-                  {new Date(v.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {v.items} objects
+                  {new Date(v.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  {v.kind === 'wiki' ? ` · ${v.items} page${v.items === 1 ? '' : 's'}` : v.items || !isWiki(ws.editor.board) ? ` · ${v.items} objects` : ''}
                 </small>
               </button>
             </li>
@@ -337,7 +339,16 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
         <div className="version-preview">
           {preview ? (
             <>
-              <Thumb {...preview.thumb} />
+              {preview.pages ? (
+                <ul className="version-pages">
+                  {preview.pages.slice(0, 60).map((p, n) => (
+                    <li key={n}>{p}</li>
+                  ))}
+                  {preview.pages.length > 60 && <li className="muted">and {preview.pages.length - 60} more</li>}
+                </ul>
+              ) : (
+                <Thumb {...preview.thumb} />
+              )}
               <div className="version-preview-foot">
                 <span>
                   <strong>{preview.v.title}</strong>

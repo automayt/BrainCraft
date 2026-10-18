@@ -1,5 +1,10 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { MovePage } from './MovePage'
+import { ChangesSince, PageHistory } from './PageHistory'
+import { WikiCatchUp } from './WikiCatchUp'
+import { PageMenu } from './PageMenu'
+import { download } from '../imageExport'
+import { fileNameFor, pageMarkdown, pagesFromFiles, wikiZip } from '../../model/wikiFiles'
 import { useEscape } from '../useEscape'
 import { headings, parseMarkdown, toggleTask } from '../../model/markdown'
 import { type LinkTarget, linkToken, parseNote } from '../../model/notes'
@@ -20,6 +25,16 @@ import { ObjectEmbed } from './ObjectEmbed'
 const LAST_PAGE = 'braincraft:page:'
 
 /** A wiki: its pages in a tree on the left, the open page on the right. */
+
+const isMarkdownFile = (f: File) => /\.(md|markdown|mdown|txt)$/i.test(f.name) || f.type === 'text/markdown'
+
+/** Markdown files become pages at the top of the wiki (one file opens straight away). */
+async function importMarkdown(editor: Editor, files: File[]) {
+  const md = files.filter(isMarkdownFile)
+  if (!md.length) return editor.setStatus('Only Markdown (.md) and text files can become pages')
+  const ids = editor.importPages(pagesFromFiles(await Promise.all(md.map(async (f) => ({ name: f.name, text: await f.text() })))))
+  if (ids.length === 1) editor.openPage(ids[0])
+}
 
 /** What a page's words link to, read once per version of them (pages re-read on every change otherwise). */
 const bodyLinks = new WeakMap<PageBody, { to: LinkTarget[]; names: string[] }>()
@@ -122,6 +137,12 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   const [title, setTitle] = useState(page.title)
   useEffect(() => setTitle(page.title), [page.title])
   const [moving, setMoving] = useState(false)
+  const [history, setHistory] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+  /** The page whose changes since the last visit are showing. */
+  const [changesOf, setChangesOf] = useState<string | null>(null)
+  const news = editor.catchUp?.pages
+  const changedHere = !!news?.changed.includes(page.id)
   const titleRef = useRef<HTMLTextAreaElement>(null)
   // A page just made: its title is ready to type.
   useEffect(() => {
@@ -180,8 +201,23 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   }
 
   return (
-    <article className="wiki-page" aria-labelledby="wiki-page-title">
+    <article
+      className="wiki-page"
+      aria-labelledby="wiki-page-title"
+      onDragOver={(e) => {
+        if (!ro && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        const md = Array.from(e.dataTransfer.files).filter(isMarkdownFile)
+        if (ro || !md.length) return
+        e.preventDefault()
+        void importMarkdown(editor, md)
+      }}
+    >
       {moving && <MovePage page={page} onClose={() => setMoving(false)} />}
+      {history && <PageHistory page={page} onClose={() => setHistory(false)} />}
+      {changesOf === page.id && editor.catchUp && <ChangesSince page={page} before={editor.catchUp.before} since={editor.catchUp.since} onClose={() => setChangesOf(null)} />}
+      <WikiCatchUp onShowChanges={setChangesOf} />
       {ro && (
         <p className="wiki-readonly muted" role="status">
           {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : 'You’re reading this wiki. Ask for the edit link to write in it.'}
@@ -243,18 +279,47 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               <button title="Add a page under this one" onClick={() => editor.addWikiPage({ parent: page.id })}>
                 + Sub-page
               </button>
-              <button title="Put this page somewhere else in the wiki" onClick={() => setMoving(true)}>
-                Move…
-              </button>
-              <button className="danger-quiet" title="Move this page (and its sub-pages) to the trash" onClick={() => editor.trashPage(page.id)}>
-                Trash
-              </button>
             </>
           )}
+          <PageMenu
+            label="More for this page"
+            items={[
+              ...(ws.boardId ? [{ label: 'History', hint: 'Earlier versions of this page, what changed, and putting one back', run: () => setHistory(true) }] : []),
+              ...(ro ? [] : [{ label: 'Move…', hint: 'Put this page somewhere else in the wiki', run: () => setMoving(true) }]),
+              { label: 'Download page (.md)', hint: 'This page as a Markdown file', run: () => download(new Blob([pageMarkdown(board, page.id, (to) => ws.linkTo(to))], { type: 'text/markdown' }), `${fileNameFor(page.title)}.md`) },
+              {
+                label: 'Download wiki (.zip)',
+                hint: 'Every page as a Markdown file, sub-pages in folders',
+                run: () => download(new Blob([wikiZip(board, (to) => ws.linkTo(to)) as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), `${fileNameFor(board.title)}.zip`),
+              },
+              ...(ro ? [] : [{ label: 'Add Markdown files…', hint: 'Each .md file becomes a page (you can also drop them on the wiki)', run: () => fileInput.current?.click() }]),
+              ...(ro ? [] : [{ label: 'Move to Trash', hint: 'This page and its sub-pages go to the Trash', danger: true, run: () => editor.trashPage(page.id) }]),
+            ]}
+          />
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain"
+            multiple
+            hidden
+            onChange={(e) => {
+              void importMarkdown(editor, Array.from(e.target.files ?? []))
+              e.target.value = ''
+            }}
+          />
         </div>
         <p className="wiki-meta muted">
           {body?.by || (body?.at && body.at > page.created) ? `Edited ${body.by ? `by ${body.by} · ` : ''}${formatTime(body.at)}` : body?.text.trim() ? `Added ${formatTime(page.created)}` : 'Not written yet'}
           {kids.length > 0 && ` · ${kids.length} sub-page${kids.length === 1 ? '' : 's'}`}
+          {changedHere && (
+            <>
+              {' · '}
+              <button className="link wiki-news-link" onClick={() => setChangesOf(page.id)}>
+                changed since you were here
+              </button>
+            </>
+          )}
+          {news?.added.includes(page.id) && ' · new since you were here'}
         </p>
       </header>
 

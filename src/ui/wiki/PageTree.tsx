@@ -16,6 +16,7 @@ export function PageTree({ current }: { current: Page | undefined }) {
   const [drag, setDrag] = useState<{ id: string; over?: string; where?: Where } | null>(null)
   const [showTrash, setShowTrash] = useState(false)
   const trash = W.trashed(board)
+  const news = new Set([...(editor.catchUp?.pages?.added ?? []), ...(editor.catchUp?.pages?.changed ?? [])])
 
   // The path to the open page is always expanded, so it can be seen in the tree.
   const path = new Set(current ? W.pagePath(board, current.id).map((p) => p.id) : [])
@@ -160,6 +161,11 @@ export function PageTree({ current }: { current: Page | undefined }) {
               {p.icon ?? '📄'}
             </span>
             <span className="page-name">{p.title || 'Untitled'}</span>
+            {news.has(p.id) && (
+              <span className="page-news" title="New or changed since you were here">
+                <span className="sr-only">, new or changed since you were here</span>
+              </span>
+            )}
           </button>
           {!ro && (
             <button className="page-add" tabIndex={-1} title="Add a sub-page" aria-label={`Add a page under ${p.title || 'Untitled'}`} onClick={() => editor.addWikiPage({ parent: p.id })}>

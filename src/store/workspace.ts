@@ -5,7 +5,7 @@
 
 import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
-import { getPage, pageText } from '../model/wiki'
+import { getBody, getPage, pageText } from '../model/wiki'
 import { wikiFromTemplate } from '../model/wikiTemplates'
 import { headings, parseMarkdown } from '../model/markdown'
 import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
@@ -86,6 +86,16 @@ export type SaveState = 'saved' | 'saving' | 'unsaved' | 'error'
 
 /** Where a board's AI change history is kept. */
 export const aiKey = (id: string) => `ai:${id}`
+
+/** A wiki page as one saved version had it. */
+export interface PageVersion {
+  v: VersionMeta
+  title: string
+  text: string
+  /** When those words were written, and by whom. */
+  at: number
+  by?: string
+}
 
 export class Workspace {
   readonly editor: Editor
@@ -268,6 +278,14 @@ export class Workspace {
     if (!key || typeof location === 'undefined') return null
     const url = new URL(location.href)
     url.hash = openHash(key, place)
+    return url.toString()
+  }
+
+  /** A web link to a page or object on any board in this browser, for anyone who has that board. */
+  linkTo(to: LinkTarget): string | null {
+    if (!to.board || typeof location === 'undefined') return null
+    const url = new URL(location.href)
+    url.hash = openHash(to.board, { page: to.page, heading: to.heading, item: to.item })
     return url.toString()
   }
 
@@ -580,6 +598,27 @@ export class Workspace {
     // Keep what's being replaced, so restoring is never a one-way door.
     await this.library.addVersion(this.boardId, this.editor.board, `Before restoring ${new Date(v.at).toLocaleString()}`)
     this.editor.replaceBoard(old, `Restored the version from ${new Date(v.at).toLocaleString()} — Ctrl Z to undo`)
+  }
+
+  /**
+   * One wiki page through the saved versions, newest first: each time its title or words changed,
+   * when and by whom (versions where the page stayed the same are folded into the change before).
+   */
+  async pageHistory(pageId: string): Promise<PageVersion[]> {
+    if (!this.boardId) return []
+    const out: PageVersion[] = []
+    for (const v of await this.library.versions(this.boardId)) {
+      const b = await this.library.loadVersion(this.boardId, v.at)
+      const page = b && getPage(b, pageId)
+      if (!b || !page) continue
+      const body = getBody(b, pageId)
+      const entry: PageVersion = { v, title: page.title, text: body?.text ?? '', at: body?.at ?? v.at, ...(body?.by ? { by: body.by } : {}) }
+      const newer = out.at(-1)
+      // The same words in an older version: the change happened then, so that's the one to show.
+      if (newer && newer.text === entry.text && newer.title === entry.title) out[out.length - 1] = { ...entry, v: newer.v.name ? newer.v : v }
+      else out.push(entry)
+    }
+    return out
   }
 
   async deleteVersion(v: VersionMeta) {

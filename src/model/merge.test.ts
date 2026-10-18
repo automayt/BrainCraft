@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { merge3 } from './merge'
+import { diffCounts, lineDiff, merge3 } from './merge'
 
 const lines = (...l: string[]) => l.join('\n')
 
@@ -31,6 +31,13 @@ describe('merging two people’s edits to a page', () => {
   it('returns the only changed side unchanged', () => {
     expect(merge3('x', 'x', 'y')).toBe('y')
     expect(merge3('x', 'y', 'x')).toBe('y')
+  })
+
+  it('shows what a change added and removed, line by line', () => {
+    const d = lineDiff(lines('# Trip', '- Flights', '- Car'), lines('# Trip', '- Train', '- Car', '- Insurance'))
+    expect(d.map((l) => `${l.t[0]}:${l.s}`)).toEqual(['s:# Trip', 'd:- Flights', 'a:- Train', 's:- Car', 'a:- Insurance'])
+    expect(diffCounts(lines('a', 'b'), lines('a', 'c', 'd'))).toEqual({ added: 2, removed: 1 })
+    expect(diffCounts('same', 'same')).toEqual({ added: 0, removed: 0 })
   })
 
   it('copes with big pages quickly', () => {

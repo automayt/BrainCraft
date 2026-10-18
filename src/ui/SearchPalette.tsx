@@ -1,12 +1,17 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { lookup, search } from '../model/search'
-import { type Id, type Kind, KIND_LABELS } from '../model/types'
+import { type Board, type Id, type Kind, KIND_LABELS } from '../model/types'
 import { commands, matchCommands } from './commands'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { useWorkspace } from './useWorkspace'
 import { isWiki, pageOrder, pagePath, searchPages } from '../model/wiki'
 
 type Filter = { label: string; kinds?: (Kind | 'connector')[] }
+
+/** Other wikis searched alongside the open board, and the matches shown from each. */
+const OTHER_WIKIS = 10
+const PER_WIKI = 4
 
 const FILTERS: Filter[] = [
   { label: 'All' },
@@ -53,6 +58,23 @@ export function SearchPalette() {
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLUListElement>(null)
+  const ws = useWorkspace()
+
+  // The other wikis in this browser, read once each time the search opens, so their pages turn
+  // up too ("where did we write down the van booking?").
+  const [wikis, setWikis] = useState<{ key: string; title: string; icon?: string; board: Board }[]>([])
+  useEffect(() => {
+    if (!editor.searchOpen) return
+    let live = true
+    const others = ws.otherBoards.filter((b) => b.kind === 'wiki').slice(0, OTHER_WIKIS)
+    void Promise.all(others.map(async (b) => ({ key: b.key, title: b.title, icon: b.icon, board: await ws.readBoard(b.key) }))).then(
+      (l) => live && setWikis(l.flatMap((w) => (w.board ? [{ ...w, board: w.board }] : []))),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [editor.searchOpen, ws])
 
   // Focus before the browser paints, so the first key typed after Ctrl+K lands in the box.
   useLayoutEffect(() => {
@@ -120,7 +142,19 @@ export function SearchPalette() {
         kind: KIND_LABELS[e.kind],
         detail: e.notes ? <span className="where">{e.notes} comment{e.notes === 1 ? '' : 's'}</span> : undefined,
       }))
-  const rows = [...cmds, ...pages, ...objects]
+  const elsewhere: Row[] =
+    commandOnly || filter !== 0 || !query.trim()
+      ? []
+      : wikis.flatMap((w) =>
+          searchPages(w.board, query, PER_WIKI).map((h) => ({
+            key: `w:${w.key}:${h.page.id}`,
+            run: () => void ws.openLink({ board: w.key, page: h.page.id }),
+            title: `${h.page.icon ? `${h.page.icon} ` : ''}${h.page.title || 'Untitled'}`,
+            kind: `${w.icon ?? '📘'} ${w.title || 'Wiki'}`,
+            detail: h.snippet ? <span>{highlight(h.snippet, query)}</span> : undefined,
+          })),
+        )
+  const rows = [...cmds, ...pages, ...objects, ...elsewhere]
 
   const close = () => editor.setSearchOpen(false)
   const go = (row: Row | undefined) => {

@@ -1,12 +1,13 @@
 /**
  * "Since you were here": what changed on a board between the last time this person looked at
  * it and now — new, changed and removed objects, and new comments. Layout shuffles (a mind map
- * re-flowing, tiny nudges) don't count.
+ * re-flowing, tiny nudges) don't count. In a wiki: new, rewritten and removed pages.
  */
 
 import { getItem } from './board'
 import { objectLabel } from './notes'
 import type { Board, Id, Item } from './types'
+import { getBody, getPage, isWiki, pageOrder } from './wiki'
 
 export interface CatchUp {
   /** When they last looked. */
@@ -17,6 +18,8 @@ export interface CatchUp {
   removed: Item[]
   /** New comments: on which object, how many. */
   comments: { id: Id; count: number }[]
+  /** In a wiki: pages that are new, whose title or words changed, and that went away (as they were). */
+  pages?: { added: string[]; changed: string[]; removed: { id: string; title: string }[] }
 }
 
 /** Moves smaller than this (in board units) are tidying, not news. */
@@ -42,6 +45,7 @@ function moved(a: Item, z: Item): boolean {
 }
 
 export function catchUp(before: Board, now: Board, since: number): CatchUp | null {
+  if (isWiki(now)) return pageCatchUp(before, now, since)
   if (before === now || before.items === now.items) return null
   const added: Id[] = []
   const changed: Id[] = []
@@ -62,6 +66,25 @@ export function catchUp(before: Board, now: Board, since: number): CatchUp | nul
   const removed = before.items.filter((i) => !ids.has(i.id))
   if (!added.length && !changed.length && !removed.length && !comments.length) return null
   return { since, added, changed, removed, comments }
+}
+
+/** What changed in a wiki: pages in the trash count as gone, a page back from it as new. */
+function pageCatchUp(before: Board, now: Board, since: number): CatchUp | null {
+  if (before === now || (before.pages === now.pages && before.bodies === now.bodies)) return null
+  const was = new Set(pageOrder(before).map((p) => p.id))
+  const added: string[] = []
+  const changed: string[] = []
+  const live = pageOrder(now)
+  for (const p of live) {
+    if (!was.has(p.id)) added.push(p.id)
+    else if (getPage(before, p.id)!.title !== p.title || (getBody(before, p.id)?.text ?? '') !== (getBody(now, p.id)?.text ?? '')) changed.push(p.id)
+  }
+  const kept = new Set(live.map((p) => p.id))
+  const removed = pageOrder(before)
+    .filter((p) => !kept.has(p.id))
+    .map((p) => ({ id: p.id, title: p.title }))
+  if (!added.length && !changed.length && !removed.length) return null
+  return { since, added: [], changed: [], removed: [], comments: [], pages: { added, changed, removed } }
 }
 
 /**
@@ -93,6 +116,10 @@ export function catchUpPeople(c: CatchUp, now: Board): string[] {
     const i = getItem(now, x.id)
     for (const n of (i?.notes ?? []).slice(-x.count)) if (n.author) names.add(n.author)
   }
+  for (const id of [...(c.pages?.added ?? []), ...(c.pages?.changed ?? [])]) {
+    const by = getBody(now, id)?.by
+    if (by) names.add(by)
+  }
   return [...names]
 }
 
@@ -107,6 +134,7 @@ export function listNames(names: string[]): string {
 export function catchUpSummary(c: CatchUp): string {
   const n = (count: number, word: string, plural = `${word}s`) => (count ? `${count} ${count === 1 ? word : plural}` : '')
   const comments = c.comments.reduce((a, x) => a + x.count, 0)
+  if (c.pages) return [n(c.pages.added.length, 'new page'), n(c.pages.changed.length, 'page changed', 'pages changed'), n(c.pages.removed.length, 'page removed', 'pages removed')].filter(Boolean).join(' · ')
   return [n(c.added.length, 'new', 'new'), n(c.changed.length, 'changed', 'changed'), n(c.removed.length, 'removed', 'removed'), n(comments, 'comment')].filter(Boolean).join(' · ')
 }
 
@@ -121,5 +149,9 @@ export function catchUpText(c: CatchUp, now: Board): string {
   if (c.changed.length) lines.push(`Changed: ${c.changed.map(label).join('; ')}`)
   if (c.removed.length) lines.push(`Removed: ${c.removed.map((i) => `${objectLabel(i)} (${i.kind})`).join('; ')}`)
   if (c.comments.length) lines.push(`New comments on: ${c.comments.map((x) => `${label(x.id)} ×${x.count}`).join('; ')}`)
+  const page = (id: string) => `${getPage(now, id)?.title || 'Untitled'}${getBody(now, id)?.by ? ` (by ${getBody(now, id)!.by})` : ''}`
+  if (c.pages?.added.length) lines.push(`New pages: ${c.pages.added.map(page).join('; ')}`)
+  if (c.pages?.changed.length) lines.push(`Changed pages: ${c.pages.changed.map(page).join('; ')}`)
+  if (c.pages?.removed.length) lines.push(`Removed pages: ${c.pages.removed.map((p) => p.title || 'Untitled').join('; ')}`)
   return lines.join('\n')
 }
