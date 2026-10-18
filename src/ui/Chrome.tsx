@@ -30,6 +30,7 @@ import { THEMES } from './theme'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
+import { isWiki } from '../model/wiki'
 import { focusFirst, moveFocus } from './menuKeys'
 import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
@@ -231,10 +232,14 @@ export function TopLeft() {
             <MenuItem label="Share…" onClick={run(ui.openShare)} />
             <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
             {!ws.viewOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
-            <hr />
-            {!ws.viewOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
-            <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
-            <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
+            {!isWiki(editor.board) && (
+              <>
+                <hr />
+                {!ws.viewOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
+                <MenuItem label="Export image or PDF…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
+                <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
+              </>
+            )}
             <hr />
             <MenuItem label="Help and shortcuts" keys="?" onClick={run(ui.openHelp)} />
           </Popover>
@@ -249,6 +254,7 @@ export function TopRight() {
   const ws = useWorkspace()
   const ui = useUi()
   const [themes, setThemes] = useState(false)
+  const wiki = isWiki(editor.board)
   return (
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
@@ -272,26 +278,30 @@ export function TopRight() {
         <span>Ask AI</span>
         <Tip label="Chat with this board" keys="Ctrl J" />
       </button>
-      <button className="present-btn has-tip" aria-label="Present" onMouseDown={keepFocus} onClick={ui.present}>
-        <PlayIcon />
-        <span>Present</span>
-        <Tip label="Frames become slides" keys="Shift P" />
-      </button>
+      {!wiki && (
+        <button className="present-btn has-tip" aria-label="Present" onMouseDown={keepFocus} onClick={ui.present}>
+          <PlayIcon />
+          <span>Present</span>
+          <Tip label="Frames become slides" keys="Shift P" />
+        </button>
+      )}
       <button className="search-pill" aria-label="Search or run a command" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />
         <span>Search or run a command</span>
         <kbd>Ctrl K</kbd>
       </button>
-      <button
-        className={`icon-btn has-tip${editor.notesOpen ? ' on' : ''}`}
-        aria-label="Comments"
-        aria-pressed={editor.notesOpen}
-        onMouseDown={keepFocus}
-        onClick={() => editor.toggleNotes()}
-      >
-        <CommentsIcon />
-        <Tip label="Comments" keys="Alt C" />
-      </button>
+      {!wiki && (
+        <button
+          className={`icon-btn has-tip${editor.notesOpen ? ' on' : ''}`}
+          aria-label="Comments"
+          aria-pressed={editor.notesOpen}
+          onMouseDown={keepFocus}
+          onClick={() => editor.toggleNotes()}
+        >
+          <CommentsIcon />
+          <Tip label="Comments" keys="Alt C" />
+        </button>
+      )}
       <div className="anchor">
         <button className={`icon-btn has-tip${themes ? ' on' : ''}`} aria-label="Theme" aria-expanded={themes} onMouseDown={keepFocus} onClick={() => setThemes(!themes)}>
           <ThemeIcon />
@@ -658,6 +668,17 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Timeline: Waits for… · Line up', 'Link events · move them so none starts too early'],
       ['B then click', 'A database: table, Kanban, timeline, calendar or gallery views'],
       ['Calendar: drag · double-click a day', 'Move a record · add one on that day'],
+    ],
+  ],
+  [
+    'Wikis',
+    [
+      ['Ctrl O → Wiki', 'Start a wiki: pages in a tree, written in Markdown'],
+      ['[[', 'While writing: link to a page or a board'],
+      ['Alt Shift ↑ / ↓ · ← / →', 'In the page list: move a page up or down · out or in'],
+      ['Enter · Tab', 'Continue a list or checklist · indent it'],
+      ['Ctrl B · Ctrl I', 'Bold · italic'],
+      ['Esc · Ctrl Enter', 'Done writing (it saves as you type)'],
     ],
   ],
   [

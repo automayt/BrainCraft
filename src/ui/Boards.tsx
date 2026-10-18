@@ -114,6 +114,23 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                 <small>{t.hint}</small>
               </button>
             ))}
+            <button
+              className="template"
+              onClick={() => {
+                onClose()
+                void ws.newWiki()
+              }}
+            >
+              <span className="thumb wiki-thumb" aria-hidden="true">
+                <i />
+                <i />
+                <i className="sub" />
+                <i className="sub" />
+                <i />
+              </span>
+              <strong>Wiki</strong>
+              <small>Pages in a tree, written in Markdown</small>
+            </button>
           </section>
         )}
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
@@ -140,6 +157,25 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
         </div>
       </div>
     </Dialog>
+  )
+}
+
+/** A wiki's card: the first few pages of its tree. */
+function WikiOutline({ meta }: { meta: BoardMeta }) {
+  const pages = meta.outline ?? []
+  const depth = (id: string | undefined, n = 0): number => {
+    const p = id === undefined ? undefined : pages.find((x) => x.id === id)
+    return p?.parent === undefined || n > 4 ? n : depth(p.parent, n + 1)
+  }
+  return (
+    <span className="thumb wiki-outline" aria-hidden="true">
+      <span className="wiki-badge">Wiki</span>
+      {pages.slice(0, 6).map((p) => (
+        <span key={p.id} style={{ paddingLeft: depth(p.id) * 10 }}>
+          {p.icon ?? '📄'} {p.title || 'Untitled'}
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -172,7 +208,7 @@ function BoardCard(p: {
       onClick={(e) => !p.renaming && !(e.target as Element).closest('button, input') && p.onOpen()}
     >
       <button className="board-open" onClick={p.onOpen} aria-label={`Open ${meta.title}`}>
-        <Thumb thumb={meta.thumb} aspect={meta.aspect} />
+        {meta.kind === 'wiki' ? <WikiOutline meta={meta} /> : <Thumb thumb={meta.thumb} aspect={meta.aspect} />}
       </button>
       <div className="board-info">
         {p.renaming ? (
@@ -196,7 +232,8 @@ function BoardCard(p: {
           </button>
         )}
         <small>
-          {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} object{meta.items === 1 ? '' : 's'}
+          {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} {meta.kind === 'wiki' ? 'page' : 'object'}
+          {meta.items === 1 ? '' : 's'}
         </small>
       </div>
       <div className="board-actions">

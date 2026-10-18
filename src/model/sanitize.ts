@@ -19,6 +19,8 @@ import type {
   Kind,
   LinkCard,
   Note,
+  Page,
+  PageBody,
   Poll,
   RunRecord,
   SelectOption,
@@ -27,6 +29,7 @@ import type {
   TimelineData,
 } from './types'
 import { defaultColor, defaultFontSize } from './types'
+import { BODY_MAX, isPageId } from './wiki'
 
 export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code']
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
@@ -367,6 +370,31 @@ export function cleanBoard(b: Board): Board {
 }
 
 /** Live-session patches checked the same way; patches that can't be used are dropped. */
+/** A wiki page's title and place, checked like everything else. */
+export function cleanPage(v: unknown): Page | null {
+  if (!isObj(v) || !isPageId(v.id)) return null
+  const rank = num(v.rank)
+  const created = num(v.created)
+  const trashed = num(v.trashed)
+  const icon = cleanIcon(v.icon)
+  return {
+    id: v.id,
+    ...(isPageId(v.parent) && v.parent !== v.id ? { parent: v.parent } : {}),
+    rank: rank ?? 0,
+    title: str(v.title, NAME_MAX) ?? '',
+    ...(icon ? { icon } : {}),
+    created: created ?? 0,
+    ...(trashed !== undefined && trashed > 0 ? { trashed } : {}),
+  }
+}
+
+/** A wiki page's words. */
+export function cleanBody(v: unknown): PageBody | null {
+  if (!isObj(v) || !isPageId(v.id)) return null
+  const by = str(v.by, 60)
+  return { id: v.id, text: str(v.text, BODY_MAX) ?? '', at: num(v.at) ?? 0, ...(by ? { by } : {}) }
+}
+
 export function cleanPatches(patches: readonly unknown[]): Patch[] {
   const out: Patch[] = []
   for (const raw of patches) {
@@ -421,6 +449,23 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         else {
           const v = cleanRecord(p.v)
           if (v && v.id === p.id) out.push({ k: 'rec', ds: p.ds, id: p.id, v })
+        }
+        break
+      }
+      case 'page':
+      case 'body': {
+        if (!isPageId(p.id)) break
+        if (p.v === null) {
+          out.push({ k: p.k, id: p.id, v: null })
+          break
+        }
+        // The page must say it's the one being changed.
+        if (p.k === 'page') {
+          const v = cleanPage(p.v)
+          if (v && v.id === p.id) out.push({ k: 'page', id: p.id, v })
+        } else {
+          const v = cleanBody(p.v)
+          if (v && v.id === p.id) out.push({ k: 'body', id: p.id, v })
         }
         break
       }

@@ -1,0 +1,305 @@
+/**
+ * Wikis: pages in a tree, written in Markdown. A wiki is a board with `kind: 'wiki'`, so it is
+ * saved, versioned, shared and synced live like any board. These helpers are pure: they take a
+ * board and return a new one.
+ */
+
+import { emptyBoard } from './board'
+import type { Board, Page, PageBody } from './types'
+import { uid } from './uid'
+
+/** Pages a wiki may hold, and characters a page may hold. */
+export const MAX_PAGES = 5_000
+export const BODY_MAX = 200_000
+
+/** Page ids: short, URL-safe, never an object's own property names. */
+export const isPageId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,64}$/.test(v) && v !== '__proto__' && v !== 'constructor' && v !== 'prototype'
+
+export const isWiki = (b: Board) => b.kind === 'wiki'
+
+/** A new wiki with one page to start on. */
+export function emptyWiki(title = 'Untitled wiki', now = Date.now()): Board {
+  const home: Page = { id: uid(), rank: 1, title: 'Home', created: now }
+  return {
+    ...emptyBoard(title),
+    kind: 'wiki',
+    pages: [home],
+    bodies: [{ id: home.id, text: `# ${title}\n\nStart writing here. Add pages in the sidebar, and link them with [[ .\n`, at: now }],
+  }
+}
+
+export const getPage = (b: Board, id: string | undefined): Page | undefined => (id === undefined ? undefined : b.pages?.find((p) => p.id === id))
+export const getBody = (b: Board, id: string): PageBody | undefined => b.bodies?.find((x) => x.id === id)
+export const pageText = (b: Board, id: string) => getBody(b, id)?.text ?? ''
+
+const byRank = (a: Page, z: Page) => a.rank - z.rank || (a.id < z.id ? -1 : a.id > z.id ? 1 : 0)
+
+/**
+ * The page a page really sits under: its parent if that exists and isn't (through its own
+ * parents) the page itself. Two friends nesting A under B and B under A at once leave both at the
+ * top, rather than in a loop nobody can see.
+ */
+export function parentOf(b: Board, page: Page): string | undefined {
+  return tree(b).parent.get(page.id)
+}
+
+/** Each page's real parent and each parent's sub-pages in order, worked out once per list of pages. */
+interface Tree {
+  parent: Map<string, string | undefined>
+  /** Sub-pages by parent ('' for the top level), in order, trash included. */
+  kids: Map<string, Page[]>
+}
+
+const trees = new WeakMap<Page[], Tree>()
+
+function tree(b: Board): Tree {
+  const pages = b.pages ?? []
+  const known = trees.get(pages)
+  if (known) return known
+  const byId = new Map(pages.map((p) => [p.id, p]))
+  const parent = new Map<string, string | undefined>()
+  for (const p of pages) {
+    let ok = p.parent !== undefined && byId.has(p.parent)
+    if (ok) {
+      // Up through the parents: coming back round to this page means a loop.
+      const seen = new Set<string>()
+      let at = byId.get(p.parent!)
+      while (at) {
+        if (at.id === p.id) {
+          ok = false
+          break
+        }
+        if (seen.has(at.id)) break
+        seen.add(at.id)
+        at = at.parent === undefined ? undefined : byId.get(at.parent)
+      }
+    }
+    parent.set(p.id, ok ? p.parent : undefined)
+  }
+  const kids = new Map<string, Page[]>()
+  for (const p of pages) {
+    const key = parent.get(p.id) ?? ''
+    const list = kids.get(key)
+    if (list) list.push(p)
+    else kids.set(key, [p])
+  }
+  for (const list of kids.values()) list.sort(byRank)
+  const t = { parent, kids }
+  trees.set(pages, t)
+  return t
+}
+
+/** A page's sub-pages in order (`undefined`: the top level). Trashed pages only with `trash`. */
+export function childrenOf(b: Board, parent: string | undefined, opts: { trash?: boolean } = {}): Page[] {
+  const list = tree(b).kids.get(parent ?? '') ?? []
+  return opts.trash ? list : list.filter((p) => !p.trashed)
+}
+
+export interface PageNode {
+  page: Page
+  children: PageNode[]
+}
+
+/** The wiki's pages as a tree (trash left out). */
+export function pageTree(b: Board): PageNode[] {
+  const build = (parent: string | undefined, depth: number): PageNode[] =>
+    depth > 64 ? [] : childrenOf(b, parent).map((page) => ({ page, children: build(page.id, depth + 1) }))
+  return build(undefined, 0)
+}
+
+/** Every page in reading order: each page, then its sub-pages (trash left out). */
+export function pageOrder(b: Board): Page[] {
+  const out: Page[] = []
+  const walk = (nodes: PageNode[]) => nodes.forEach((n) => (out.push(n.page), walk(n.children)))
+  walk(pageTree(b))
+  return out
+}
+
+/** The pages above a page, from the top down, ending with the page itself. */
+export function pagePath(b: Board, id: string): Page[] {
+  const out: Page[] = []
+  let at = getPage(b, id)
+  while (at && out.length < 64) {
+    out.unshift(at)
+    const up = parentOf(b, at)
+    at = up === undefined ? undefined : getPage(b, up)
+  }
+  return out
+}
+
+/** A page and everything under it (trashed or not). */
+export function withDescendants(b: Board, id: string): Set<string> {
+  const out = new Set<string>([id])
+  const { kids } = tree(b)
+  const todo = [id]
+  while (todo.length) {
+    for (const p of kids.get(todo.pop()!) ?? []) {
+      if (out.has(p.id)) continue
+      out.add(p.id)
+      todo.push(p.id)
+    }
+  }
+  return out
+}
+
+/** A rank between two neighbours (either may be missing: first, last, or only page). */
+export function rankBetween(before: number | undefined, after: number | undefined): number {
+  if (before === undefined && after === undefined) return 1
+  if (before === undefined) return after! - 1
+  if (after === undefined) return before + 1
+  return (before + after) / 2
+}
+
+/** Ranks 1, 2, 3… for a page's sub-pages, when the gaps between them have worn too thin. */
+function renumber(b: Board, parent: string | undefined): Board {
+  const order = childrenOf(b, parent, { trash: true }).map((p, k) => [p.id, k + 1] as const)
+  const rank = new Map(order)
+  return { ...b, pages: (b.pages ?? []).map((p) => (rank.has(p.id) && p.rank !== rank.get(p.id) ? { ...p, rank: rank.get(p.id)! } : p)) }
+}
+
+/** The rank for a new place among `parent`'s sub-pages: before `before`, else at the end. */
+function rankFor(b: Board, parent: string | undefined, before: string | undefined, moving?: string): [Board, number] {
+  const siblings = () => childrenOf(b, parent).filter((p) => p.id !== moving)
+  let list = siblings()
+  let k = before === undefined ? -1 : list.findIndex((p) => p.id === before)
+  const pick = () => (k < 0 ? rankBetween(list.at(-1)?.rank, undefined) : rankBetween(list[k - 1]?.rank, list[k].rank))
+  let rank = pick()
+  const neighbours = k < 0 ? [list.at(-1)?.rank] : [list[k - 1]?.rank, list[k].rank]
+  if (neighbours.some((r) => r !== undefined && Math.abs(r - rank) < 1e-9) || !Number.isFinite(rank)) {
+    b = renumber(b, parent)
+    list = siblings()
+    k = before === undefined ? -1 : list.findIndex((p) => p.id === before)
+    rank = pick()
+  }
+  return [b, rank]
+}
+
+export interface NewPage {
+  title: string
+  parent?: string
+  /** Put it before this sibling; otherwise last. */
+  before?: string
+  text?: string
+  icon?: string
+  id?: string
+}
+
+/** Adds a page. Returns the board unchanged (and an empty id) when the wiki is full. */
+export function addPage(b: Board, p: NewPage, now = Date.now(), by?: string): [Board, string] {
+  if ((b.pages?.length ?? 0) >= MAX_PAGES) return [b, '']
+  const parent = getPage(b, p.parent) ? p.parent : undefined
+  const id = p.id && isPageId(p.id) && !getPage(b, p.id) ? p.id : uid()
+  let rank: number
+  ;[b, rank] = rankFor(b, parent, p.before)
+  const page: Page = { id, ...(parent !== undefined ? { parent } : {}), rank, title: p.title.slice(0, 500), ...(p.icon ? { icon: p.icon } : {}), created: now }
+  const body: PageBody = { id, text: (p.text ?? '').slice(0, BODY_MAX), at: now, ...(by ? { by } : {}) }
+  return [{ ...b, pages: [...(b.pages ?? []), page], bodies: [...(b.bodies ?? []), body] }, id]
+}
+
+function updatePage(b: Board, id: string, f: (p: Page) => Page): Board {
+  let hit = false
+  const pages = (b.pages ?? []).map((p) => {
+    if (p.id !== id) return p
+    hit = true
+    return f(p)
+  })
+  return hit ? { ...b, pages } : b
+}
+
+/** Renames a page or changes its icon. */
+export function setPageMeta(b: Board, id: string, meta: { title?: string; icon?: string | null }): Board {
+  return updatePage(b, id, (p) => {
+    const next: Page = { ...p }
+    if (meta.title !== undefined) next.title = meta.title.slice(0, 500)
+    if (meta.icon === null) delete next.icon
+    else if (meta.icon !== undefined) next.icon = meta.icon
+    return next.title === p.title && next.icon === p.icon ? p : next
+  })
+}
+
+/** Replaces a page's words. */
+export function setPageBody(b: Board, id: string, text: string, now = Date.now(), by?: string): Board {
+  if (!getPage(b, id)) return b
+  const clipped = text.slice(0, BODY_MAX)
+  const old = getBody(b, id)
+  if (old?.text === clipped) return b
+  const body: PageBody = { id, text: clipped, at: now, ...(by ? { by } : {}) }
+  return { ...b, bodies: old ? (b.bodies ?? []).map((x) => (x.id === id ? body : x)) : [...(b.bodies ?? []), body] }
+}
+
+/**
+ * Moves a page (with its sub-pages) under `parent` (undefined: the top), before `before` or
+ * last. Refuses to move a page under itself or one of its own sub-pages.
+ */
+export function movePage(b: Board, id: string, parent: string | undefined, before?: string): Board {
+  const page = getPage(b, id)
+  if (!page) return b
+  if (parent !== undefined && (!getPage(b, parent) || withDescendants(b, id).has(parent))) return b
+  if (before === id) return b
+  let rank: number
+  ;[b, rank] = rankFor(b, parent, before, id)
+  return updatePage(b, id, (p) => {
+    const next: Page = { ...p, rank }
+    if (parent === undefined) delete next.parent
+    else next.parent = parent
+    return next
+  })
+}
+
+/** Puts a page and its sub-pages in the trash. */
+export function trashPage(b: Board, id: string, now = Date.now()): Board {
+  if (!getPage(b, id)) return b
+  const all = withDescendants(b, id)
+  return { ...b, pages: (b.pages ?? []).map((p) => (all.has(p.id) && !p.trashed ? { ...p, trashed: now } : p)) }
+}
+
+/** Takes a page (and what went to the trash with it) back out; to the top level if its parent is still in the trash. */
+export function restorePage(b: Board, id: string): Board {
+  const page = getPage(b, id)
+  if (!page?.trashed) return b
+  const stamp = page.trashed
+  const all = withDescendants(b, id)
+  const parent = parentOf(b, page)
+  const parentGone = parent !== undefined && !!getPage(b, parent)?.trashed
+  // Back at the top level, it goes last.
+  let top = page.rank
+  if (parentGone) [b, top] = rankFor(b, undefined, undefined, id)
+  return {
+    ...b,
+    pages: (b.pages ?? []).map((p) => {
+      if (!all.has(p.id) || p.trashed !== stamp) return p
+      const next: Page = { ...p }
+      delete next.trashed
+      if (p.id === id && parentGone) {
+        delete next.parent
+        next.rank = top
+      }
+      return next
+    }),
+  }
+}
+
+/** Deletes a page and its sub-pages for good (words too). */
+export function deletePage(b: Board, id: string): Board {
+  if (!getPage(b, id)) return b
+  const all = withDescendants(b, id)
+  return { ...b, pages: (b.pages ?? []).filter((p) => !all.has(p.id)), bodies: (b.bodies ?? []).filter((x) => !all.has(x.id)) }
+}
+
+/** Pages in the trash, newest first (only the ones that went in themselves, not their sub-pages). */
+export function trashed(b: Board): Page[] {
+  return (b.pages ?? [])
+    .filter((p) => {
+      if (!p.trashed) return false
+      const up = parentOf(b, p)
+      const parent = up === undefined ? undefined : getPage(b, up)
+      return !parent || parent.trashed !== p.trashed
+    })
+    .sort((a, z) => (z.trashed ?? 0) - (a.trashed ?? 0))
+}
+
+/** A page by its exact title (case-insensitive), trash left out. */
+export function pageByTitle(b: Board, title: string): Page | undefined {
+  const t = title.trim().toLowerCase()
+  return t ? (b.pages ?? []).find((p) => !p.trashed && p.title.trim().toLowerCase() === t) : undefined
+}

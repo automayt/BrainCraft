@@ -1,10 +1,10 @@
 /**
- * Board changes as small patches: one per object, line, dataset or record that changed.
+ * Board changes as small patches: one per object, line, dataset, record or wiki page that changed.
  * Live collaboration sends these between people (last write wins, per object), and undo
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Board, Connector, DataRecord, Dataset, Field, Id, Item } from '../model/types'
+import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -23,6 +23,9 @@ export type Patch =
   | { k: 'order'; v: Id[] }
   | { k: 'ds'; id: string; v: DatasetMeta | null }
   | { k: 'rec'; ds: string; id: string; v: DataRecord | null }
+  /** A wiki page's title and place; its words go separately, so renaming and typing never clash. */
+  | { k: 'page'; id: string; v: Page | null }
+  | { k: 'body'; id: string; v: PageBody | null }
 
 /** What a patch is about: two patches with the same key replace each other. */
 export function keyOf(p: Patch): string {
@@ -41,7 +44,24 @@ export function keyOf(p: Patch): string {
       return `d:${p.id}`
     case 'rec':
       return `r:${p.ds}:${p.id}`
+    case 'page':
+      return `p:${p.id}`
+    case 'body':
+      return `b:${p.id}`
   }
+}
+
+/** Patches for a list of things with string ids: what's new or changed, then what's gone. */
+function diffById<T extends { id: string }>(a: readonly T[] | undefined, z: readonly T[] | undefined, patch: (id: string, v: T | null) => Patch, out: Patch[]) {
+  if (a === z) return
+  const before = new Map((a ?? []).map((x) => [x.id, x]))
+  const after = new Set<string>()
+  for (const x of z ?? []) {
+    after.add(x.id)
+    const old = before.get(x.id)
+    if (old !== x && !same(old, x)) out.push(patch(x.id, x))
+  }
+  for (const x of a ?? []) if (!after.has(x.id)) out.push(patch(x.id, null))
 }
 
 const same = (a: unknown, z: unknown) => a === z || JSON.stringify(a) === JSON.stringify(z)
@@ -130,6 +150,10 @@ export function diff(a: Board, z: Board): Patch[] {
     }
     for (const d of a.datasets ?? []) if (!after.has(d.id)) out.push({ k: 'ds', id: d.id, v: null })
   }
+
+  // Wiki pages before their words: a new page must exist before its body arrives.
+  diffById(a.pages, z.pages, (id, v) => ({ k: 'page', id, v }), out)
+  diffById(a.bodies, z.bodies, (id, v) => ({ k: 'body', id, v }), out)
   return out
 }
 
@@ -204,6 +228,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let datasets = b.datasets
   let title = b.title
   let icon = b.icon
+  let pages = b.pages
+  let bodies = b.bodies
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -248,6 +274,24 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         })
         break
       }
+      case 'page': {
+        const list = pages ?? []
+        const at = list.findIndex((x) => x.id === p.id)
+        if (p.v === null) {
+          pages = list.filter((x) => x.id !== p.id)
+          // A page that's gone takes its words with it.
+          bodies = (bodies ?? []).filter((x) => x.id !== p.id)
+        } else pages = at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
+      case 'body': {
+        // Words for a page that isn't (or is no longer) there have nowhere to go.
+        if (!(pages ?? []).some((x) => x.id === p.id)) break
+        const list = bodies ?? []
+        const at = list.findIndex((x) => x.id === p.id)
+        bodies = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
     }
   }
   const items = itemList.result() as Item[]
@@ -260,6 +304,11 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   else delete next.icon
   if (datasets?.length) next.datasets = datasets
   else delete next.datasets
+  // A wiki keeps its lists even when empty; a canvas board only has them when there's something in them.
+  if (pages?.length || b.kind === 'wiki') next.pages = pages ?? []
+  else delete next.pages
+  if (bodies?.length || b.kind === 'wiki') next.bodies = bodies ?? []
+  else delete next.bodies
   return next
 }
 
@@ -279,6 +328,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
   const items = new Map(b.items.map((i) => [i.id, i]))
   const conns = new Map(b.connectors.map((c) => [c.id, c]))
   const sets = new Map((b.datasets ?? []).map((d) => [d.id, d]))
+  const pages = new Map((b.pages ?? []).map((x) => [x.id, x]))
+  const bodies = new Map((b.bodies ?? []).map((x) => [x.id, x]))
   return (p) => {
     switch (p.k) {
       case 'item':
@@ -297,6 +348,10 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
       }
       case 'rec':
         return sets.get(p.ds)?.records.find((r) => r.id === p.id) ?? null
+      case 'page':
+        return pages.get(p.id) ?? null
+      case 'body':
+        return bodies.get(p.id) ?? null
     }
   }
 }

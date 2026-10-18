@@ -3,6 +3,33 @@
 What to build next, roughly in order. Each idea says why it matters for a
 small group of friends using BrainCraft together. Ticked ones are built.
 
+## Wikis
+
+A wiki is a board with `kind: 'wiki'` and pages instead of a canvas, so it
+saves, versions, syncs and shares like any board. Built in phases:
+
+- [x] **Phase 1: wiki spaces.** New wiki from Your boards; a page tree (drag
+  or Alt+Shift+arrows to nest and reorder); Markdown with a live preview
+  (headings with anchors, lists, checklists you can tick, tables, code,
+  quotes, callouts, `{{children}}`, `{{toc}}`); `[[` links between pages and
+  to boards, "new page" links, copyable page and heading links, "Linked
+  from"; a trash; typing undoes as one step per burst; tab sync and live sync
+  through the server.
+- [ ] **Phase 2: links everywhere.** Page links in canvas comments and
+  descriptions; links you can paste in chats (`#open=KEY&page=…`) with a
+  `hashchange` listener; backlinks both ways (a canvas object lists the pages
+  that mention it); page cards on the canvas and a page preview panel;
+  `createPage`/`updatePage`/`movePage`/`deletePage` operations and
+  `list_pages`/`read_page` tools for AI assistants and MCP.
+- [ ] **Phase 3: embeds.** `![[Label]](board:KEY#ID)` shows a frame, mind map,
+  table, Kanban board, timeline or whole board inside a page, drawn by the
+  real board renderer; snapshots for friends who don't have the board (with
+  every hidden brainstorm note blanked); database views as real tables; a
+  `/` menu; wiki templates (trip, move, party, club).
+- [ ] **Phase 4: robustness.** A line-by-line merge so two friends typing on
+  one page both keep their words; page history with diffs; "Since you were
+  here" for pages; search across wikis; Markdown import and export.
+
 ## Next up
 
 - [x] **Status marks.** Mark any object (a mind-map idea, a sticky, a card) as

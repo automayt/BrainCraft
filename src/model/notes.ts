@@ -35,11 +35,17 @@ export function deleteNote(b: Board, id: Id, noteId: string): Board {
 export interface LinkTarget {
   board?: string
   item?: Id
+  /** In a wiki: a page of this wiki (or of `board`'s), and a heading's anchor on it. */
+  page?: string
+  heading?: string
 }
 
-// `@[Label](#12)` mentions, `[[Label]](#12)` / `[[Label]](board:key)` / `[[Label]](board:key#12)`
-// wiki-links, and `[[Name]]` links typed by hand that are matched to a board or object by name.
-const TOKEN = /@\[([^\]]*)\]\(#(\d+)\)|\[\[([^[\]\n]*)\]\]\((?:board:([\w-]+))?(?:#(\d+))?\)|\[\[([^[\]\n]+)\]\]/g
+// `@[Label](#12)` mentions; `[[Label]](#12)` / `[[Label]](board:key)` / `[[Label]](board:key#12)`
+// wiki-links; `[[Label]](page:id#heading)` / `[[Label]](board:key/page:id)` page links; and
+// `[[Name]]` links typed by hand that are matched to a page, board or object by name.
+const TOKEN =
+  /@\[([^\]]*)\]\(#(\d+)\)|\[\[([^[\]\n]*)\]\]\((?:board:([\w-]+))?(?:\/?page:([\w-]+)(?:#([\w-]+))?|#(\d+))?\)|\[\[([^[\]\n]+)\]\]/g
+const TOKEN_AT = new RegExp(TOKEN.source, 'y')
 
 const clean = (label: string) => label.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim()
 
@@ -48,7 +54,10 @@ export function mentionToken(label: string, id: Id): string {
 }
 
 export function linkToken(label: string, to: LinkTarget): string {
-  return `[[${clean(label)}]](${to.board ? `board:${to.board}` : ''}${to.item !== undefined ? `#${to.item}` : ''})`
+  const board = to.board ? `board:${to.board}` : ''
+  const where =
+    to.page !== undefined ? `${board ? '/' : ''}page:${to.page}${to.heading ? `#${to.heading}` : ''}` : to.item !== undefined ? `#${to.item}` : ''
+  return `[[${clean(label)}]](${board}${where})`
 }
 
 /** `link` is null for a `[[Name]]` typed by hand: it points at whatever is called that. */
@@ -60,14 +69,33 @@ export function parseNote(text: string): NotePart[] {
   let last = 0
   for (const m of text.matchAll(TOKEN)) {
     if (m.index! > last) parts.push({ text: text.slice(last, m.index) })
-    if (m[2] !== undefined) parts.push({ mention: Number(m[2]), label: m[1] })
-    else if (m[6] !== undefined) parts.push({ link: null, label: m[6].trim() })
-    else if (m[4] === undefined && m[5] === undefined) parts.push({ text: m[0] })
-    else parts.push({ link: { ...(m[4] ? { board: m[4] } : {}), ...(m[5] ? { item: Number(m[5]) } : {}) }, label: m[3] })
+    parts.push(partOf(m))
     last = m.index! + m[0].length
   }
   if (last < text.length) parts.push({ text: text.slice(last) })
   return parts
+}
+
+function partOf(m: RegExpMatchArray): NotePart {
+  if (m[2] !== undefined) return { mention: Number(m[2]), label: m[1] }
+  if (m[8] !== undefined) return { link: null, label: m[8].trim() }
+  if (m[4] === undefined && m[5] === undefined && m[7] === undefined) return { text: m[0] }
+  return {
+    link: {
+      ...(m[4] ? { board: m[4] } : {}),
+      ...(m[5] ? { page: m[5] } : {}),
+      ...(m[6] ? { heading: m[6] } : {}),
+      ...(m[7] ? { item: Number(m[7]) } : {}),
+    },
+    label: m[3],
+  }
+}
+
+/** A mention or link starting exactly at `at` in `text`, for parsers that walk the text themselves. */
+export function tokenAt(text: string, at: number): { part: NotePart; length: number } | null {
+  TOKEN_AT.lastIndex = at
+  const m = TOKEN_AT.exec(text)
+  return m ? { part: partOf(m), length: m[0].length } : null
 }
 
 /** Note text with mentions and links shown as their labels, for search and previews. */

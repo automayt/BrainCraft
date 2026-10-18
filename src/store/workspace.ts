@@ -5,6 +5,7 @@
 
 import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
+import { emptyWiki, getPage } from '../model/wiki'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board } from '../model/types'
 import { type KV, openKV } from './kv'
@@ -366,6 +367,11 @@ export class Workspace {
     return id
   }
 
+  /** Starts a new wiki (pages in a tree) and opens it. */
+  newWiki(title = 'Untitled wiki') {
+    return this.newBoard(emptyWiki(title))
+  }
+
   /** Saves a shared board into this browser's library and opens it for editing. */
   async keepCopy() {
     const b = this.editor.board
@@ -599,9 +605,20 @@ export class Workspace {
       }
       await this.switchTo(meta.id)
     }
+    if (to.page !== undefined) {
+      const page = getPage(this.editor.board, to.page)
+      if (page && !page.trashed) this.editor.openPage(to.page, to.heading ?? null)
+      else this.editor.setStatus(page ? 'That page is in the trash' : 'That page was deleted')
+      return
+    }
     if (to.item === undefined) return
     if (getItem(this.editor.board, to.item)) this.editor.focusObject(to.item)
     else this.editor.setStatus('That object was deleted')
+  }
+
+  /** The key other boards and links use for the open one (its live id when shared). */
+  get linkKey(): string | null {
+    return this.liveInfo?.id ?? this.boardId
   }
 
   /** Comments and descriptions on other boards in this browser that link here. */

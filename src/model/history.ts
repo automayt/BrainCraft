@@ -25,6 +25,19 @@ export class History {
     return true
   }
 
+  /**
+   * Folds a change into the last step when nothing came between (`before` is where that step
+   * ended): a burst of typing on a page undoes as one step, not one per letter.
+   */
+  amend(before: Board, now: Board): boolean {
+    const last = this.undoStack.at(-1)
+    if (!last || last.after !== before) return this.commit(before, now)
+    if (before === now) return false
+    last.after = now
+    this.redoStack = []
+    return true
+  }
+
   undo(): Step | null {
     const step = this.undoStack.pop()
     if (!step) return null

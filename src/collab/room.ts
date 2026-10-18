@@ -8,6 +8,7 @@ import { cleanPatches } from '../model/sanitize'
 import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
+import { MAX_PAGES } from '../model/wiki'
 import { type Patch, applyPatches, diff } from './patch'
 import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage, type Signal } from './protocol'
 
@@ -131,6 +132,9 @@ export class Room {
       }
       if (next.items.length > MAX_ITEMS && next.items.length > this.data.board.items.length)
         return m.send({ t: 'error', message: `This board is full (${MAX_ITEMS.toLocaleString('en')} objects)`, seq })
+      const pages = next.pages?.length ?? 0
+      if (pages > MAX_PAGES && pages > (this.data.board.pages?.length ?? 0))
+        return m.send({ t: 'error', message: `This wiki is full (${MAX_PAGES.toLocaleString('en')} pages)`, seq })
       this.data.board = next
       this.data.version++
       this.changed()

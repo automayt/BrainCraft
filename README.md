@@ -195,6 +195,29 @@ These become interactive once selected; drag them by their title strip.
   link itself. Nothing is uploaded. People who open it see the board
   read-only and can save their own copy.
 
+### Wikis: pages in a tree
+
+A wiki sits in **Your boards** next to your canvas boards (Ctrl+O → **Wiki**).
+Instead of a canvas it has pages, nested as deep as you like, written in
+Markdown. It saves, keeps versions, goes to files, syncs between tabs and
+shares live exactly like a board.
+
+- **The page list** on the left: **+ New page**, **+** on a page for a page
+  under it, drag a page onto another to nest it (or above and below it to
+  reorder), or use **Alt+Shift+arrows**. Deleted pages go to the **Trash**,
+  with their sub-pages, until you delete them for good.
+- **Writing:** **Edit** (or double-click the page) opens the Markdown on the
+  left and how it reads on the right. Headings, lists, `- [ ]` checklists
+  (tick them while reading), tables, code, quotes, `> [!tip]` callouts,
+  `{{children}}` for the pages under this one and `{{toc}}` for its headings.
+  It saves as you type; Esc when you're done.
+- **Links:** type `[[` to link to another page or a board. A `[[Name]]` that
+  no page has yet offers to make that page. **Copy link** (and the **#** next
+  to any heading) copies a link you can paste into any page or canvas
+  comment. Each page lists the pages that link to it.
+- Linking pages from canvas comments, and showing canvas objects inside pages,
+  come next (see [docs/IDEAS.md](docs/IDEAS.md)).
+
 ### Linked data: one dataset, many views
 
 - **Database (B)** adds a set of records with typed fields: text, number,

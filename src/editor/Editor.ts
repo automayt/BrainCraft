@@ -27,6 +27,7 @@ import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
+import * as W from '../model/wiki'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
@@ -43,6 +44,7 @@ import {
   type KanbanData,
   type Kind,
   type LinkCard,
+  type Page,
   type Status,
   type TableData,
   type TimelineData,
@@ -484,6 +486,10 @@ export class Editor {
     this.aiHistory = []
     this.catchUp = null
     this.showingCatchUp = false
+    // A wiki opens on its first page (the screen picks the remembered one, if any).
+    this.page = null
+    this.pageHeading = null
+    this.lastTyping = null
     this.status = status
     this.zoomToFit()
     this.onBoardChange?.(this.board)
@@ -1372,6 +1378,89 @@ export class Editor {
     this.edit((b) => N.deleteNote(b, id, noteId))
     // One click deletes anyone's comment: make the way back obvious.
     if (this.board !== before) this.setStatus('Comment deleted — Ctrl Z brings it back')
+  }
+
+  // ----- wiki pages ------------------------------------------------------------------------
+
+  /** The page a wiki is showing (null: its first page). */
+  page: string | null = null
+  /** A heading to scroll to on that page, once it's shown. */
+  pageHeading: string | null = null
+  /** The last typing on a page, so a burst of it undoes as one step. */
+  private lastTyping: { page: string; at: number; board: Board } | null = null
+
+  /** The page being shown: the one picked, or else the wiki's first. */
+  get currentPage(): Page | undefined {
+    if (!W.isWiki(this.board)) return undefined
+    const picked = W.getPage(this.board, this.page ?? undefined)
+    return picked && !picked.trashed ? picked : W.pageOrder(this.board)[0]
+  }
+
+  openPage(id: string, heading: string | null = null) {
+    this.page = id
+    this.pageHeading = heading
+    this.emit()
+  }
+
+  /** Adds a page (under `parent`, before `before` or last) and opens it. */
+  addWikiPage(opts: { title?: string; parent?: string; before?: string; text?: string } = {}): string {
+    let id = ''
+    this.edit((b) => {
+      const [next, made] = W.addPage(b, { title: opts.title ?? 'Untitled', parent: opts.parent, before: opts.before, text: opts.text }, Date.now(), this.author.trim() || undefined)
+      id = made
+      return next
+    })
+    if (id) this.openPage(id)
+    else if (!this.readOnly) this.setStatus(`This wiki is full (${W.MAX_PAGES.toLocaleString('en')} pages)`)
+    return id
+  }
+
+  setPageTitle(id: string, title: string) {
+    this.edit((b) => W.setPageMeta(b, id, { title }))
+  }
+
+  setPageIcon(id: string, icon: string | null) {
+    this.edit((b) => W.setPageMeta(b, id, { icon }))
+  }
+
+  /** Replaces a page's words; typing in quick succession on one page is one undo step. */
+  setPageText(id: string, text: string) {
+    if (this.readOnly) return
+    const before = this.board
+    this.apply(W.setPageBody(this.board, id, text, Date.now(), this.author.trim() || undefined))
+    if (this.board === before) return
+    const t = this.lastTyping
+    const now = Date.now()
+    if (t && t.page === id && now - t.at < 1500 && t.board === before) this.history.amend(before, this.board)
+    else this.history.commit(before, this.board)
+    this.lastTyping = { page: id, at: now, board: this.board }
+    this.emit()
+  }
+
+  /** Moves a page (and its sub-pages) under `parent` (undefined: the top), before `before` or last. */
+  movePageTo(id: string, parent: string | undefined, before?: string) {
+    const was = this.board
+    this.edit((b) => W.movePage(b, id, parent, before))
+    if (this.board === was && parent !== undefined && W.withDescendants(was, id).has(parent)) this.setStatus('A page can’t go inside one of its own sub-pages')
+  }
+
+  trashPage(id: string) {
+    const page = W.getPage(this.board, id)
+    if (!page) return
+    const count = W.withDescendants(this.board, id).size
+    this.edit((b) => W.trashPage(b, id))
+    if (this.page === id) this.page = null
+    this.setStatus(`Moved “${page.title || 'Untitled'}”${count > 1 ? ` and ${count - 1} sub-page${count > 2 ? 's' : ''}` : ''} to the trash — Ctrl Z brings it back`)
+  }
+
+  restorePage(id: string) {
+    this.edit((b) => W.restorePage(b, id))
+    this.openPage(id)
+  }
+
+  deletePageForever(id: string) {
+    this.edit((b) => W.deletePage(b, id))
+    if (this.page === id) this.page = null
   }
 
   setSearchOpen(open: boolean) {

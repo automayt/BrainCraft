@@ -1,8 +1,9 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { MAX_ID, cleanConnector, cleanDataset, cleanIcon, cleanItem } from './sanitize'
-import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item } from './types'
+import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage } from './sanitize'
+import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody } from './types'
+import { MAX_PAGES } from './wiki'
 
 export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
@@ -31,6 +32,18 @@ export function fromJson(json: string): Board {
   // A loop, not Math.max(...ids): spreading a very big board overflows the call stack.
   let maxId = 0
   for (const o of [...items, ...connectors]) if (o.id > maxId) maxId = o.id
+  // Wiki pages: the first of any repeated id, parents that exist, words only for pages that do.
+  const wiki = raw.kind === 'wiki'
+  const pageIds = new Set<string>()
+  const pages = (Array.isArray(raw.pages) ? raw.pages.map(cleanPage) : [])
+    .filter((p): p is Page => !!p && !pageIds.has(p.id) && !!pageIds.add(p.id))
+    .slice(0, MAX_PAGES)
+  const knownPages = new Set(pages.map((p) => p.id))
+  for (const p of pages) if (p.parent !== undefined && !knownPages.has(p.parent)) delete p.parent
+  const bodyIds = new Set<string>()
+  const bodies = (Array.isArray(raw.bodies) ? raw.bodies.map(cleanBody) : []).filter(
+    (x): x is PageBody => !!x && knownPages.has(x.id) && !bodyIds.has(x.id) && !!bodyIds.add(x.id),
+  )
   return {
     version: FORMAT_VERSION,
     title: typeof raw.title === 'string' ? raw.title : 'Untitled board',
@@ -40,6 +53,8 @@ export function fromJson(json: string): Board {
     // Ids are whole numbers: a nextId like 2.5 or 1e309 would give new objects ids a reload drops.
     nextId: Math.max(Number.isSafeInteger(raw.nextId) && (raw.nextId as number) <= MAX_ID ? (raw.nextId as number) : 0, maxId + 1),
     ...(datasets.length ? { datasets } : {}),
+    ...(wiki ? { kind: 'wiki' as const } : {}),
+    ...(wiki || pages.length ? { pages, bodies } : {}),
   }
 }
 

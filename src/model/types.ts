@@ -78,6 +78,31 @@ export interface Dataset {
   records: DataRecord[]
 }
 
+/**
+ * A wiki page's place in its wiki: title and position. Its words are a separate `PageBody`, so
+ * renaming or moving a page and typing on it never overwrite each other.
+ */
+export interface Page {
+  id: string
+  /** The page it sits under; missing (or a page that's gone) means the top level. */
+  parent?: string
+  /** Order among its siblings, smallest first (ties go by id). */
+  rank: number
+  title: string
+  icon?: string
+  created: number
+  /** When it went to the trash (with its sub-pages); restorable until deleted for good. */
+  trashed?: number
+}
+
+/** A wiki page's words, in Markdown, and who last changed them. */
+export interface PageBody {
+  id: string
+  text: string
+  at: number
+  by?: string
+}
+
 export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery'
 
 /** How a `data` item shows its dataset. Sorting, filtering and hiding change the view, never the data. */
@@ -309,6 +334,11 @@ export interface Board {
   nextId: Id
   /** Records shown by `data` items; several items can show the same dataset. */
   datasets?: Dataset[]
+  /** A wiki: pages in a tree instead of a canvas. Set when it's made, never changed. */
+  kind?: 'wiki'
+  pages?: Page[]
+  /** The pages' words, one per page (same id). */
+  bodies?: PageBody[]
 }
 
 export const FORMAT_VERSION = 1

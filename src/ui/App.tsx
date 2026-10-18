@@ -17,6 +17,8 @@ import { type ContextMenuState, type Ui, UiContext } from './uiContext'
 import { imageFiles, readImage } from './images'
 import { ImportExport } from './ImportExport'
 import { altLetter } from './keys'
+import { isWiki } from '../model/wiki'
+import { WikiView } from './wiki/WikiView'
 import { NotesPanel } from './NotesPanel'
 import { BoardErrorBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
@@ -58,7 +60,8 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}`)
+  const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [importTab, setImportTab] = useState<'import' | 'export'>('import')
@@ -216,6 +219,19 @@ function App({ ws }: { ws: Workspace }) {
       if (uiRef.current.menu && e.key !== 'Escape') return
       // Escape closes the open menu, dialog or pop-up; it shouldn't also clear the selection behind it.
       if (e.key === 'Escape' && (uiRef.current.menu || document.querySelector('[aria-modal="true"], .popover, .align-menu, .dv-sheet'))) return
+      // A wiki has no canvas: Help, and undo, redo and save, are all that reach the editor.
+      if (isWiki(editor.board)) {
+        const ctrl = e.ctrlKey || e.metaKey
+        if (e.key === '?' && !ctrl) {
+          e.preventDefault()
+          setDialog((d) => (d === 'help' ? null : 'help'))
+        } else if (ctrl && /^[zys]$/i.test(e.key)) {
+          const result = editor.keyDown(e.key, { shift: e.shiftKey, ctrl: true })
+          if (result === 'save') void ws.saveFile(e.shiftKey)
+          if (result) e.preventDefault()
+        }
+        return
+      }
       const ctrl = e.ctrlKey || e.metaKey
       // Board zoom instead of browser zoom.
       if (ctrl && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
@@ -265,7 +281,7 @@ function App({ ws }: { ws: Workspace }) {
       }
     }
     const onCopy = (e: ClipboardEvent) => {
-      if (isTyping(e.target)) return
+      if (isTyping(e.target) || isWiki(editor.board)) return
       const text = editor.copyText()
       if (!text) return
       e.clipboardData?.setData('text/plain', text)
@@ -273,7 +289,7 @@ function App({ ws }: { ws: Workspace }) {
       if (e.type === 'cut') editor.deleteSelection()
     }
     const onPaste = (e: ClipboardEvent) => {
-      if (isTyping(e.target)) return
+      if (isTyping(e.target) || isWiki(editor.board)) return
       // Images first: copying from a browser or screenshot tool puts the picture on the clipboard.
       const images = imageFiles(e.clipboardData?.files)
       if (images.length) {
@@ -314,7 +330,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}`}
+          className={`app${editor.notesOpen ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -327,13 +343,17 @@ function App({ ws }: { ws: Workspace }) {
           }}
         >
           <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
-            <Canvas />
+            {wiki ? <WikiView /> : <Canvas />}
           </BoardErrorBoundary>
           <TopLeft />
           <TopRight />
-          <ToolRail />
-          <BottomLeft />
-          <NotesPanel />
+          {!wiki && (
+            <>
+              <ToolRail />
+              <BottomLeft />
+              <NotesPanel />
+            </>
+          )}
           {assistant && !editor.presenting && (
             <Suspense fallback={<aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
               <LazyAiPanel onClose={() => setAssistant(false)} />
@@ -343,8 +363,12 @@ function App({ ws }: { ws: Workspace }) {
           <Toast />
           <SearchPalette />
           <ReadOnlyBanner />
-          <Presenter />
-          <RunPanel />
+          {!wiki && (
+            <>
+              <Presenter />
+              <RunPanel />
+            </>
+          )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
           {dialog === 'help' && <Help onClose={close} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}

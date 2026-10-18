@@ -4,6 +4,7 @@ import { bounds } from '../model/board'
 import { fromJson, toJson } from '../model/serialize'
 import type { Board, Kind } from '../model/types'
 import type { KV } from './kv'
+import { isWiki, pageOrder } from '../model/wiki'
 
 /** One object of a board thumbnail: x, y, w, h in 0–1000 of the board's bounds, plus fill and kind. */
 export type ThumbRect = [number, number, number, number, string, Kind]
@@ -31,6 +32,18 @@ export interface BoardMeta {
   thumb: ThumbRect[]
   /** Aspect ratio (w / h) of the board's content, for the thumbnail. */
   aspect: number
+  /** A wiki rather than a canvas board. */
+  kind?: 'wiki'
+  /** A wiki's pages (not their words), so lists and link pickers needn't load it. */
+  outline?: PageOutline[]
+}
+
+/** A page as other boards see it: enough to list it and link to it. */
+export interface PageOutline {
+  id: string
+  title: string
+  parent?: string
+  icon?: string
 }
 
 export interface VersionMeta {
@@ -135,12 +148,18 @@ export class Library {
     const meta: BoardMeta = {
       id,
       ...(live ? { live } : {}),
-      title: board.title || 'Untitled board',
+      title: board.title || (isWiki(board) ? 'Untitled wiki' : 'Untitled board'),
       ...(board.icon ? { icon: board.icon } : {}),
       created,
       updated: this.now(),
-      items: board.items.length,
+      items: isWiki(board) ? pageOrder(board).length : board.items.length,
       ...thumbnail(board),
+      ...(isWiki(board)
+        ? {
+            kind: 'wiki' as const,
+            outline: pageOrder(board).map((p) => ({ id: p.id, title: p.title, ...(p.parent ? { parent: p.parent } : {}), ...(p.icon ? { icon: p.icon } : {}) })),
+          }
+        : {}),
     }
     await this.kv.set(boardKey(id), json)
     await this.kv.set(metaKey(id), meta)
