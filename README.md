@@ -89,8 +89,8 @@ The board fills the window and the controls float above it:
   most after that kind of shape, then the usual conventions. Press **1–7** to
   pick.
 - **Mermaid:** paste a Mermaid flowchart (or use **Import / Export**) to build
-  it, laid out automatically. Export any flowchart back to Mermaid for docs,
-  GitHub or Notion.
+  it, laid out automatically. Export any flowchart back to Mermaid for docs
+  and wikis that draw Mermaid diagrams.
 
 A hint bar at the bottom of the canvas shows the shortcuts that apply to
 whatever you have selected.
@@ -246,13 +246,42 @@ shares live exactly like a board.
   date as they read the page; anyone else who has the board gets an **Update
   the copy** button. Just reading a page never copies a board into it.
 - **`/` menu:** headings, checklists, lists, tables, code, quotes, tips and
-  warnings, dividers, links to pages, a new sub-page, the sub-page list and
-  contents, and embeds.
+  warnings, dividers, links to pages, a new sub-page, embeds and every macro.
+- **Macros:** write `{{name}}` on a line of its own, or pick one from the `/`
+  menu. A name BrainCraft doesn't know shows marked in red, so typos stand out.
+  - `{{children}}` the pages under this one; `{{toc}}` this page's headings;
+    `{{pagetree}}` every page (`{{pagetree here}}`: the ones under this page).
+  - `{{tasks}}` every unticked checklist item in the wiki, grouped by page and
+    tickable right there (`{{tasks here}}`: this page and the ones under it;
+    `{{tasks all}}`: ticked ones too).
+  - `{{recent 5}}` the latest changes across the wiki.
+  - `{{include "Page title"}}` shows another page's words here, kept in step.
+  - `{{expand Title}}` … `{{/expand}}` a section that stays closed until
+    clicked; `{{columns}}` … `{{column}}` … `{{/columns}}` side by side
+    (stacked on phones).
+  - Inside a sentence: `{{status Booked}}` a coloured label (it picks a colour
+    from the words, or say one: `{{status Ideas purple}}`),
+    `{{countdown 2026-12-20}}` "63 days to go", `{{today}}` today's date.
 - **Templates:** Your boards has a row of wikis to start from: blank, a trip,
   moving house, a party and a club handbook.
-- **History of a page:** **⋯ → History** lists each saved version where the
-  page changed (who, when, lines added and removed), shows what changed, and
-  **Put this version back** restores just that page as one undo step.
+- **Versions of a page:** a version is saved each time someone finishes
+  writing on a page (with their note, if they wrote one in **What did you
+  change?** beside Done), every ten minutes during a long stretch of writing,
+  on a rename, when a version is put back, and when an AI assistant changes
+  the page. Versions live in the wiki, so friends in a live session see the
+  same history. The page shows its number ("version 7"); click it, or **⋯ →
+  History**, to see:
+  - each version with who, when, their note and lines added and removed;
+  - **Changes** against the version before, the page now, or any other one;
+  - **The page then**, as it read;
+  - **Who wrote what**: every line beside the version and person that wrote it;
+  - **Mark as milestone** to keep a version for good, a note on any version,
+    and **Put this version back** for just that page (one undo step, and
+    itself a new version).
+  Each page keeps its last 50 versions plus milestones; undo never removes a
+  version. Older history from before versions existed comes from the wiki's
+  backups. **Recent changes** at the foot of the page list shows the latest
+  versions across the whole wiki, with what each one changed.
 - **Since you were here:** opening a wiki after friends worked on it lists the
   new, changed and removed pages, marks them in the page list, and **what
   changed** shows the lines that are different since your last visit.

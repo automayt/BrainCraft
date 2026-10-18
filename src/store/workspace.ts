@@ -597,7 +597,9 @@ export class Workspace {
     await this.flush()
     // Keep what's being replaced, so restoring is never a one-way door.
     await this.library.addVersion(this.boardId, this.editor.board, `Before restoring ${new Date(v.at).toLocaleString()}`)
-    this.editor.replaceBoard(old, `Restored the version from ${new Date(v.at).toLocaleString()} — Ctrl Z to undo`)
+    // The page history carries on through a restore (versions don't keep it).
+    const now = this.editor.board.revs
+    this.editor.replaceBoard(now ? { ...old, revs: now.filter((r) => old.pages?.some((p) => p.id === r.page)) } : old, `Restored the version from ${new Date(v.at).toLocaleString()} — Ctrl Z to undo`)
   }
 
   /**

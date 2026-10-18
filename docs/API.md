@@ -110,7 +110,7 @@ Results carry the page's id as `page`.
 | Operation | Fields | Does |
 | --- | --- | --- |
 | `createPage` | `title`, `parent?`, `before?`, `text?` (Markdown), `icon?`, `ref?` | A page under `parent` (or at the top), before `before` or last. |
-| `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?` | `text` replaces the page's Markdown; `append` adds a line at the end. |
+| `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?`, `note?` | `text` replaces the page's Markdown; `append` adds a line at the end; `note` says what changed. The page's history keeps a version from before and after. |
 | `movePage` | `page`, `parent?` (`null` for the top), `before?` | Moves it with its sub-pages. A page can't go inside its own sub-pages. |
 | `deletePage` | `page` | Moves it and its sub-pages to the trash. |
 

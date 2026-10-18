@@ -1,8 +1,9 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanSnap } from './sanitize'
-import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type Snap } from './types'
+import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanRev, cleanSnap } from './sanitize'
+import { MAX_REVS } from './revisions'
+import { type Board, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type PageRev, type Snap } from './types'
 import { MAX_PAGES, MAX_SNAPS } from './wiki'
 
 export function toJson(b: Board): string {
@@ -44,6 +45,10 @@ export function fromJson(json: string): Board {
   const bodies = (Array.isArray(raw.bodies) ? raw.bodies.map(cleanBody) : []).filter(
     (x): x is PageBody => !!x && knownPages.has(x.id) && !bodyIds.has(x.id) && !!bodyIds.add(x.id),
   )
+  const revIds = new Set<string>()
+  const revs = (wiki && Array.isArray(raw.revs) ? raw.revs.slice(0, MAX_REVS).map(cleanRev) : []).filter(
+    (r): r is PageRev => !!r && knownPages.has(r.page) && !revIds.has(r.id) && !!revIds.add(r.id),
+  )
   const snapKeys = new Set<string>()
   const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_SNAPS).map(cleanSnap) : []).filter(
     (s): s is Snap => !!s && !snapKeys.has(s.key) && !!snapKeys.add(s.key),
@@ -61,6 +66,7 @@ export function fromJson(json: string): Board {
     // Only a wiki keeps pages: a board that smuggles some in loses them on load.
     ...(wiki ? { pages, bodies } : {}),
     ...(snaps.length ? { snaps } : {}),
+    ...(revs.length ? { revs } : {}),
   }
 }
 

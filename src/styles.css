@@ -8623,3 +8623,308 @@ button.on,
     left: 0;
   }
 }
+
+/* "What did you change?" beside Done: kept with the page's version. */
+.page-note {
+  flex: 1;
+  min-width: 160px;
+  max-width: 420px;
+  margin-left: auto;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.page-note:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .page-editor-saved {
+    display: none;
+  }
+}
+
+.page-history-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 0;
+}
+
+.page-history-tabs button {
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 999px;
+}
+
+.page-history-tabs .on {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+}
+
+.page-history-tools select {
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.rev-star {
+  color: var(--warning, #e0a400);
+}
+
+.rev-note {
+  font-style: italic;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.page-history-more {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.rev-note-field {
+  margin: 8px 14px 0;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rev-note-field:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.page-history-page {
+  flex: 1;
+  padding: 6px 22px 22px;
+  overflow: auto;
+}
+
+.page-history-page h1 {
+  font-size: 24px;
+}
+
+.who-line {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 14px 0 0 !important;
+  border-left: 4px solid hsl(var(--who) 65% 55% / 0.8);
+}
+
+.who-tag {
+  padding-left: 8px;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .who-line {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+}
+
+/* "Recent changes" sits above the Trash at the foot of the page list. */
+.page-recent {
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.page-recent ~ .page-trash {
+  margin-top: 0;
+  border-top: none;
+}
+
+.recent-list {
+  flex: 1;
+  margin: 0;
+  padding: 0 18px 18px;
+  overflow: auto;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.recent-day {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.recent-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.recent-toggle {
+  margin-left: auto;
+  font-size: 12.5px;
+}
+
+.recent-note {
+  margin: 0 0 4px 22px;
+  font-size: 13px;
+}
+
+.recent-list .page-diff {
+  flex: none;
+  max-height: 320px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* ----- macros in pages ----- */
+
+.md-status {
+  display: inline-block;
+  padding: 0 7px;
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 0.08em;
+  border-radius: 4px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+.md-status-blue {
+  background: color-mix(in srgb, #3b82f6 26%, transparent);
+}
+
+.md-status-green {
+  background: color-mix(in srgb, #22a06b 28%, transparent);
+}
+
+.md-status-yellow {
+  background: color-mix(in srgb, #e2b203 32%, transparent);
+}
+
+.md-status-red {
+  background: color-mix(in srgb, #e34935 28%, transparent);
+}
+
+.md-status-purple {
+  background: color-mix(in srgb, #8f7ee7 30%, transparent);
+}
+
+.md-countdown {
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.md-macro-bad {
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.85em;
+  color: var(--danger);
+  border: 1px dashed var(--danger);
+  border-radius: 4px;
+}
+
+.md-macro-note {
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.md-expand {
+  margin: 0.8em 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.md-expand > summary {
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.md-expand-body {
+  padding: 0 14px 4px;
+}
+
+.md-columns {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+  gap: 18px;
+  margin: 0.8em 0;
+}
+
+.md-column > :first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .md-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.md-pagetree ul,
+.md-recent {
+  padding-left: 1.2em;
+}
+
+.md-tasks {
+  margin: 0.8em 0;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.md-tasks ul {
+  margin: 2px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.md-tasks li.done span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.md-tasks-page {
+  font-weight: 600;
+}
+
+.md-include {
+  margin: 0.8em 0;
+  padding: 2px 16px 6px;
+  border-left: 3px solid var(--accent);
+}
+
+.md-include-from {
+  font-size: 12.5px;
+}
+
+.md-include .md {
+  font-size: inherit;
+}

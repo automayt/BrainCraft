@@ -21,6 +21,7 @@ import type {
   Note,
   Page,
   PageBody,
+  PageRev,
   Poll,
   Snap,
   RunRecord,
@@ -400,6 +401,23 @@ export function cleanBody(v: unknown): PageBody | null {
   return { id: v.id, text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX), at: num(v.at) ?? 0, ...(by ? { by } : {}) }
 }
 
+/** A saved version of a wiki page. */
+export function cleanRev(v: unknown): PageRev | null {
+  if (!isObj(v) || typeof v.id !== 'string' || !/^[\w-]{1,64}$/.test(v.id) || !isPageId(v.page) || typeof v.text !== 'string') return null
+  const by = str(v.by, 60)
+  const note = str(v.note, 300)
+  return {
+    id: v.id,
+    page: v.page,
+    at: num(v.at) ?? 0,
+    ...(by ? { by } : {}),
+    title: str(v.title, 500) ?? '',
+    text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX),
+    ...(note ? { note } : {}),
+    ...(v.keep === true ? { keep: true } : {}),
+  }
+}
+
 /** A wiki's copy of an embedded object, checked like the board it came from. */
 export function cleanSnap(v: unknown): Snap | null {
   if (!isObj(v) || !isSnapKey(v.key)) return null
@@ -470,6 +488,15 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         else {
           const v = cleanRecord(p.v)
           if (v && v.id === p.id) out.push({ k: 'rec', ds: p.ds, id: p.id, v })
+        }
+        break
+      }
+      case 'rev': {
+        if (typeof p.id !== 'string') break
+        if (p.v === null) out.push({ k: 'rev', id: p.id, v: null })
+        else {
+          const v = cleanRev(p.v)
+          if (v && v.id === p.id) out.push({ k: 'rev', id: p.id, v })
         }
         break
       }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { guessLang, isLang, tokenize } from '../../model/code'
-import { type Block, type Heading, type Inline, type ListItem, inlineText } from '../../model/markdown'
+import { type Block, type Heading, type Inline, type ListItem, inlineText, macroText } from '../../model/markdown'
+import { type MacroArgs, argText, countdown, macroInfo, parseDay, statusLook } from '../../model/macros'
 import type { LinkTarget } from '../../model/notes'
 import type { Id } from '../../model/types'
 
@@ -18,6 +19,73 @@ export interface MarkdownActions {
   copyHeading?: (slug: string, text: string) => void
   /** Draws an embedded canvas object; missing shows it as a link. */
   embed?: (block: Extract<Block, { t: 'embed' }>) => ReactNode
+  /** Draws a macro that needs the wiki (a page tree, open tasks, another page…); missing shows a note. */
+  macro?: (block: MacroBlock) => ReactNode
+}
+
+export type MacroBlock = Extract<Block, { t: 'macro' }>
+
+/** A macro inside a sentence. */
+function InlineMacro({ name, args }: { name: string; args: MacroArgs }) {
+  if (name === 'status') {
+    const { label, color } = statusLook(args)
+    return <span className={`md-status md-status-${color}`}>{label}</span>
+  }
+  if (name === 'countdown') {
+    const day = parseDay(args.pos[0])
+    return day ? (
+      <span className="md-countdown" title={day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}>
+        {countdown(day)}
+      </span>
+    ) : (
+      <span className="md-macro-bad" title="Write the date like 2026-12-20">
+        {`{{countdown ${argText(args)}}}`}
+      </span>
+    )
+  }
+  return <>{macroText(name, args)}</>
+}
+
+/** A macro on its own line, or around other lines. */
+function MacroView({ b, a }: { b: MacroBlock; a: MarkdownActions }) {
+  const info = macroInfo(b.name)
+  if (!info) {
+    return (
+      <p>
+        <span className="md-macro-bad" title={`BrainCraft has no macro called “${b.name}”. Type / at the start of a line to see the ones it has.`}>
+          {`{{${b.name}${b.args.pos.length || Object.keys(b.args.named).length ? ' …' : ''}}}`}
+        </span>
+      </p>
+    )
+  }
+  const blocks = (list: Block[] | undefined) => (list ?? []).map((c, k) => <BlockView key={k} b={c} a={a} />)
+  switch (b.name) {
+    case 'expand':
+      return (
+        <details className="md-expand">
+          <summary>{argText(b.args) || 'Show more'}</summary>
+          <div className="md-expand-body">{b.children ? blocks(b.children) : <p className="muted">Close it with {'{{/expand}}'} on a line of its own.</p>}</div>
+        </details>
+      )
+    case 'columns':
+      return b.columns ? (
+        <div className="md-columns" style={{ ['--cols' as string]: b.columns.length }}>
+          {b.columns.map((c, k) => (
+            <div key={k} className="md-column">
+              {blocks(c)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">Columns: put {'{{column}}'} between them and {'{{/columns}}'} at the end.</p>
+      )
+    case 'children':
+      return a.children()
+    case 'toc':
+      return <BlockView b={{ t: 'toc', line: b.line }} a={a} />
+    default:
+      return a.macro ? a.macro(b) : <p className="md-macro-note muted">{info.label} shows here in the wiki.</p>
+  }
 }
 
 function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
@@ -45,6 +113,8 @@ function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
         return a.link(x.to, x.label, k)
       case 'mention':
         return a.mention(x.id, x.label, k)
+      case 'macro':
+        return <InlineMacro key={k} name={x.name} args={x.args} />
     }
   })
 }
@@ -161,6 +231,8 @@ function BlockView({ b, a }: { b: Block; a: MarkdownActions }): ReactNode {
       )
     case 'children':
       return a.children()
+    case 'macro':
+      return <MacroView b={b} a={a} />
     case 'embed':
       return a.embed ? a.embed(b) : <p>{a.link({ board: b.board, ...(b.item !== undefined ? { item: b.item } : {}) }, b.label || 'Embedded board', 0)}</p>
     case 'toc':

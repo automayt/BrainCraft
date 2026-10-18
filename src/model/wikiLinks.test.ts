@@ -152,6 +152,14 @@ describe('page operations and tools', () => {
     expect(page.text).toContain('## Budget')
     await runTool(host, 'apply_ops', { ops: [{ op: 'updatePage', page: flights, title: 'Getting there' }] })
     expect(((await runTool(host, 'find', { query: 'getting' })) as { title: string }[])[0].title).toBe('Getting there')
+    // The rename left two versions: the page before it, and after.
+    await runTool(host, 'apply_ops', { ops: [{ op: 'updatePage', page: flights, append: 'Book seats', note: 'Seats' }] })
+    const history = (await runTool(host, 'page_history', { page: flights })) as { versions: { version: number; note?: string; added: number }[] }
+    expect(history.versions[0]).toMatchObject({ note: 'Seats', added: 1 })
+    const first = (await runTool(host, 'read_page', { page: flights, version: 1 })) as { title: string; text: string }
+    expect(first.title).toBe('Flights')
+    expect(first.text).not.toContain('Book seats')
+    await expect(runTool(host, 'read_page', { page: flights, version: 99 })).rejects.toThrow(/No version 99/)
     await expect(runTool({ ...host, board: () => emptyBoard() }, 'list_pages')).rejects.toThrow(/isn’t a wiki/)
   })
 })

@@ -114,6 +114,24 @@ export interface PageBody {
   by?: string
 }
 
+/**
+ * One saved version of a wiki page: its title and words at a moment, who wrote them, and a note
+ * about what changed. Versions are only ever added (or pruned when there are too many), never
+ * edited, so friends adding them at the same time never clash.
+ */
+export interface PageRev {
+  id: string
+  page: string
+  at: number
+  by?: string
+  title: string
+  text: string
+  /** What changed, in the writer's words. */
+  note?: string
+  /** A milestone: kept however many versions come after it. */
+  keep?: boolean
+}
+
 export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery'
 
 /** How a `data` item shows its dataset. Sorting, filtering and hiding change the view, never the data. */
@@ -354,6 +372,8 @@ export interface Board {
   bodies?: PageBody[]
   /** Copies of what the pages embed, for friends who don't have those boards. */
   snaps?: Snap[]
+  /** Saved versions of the pages, oldest first (see `revisions.ts`). */
+  revs?: PageRev[]
 }
 
 export const FORMAT_VERSION = 1

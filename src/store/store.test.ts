@@ -128,11 +128,18 @@ describe('share links', () => {
     ;[w, gone] = W.addPage(w, { title: 'Secret', text: 'old plans ![[Old]](board:k#2)' }, 3)
     w = W.trashPage(w, gone, 4)
     const snap = (key: string) => ({ key, at: 1, items: [{ ...newItem('image', { x: 0, y: 0, w: 10, h: 10 }, { src: 'data:image/png;base64,AAAA' }), id: 1 }], connectors: [] })
-    w = { ...w, snaps: [snap('k#1'), snap('k#2')] }
+    w = { ...w, snaps: [snap('k#1'), snap('k#2')], revs: [{ id: 'r1', page: w.pages![0].id, at: 1, title: 'Home', text: 'old words' }] }
     const out = forSharing(w)
     expect(out.pages!.map((p) => p.title)).toEqual(['Home', 'Kept'])
     expect(JSON.stringify(out)).not.toContain('old plans')
     expect(out.snaps!.map((s) => s.key)).toEqual(['k#1'])
+    // The page history stays home, and out of backups too.
+    expect(out.revs).toBeUndefined()
+    const lib = new Library(new MemoryKV())
+    const id = await lib.create(w)
+    await lib.addVersion(id, w, 'Named')
+    const [v] = await lib.versions(id)
+    expect((await lib.loadVersion(id, v.at))!.revs).toBeUndefined()
     expect(withoutImages(out).snaps![0].items[0].src).toBeUndefined()
   })
 })

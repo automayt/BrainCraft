@@ -4,7 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, Snap } from '../model/types'
+import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -28,6 +28,8 @@ export type Patch =
   | { k: 'body'; id: string; v: PageBody | null }
   /** A copy of what a page embeds, kept for friends who don't have that board. */
   | { k: 'snap'; id: string; v: Snap | null }
+  /** A saved version of a wiki page (added once; changed only for a note or milestone mark). */
+  | { k: 'rev'; id: string; v: PageRev | null }
 
 /** What a patch is about: two patches with the same key replace each other. */
 export function keyOf(p: Patch): string {
@@ -52,6 +54,8 @@ export function keyOf(p: Patch): string {
       return `b:${p.id}`
     case 'snap':
       return `s:${p.id}`
+    case 'rev':
+      return `v:${p.id}`
   }
 }
 
@@ -168,6 +172,7 @@ export function diff(a: Board, z: Board): Patch[] {
     }
     for (const s of a.snaps ?? []) if (!after.has(s.key)) out.push({ k: 'snap', id: s.key, v: null })
   }
+  diffById(a.revs, z.revs, (id, v) => ({ k: 'rev', id, v }), out)
   return out
 }
 
@@ -245,6 +250,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let pages = b.pages
   let bodies = b.bodies
   let snaps = b.snaps
+  let revs = b.revs
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -313,6 +319,14 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         snaps = p.v === null ? list.filter((x) => x.key !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
         break
       }
+      case 'rev': {
+        // A version of a page that isn't there has nothing to belong to.
+        if (p.v && !(pages ?? []).some((x) => x.id === p.v!.page)) break
+        const list = revs ?? []
+        const at = list.findIndex((x) => x.id === p.id)
+        revs = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
     }
   }
   const items = itemList.result() as Item[]
@@ -332,6 +346,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   else delete next.bodies
   if (snaps?.length) next.snaps = snaps
   else delete next.snaps
+  if (revs?.length) next.revs = revs
+  else delete next.revs
   return next
 }
 
@@ -377,6 +393,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return bodies.get(p.id) ?? null
       case 'snap':
         return (b.snaps ?? []).find((s) => s.key === p.id) ?? null
+      case 'rev':
+        return (b.revs ?? []).find((r) => r.id === p.id) ?? null
     }
   }
 }

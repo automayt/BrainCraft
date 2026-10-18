@@ -28,6 +28,7 @@ import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
 import * as BS from '../model/brainstorm'
 import { merge3 } from '../model/merge'
+import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys } from '../model/markdown'
@@ -577,13 +578,13 @@ export class Editor {
   undo() {
     this.finishEditing()
     const step = this.history.undo()
-    if (step) this.afterJump(this.board === step.after ? step.before : this.rebase(step.after, step.before))
+    if (step) this.afterJump(this.keepLog(this.board === step.after ? step.before : this.rebase(step.after, step.before)))
   }
 
   redo() {
     this.finishEditing()
     const step = this.history.redo()
-    if (step) this.afterJump(this.board === step.before ? step.after : this.rebase(step.before, step.after))
+    if (step) this.afterJump(this.keepLog(this.board === step.before ? step.after : this.rebase(step.before, step.after)))
   }
 
   pointerLeave() {
@@ -711,7 +712,46 @@ export class Editor {
 
   /** Applies just the change from `from` to `to` onto the current board (others' edits since stay). */
   private rebase(from: Board, to: Board): Board {
-    return M.layoutAll(applyPatches(this.board, diff(from, to)), this.measure)
+    return M.layoutAll(applyPatches(this.board, diff(from, to).filter((p) => p.k !== 'rev')), this.measure)
+  }
+
+  /** Undo and redo never take saved page versions away: the history of a page is a log, not an edit. */
+  private keepLog(b: Board): Board {
+    const log = this.board.revs
+    if (b.revs === log) return b
+    const kept = log?.filter((r) => W.getPage(b, r.page))
+    const next = { ...b, revs: kept }
+    if (!kept?.length) delete next.revs
+    return next
+  }
+
+  /** Saves versions of pages (outside undo: see {@link keepLog}). */
+  private saveVersions(pages: Iterable<string>, opts: RV.SaveOptions = {}) {
+    if (this.readOnly || !W.isWiki(this.board)) return
+    let b = this.board
+    for (const id of pages) b = RV.savePageVersion(b, id, opts)
+    if (b === this.board) return
+    this.apply(b)
+    this.emit()
+  }
+
+  /** Starting to write on a page: what it says now is kept first, so the change can be seen later. */
+  beginPageEdit(id: string) {
+    this.saveVersions([id])
+  }
+
+  /** Done writing on a page: what it says now becomes a version, with an optional note. */
+  endPageEdit(id: string, note?: string) {
+    this.saveVersions([id], { note })
+  }
+
+  /** Marks a saved version as a milestone (kept for good), or gives it a note. */
+  markPageVersion(revId: string, mark: { note?: string; keep?: boolean }) {
+    if (this.readOnly) return
+    const next = RV.markRev(this.board, revId, mark)
+    if (next === this.board) return
+    this.apply(next)
+    this.emit()
   }
 
   private afterJump(b: Board) {
@@ -1441,7 +1481,10 @@ export class Editor {
   }
 
   setPageTitle(id: string, title: string) {
+    if (W.getPage(this.board, id)?.title === title) return
+    this.saveVersions([id])
     this.edit((b) => W.setPageMeta(b, id, { title }))
+    this.saveVersions([id], { at: Date.now(), by: this.author.trim() || undefined })
   }
 
   setPageIcon(id: string, icon: string | null) {
@@ -1451,6 +1494,9 @@ export class Editor {
   /** Replaces a page's words; typing in quick succession on one page is one undo step. */
   setPageText(id: string, text: string) {
     if (this.readOnly) return
+    // A long stretch of writing still leaves versions behind, every few minutes.
+    const last = RV.latestRev(this.board, id)
+    if (last && Date.now() - last.at > RV.REV_EVERY && RV.unsavedChanges(this.board, id)) this.saveVersions([id])
     const before = this.board
     this.apply(W.setPageBody(this.board, id, text, Date.now(), this.author.trim() || undefined))
     if (this.board === before) return
@@ -1476,6 +1522,7 @@ export class Editor {
       }
       return b
     })
+    this.saveVersions(ids, { note: 'Added from a Markdown file' })
     const skipped = pages.length - ids.length
     this.setStatus(`Added ${ids.length} page${ids.length === 1 ? '' : 's'} from Markdown${skipped ? ` (${skipped} didn’t fit: the wiki is full)` : ''}`)
     return ids
@@ -1485,7 +1532,9 @@ export class Editor {
   restorePageVersion(id: string, title: string, text: string, when: string) {
     if (this.readOnly || !W.getPage(this.board, id)) return
     this.lastTyping = null
+    this.saveVersions([id])
     this.edit((b) => W.setPageMeta(W.setPageBody(b, id, text, Date.now(), this.author.trim() || undefined), id, { title }))
+    this.saveVersions([id], { note: `Put back the version ${when}` })
     this.setStatus(`Put back the page as written ${when} — Ctrl Z to undo`)
   }
 

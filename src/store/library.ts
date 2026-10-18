@@ -219,7 +219,9 @@ export class Library {
     // Two versions in the same millisecond would share a key.
     while (await this.kv.get(versionKey(id, at))) at++
     const wiki = isWiki(board)
-    const v: StoredVersion = { at, title: board.title, items: wiki ? pageOrder(board).length : board.items.length, ...(wiki ? { kind: 'wiki' as const } : {}), json: toJson(board), ...(name ? { name } : {}) }
+    // A wiki's page history lives in the wiki itself; copying it into every version would only take room.
+    const kept = board.revs ? { ...board, revs: undefined } : board
+    const v: StoredVersion = { at, title: board.title, items: wiki ? pageOrder(board).length : board.items.length, ...(wiki ? { kind: 'wiki' as const } : {}), json: toJson(kept), ...(name ? { name } : {}) }
     await this.kv.set(versionKey(id, at), v)
     await this.prune(id)
     return { at, title: v.title, items: v.items, ...(name ? { name } : {}) }

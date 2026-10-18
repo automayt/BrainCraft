@@ -322,7 +322,13 @@ export function restorePage(b: Board, id: string): Board {
 export function deletePage(b: Board, id: string): Board {
   if (!getPage(b, id)) return b
   const all = withDescendants(b, id)
-  return { ...b, pages: (b.pages ?? []).filter((p) => !all.has(p.id)), bodies: (b.bodies ?? []).filter((x) => !all.has(x.id)) }
+  const revs = b.revs?.filter((r) => !all.has(r.page))
+  return {
+    ...b,
+    pages: (b.pages ?? []).filter((p) => !all.has(p.id)),
+    bodies: (b.bodies ?? []).filter((x) => !all.has(x.id)),
+    ...(b.revs ? { revs: revs!.length ? revs : undefined } : {}),
+  }
 }
 
 /** Pages in the trash, newest first (only the ones that went in themselves, not their sub-pages). */

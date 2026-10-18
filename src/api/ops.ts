@@ -23,6 +23,7 @@ import { tableSize } from '../model/table'
 import { isIsoDay } from '../model/timeline'
 import { uid } from '../model/uid'
 import { cleanBody, cleanConnector, cleanItem, cleanPage } from '../model/sanitize'
+import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import {
   type Arrowheads,
@@ -93,8 +94,8 @@ export type Op =
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
   /** Wiki pages (in a wiki only). `page`, `parent` and `before` take a page id, a `ref` or an exact title. */
-  | { op: 'createPage'; title: string; parent?: string; before?: string; text?: string; icon?: string; ref?: string }
-  | { op: 'updatePage'; page: string; title?: string; text?: string; append?: string; icon?: string | null }
+  | { op: 'createPage'; title: string; parent?: string; before?: string; text?: string; icon?: string; ref?: string; note?: string }
+  | { op: 'updatePage'; page: string; title?: string; text?: string; append?: string; icon?: string | null; note?: string }
   | { op: 'movePage'; page: string; parent?: string | null; before?: string }
   | { op: 'deletePage'; page: string }
 
@@ -617,10 +618,13 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           let id: string
           ;[b, id] = W.addPage(b, { title: text(op.title, 'title'), parent, before, text: text(op.text, 'text', false), icon: typeof op.icon === 'string' ? op.icon : undefined }, now, 'AI')
           if (!id) fail(index, op, `the wiki is full (${W.MAX_PAGES} pages)`)
+          b = RV.savePageVersion(b, id, { note: typeof op.note === 'string' ? op.note : 'Written by an AI assistant' })
           if (op.ref) pageRefs.set(op.ref, id)
           results.push({ op: op.op, page: id, ...(op.ref ? { ref: op.ref } : {}) })
         } else if (op.op === 'updatePage') {
           const id = findPage(op.page, 'page')
+          // The page as it was, then as changed: both in its history.
+          b = RV.savePageVersion(b, id)
           if (op.title !== undefined || op.icon !== undefined) b = W.setPageMeta(b, id, { ...(op.title !== undefined ? { title: text(op.title, 'title') } : {}), ...(op.icon !== undefined ? { icon: op.icon === null ? null : text(op.icon, 'icon') } : {}) })
           if (op.text !== undefined || op.append !== undefined) {
             const base = op.text !== undefined ? text(op.text, 'text') : W.pageText(b, id)
@@ -628,6 +632,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
             const joined = extra ? `${base}${base && !base.endsWith('\n') ? '\n' : ''}${extra}` : base
             b = W.setPageBody(b, id, joined, now, 'AI')
           }
+          b = RV.savePageVersion(b, id, { at: now, by: 'AI', note: typeof op.note === 'string' ? op.note : 'Changed by an AI assistant' })
           results.push({ op: op.op, page: id })
         } else if (op.op === 'movePage') {
           const id = findPage(op.page, 'page')

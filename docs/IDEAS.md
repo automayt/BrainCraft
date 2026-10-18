@@ -40,9 +40,20 @@ saves, versions, syncs and shares like any board. Built in phases:
   page history with diffs and putting one page back; "Since you were here"
   for pages; Ctrl+K search across wikis; Markdown files in and out (a page as
   .md, a whole wiki as a .zip of .md files, .md files dropped in as pages).
+- [x] **Versions and macros.** Page versions kept in the wiki and shared
+  live (saved on finishing writing, with a "what did you change?" note, on
+  renames, restores and AI changes); history with changes against any
+  version, the page then, who wrote each line, milestones and notes; Recent
+  changes across the wiki; `page_history` and `read_page` with a version for
+  AI assistants. Macros: page tree, open tasks you can tick, recent changes,
+  another page shown in place, expandable sections, columns, status labels,
+  countdowns and today's date.
 - [ ] **Later for robustness:** the merge on the server too (today it happens
-  in each browser as text arrives), history for page renames and moves, and
-  importing a .zip of Markdown back as a page tree.
+  in each browser as text arrives), history for page moves, and importing a
+  .zip of Markdown back as a page tree.
+- [ ] **More macros:** `{{rsvp}}`, `{{expenses}}` from a table's "Paid by"
+  column, `{{board KEY}}` thumbnails, `{{children depth=2}}`, and per-page
+  labels with `{{labelled camping}}` lists.
 
 ### From the review (2026-10-18)
 

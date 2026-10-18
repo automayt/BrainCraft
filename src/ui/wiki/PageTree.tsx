@@ -2,6 +2,7 @@ import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useStat
 import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
 import { useEditor } from '../useEditor'
+import { RecentChanges } from './RecentChanges'
 
 type Where = 'before' | 'inside' | 'after'
 
@@ -15,6 +16,7 @@ export function PageTree({ current }: { current: Page | undefined }) {
   const [filter, setFilter] = useState('')
   const [drag, setDrag] = useState<{ id: string; over?: string; where?: Where } | null>(null)
   const [showTrash, setShowTrash] = useState(false)
+  const [recent, setRecent] = useState(false)
   const trash = W.trashed(board)
   const news = new Set([...(editor.catchUp?.pages?.added ?? []), ...(editor.catchUp?.pages?.changed ?? [])])
 
@@ -233,6 +235,14 @@ export function PageTree({ current }: { current: Page | undefined }) {
           )}
         </ul>
       )}
+      {(board.revs?.length ?? 0) > 0 && (
+        <div className="page-recent">
+          <button className="link" onClick={() => setRecent(true)}>
+            🕘 Recent changes
+          </button>
+        </div>
+      )}
+      {recent && <RecentChanges onClose={() => setRecent(false)} />}
       {trash.length > 0 && (
         <div className="page-trash">
           <button className="link" aria-expanded={showTrash} onClick={() => setShowTrash(!showTrash)}>

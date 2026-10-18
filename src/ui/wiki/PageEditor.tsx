@@ -11,6 +11,7 @@ import { Markdown, type MarkdownActions } from './Markdown'
 import { EmbedPicker } from './EmbedPicker'
 import { embedToken, makeSnap } from '../../model/embed'
 import { caretPoint } from '../caretPoint'
+import { MACROS } from '../../model/macros'
 
 interface SlashItem {
   label: string
@@ -37,8 +38,8 @@ const SLASH: SlashItem[] = [
   { label: 'Quote', hint: '>', text: '> ' },
   { label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
   { label: 'Divider', hint: '---', text: '---\n' },
-  { label: 'Sub-page list', hint: '{{children}}', text: '{{children}}\n' },
-  { label: 'Contents', hint: '{{toc}}', text: '{{toc}}\n' },
+  // Every macro: its own words say what it does.
+  ...MACROS.map((m) => ({ label: m.label, hint: m.hint, text: m.insert, caret: m.caret })),
 ]
 
 /** How long after the last key a draft goes out (to the board, other tabs and friends). */
@@ -99,9 +100,23 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     base.current = text
   }, [text])
   // Leaving the page (or the editor, or closing the tab) sends what's waiting.
-  useEffect(() => () => push(), [page.id])
+  // Writing starts and ends with a saved version of the page (with the note, if one was written).
+  const [note, setNote] = useState('')
+  const noteRef = useRef(note)
+  noteRef.current = note
   useEffect(() => {
-    const flush = () => push()
+    editor.beginPageEdit(page.id)
+    return () => {
+      push()
+      editor.endPageEdit(page.id, noteRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id])
+  useEffect(() => {
+    const flush = () => {
+      push()
+      editor.endPageEdit(page.id, noteRef.current)
+    }
     window.addEventListener('pagehide', flush)
     return () => window.removeEventListener('pagehide', flush)
   })
@@ -150,7 +165,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     el.focus()
   }
 
-  const slashItems = slash ? SLASH.filter((x) => !slash.query.trim() || x.label.toLowerCase().includes(slash.query.trim().toLowerCase())) : []
+  const slashItems = slash ? SLASH.filter((x) => !slash.query.trim() || `${x.label} ${x.hint}`.toLowerCase().includes(slash.query.trim().toLowerCase())) : []
 
   /** Runs a / menu item in place of the "/query" typed. */
   const runSlash = (item: SlashItem) => {
@@ -435,7 +450,22 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
         <Markdown blocks={blocks} actions={{ ...actions, copyHeading: undefined, toggle: actions.toggle && ((line) => change(toggleTask(draftRef.current, line))) }} />
       </div>
       <div className="page-editor-foot">
-        <span className="muted">Saved as you type · Esc or Ctrl Enter when done</span>
+        <span className="muted page-editor-saved">Saved as you type · Esc or Ctrl Enter when done</span>
+        <input
+          className="page-note"
+          value={note}
+          maxLength={300}
+          placeholder="What did you change? (optional)"
+          aria-label="What did you change? (kept with this version of the page)"
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              push()
+              onDone()
+            }
+          }}
+        />
         <button
           className="primary"
           onClick={() => {

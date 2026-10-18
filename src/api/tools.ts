@@ -9,7 +9,7 @@ import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import type { Board, Id, Kind } from '../model/types'
 import { KIND_LABELS } from '../model/types'
 import { type Op, type OpResult, opsFromText } from './ops'
-import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf } from './queries'
+import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf, pageHistory, pageVersion } from './queries'
 import { isWiki } from '../model/wiki'
 
 export interface BoardInfo {
@@ -61,9 +61,9 @@ addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: vi
 
 Wikis (boards of pages instead of a canvas; only these ops work on them). "page", "parent" and "before" take a page id, a "ref" from earlier in the batch, or an exact page title:
 createPage {title, parent?, before?, text?, icon?, ref?} — a page (under "parent", before "before" or last), its text in Markdown
-updatePage {page, title?, text?, append?, icon?} — "text" replaces the page's Markdown, "append" adds to the end
+updatePage {page, title?, text?, append?, icon?, note?} — "text" replaces the page's Markdown, "append" adds to the end; "note" says what changed (kept in the page's history)
 movePage {page, parent?: page or null for the top, before?} · deletePage {page} — moves it (and its sub-pages) to the trash
-Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] / [!note] / [!warning] / [!danger] callouts, {{children}} lists sub-pages, {{toc}} lists headings. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), a page in another wiki with [[Title]](board:KEY/page:ID), an object on a canvas board with [[Label]](board:KEY#ID). A line ![[Label]](board:KEY#ID) on its own shows that object inside the page (![[Label]](board:KEY) a whole board; ![[Label|420]](board:KEY#ID) sets its height in pixels).`
+Page Markdown: # headings, - lists, - [ ] checklists, | tables |, \`\`\` code, > quotes, > [!tip] / [!note] / [!warning] / [!danger] callouts, macros on a line of their own: {{children}} sub-pages, {{toc}} headings, {{pagetree}} (or {{pagetree here}}), {{tasks}} open checklist items (or {{tasks here}}), {{recent 5}}, {{include "Page title"}}, {{expand Title}} … {{/expand}}, {{columns}} … {{column}} … {{/columns}}; inside sentences {{status Done green}}, {{countdown 2026-12-20}}, {{today}}. Link a page with [[Title]](page:ID) (or [[Title]] by name), a heading with [[Title › Heading]](page:ID#anchor), a page in another wiki with [[Title]](board:KEY/page:ID), an object on a canvas board with [[Label]](board:KEY#ID). A line ![[Label]](board:KEY#ID) on its own shows that object inside the page (![[Label]](board:KEY) a whole board; ![[Label|420]](board:KEY#ID) sets its height in pixels).`
 
 const fileProp = {
   file: {
@@ -133,7 +133,14 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'read_page',
     title: 'Read wiki page',
-    description: 'One wiki page in full: where it sits, its Markdown, its sub-pages and the pages that link to it. "page" is its id or exact title.',
+    description: 'One wiki page in full: where it sits, its Markdown, its sub-pages and the pages that link to it. "page" is its id or exact title. With "version" (a number from page_history), that saved version instead.',
+    inputSchema: { type: 'object', properties: { page: { type: 'string' }, version: { type: 'number' }, ...fileProp }, required: ['page'] },
+    readOnly: true,
+  },
+  {
+    name: 'page_history',
+    title: 'Wiki page history',
+    description: 'A wiki page’s saved versions, newest first: number, when, who, the writer’s note, lines added and removed, renames and milestones. Read one with read_page and "version"; put one back with updatePage and its text.',
     inputSchema: { type: 'object', properties: { page: { type: 'string' }, ...fileProp }, required: ['page'] },
     readOnly: true,
   },
@@ -203,9 +210,18 @@ export async function runTool(host: ToolHost, name: string, args: Record<string,
     case 'read_page': {
       const b = host.board()
       if (!isWiki(b)) throw new ToolError('This board isn’t a wiki.')
-      const p = getPage(b, str(args.page, 'page'))
+      const ref = str(args.page, 'page')
+      const p = typeof args.version === 'number' ? pageVersion(b, ref, args.version) : getPage(b, ref)
       if (!p) throw new ToolError(`No page "${String(args.page)}" in this wiki. Call list_pages for the ids.`)
+      if (typeof p === 'string') throw new ToolError(p)
       return p
+    }
+    case 'page_history': {
+      const b = host.board()
+      if (!isWiki(b)) throw new ToolError('This board isn’t a wiki.')
+      const h = pageHistory(b, str(args.page, 'page'))
+      if (!h) throw new ToolError(`No page "${String(args.page)}" in this wiki. Call list_pages for the ids.`)
+      return h
     }
     case 'export_mermaid': {
       const ids = Array.isArray(args.ids) ? (args.ids as number[]) : undefined

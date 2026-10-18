@@ -103,7 +103,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
             </div>
             <textarea readOnly value={empty ? '' : exported} placeholder="There are no flowchart shapes to export yet." />
             <div className="dialog-foot">
-              <span className="muted">{copied ? 'Copied!' : 'Paste Mermaid into GitHub, Notion, docs…'}</span>
+              <span className="muted">{copied ? 'Copied!' : 'Paste it into any doc or wiki that draws Mermaid'}</span>
               <button
                 className="primary"
                 disabled={empty}

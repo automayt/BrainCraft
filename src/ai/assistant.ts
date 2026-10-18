@@ -79,7 +79,7 @@ export interface Callbacks {
   proposal(p: Proposal): void
 }
 
-const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page']
+const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history']
 
 const READ_BOARD: Anthropic.Beta.BetaTool = {
   name: 'read_board',

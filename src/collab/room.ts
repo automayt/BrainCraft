@@ -9,6 +9,7 @@ import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
 import { MAX_PAGES, MAX_SNAPS, WIKI_TEXT_MAX } from '../model/wiki'
+import { MAX_REVS, REV_TEXT_BUDGET } from '../model/revisions'
 import { type Patch, applyPatches, diff } from './patch'
 import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage, type Signal } from './protocol'
 
@@ -125,7 +126,7 @@ export class Room {
       // Checked before anyone else sees them: a bad field from one person can't crash the rest.
       const isWiki = this.data.board.kind === 'wiki'
       // Pages and embed copies belong to wikis only.
-      const patches = cleanPatches(msg.patches).filter((p) => isWiki || (p.k !== 'page' && p.k !== 'body' && p.k !== 'snap'))
+      const patches = cleanPatches(msg.patches).filter((p) => isWiki || (p.k !== 'page' && p.k !== 'body' && p.k !== 'snap' && p.k !== 'rev'))
       let next: Board
       try {
         next = applyPatches(this.data.board, patches)
@@ -139,6 +140,14 @@ export class Room {
         return m.send({ t: 'error', message: `This wiki is full (${MAX_PAGES.toLocaleString('en')} pages)`, seq })
       const snaps = next.snaps?.length ?? 0
       if (snaps > MAX_SNAPS && snaps > (this.data.board.snaps?.length ?? 0)) return m.send({ t: 'error', message: 'This wiki has too many embeds', seq })
+      const revs = next.revs?.length ?? 0
+      if (revs > MAX_REVS && revs > (this.data.board.revs?.length ?? 0)) return m.send({ t: 'error', message: 'This wiki has too many saved versions', seq })
+      if (isWiki && patches.some((p) => p.k === 'rev' && p.v)) {
+        // Room for each browser's own pruning to catch up, but not for a flood of copies.
+        const kept = (b: Board) => (b.revs ?? []).reduce((n, r) => n + r.text.length, 0)
+        const now = kept(next)
+        if (now > REV_TEXT_BUDGET * 3 && now > kept(this.data.board)) return m.send({ t: 'error', message: 'This wiki has too many saved versions', seq })
+      }
       if (isWiki && patches.some((p) => p.k === 'body')) {
         const size = (b: Board) => (b.bodies ?? []).reduce((n, x) => n + x.text.length, 0)
         const now = size(next)

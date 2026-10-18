@@ -4,6 +4,7 @@
  * and BrainCraft's own links and mentions (`[[Page]](page:id)`, `@[Note](#12)`) work inline.
  */
 
+import { type MacroArgs, argText, countdown, macroInfo, parseArgs, parseDay, statusLook } from './macros'
 import { type LinkTarget, tokenAt } from './notes'
 import type { Id } from './types'
 
@@ -17,6 +18,8 @@ export type Inline =
   | { t: 'link'; to: LinkTarget | null; label: string }
   | { t: 'mention'; id: Id; label: string }
   | { t: 'br' }
+  /** A macro inside a sentence: `{{status Done}}`, `{{countdown 2026-12-20}}`, `{{today}}`. */
+  | { t: 'macro'; name: string; args: MacroArgs }
 
 export interface ListItem {
   c: Inline[]
@@ -41,6 +44,11 @@ export type Block =
   | { t: 'hr'; line: number }
   /** `{{children}}`: this page's sub-pages; `{{toc}}`: its headings. */
   | { t: 'children' | 'toc'; line: number }
+  /**
+   * A macro on its own line (`{{tasks}}`), or around some lines (`{{expand Title}}` … `{{/expand}}`:
+   * `children` holds what's inside; for `{{columns}}`, `columns` holds each column).
+   */
+  | { t: 'macro'; name: string; args: MacroArgs; children?: Block[]; columns?: Block[][]; line: number }
   /** `![[Label|height]](board:KEY#ID)`: a canvas object (or a whole board) shown in the page. */
   | { t: 'embed'; label: string; board: string; item?: Id; height?: number; line: number }
 
@@ -97,6 +105,14 @@ export function parseInline(s: string, depth = 0): Inline[] {
       if (end > i + 1) {
         push({ t: 'code', s: s.slice(i + 1, end) })
         i = end + 1
+        continue
+      }
+    }
+    if (ch === '{' && s[i + 1] === '{') {
+      const m = INLINE_MACRO.exec(s.slice(i, i + 260))
+      if (m && macroInfo(m[1])?.kind === 'inline') {
+        push({ t: 'macro', name: m[1].toLowerCase(), args: parseArgs(m[2]) })
+        i += m[0].length
         continue
       }
     }
@@ -181,11 +197,24 @@ export function inlineText(c: Inline[]): string {
         case 'link':
         case 'mention':
           return x.label
+        case 'macro':
+          return macroText(x.name, x.args)
         default:
           return inlineText(x.c)
       }
     })
     .join('')
+}
+
+/** What an inline macro says, as plain words (for search, snippets and anchors). */
+export function macroText(name: string, args: MacroArgs, today = new Date()): string {
+  if (name === 'status') return statusLook(args).label
+  if (name === 'today') return today.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+  if (name === 'countdown') {
+    const day = parseDay(args.pos[0])
+    return day ? countdown(day, today) : argText(args)
+  }
+  return argText(args)
 }
 
 /** A heading's anchor: lower case, words joined by hyphens, in any alphabet. */
@@ -223,7 +252,40 @@ const HR = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
 const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
 const QUOTE = /^ {0,3}> ?(.*)$/
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
-const MACRO = /^\s*\{\{\s*(children|toc)\s*\}\}\s*$/i
+/** A macro on a line of its own: `{{name options}}`, and the line that closes one around others. */
+const MACRO = /^\s*\{\{\s*([a-zA-Z][\w-]{0,30})(?:\s+([^{}\n]{0,300}?))?\s*\}\}\s*$/
+const MACRO_END = /^\s*\{\{\s*\/([a-zA-Z][\w-]{0,30})\s*\}\}\s*$/
+/** A macro inside a sentence. */
+const INLINE_MACRO = /^\{\{\s*([a-zA-Z][\w-]{0,30})(?:\s+([^{}\n]{0,200}?))?\s*\}\}/
+
+/** A line that is a macro block (not one that belongs in a sentence). */
+const blockMacro = (line: string) => {
+  const m = MACRO.exec(line)
+  return m && macroInfo(m[1])?.kind !== 'inline' ? m : null
+}
+
+/**
+ * Where each section macro closes: opening line → closing line, nested ones of the same name
+ * allowed. One pass over the lines (looking ahead from every opening line was slow on long pages).
+ */
+function macroEnds(lines: string[]): Map<number, number> {
+  const out = new Map<number, number>()
+  const open = new Map<string, number[]>()
+  lines.forEach((line, j) => {
+    const m = MACRO.exec(line)
+    if (m && macroInfo(m[1])?.kind === 'container') {
+      const name = m[1].toLowerCase()
+      const stack = open.get(name)
+      if (stack) stack.push(j)
+      else open.set(name, [j])
+      return
+    }
+    const end = MACRO_END.exec(line)
+    const start = end && open.get(end[1].toLowerCase())?.pop()
+    if (start !== undefined && start !== null) out.set(start, j)
+  })
+  return out
+}
 const EMBED = /^\s*!\[\[([^[\]\n|]*)(?:\|(\d{2,4}))?\]\]\(board:([\w-]{1,64})(?:#(\d{1,16}))?\)\s*$/
 
 /** The snapshot keys (`board` or `board#item`) of every embed in some page text. */
@@ -255,12 +317,13 @@ const cells = (line: string) => {
 
 const startsBlock = (line: string, next: string | undefined) =>
   EMBED.test(line) ||
-  FENCE.test(line) || HEADING.test(line) || HR.test(line) || LIST.test(line) || QUOTE.test(line) || MACRO.test(line) || (line.includes('|') && next !== undefined && TABLE_RULE.test(next) && next.includes('-'))
+  FENCE.test(line) || HEADING.test(line) || HR.test(line) || LIST.test(line) || QUOTE.test(line) || !!blockMacro(line) || MACRO_END.test(line) || (line.includes('|') && next !== undefined && TABLE_RULE.test(next) && next.includes('-'))
 
 /** Parses a page's Markdown. `offset` is the line the text starts on (for nested blocks). */
 export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const out: Block[] = []
+  let ends: Map<number, number> | undefined
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
@@ -298,10 +361,39 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
       i++
       continue
     }
-    const macro = MACRO.exec(line)
+    const macro = blockMacro(line)
     if (macro) {
-      out.push({ t: macro[1].toLowerCase() as 'children' | 'toc', line: at })
-      i++
+      const name = macro[1].toLowerCase()
+      const args = parseArgs(macro[2])
+      if ((name === 'children' || name === 'toc') && !macro[2]) {
+        out.push({ t: name, line: at })
+        i++
+        continue
+      }
+      const end = macroInfo(name)?.kind === 'container' ? ((ends ??= macroEnds(lines)).get(i) ?? -1) : -1
+      if (end < 0) {
+        // A block macro, an unknown one, or a container not closed (yet): just this line.
+        out.push({ t: 'macro', name, args, line: at })
+        i++
+        continue
+      }
+      const inner = lines.slice(i + 1, end)
+      const nested = depth < MAX_DEPTH
+      if (name === 'columns') {
+        // Split at {{column}} lines that belong to these columns (not to columns inside them).
+        const parts: { from: number; lines: string[] }[] = [{ from: i + 1, lines: [] }]
+        let open = 0
+        inner.forEach((l, k) => {
+          const m = MACRO.exec(l)
+          if (m && m[1].toLowerCase() === 'columns') open++
+          if (MACRO_END.exec(l)?.[1].toLowerCase() === 'columns') open--
+          if (open === 0 && m && m[1].toLowerCase() === 'column') parts.push({ from: i + 2 + k, lines: [] })
+          else parts.at(-1)!.lines.push(l)
+        })
+        const columns = parts.slice(0, 6).map((p) => (nested ? parseMarkdown(p.lines.join('\n'), offset + p.from, depth + 1) : []))
+        out.push({ t: 'macro', name, args, columns, line: at })
+      } else out.push({ t: 'macro', name, args, children: nested ? parseMarkdown(inner.join('\n'), at + 1, depth + 1) : [], line: at })
+      i = end + 1
       continue
     }
     if (QUOTE.test(line)) {
@@ -349,6 +441,10 @@ function headingBlocks(blocks: Block[]): Extract<Block, { t: 'h' }>[] {
     for (const b of list) {
       if (b.t === 'h') out.push(b)
       else if (b.t === 'quote' || b.t === 'callout') walk(b.children)
+      else if (b.t === 'macro') {
+        if (b.children) walk(b.children)
+        for (const c of b.columns ?? []) walk(c)
+      }
     }
   }
   walk(blocks)
@@ -458,7 +554,7 @@ export function plainMarkdown(text: string): string {
   const out: string[] = []
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     if (TABLE_RULE.test(raw) && raw.includes('-')) continue
-    if (MACRO.test(raw) || FENCE.test(raw) || HR.test(raw)) continue
+    if (blockMacro(raw) || MACRO_END.test(raw) || FENCE.test(raw) || HR.test(raw)) continue
     const embed = EMBED.exec(raw)
     if (embed) {
       out.push(embed[1])
@@ -474,6 +570,30 @@ export function plainMarkdown(text: string): string {
 }
 /** How much of a page {@link plainMarkdown} reads (snippets need the start; search the lot, up to here). */
 const BODY_PLAIN_MAX = 250_000
+
+/** Every checklist item in some blocks, nested lists, quotes, callouts and macros included, in reading order. */
+export function taskItems(blocks: Block[]): ListItem[] {
+  const out: ListItem[] = []
+  const walk = (list: Block[]) => {
+    for (const b of list) {
+      if (b.t === 'list') {
+        const items = (l: ListItem[]) => {
+          for (const it of l) {
+            if (it.task !== undefined) out.push(it)
+            if (it.sub?.t === 'list') items(it.sub.items)
+          }
+        }
+        items(b.items)
+      } else if (b.t === 'quote' || b.t === 'callout') walk(b.children)
+      else if (b.t === 'macro') {
+        if (b.children) walk(b.children)
+        for (const c of b.columns ?? []) walk(c)
+      }
+    }
+  }
+  walk(blocks)
+  return out
+}
 
 /** Ticks or unticks the checklist item on `line` (0-based). Returns the text unchanged if there isn't one. */
 export function toggleTask(text: string, line: number): string {

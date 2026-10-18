@@ -99,5 +99,6 @@ export function forSharing(b: Board): Board {
   const bodies = (b.bodies ?? []).filter((x) => kept.has(x.id))
   const used = new Set(bodies.flatMap((x) => embedKeys(x.text)))
   const snaps = (b.snaps ?? []).filter((s) => used.has(s.key))
-  return { ...b, pages, bodies, snaps: snaps.length ? snaps : undefined }
+  // The page history stays home: a link carries the pages as they are.
+  return { ...b, pages, bodies, snaps: snaps.length ? snaps : undefined, revs: undefined }
 }

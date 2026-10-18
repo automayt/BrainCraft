@@ -2,6 +2,8 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { MovePage } from './MovePage'
 import { ChangesSince, PageHistory } from './PageHistory'
 import { WikiCatchUp } from './WikiCatchUp'
+import { WikiMacro } from './WikiMacros'
+import * as RV from '../../model/revisions'
 import { PageMenu } from './PageMenu'
 import { download } from '../imageExport'
 import { fileNameFor, pageMarkdown, pagesFromFiles, wikiZip } from '../../model/wikiFiles'
@@ -192,6 +194,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     toggle: ro ? undefined : (line) => editor.setPageText(page.id, toggleTask(text, line)),
     children: () => <SubPages pages={kids} />,
     embed: (block) => <ObjectEmbed block={block} />,
+    macro: (block) => <WikiMacro block={block} page={page} actions={actions} />,
     headings: heads,
     copyHeading: (slug, words) => copyPlace(ws, editor, `${page.title || 'Untitled'} › ${words}`, { page: page.id, heading: slug }),
   }
@@ -311,6 +314,15 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
         <p className="wiki-meta muted">
           {body?.by || (body?.at && body.at > page.created) ? `Edited ${body.by ? `by ${body.by} · ` : ''}${formatTime(body.at)}` : body?.text.trim() ? `Added ${formatTime(page.created)}` : 'Not written yet'}
           {kids.length > 0 && ` · ${kids.length} sub-page${kids.length === 1 ? '' : 's'}`}
+          {RV.pageRevs(board, page.id).length > 0 && (
+            <>
+              {' · '}
+              <button className="link" title="Earlier versions of this page" onClick={() => setHistory(true)}>
+                version {RV.pageRevs(board, page.id).length}
+                {RV.unsavedChanges(board, page.id) ? ' + changes' : ''}
+              </button>
+            </>
+          )}
           {changedHere && (
             <>
               {' · '}
