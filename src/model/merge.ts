@@ -68,11 +68,24 @@ export function lineDiff(before: string, after: string): DiffLine[] {
   return out
 }
 
+/** Counts worked out lately: history lists show the same pairs on every render. */
+const counted = new Map<string, { added: number; removed: number }>()
+
 /** How many lines a change adds and removes. */
 export function diffCounts(before: string, after: string): { added: number; removed: number } {
+  if (before === after) return { added: 0, removed: 0 }
+  const key = `${before.length}:${after.length}:${before}\u0000${after}`
+  const hit = counted.get(key)
+  if (hit) return hit
+  const out = countLines(before, after)
+  counted.set(key, out)
+  if (counted.size > 300) counted.delete(counted.keys().next().value!)
+  return out
+}
+
+function countLines(before: string, after: string): { added: number; removed: number } {
   let added = 0
   let removed = 0
-  if (before === after) return { added, removed }
   for (const h of hunks(before.split('\n'), after.split('\n'))) {
     added += h.lines.length
     removed += h.end - h.start

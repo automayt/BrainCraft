@@ -7866,6 +7866,25 @@ button.on,
   background: var(--accent-soft);
 }
 
+.results-heading {
+  padding: 8px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.page-picker-group {
+  padding: 8px 8px 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .page-picker small {
   font-size: 11.5px;
 }
@@ -8617,11 +8636,10 @@ button.on,
   color: var(--danger);
 }
 
-@media (max-width: 1000px) {
-  .page-menu ul {
-    right: auto;
-    left: 0;
-  }
+/* Opening rightwards when the ⋯ button sits near the left edge. */
+.page-menu.opens-right ul {
+  right: auto;
+  left: 0;
 }
 
 /* "What did you change?" beside Done: kept with the page's version. */
@@ -8781,8 +8799,16 @@ button.on,
 }
 
 .recent-toggle {
-  margin-left: auto;
   font-size: 12.5px;
+}
+
+.modal.recent-changes {
+  height: auto;
+  max-height: min(720px, 88vh);
+}
+
+.who-line.who-unknown {
+  border-left-color: var(--border-strong);
 }
 
 .recent-note {
@@ -8802,6 +8828,8 @@ button.on,
 
 .md-status {
   display: inline-block;
+  /* Drawn as an outline when the system forces its own colours. */
+  border: 1px solid transparent;
   padding: 0 7px;
   font-size: 0.78em;
   font-weight: 700;
@@ -8824,6 +8852,10 @@ button.on,
 
 .md-status-yellow {
   background: color-mix(in srgb, #e2b203 32%, transparent);
+}
+
+.md-status-orange {
+  background: color-mix(in srgb, #f18d13 30%, transparent);
 }
 
 .md-status-red {
@@ -8927,4 +8959,23 @@ button.on,
 
 .md-include .md {
   font-size: inherit;
+}
+
+.page-history-intro {
+  margin: 0;
+  padding: 0 18px 10px;
+  font-size: 13px;
+}
+
+.page-history-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.versions-wiki-note {
+  margin: 0;
+  padding: 0 18px 10px;
+  font-size: 13px;
 }

@@ -51,6 +51,29 @@ saves, versions, syncs and shares like any board. Built in phases:
 - [ ] **Later for robustness:** the merge on the server too (today it happens
   in each browser as text arrives), history for page moves, and importing a
   .zip of Markdown back as a page tree.
+### From the review (2026-10-18, versions and macros)
+
+- [ ] **Put lines back from a diff:** a button on removed lines in Changes,
+  Recent changes and What changed, since friends rarely want a whole old page,
+  just the paragraph someone deleted.
+- [ ] **Change a status by clicking it while reading:** pick a new label from
+  a small menu, saved as a version with who did it.
+- [ ] **"Changed since we agreed":** mark a version as the agreed plan and the
+  page shows how many lines changed since, with the diff.
+- [ ] **"Did you mean…?" for macro typos,** with a one-click fix in the red mark.
+- [ ] **`{{decisions}}`:** collects lines starting "Decided:" from every page,
+  with who and when from the versions.
+- [ ] **`{{statuses}}`:** "4 booked · 2 waiting · 1 not booked" across the wiki.
+- [ ] **"You last saw version 12"** in page history, and comparing with it.
+- [ ] **Quick-note chips beside Done on phones** ("dates", "typo", "ideas").
+- [ ] **A page picker for Show another page,** and next/previous change buttons
+  in What changed.
+- [ ] **Filters in Recent changes** ("others' changes only", "this page and
+  below"), each row opening that version in the page's history.
+- [ ] **Who wrote each task in `{{tasks}}`,** and `{{tasks @me}}`.
+- [ ] **A drop zone overlay** ("Drop .md files to add pages") while dragging
+  files over a wiki, and importing a .zip of Markdown.
+
 - [ ] **More macros:** `{{rsvp}}`, `{{expenses}}` from a table's "Paid by"
   column, `{{board KEY}}` thumbnails, `{{children depth=2}}`, and per-page
   labels with `{{labelled camping}}` lists.
@@ -71,7 +94,7 @@ Ideas from the wiki review, roughly by value for a small group against effort:
   synced live, for the party and club templates.
 - [ ] **Expense split:** a budget table's "Paid by" column feeds a "who owes
   whom" summary for trips and moves.
-- [ ] **Countdown:** `{{countdown 2026-12-20}}` shows "23 days to go".
+- [x] **Countdown:** `{{countdown 2026-12-20}}` shows "23 days to go".
 - [ ] **Turn a canvas selection into a page:** right-click stickies or a mind
   map → "Make a wiki page" as a checklist or outline, linked back.
 - [ ] **Duplicate a page** with its sub-pages, or "New page like this" for

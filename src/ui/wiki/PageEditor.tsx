@@ -19,27 +19,33 @@ interface SlashItem {
   text?: string
   /** Where the caret goes in `text` (its end when missing). */
   caret?: number
+  /** Characters after the caret to select, a placeholder to type over. */
+  select?: number
+  /** Goes where the caret is, inside a sentence, rather than on a line of its own. */
+  inline?: boolean
   action?: 'link' | 'subpage' | 'embed'
+  /** The heading it's listed under. */
+  group: string
 }
 
 /** What "/" at the start of a line offers. */
 const SLASH: SlashItem[] = [
-  { label: 'Heading', hint: '##', text: '## ' },
-  { label: 'Checklist', hint: '- [ ]', text: '- [ ] ' },
-  { label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
-  { label: 'Link to a page', hint: '[[', text: '[[', action: 'link' },
-  { label: 'New sub-page', hint: 'Adds a page under this one, linked here', action: 'subpage' },
-  { label: 'Table', hint: '| |', text: '| Column | Column |\n| --- | --- |\n|  |  |\n', caret: 2 },
-  { label: 'Bulleted list', hint: '-', text: '- ' },
-  { label: 'Numbered list', hint: '1.', text: '1. ' },
-  { label: 'Smaller heading', hint: '###', text: '### ' },
-  { label: 'Tip', hint: '> [!tip]', text: '> [!tip] ' },
-  { label: 'Warning', hint: '> [!warning]', text: '> [!warning] ' },
-  { label: 'Quote', hint: '>', text: '> ' },
-  { label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
-  { label: 'Divider', hint: '---', text: '---\n' },
+  { group: 'Write', label: 'Heading', hint: '##', text: '## ' },
+  { group: 'Write', label: 'Checklist', hint: '- [ ]', text: '- [ ] ' },
+  { group: 'Write', label: 'Table', hint: '| |', text: '| Column | Column |\n| --- | --- |\n|  |  |\n', caret: 2 },
+  { group: 'Write', label: 'Bulleted list', hint: '-', text: '- ' },
+  { group: 'Write', label: 'Numbered list', hint: '1.', text: '1. ' },
+  { group: 'Write', label: 'Smaller heading', hint: '###', text: '### ' },
+  { group: 'Write', label: 'Tip', hint: '> [!tip]', text: '> [!tip] ' },
+  { group: 'Write', label: 'Warning', hint: '> [!warning]', text: '> [!warning] ' },
+  { group: 'Write', label: 'Quote', hint: '>', text: '> ' },
+  { group: 'Write', label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
+  { group: 'Write', label: 'Divider', hint: '---', text: '---\n' },
+  { group: 'Links and embeds', label: 'Link to a page', hint: '[[', text: '[[', action: 'link' },
+  { group: 'Links and embeds', label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
+  { group: 'Links and embeds', label: 'New sub-page', hint: 'Adds a page under this one, linked here', action: 'subpage' },
   // Every macro: its own words say what it does.
-  ...MACROS.map((m) => ({ label: m.label, hint: m.hint, text: m.insert, caret: m.caret })),
+  ...MACROS.map((m) => ({ group: 'Macros', label: m.label, hint: m.hint, text: m.insert, caret: m.caret, select: m.select, inline: m.kind === 'inline' })),
 ]
 
 /** How long after the last key a draft goes out (to the board, other tabs and friends). */
@@ -171,8 +177,9 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const runSlash = (item: SlashItem) => {
     if (!slash) return
     const caret = Math.max(area.current!.selectionStart, slash.from)
-    // Opened from the Insert button in the middle of a line: what it adds starts a new one.
-    const lead = slash.from > 0 && draft[slash.from - 1] !== '\n' ? '\n' : ''
+    // Opened from the Insert button in the middle of a line: what it adds starts a new one
+    // (unless it belongs in the sentence, like a status label).
+    const lead = !item.inline && slash.from > 0 && draft[slash.from - 1] !== '\n' ? '\n' : ''
     const before = draft.slice(0, slash.from) + lead
     const after = draft.slice(caret)
     const from = slash.from + lead.length
@@ -190,7 +197,10 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
       return
     }
     const text = item.text!
-    change(before + text + after, from + (item.caret ?? text.length))
+    const at = from + (item.caret ?? text.length)
+    change(before + text + after, at)
+    // A placeholder (the status words, the date) is selected, so typing replaces it.
+    if (item.select) requestAnimationFrame(() => area.current?.setSelectionRange(at, at + item.select!))
     if (item.action === 'link') requestAnimationFrame(() => setPick({ from, query: '', k: 0 }))
   }
 
@@ -345,7 +355,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           <button title="Insert a heading, checklist, table, embed… (or type / at the start of a line)" aria-haspopup="listbox" onMouseDown={(e) => e.preventDefault()} onClick={openInsert}>
             Insert ▾
           </button>
-          <span className="muted page-editor-hint">Type / for headings, checklists, tables and embeds · [[ to link a page</span>
+          <span className="muted page-editor-hint">Type / for headings, checklists, tables, embeds and macros · [[ to link a page</span>
         </div>
         <textarea
           ref={area}
@@ -392,14 +402,19 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
         </span>
         {menu === 'slash' && slash && (
           <ul className="page-picker" id={`${ids}-menu`} style={place} role="listbox" aria-label="Insert">
-            {slashItems.map((x, k) => (
+            {slashItems.map((x, k) => [
+              k === 0 || slashItems[k - 1].group !== x.group ? (
+                <li key={`g-${x.group}`} role="presentation" className="page-picker-group">
+                  {x.group}
+                </li>
+              ) : null,
               <li key={x.label} id={`${ids}-opt-${k}`} role="option" aria-selected={k === slash.k}>
                 <button className={k === slash.k ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => runSlash(x)}>
                   <span>{x.label}</span>
                   <small className="muted">{x.hint}</small>
                 </button>
-              </li>
-            ))}
+              </li>,
+            ])}
           </ul>
         )}
         {embedAt !== null && (

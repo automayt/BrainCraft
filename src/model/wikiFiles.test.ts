@@ -52,7 +52,7 @@ describe('wiki pages as Markdown files', () => {
 
   it('reads Markdown files back as pages, and links by title find them again', () => {
     const pages = pagesFromFiles([
-      { name: 'notes/Packing.md', text: '﻿# Packing list #\r\n\r\n- [ ] Towel\r\n' },
+      { name: 'notes/Packing.md', text: '\uFEFF# Packing list #\r\n\r\n- [ ] Towel\r\n' },
       { name: 'Ideas.markdown', text: 'No heading here' },
     ])
     expect(pages).toEqual([

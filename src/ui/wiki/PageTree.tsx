@@ -17,8 +17,13 @@ export function PageTree({ current }: { current: Page | undefined }) {
   const [drag, setDrag] = useState<{ id: string; over?: string; where?: Where } | null>(null)
   const [showTrash, setShowTrash] = useState(false)
   const [recent, setRecent] = useState(false)
+  useEffect(() => {
+    if (editor.wikiPanel !== 'recent') return
+    editor.wikiPanel = null
+    setRecent(true)
+  }, [editor, editor.wikiPanel])
   const trash = W.trashed(board)
-  const news = new Set([...(editor.catchUp?.pages?.added ?? []), ...(editor.catchUp?.pages?.changed ?? [])])
+  const news = new Set([...(editor.catchUp?.pages?.added ?? []), ...(editor.catchUp?.pages?.changed ?? [])].filter((id) => !editor.catchUpSeen.has(id)))
 
   // The path to the open page is always expanded, so it can be seen in the tree.
   const path = new Set(current ? W.pagePath(board, current.id).map((p) => p.id) : [])
@@ -235,13 +240,11 @@ export function PageTree({ current }: { current: Page | undefined }) {
           )}
         </ul>
       )}
-      {(board.revs?.length ?? 0) > 0 && (
-        <div className="page-recent">
-          <button className="link" onClick={() => setRecent(true)}>
-            🕘 Recent changes
-          </button>
-        </div>
-      )}
+      <div className="page-recent">
+        <button className="link" onClick={() => setRecent(true)}>
+          🕘 Recent changes
+        </button>
+      </div>
       {recent && <RecentChanges onClose={() => setRecent(false)} />}
       {trash.length > 0 && (
         <div className="page-trash">

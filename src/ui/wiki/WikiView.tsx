@@ -8,7 +8,7 @@ import { PageMenu } from './PageMenu'
 import { download } from '../imageExport'
 import { fileNameFor, pageMarkdown, pagesFromFiles, wikiZip } from '../../model/wikiFiles'
 import { useEscape } from '../useEscape'
-import { headings, parseMarkdown, toggleTask } from '../../model/markdown'
+import { headings, parseMarkdown } from '../../model/markdown'
 import { type LinkTarget, linkToken, parseNote } from '../../model/notes'
 import type { Page, PageBody } from '../../model/types'
 import * as W from '../../model/wiki'
@@ -28,6 +28,7 @@ const LAST_PAGE = 'braincraft:page:'
 
 /** A wiki: its pages in a tree on the left, the open page on the right. */
 
+const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 const isMarkdownFile = (f: File) => /\.(md|markdown|mdown|txt)$/i.test(f.name) || f.type === 'text/markdown'
 
 /** Markdown files become pages at the top of the wiki (one file opens straight away). */
@@ -93,7 +94,23 @@ export function WikiView() {
   }, [editor.pageHeading, page?.id])
 
   return (
-    <div className={`wiki no-canvas${drawer ? ' drawer-open' : ''}`}>
+    <div
+      className={`wiki no-canvas${drawer ? ' drawer-open' : ''}`}
+      onDragOver={(e) => {
+        if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        const files = Array.from(e.dataTransfer.files)
+        // Board files open as boards (the app does that); anything else stays here, never opening in the browser.
+        if (!files.length || files.every(isBoardFile)) return
+        e.preventDefault()
+        if (editor.readOnly) return editor.setStatus('This wiki is read-only here')
+        const md = files.filter(isMarkdownFile)
+        if (md.length) void importMarkdown(editor, md)
+        else if (files.some((f) => /\.zip$/i.test(f.name))) editor.setStatus('A .zip can’t be added yet: unzip it and drop the .md files')
+        else editor.setStatus('Only Markdown (.md) and text files can become pages')
+      }}
+    >
       <button
         className="wiki-drawer-btn"
         aria-expanded={drawer}
@@ -141,8 +158,14 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   const [moving, setMoving] = useState(false)
   const [history, setHistory] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  // Ctrl+K asked for a page panel.
+  useEffect(() => {
+    if (editor.wikiPanel === 'history') setHistory(true)
+    else if (editor.wikiPanel === 'import' && !ro) fileInput.current?.click()
+    else return
+    editor.wikiPanel = null
+  }, [editor, editor.wikiPanel, ro])
   /** The page whose changes since the last visit are showing. */
-  const [changesOf, setChangesOf] = useState<string | null>(null)
   const news = editor.catchUp?.pages
   const changedHere = !!news?.changed.includes(page.id)
   const titleRef = useRef<HTMLTextAreaElement>(null)
@@ -191,7 +214,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
         @{label}
       </span>
     ),
-    toggle: ro ? undefined : (line) => editor.setPageText(page.id, toggleTask(text, line)),
+    toggle: ro ? undefined : (line) => editor.tickTask(page.id, line),
     children: () => <SubPages pages={kids} />,
     embed: (block) => <ObjectEmbed block={block} />,
     macro: (block) => <WikiMacro block={block} page={page} actions={actions} />,
@@ -204,23 +227,11 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   }
 
   return (
-    <article
-      className="wiki-page"
-      aria-labelledby="wiki-page-title"
-      onDragOver={(e) => {
-        if (!ro && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
-      }}
-      onDrop={(e) => {
-        const md = Array.from(e.dataTransfer.files).filter(isMarkdownFile)
-        if (ro || !md.length) return
-        e.preventDefault()
-        void importMarkdown(editor, md)
-      }}
-    >
+    <article className="wiki-page" aria-labelledby="wiki-page-title">
       {moving && <MovePage page={page} onClose={() => setMoving(false)} />}
       {history && <PageHistory page={page} onClose={() => setHistory(false)} />}
-      {changesOf === page.id && editor.catchUp && <ChangesSince page={page} before={editor.catchUp.before} since={editor.catchUp.since} onClose={() => setChangesOf(null)} />}
-      <WikiCatchUp onShowChanges={setChangesOf} />
+      {editor.changesOf === page.id && editor.catchUp && <ChangesSince page={page} before={editor.catchUp.before} since={editor.catchUp.since} onClose={() => editor.showChanges(null)} />}
+      <WikiCatchUp onShowChanges={(id) => editor.showChanges(id)} />
       {ro && (
         <p className="wiki-readonly muted" role="status">
           {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : 'You’re reading this wiki. Ask for the edit link to write in it.'}
@@ -287,7 +298,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
           <PageMenu
             label="More for this page"
             items={[
-              ...(ws.boardId ? [{ label: 'History', hint: 'Earlier versions of this page, what changed, and putting one back', run: () => setHistory(true) }] : []),
+              { label: 'Page history', hint: 'Earlier versions of this page, what changed, and putting one back', run: () => setHistory(true) },
               ...(ro ? [] : [{ label: 'Move…', hint: 'Put this page somewhere else in the wiki', run: () => setMoving(true) }]),
               { label: 'Download page (.md)', hint: 'This page as a Markdown file', run: () => download(new Blob([pageMarkdown(board, page.id, (to) => ws.linkTo(to))], { type: 'text/markdown' }), `${fileNameFor(page.title)}.md`) },
               {
@@ -296,7 +307,9 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
                 run: () => download(new Blob([wikiZip(board, (to) => ws.linkTo(to)) as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), `${fileNameFor(board.title)}.zip`),
               },
               ...(ro ? [] : [{ label: 'Add Markdown files…', hint: 'Each .md file becomes a page (you can also drop them on the wiki)', run: () => fileInput.current?.click() }]),
-              ...(ro ? [] : [{ label: 'Move to Trash', hint: 'This page and its sub-pages go to the Trash', danger: true, run: () => editor.trashPage(page.id) }]),
+              ...(ro
+                ? []
+                : [{ label: kids.length ? `Move to Trash (with ${kids.length} sub-page${kids.length === 1 ? '' : 's'})` : 'Move to Trash', hint: 'It can be restored from the Trash at the foot of the page list', danger: true, run: () => editor.trashPage(page.id) }]),
             ]}
           />
           <input
@@ -326,7 +339,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
           {changedHere && (
             <>
               {' · '}
-              <button className="link wiki-news-link" onClick={() => setChangesOf(page.id)}>
+              <button className="link wiki-news-link" onClick={() => editor.showChanges(page.id)}>
                 changed since you were here
               </button>
             </>

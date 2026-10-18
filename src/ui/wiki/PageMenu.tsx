@@ -10,6 +10,8 @@ export interface MenuItem {
 /** A "⋯" button with a short menu: the page actions that don't need a button of their own. */
 export function PageMenu({ items, label }: { items: MenuItem[]; label: string }) {
   const [open, setOpen] = useState(false)
+  /** Which way the menu opens: towards the side of the screen with room for it. */
+  const [rightwards, setRightwards] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
 
@@ -43,8 +45,19 @@ export function PageMenu({ items, label }: { items: MenuItem[]; label: string })
   }
 
   return (
-    <div className="page-menu" ref={box} onKeyDown={open ? onKey : undefined}>
-      <button ref={button} aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen(!open)}>
+    <div className={`page-menu${rightwards ? ' opens-right' : ''}`} ref={box} onKeyDown={open ? onKey : undefined}>
+      <button
+        ref={button}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        onClick={() => {
+          const r = button.current?.getBoundingClientRect()
+          setRightwards(!!r && r.right < 240)
+          setOpen(!open)
+        }}
+      >
         ⋯
       </button>
       {open && (
@@ -57,6 +70,8 @@ export function PageMenu({ items, label }: { items: MenuItem[]; label: string })
                 title={x.hint}
                 onClick={() => {
                   setOpen(false)
+                  // Focus goes back to ⋯ first, so a dialog the item opens returns it there.
+                  button.current?.focus()
                   x.run()
                 }}
               >

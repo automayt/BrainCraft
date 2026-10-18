@@ -251,6 +251,9 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let bodies = b.bodies
   let snaps = b.snaps
   let revs = b.revs
+  // Versions by id, made on the first version patch: one pass however many arrive at once.
+  let revMap: Map<string, PageRev> | null = null
+  let pageIds: Set<string> | null = null
   const setDataset = (id: string, f: (d: Dataset | undefined) => Dataset | null) => {
     const list = datasets ?? []
     const old = list.find((d) => d.id === id)
@@ -296,6 +299,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         break
       }
       case 'page': {
+        pageIds = null
         const list = pages ?? []
         const at = list.findIndex((x) => x.id === p.id)
         if (p.v === null) {
@@ -320,11 +324,14 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         break
       }
       case 'rev': {
+        revMap ??= new Map((revs ?? []).map((r) => [r.id, r]))
+        if (p.v === null) {
+          revMap.delete(p.id)
+          break
+        }
         // A version of a page that isn't there has nothing to belong to.
-        if (p.v && !(pages ?? []).some((x) => x.id === p.v!.page)) break
-        const list = revs ?? []
-        const at = list.findIndex((x) => x.id === p.id)
-        revs = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        pageIds ??= new Set((pages ?? []).map((x) => x.id))
+        if (pageIds.has(p.v.page)) revMap.set(p.id, p.v)
         break
       }
     }
@@ -346,6 +353,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   else delete next.bodies
   if (snaps?.length) next.snaps = snaps
   else delete next.snaps
+  if (revMap) revs = [...revMap.values()]
   if (revs?.length) next.revs = revs
   else delete next.revs
   return next

@@ -26,17 +26,30 @@ export interface MarkdownActions {
 export type MacroBlock = Extract<Block, { t: 'macro' }>
 
 /** A macro inside a sentence. */
-function InlineMacro({ name, args }: { name: string; args: MacroArgs }) {
+function InlineMacro({ name, args, raw }: { name: string; args: MacroArgs; raw?: string }) {
+  if (raw !== undefined) {
+    const info = macroInfo(name)
+    return (
+      <span
+        className="md-macro-bad"
+        title={info ? `{{${info.name}}} works on a line of its own` : `BrainCraft has no macro called “${name}”. Type / at the start of a line to see the ones it has.`}
+      >
+        {raw}
+      </span>
+    )
+  }
   if (name === 'status') {
     const { label, color } = statusLook(args)
     return <span className={`md-status md-status-${color}`}>{label}</span>
   }
   if (name === 'countdown') {
     const day = parseDay(args.pos[0])
+    const full = day?.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     return day ? (
-      <span className="md-countdown" title={day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}>
+      <time className="md-countdown" dateTime={args.pos[0]} title={full}>
         {countdown(day)}
-      </span>
+        <span className="sr-only"> ({full})</span>
+      </time>
     ) : (
       <span className="md-macro-bad" title="Write the date like 2026-12-20">
         {`{{countdown ${argText(args)}}}`}
@@ -114,7 +127,7 @@ function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
       case 'mention':
         return a.mention(x.id, x.label, k)
       case 'macro':
-        return <InlineMacro key={k} name={x.name} args={x.args} />
+        return <InlineMacro key={k} name={x.name} args={x.args} raw={x.raw} />
     }
   })
 }

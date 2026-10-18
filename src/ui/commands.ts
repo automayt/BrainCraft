@@ -173,14 +173,24 @@ export function commands(editor: Editor, ui: Ui): Command[] {
   // A wiki has no canvas: its own commands, and the board-wide ones that make sense for it.
   if (isWiki(editor.board)) {
     const page = editor.currentPage
+    const look: Command[] = [
+      ...(page ? [{ id: 'page-history', label: `Page history of “${page.title || 'Untitled'}”…`, group: 'Wiki', aliases: 'history versions undo restore older changes who wrote page', run: () => editor.openWikiPanel('history') }] : []),
+      { id: 'recent', label: 'Recent changes in this wiki…', group: 'Wiki', aliases: 'history latest changed edits activity log', run: () => editor.openWikiPanel('recent') },
+    ]
     const wiki: Command[] = editor.readOnly
-      ? []
+      ? look
       : [
+          ...look,
+          { id: 'page-import', label: 'Add Markdown files as pages…', group: 'Wiki', aliases: 'import md markdown files upload', run: () => editor.openWikiPanel('import') },
           { id: 'page-new', label: 'New page', group: 'Wiki', aliases: 'add create wiki page', run: () => editor.addWikiPage() },
           ...(page ? [{ id: 'page-sub', label: `New page under “${page.title || 'Untitled'}”`, group: 'Wiki', aliases: 'add child sub wiki page', run: () => editor.addWikiPage({ parent: page.id }) }] : []),
           ...(page ? [{ id: 'page-trash', label: `Move “${page.title || 'Untitled'}” to the trash`, group: 'Wiki', aliases: 'delete remove wiki page', run: () => editor.trashPage(page.id) }] : []),
         ]
-    return [...wiki, ...list.filter((c) => (c.group === 'Board' || c.group === 'Help') && !CANVAS_IDS.has(c.id) && (!editor.readOnly || !EDIT_IDS.has(c.id)))]
+    const board = list
+      .filter((c) => (c.group === 'Board' || c.group === 'Help') && !CANVAS_IDS.has(c.id) && (!editor.readOnly || !EDIT_IDS.has(c.id)))
+      // Told apart from a page's own history: this one takes every page back.
+      .map((c) => (c.id === 'versions' ? { ...c, label: 'Wiki version history (every page)…', aliases: 'restore backup whole wiki all pages snapshot autosave' } : c))
+    return [...wiki, ...board]
   }
   // A board that can't be changed (a snapshot link, the view link, a presentation) offers looking, not editing.
   if (editor.readOnly) return list.filter((c) => (LOOK_GROUPS.has(c.group) && !EDIT_IDS.has(c.id)) || LOOK_IDS.has(c.id) || (!editor.running && RUN_IDS.has(c.id)))

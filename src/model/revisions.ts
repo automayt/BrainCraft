@@ -19,6 +19,8 @@ export const REV_TEXT_BUDGET = 5_000_000
 export const REV_EVERY = 10 * 60_000
 /** How many versions a live room accepts in one wiki. */
 export const MAX_REVS = 20_000
+/** How many versions a wiki keeps in all (well under what a room accepts, so saving never hits it). */
+export const REV_TOTAL_KEEP = 15_000
 
 const byTime = (a: PageRev, z: PageRev) => a.at - z.at || (a.id < z.id ? -1 : a.id > z.id ? 1 : 0)
 
@@ -44,8 +46,17 @@ export function pageRevs(b: Board, page: string): PageRev[] {
 
 export const latestRev = (b: Board, page: string): PageRev | undefined => pageRevs(b, page).at(-1)
 
-/** A version's number on its page: 1 for the first saved one. */
-export const revNumber = (b: Board, rev: PageRev) => pageRevs(b, rev.page).findIndex((r) => r.id === rev.id) + 1
+/** A version's number on its page: 1 for the first saved one, and the same for good once given. */
+export const revNumber = (b: Board, rev: PageRev) => rev.n ?? pageRevs(b, rev.page).findIndex((r) => r.id === rev.id) + 1
+
+/** Whether older versions of the page have gone (pruned), so its oldest kept one isn't its first. */
+export const olderGone = (b: Board, page: string) => {
+  const first = pageRevs(b, page)[0]
+  return !!first && revNumber(b, first) > 1
+}
+
+/** Small changes by one person this close together make one version. */
+export const QUICK_MS = 2 * 60_000
 
 /** Whether the page as it is now says something its latest saved version doesn't. */
 export function unsavedChanges(b: Board, page: string): boolean {
@@ -61,11 +72,15 @@ export interface SaveOptions {
   by?: string
   note?: string
   keep?: boolean
+  /** A small change: joins the same person's small change of a moment ago instead of adding one. */
+  quick?: boolean
+  /** Who is saving: a note only goes on an unchanged version they wrote themselves. */
+  me?: string
 }
 
 /**
  * Saves the page as it is now as a version, unless its latest version already says the same: then
- * a note or milestone mark given goes on that version instead.
+ * a note goes on that version if it's the same writer's and has none yet (never over a friend's).
  */
 export function savePageVersion(b: Board, page: string, opts: SaveOptions = {}): Board {
   const p = getPage(b, page)
@@ -75,13 +90,32 @@ export function savePageVersion(b: Board, page: string, opts: SaveOptions = {}):
   const last = latestRev(b, page)
   const note = opts.note?.trim().slice(0, 300) || undefined
   if (last && last.title === p.title && last.text === text) {
-    if ((!note || last.note === note) && (!opts.keep || last.keep)) return b
-    const marked: PageRev = { ...last, ...(note ? { note } : {}), ...(opts.keep ? { keep: true } : {}) }
+    const addNote = !!note && !last.note && (opts.me === undefined || last.by === opts.me)
+    if (!addNote && (!opts.keep || last.keep)) return b
+    const marked: PageRev = { ...last, ...(addNote ? { note } : {}), ...(opts.keep ? { keep: true } : {}) }
     return { ...b, revs: b.revs!.map((r) => (r === last ? marked : r)) }
   }
   const by = opts.by ?? body?.by
   const at = Math.max(opts.at ?? body?.at ?? p.created, last ? last.at + 1 : 0)
-  const rev: PageRev = { id: uid() + uid().slice(0, 4), page, at, ...(by ? { by } : {}), title: p.title, text, ...(note ? { note } : {}), ...(opts.keep ? { keep: true } : {}) }
+  // A tick a moment after the same person's last tick: one version for the lot.
+  if (opts.quick && last?.quick && last.by === by && at - last.at < QUICK_MS) {
+    const joined = [last.note, note].filter(Boolean).join(', ')
+    const merged: PageRev = { ...last, at, title: p.title, text, ...(joined ? { note: joined.length > 300 ? `${joined.slice(0, 299)}…` : joined } : {}) }
+    return { ...b, revs: b.revs!.map((r) => (r === last ? merged : r)) }
+  }
+  const n = (last ? (last.n ?? pageRevs(b, page).length) : 0) + 1
+  const rev: PageRev = {
+    id: uid() + uid().slice(0, 4),
+    page,
+    at,
+    n,
+    ...(by ? { by } : {}),
+    title: p.title,
+    text,
+    ...(note ? { note } : {}),
+    ...(opts.keep ? { keep: true } : {}),
+    ...(opts.quick ? { quick: true } : {}),
+  }
   return pruneRevs({ ...b, revs: [...(b.revs ?? []), rev] })
 }
 
@@ -119,12 +153,14 @@ export function pruneRevs(b: Board): Board {
     for (const r of plain.slice(0, Math.max(0, plain.length - (REV_KEEP - 1)))) drop.add(r.id)
   }
   let size = list.reduce((n, r) => n + (drop.has(r.id) ? 0 : r.text.length), 0)
-  if (size > REV_TEXT_BUDGET) {
+  let count = list.length - drop.size
+  if (size > REV_TEXT_BUDGET || count > REV_TOTAL_KEEP) {
     for (const r of [...list].sort(byTime)) {
-      if (size <= REV_TEXT_BUDGET) break
+      if (size <= REV_TEXT_BUDGET && count <= REV_TOTAL_KEEP) break
       if (r.keep || latest.has(r.id) || drop.has(r.id)) continue
       drop.add(r.id)
       size -= r.text.length
+      count--
     }
   }
   return drop.size ? { ...b, revs: list.filter((r) => !drop.has(r.id)) } : b
@@ -138,14 +174,20 @@ export interface WhoLine {
 
 /** Who wrote what: each line of the page now, with the version it first appeared in. */
 export function whoWrote(b: Board, page: string): WhoLine[] {
-  let lines: WhoLine[] = [{ s: '', rev: null }]
+  let lines: WhoLine[] | null = null
   let before = ''
   const step = (text: string, rev: PageRev | null) => {
+    // The first version wrote every line it has (a blank line included).
+    if (!lines) {
+      lines = text.split('\n').map((s) => ({ s, rev }))
+      before = text
+      return
+    }
     if (text === before) return
     const out: WhoLine[] = []
     let k = 0
     for (const l of lineDiff(before, text)) {
-      if (l.t === 'same') out.push(lines[k++] ?? { s: l.s, rev })
+      if (l.t === 'same') out.push(lines![k++] ?? { s: l.s, rev })
       else if (l.t === 'del') k++
       else out.push({ s: l.s, rev })
     }
@@ -154,7 +196,7 @@ export function whoWrote(b: Board, page: string): WhoLine[] {
   }
   for (const r of pageRevs(b, page)) step(r.text, r)
   step(pageText(b, page), null)
-  return lines
+  return lines ?? []
 }
 
 export interface Change {
@@ -163,14 +205,21 @@ export interface Change {
   prev?: PageRev
 }
 
-/** The latest saved versions across the whole wiki, newest first. */
+/**
+ * A page's starting point: the version kept automatically when someone first opened it to write,
+ * of words nobody in particular wrote (a template's, say). Not a change anyone made.
+ */
+export const isStartingPoint = (b: Board, rev: PageRev) => !rev.by && revNumber(b, rev) === 1
+
+/** The latest saved versions across the whole wiki, newest first (starting points left out). */
 export function recentChanges(b: Board, limit = 100): Change[] {
-  return [...(b.revs ?? [])]
-    .sort((a, z) => byTime(z, a))
-    .slice(0, limit)
-    .map((rev) => {
-      const revs = pageRevs(b, rev.page)
-      const k = revs.findIndex((r) => r.id === rev.id)
-      return { rev, ...(k > 0 ? { prev: revs[k - 1] } : {}) }
-    })
+  const out: Change[] = []
+  for (const rev of [...(b.revs ?? [])].sort((a, z) => byTime(z, a))) {
+    if (out.length >= limit) break
+    if (isStartingPoint(b, rev)) continue
+    const revs = pageRevs(b, rev.page)
+    const k = revs.findIndex((r) => r.id === rev.id)
+    out.push({ rev, ...(k > 0 ? { prev: revs[k - 1] } : {}) })
+  }
+  return out
 }

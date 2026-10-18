@@ -35,7 +35,7 @@ export const WIKI_TEMPLATES: WikiTemplate[] = [
       {
         title: 'Home',
         icon: '🧳',
-        text: '# Our trip\n\n> [!tip] Where and when\n> Add the dates and the place here, so everyone sees them first.\n\n{{children}}\n',
+        text: '# Our trip\n\n> [!tip] Where and when\n> Add the dates and the place here, so everyone sees them first. We leave {{countdown YYYY-MM-DD}} (put the date in).\n\n## Still to do\n{{tasks}}\n\n{{children}}\n',
       },
       {
         title: 'Plan',
@@ -55,7 +55,7 @@ export const WIKI_TEMPLATES: WikiTemplate[] = [
       {
         title: 'Bookings',
         icon: '🎟',
-        text: '| What | When | Reference | Booked by |\n| --- | --- | --- | --- |\n|  |  |  |  |\n',
+        text: '| What | When | Reference | Booked by | Status |\n| --- | --- | --- | --- | --- |\n| Place to stay |  |  |  | {{status Not booked}} |\n',
       },
     ],
   },
@@ -65,7 +65,7 @@ export const WIKI_TEMPLATES: WikiTemplate[] = [
     hint: 'Countdown checklist, rooms, contacts',
     title: 'The move',
     pages: [
-      { title: 'Home', icon: '🏠', text: '# The move\n\n{{children}}\n' },
+      { title: 'Home', icon: '🏠', text: '# The move\n\n## Still to do\n{{tasks}}\n\n{{children}}\n' },
       {
         title: 'Countdown',
         icon: '✅',
@@ -81,7 +81,7 @@ export const WIKI_TEMPLATES: WikiTemplate[] = [
     hint: 'Guests, who brings what, the day',
     title: 'The party',
     pages: [
-      { title: 'Home', icon: '🎉', text: '# The party\n\n> [!note] When and where\n> \n\n{{children}}\n' },
+      { title: 'Home', icon: '🎉', text: '# The party\n\n> [!note] When and where\n> {{countdown YYYY-MM-DD}} (put the date in)\n\n{{children}}\n' },
       { title: 'Guests', icon: '💌', text: '| Name | Coming? | Plus one |\n| --- | --- | --- |\n|  |  |  |\n' },
       { title: 'Who brings what', icon: '🥗', text: '| Food or drink | Who |\n| --- | --- |\n| Snacks |  |\n| Drinks |  |\n| Dessert |  |\n' },
       { title: 'On the day', icon: '⏰', text: '- [ ] Set up\n- [ ] Music\n- [ ] Clean up\n' },

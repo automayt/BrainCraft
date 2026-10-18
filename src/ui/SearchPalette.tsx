@@ -166,12 +166,12 @@ export function SearchPalette() {
 
   return (
     <div className="palette-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="palette" role="dialog" aria-label="Search the board">
+      <div className="palette" role="dialog" aria-label={wiki ? 'Search the wiki' : 'Search the board'}>
         <input
           ref={input}
           autoFocus
           value={query}
-          placeholder="Search the board, or run a command (type > for commands only)"
+          placeholder={wiki ? 'Search pages (here and in your other wikis), or type > for commands' : 'Search the board, or run a command (type > for commands only)'}
           aria-label="Search"
           onChange={(e) => {
             setQuery(e.target.value)
@@ -209,13 +209,14 @@ export function SearchPalette() {
           {commandOnly
             ? 'Commands'
             : query.trim()
-              ? `${objects.length + pages.length} match${objects.length + pages.length === 1 ? '' : 'es'}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}`
+              ? `${objects.length + pages.length + elsewhere.length} match${objects.length + pages.length + elsewhere.length === 1 ? '' : 'es'}${elsewhere.length ? ` (${elsewhere.length} in other wikis)` : ''}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}`
               : `All ${wiki ? 'pages' : 'objects'} (${rows.length}) · type > for commands`}
           <span>↑↓ choose · Enter go · Tab filter · Esc close</span>
         </div>
         <ul ref={list} className="results" role="listbox">
           {rows.map((r, k) => (
-            <li key={r.key}>
+            <li key={r.key} className={elsewhere.length && r === elsewhere[0] ? 'results-break' : undefined}>
+              {elsewhere.length > 0 && r === elsewhere[0] && <div className="results-heading">In your other wikis</div>}
               <button
                 role="option"
                 aria-selected={k === active}

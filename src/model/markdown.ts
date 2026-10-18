@@ -4,7 +4,7 @@
  * and BrainCraft's own links and mentions (`[[Page]](page:id)`, `@[Note](#12)`) work inline.
  */
 
-import { type MacroArgs, argText, countdown, macroInfo, parseArgs, parseDay, statusLook } from './macros'
+import { type MacroArgs, argText, countdown, macroInfo, macroName, parseArgs, parseDay, statusLook } from './macros'
 import { type LinkTarget, tokenAt } from './notes'
 import type { Id } from './types'
 
@@ -18,8 +18,11 @@ export type Inline =
   | { t: 'link'; to: LinkTarget | null; label: string }
   | { t: 'mention'; id: Id; label: string }
   | { t: 'br' }
-  /** A macro inside a sentence: `{{status Done}}`, `{{countdown 2026-12-20}}`, `{{today}}`. */
-  | { t: 'macro'; name: string; args: MacroArgs }
+  /**
+   * A macro inside a sentence: `{{status Done}}`, `{{countdown 2026-12-20}}`, `{{today}}`. `raw` is set
+   * for one that can't go there (unknown, or one that needs a line of its own), shown marked.
+   */
+  | { t: 'macro'; name: string; args: MacroArgs; raw?: string }
 
 export interface ListItem {
   c: Inline[]
@@ -109,10 +112,11 @@ export function parseInline(s: string, depth = 0): Inline[] {
       }
     }
     if (ch === '{' && s[i + 1] === '{') {
-      const m = INLINE_MACRO.exec(s.slice(i, i + 260))
-      if (m && macroInfo(m[1])?.kind === 'inline') {
-        push({ t: 'macro', name: m[1].toLowerCase(), args: parseArgs(m[2]) })
-        i += m[0].length
+      const m = readMacro(s, i, 200)
+      if (m) {
+        // One that belongs on a line of its own, or a name BrainCraft doesn't know: shown marked.
+        push({ t: 'macro', name: macroName(m.name), args: parseArgs(m.args), ...(macroInfo(m.name)?.kind === 'inline' ? {} : { raw: s.slice(i, m.end) }) })
+        i = m.end
         continue
       }
     }
@@ -198,7 +202,7 @@ export function inlineText(c: Inline[]): string {
         case 'mention':
           return x.label
         case 'macro':
-          return macroText(x.name, x.args)
+          return x.raw ?? macroText(x.name, x.args)
         default:
           return inlineText(x.c)
       }
@@ -253,14 +257,40 @@ const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
 const QUOTE = /^ {0,3}> ?(.*)$/
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
 /** A macro on a line of its own: `{{name options}}`, and the line that closes one around others. */
-const MACRO = /^\s*\{\{\s*([a-zA-Z][\w-]{0,30})(?:\s+([^{}\n]{0,300}?))?\s*\}\}\s*$/
 const MACRO_END = /^\s*\{\{\s*\/([a-zA-Z][\w-]{0,30})\s*\}\}\s*$/
-/** A macro inside a sentence. */
-const INLINE_MACRO = /^\{\{\s*([a-zA-Z][\w-]{0,30})(?:\s+([^{}\n]{0,200}?))?\s*\}\}/
+const NAME = /[a-zA-Z][\w-]{0,30}/y
+
+/**
+ * Reads `{{name options}}` starting at `from`, by hand: a pattern for this backtracked for seconds on
+ * one long line of spaces. Options are at most `max` characters, with no braces or line breaks.
+ */
+function readMacro(s: string, from: number, max: number): { name: string; args?: string; end: number } | null {
+  if (s[from] !== '{' || s[from + 1] !== '{') return null
+  let i = from + 2
+  while (s[i] === ' ' || s[i] === '\t') i++
+  NAME.lastIndex = i
+  const m = NAME.exec(s)
+  if (!m) return null
+  i += m[0].length
+  const close = s.indexOf('}}', i)
+  if (close < 0 || close - i > max + 2) return null
+  const rest = s.slice(i, close)
+  if (/[{}\n]/.test(rest) || (rest && rest[0] !== ' ' && rest[0] !== '\t')) return null
+  const args = rest.trim()
+  return { name: m[0], ...(args ? { args } : {}), end: close + 2 }
+}
+
+/** A macro on a line of its own: [line, name, options]. */
+function macroLine(line: string): [string, string, string | undefined] | null {
+  if (line.length > 400) return null
+  const t = line.trim()
+  const m = readMacro(t, 0, 300)
+  return m && m.end === t.length ? [line, m.name, m.args] : null
+}
 
 /** A line that is a macro block (not one that belongs in a sentence). */
 const blockMacro = (line: string) => {
-  const m = MACRO.exec(line)
+  const m = macroLine(line)
   return m && macroInfo(m[1])?.kind !== 'inline' ? m : null
 }
 
@@ -272,16 +302,16 @@ function macroEnds(lines: string[]): Map<number, number> {
   const out = new Map<number, number>()
   const open = new Map<string, number[]>()
   lines.forEach((line, j) => {
-    const m = MACRO.exec(line)
+    const m = macroLine(line)
     if (m && macroInfo(m[1])?.kind === 'container') {
-      const name = m[1].toLowerCase()
+      const name = macroName(m[1])
       const stack = open.get(name)
       if (stack) stack.push(j)
       else open.set(name, [j])
       return
     }
     const end = MACRO_END.exec(line)
-    const start = end && open.get(end[1].toLowerCase())?.pop()
+    const start = end && open.get(macroName(end[1]))?.pop()
     if (start !== undefined && start !== null) out.set(start, j)
   })
   return out
@@ -363,7 +393,7 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
     }
     const macro = blockMacro(line)
     if (macro) {
-      const name = macro[1].toLowerCase()
+      const name = macroName(macro[1])
       const args = parseArgs(macro[2])
       if ((name === 'children' || name === 'toc') && !macro[2]) {
         out.push({ t: name, line: at })
@@ -384,13 +414,15 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
         const parts: { from: number; lines: string[] }[] = [{ from: i + 1, lines: [] }]
         let open = 0
         inner.forEach((l, k) => {
-          const m = MACRO.exec(l)
-          if (m && m[1].toLowerCase() === 'columns') open++
-          if (MACRO_END.exec(l)?.[1].toLowerCase() === 'columns') open--
-          if (open === 0 && m && m[1].toLowerCase() === 'column') parts.push({ from: i + 2 + k, lines: [] })
+          const m = macroLine(l)
+          if (m && macroName(m[1]) === 'columns') open++
+          if (MACRO_END.exec(l) && macroName(MACRO_END.exec(l)![1]) === 'columns') open--
+          if (open === 0 && m && macroName(m[1]) === 'column') parts.push({ from: i + 2 + k, lines: [] })
           else parts.at(-1)!.lines.push(l)
         })
-        const columns = parts.slice(0, 6).map((p) => (nested ? parseMarkdown(p.lines.join('\n'), offset + p.from, depth + 1) : []))
+        // Six at most: any more join the sixth rather than vanish.
+        if (parts.length > 6) parts.splice(5, parts.length, { from: parts[5].from, lines: parts.slice(5).flatMap((p) => p.lines) })
+        const columns = parts.map((p) => (nested ? parseMarkdown(p.lines.join('\n'), offset + p.from, depth + 1) : []))
         out.push({ t: 'macro', name, args, columns, line: at })
       } else out.push({ t: 'macro', name, args, children: nested ? parseMarkdown(inner.join('\n'), at + 1, depth + 1) : [], line: at })
       i = end + 1

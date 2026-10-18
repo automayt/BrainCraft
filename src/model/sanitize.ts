@@ -398,8 +398,11 @@ export function cleanBody(v: unknown): PageBody | null {
   // A body without text is refused rather than wiping the page.
   if (!isObj(v) || !isPageId(v.id) || typeof v.text !== 'string') return null
   const by = str(v.by, 60)
-  return { id: v.id, text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX), at: num(v.at) ?? 0, ...(by ? { by } : {}) }
+  return { id: v.id, text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX), at: clampTime(num(v.at) ?? 0), ...(by ? { by } : {}) }
 }
+
+/** A time that dates can show: not before 1970, nor more than a day ahead of this clock. */
+export const clampTime = (t: number) => Math.max(0, Math.min(t, Date.now() + 86_400_000))
 
 /** A saved version of a wiki page. */
 export function cleanRev(v: unknown): PageRev | null {
@@ -409,12 +412,15 @@ export function cleanRev(v: unknown): PageRev | null {
   return {
     id: v.id,
     page: v.page,
-    at: num(v.at) ?? 0,
+    // Not in the far future: a version from next century would stay "latest" for good.
+    at: clampTime(num(v.at) ?? 0),
     ...(by ? { by } : {}),
     title: str(v.title, 500) ?? '',
     text: v.text.replace(/\r\n?/g, '\n').slice(0, BODY_MAX),
     ...(note ? { note } : {}),
     ...(v.keep === true ? { keep: true } : {}),
+    ...(Number.isSafeInteger(v.n) && (v.n as number) > 0 ? { n: v.n as number } : {}),
+    ...(v.quick === true ? { quick: true } : {}),
   }
 }
 

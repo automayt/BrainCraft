@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type KeyboardEvent as ReactKey, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { parseMarkdown, headings } from '../../model/markdown'
 import { type DiffLine, diffCounts, lineDiff } from '../../model/merge'
 import * as RV from '../../model/revisions'
@@ -38,7 +38,7 @@ const hueOf = (name: string) => HUES[[...name].reduce((n, c) => (n * 31 + c.char
 
 /**
  * One page's history: every saved version (who, when, their note, lines added and removed), the
- * page as each version had it, what changed between any two, who wrote each line, milestones, and
+ * page as each version had it, what changed between any two, who wrote each line, versions kept for good, and
  * putting an old version of just this page back (the rest of the wiki stays as it is).
  */
 export function PageHistory({ page, onClose }: { page: Page; onClose: () => void }) {
@@ -56,7 +56,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
 
   useEffect(() => {
     let live = true
-    void ws.pageHistory(page.id).then(
+    void ws.pageHistory(page.id, RV.pageRevs(editor.board, page.id)[0]?.at ?? Infinity).then(
       (l) => live && setBackups(l),
       () => live && setBackups([]),
     )
@@ -75,7 +75,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
     // Newest first.
     for (let n = revs.length - 1; n >= 0; n--) {
       const r = revs[n]
-      out.push({ key: r.id, label: `Version ${n + 1}${!unsaved && n === revs.length - 1 ? ' · now' : ''}`, title: r.title, text: r.text, at: r.at, by: r.by, note: r.note, rev: r })
+      out.push({ key: r.id, label: `Version ${RV.revNumber(board, r)}${RV.isStartingPoint(board, r) ? ' · starting point' : ''}${!unsaved && n === revs.length - 1 ? ' · now' : ''}`, title: r.title, text: r.text, at: r.at, by: r.by, note: r.note, rev: r })
     }
     // Older history from the wiki's backups: before the first saved version.
     const first = revs[0]
@@ -84,7 +84,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
       if (first && v.at >= first.at) continue
       if (v.text === after) continue
       after = v.text
-      out.push({ key: `b${v.v.at}`, label: v.v.name ? `Backup “${v.v.name}”` : 'Backup', title: v.title, text: v.text, at: v.at, by: v.by, backup: true })
+      out.push({ key: `b${v.v.at}`, label: v.v.name ? `Wiki version “${v.v.name}”` : 'Autosave', title: v.title, text: v.text, at: v.at, by: v.by, backup: true })
     }
     if (!out.length) out.push({ key: 'now', label: 'Now', title: page.title, text, at: body?.at ?? page.created, by: body?.by, now: true })
     return out
@@ -99,18 +99,49 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
   const who = useMemo(() => (tab === 'who' ? RV.whoWrote(board, page.id) : []), [tab, board, page.id])
   const isCurrent = at === 0
   const nOf = (e: Entry | undefined) => (e?.rev ? RV.revNumber(board, e.rev) : 0)
+  const dropped = RV.olderGone(board, page.id)
+  const ids = useId()
+  const TABS: [Tab, string][] = [
+    ['changes', 'Changes'],
+    ['page', 'The page then'],
+    ['who', 'Who wrote what'],
+  ]
+  // Opening on the version picked, ready for the arrow keys.
+  const list = useRef<HTMLUListElement>(null)
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>('button.on')?.focus()
+  }, [])
+  const onListKey = (e: ReactKey) => {
+    const next = e.key === 'ArrowDown' ? at + 1 : e.key === 'ArrowUp' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? entries.length - 1 : null
+    if (next === null || next < 0 || next >= entries.length) return
+    e.preventDefault()
+    setK(next)
+    setAgainst('prev')
+    requestAnimationFrame(() => list.current?.querySelectorAll<HTMLElement>('button')[next]?.focus())
+  }
+  const onTabKey = (e: ReactKey) => {
+    const k = TABS.findIndex(([t]) => t === tab)
+    const next = e.key === 'ArrowRight' ? (k + 1) % TABS.length : e.key === 'ArrowLeft' ? (k + TABS.length - 1) % TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null
+    if (next === null) return
+    e.preventDefault()
+    setTab(TABS[next][0])
+    document.getElementById(`${ids}-tab-${TABS[next][0]}`)?.focus()
+  }
 
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className="modal page-history" role="dialog" aria-modal="true" aria-label={`History of ${page.title || 'Untitled'}`}>
+      <div ref={ref} className="modal page-history" role="dialog" aria-modal="true" aria-label={`Page history of ${page.title || 'Untitled'}`}>
         <header>
-          <h2>History of “{page.title || 'Untitled'}”</h2>
+          <h2>Page history: “{page.title || 'Untitled'}”</h2>
           <button className="icon-close" aria-label="Close" onClick={onClose}>
             ×
           </button>
         </header>
+        <p className="muted page-history-intro">
+          A version of this page is kept each time someone finishes writing on it. Putting one back changes only this page; to take the whole wiki back, use Version history.
+        </p>
         <div className="page-history-body">
-          <ul className="page-history-list" aria-label="Versions">
+          <ul ref={list} className="page-history-list" aria-label="Versions (arrow keys move)" onKeyDown={onListKey}>
             {entries.map((e, n) => {
               const c = diffCounts(entries[n + 1]?.text ?? '', e.text)
               return (
@@ -118,6 +149,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
                   <button
                     className={n === at ? 'on' : ''}
                     aria-current={n === at ? 'true' : undefined}
+                    tabIndex={n === at ? 0 : -1}
                     onClick={() => {
                       setK(n)
                       setAgainst('prev')
@@ -125,7 +157,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
                   >
                     <strong>
                       {e.rev?.keep && (
-                        <span className="rev-star" title="Milestone">
+                        <span className="rev-star" title="Kept for good">
                           ★{' '}
                         </span>
                       )}
@@ -133,7 +165,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
                     </strong>
                     <small className="muted">
                       {[e.by, formatTime(e.at)].filter(Boolean).join(' · ')}
-                      {n < entries.length - 1 ? ` · +${c.added} −${c.removed}` : ''}
+                      {n < entries.length - 1 ? ` · +${c.added} −${c.removed}` : dropped && e.rev ? ' · older versions dropped' : ''}
                       {entries[n + 1] && e.title !== entries[n + 1].title ? ' · renamed' : ''}
                     </small>
                     {e.note && <small className="rev-note">{e.note}</small>}
@@ -141,22 +173,27 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
                 </li>
               )
             })}
-            {backups === null && <li className="muted page-history-more">Looking through older backups…</li>}
+            {backups === null && <li className="muted page-history-more">Looking through older autosaves…</li>}
+            {dropped && <li className="muted page-history-more">Older versions were dropped to save room. Versions kept for good always stay.</li>}
           </ul>
           <section className="page-history-view" aria-label={picked.label}>
-            <div className="page-history-tabs" role="tablist" aria-label="Show">
-              {(
-                [
-                  ['changes', 'Changes'],
-                  ['page', 'The page then'],
-                  ['who', 'Who wrote what'],
-                ] as [Tab, string][]
-              ).map(([t, label]) => (
-                <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
+            <div className="page-history-tabs" role="tablist" aria-label="Show" onKeyDown={onTabKey}>
+              {TABS.map(([t, label]) => (
+                <button
+                  key={t}
+                  id={`${ids}-tab-${t}`}
+                  role="tab"
+                  aria-selected={tab === t}
+                  aria-controls={`${ids}-panel`}
+                  tabIndex={tab === t ? 0 : -1}
+                  className={tab === t ? 'on' : ''}
+                  onClick={() => setTab(t)}
+                >
                   {label}
                 </button>
               ))}
             </div>
+            <div id={`${ids}-panel`} role="tabpanel" aria-labelledby={`${ids}-tab-${tab}`} className="page-history-panel">
             <div className="page-history-tools">
               {tab === 'changes' && (
                 <label>
@@ -176,15 +213,19 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
               )}
               {tab === 'who' && <span className="muted">Each line of the page now, and the version that brought it in</span>}
               {picked.rev && !ro && (
-                <button onClick={() => editor.markPageVersion(picked.rev!.id, { keep: !picked.rev!.keep })} title="A milestone is kept for good, however many versions come after it">
-                  {picked.rev.keep ? '★ Milestone' : '☆ Mark as milestone'}
+                <button
+                  aria-pressed={!!picked.rev.keep}
+                  onClick={() => editor.markPageVersion(picked.rev!.id, { keep: !picked.rev!.keep })}
+                  title="A version kept for good stays however many versions come after it"
+                >
+                  {picked.rev.keep ? '★ Kept for good' : '☆ Keep for good'}
                 </button>
               )}
               {!isCurrent && !ro && (
                 <button
                   className="primary"
                   onClick={() => {
-                    editor.restorePageVersion(page.id, picked.title, picked.text, picked.rev ? `(version ${nOf(picked)})` : `(backup from ${formatTime(picked.at)})`)
+                    editor.restorePageVersion(page.id, picked.title, picked.text, picked.rev ? `version ${nOf(picked)}` : `the autosave from ${formatTime(picked.at)}`)
                     onClose()
                   }}
                 >
@@ -196,6 +237,7 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
             {tab === 'changes' && <Diff lines={lines} />}
             {tab === 'page' && <VersionPage entry={picked} />}
             {tab === 'who' && <WhoWrote lines={who} board={board} />}
+            </div>
           </section>
         </div>
       </div>
@@ -206,6 +248,16 @@ export function PageHistory({ page, onClose }: { page: Page; onClose: () => void
 /** The note on a saved version: what changed, in the writer's words (anyone may add one later). */
 function NoteField({ rev, onSave }: { rev: PageRev; onSave: (note: string) => void }) {
   const [value, setValue] = useState(rev.note ?? '')
+  // Closing the dialog (Esc, the backdrop) keeps what was typed, as leaving the field does.
+  const latest = useRef({ value, onSave, note: rev.note ?? '' })
+  latest.current = { value, onSave, note: rev.note ?? '' }
+  useEffect(
+    () => () => {
+      const l = latest.current
+      if (l.value !== l.note) l.onSave(l.value)
+    },
+    [],
+  )
   return (
     <input
       className="rev-note-field"
@@ -214,7 +266,11 @@ function NoteField({ rev, onSave }: { rev: PageRev; onSave: (note: string) => vo
       placeholder="Add a note about this version"
       aria-label="Note about this version"
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => value !== (rev.note ?? '') && onSave(value)}
+      onBlur={() => {
+        if (value === (rev.note ?? '')) return
+        latest.current.note = value
+        onSave(value)
+      }}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
     />
   )
@@ -249,7 +305,7 @@ function WhoWrote({ lines, board }: { lines: RV.WhoLine[]; board: Board }) {
         const first = n === 0 || lines[n - 1].rev !== l.rev
         const name = l.rev ? `v${RV.revNumber(board, l.rev)}${l.rev.by ? ` · ${l.rev.by}` : ''}` : 'Not saved as a version yet'
         return (
-          <div key={n} className="who-line" style={{ '--who': l.rev?.by ? hueOf(l.rev.by) : 0 } as CSSProperties}>
+          <div key={n} className={`who-line${l.rev?.by ? '' : ' who-unknown'}`} style={{ '--who': l.rev?.by ? hueOf(l.rev.by) : 0 } as CSSProperties}>
             <span className={`who-tag${l.rev ? '' : ' muted'}`} aria-hidden={!first}>
               {first ? name : ''}
             </span>

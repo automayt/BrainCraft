@@ -597,19 +597,23 @@ export class Workspace {
     await this.flush()
     // Keep what's being replaced, so restoring is never a one-way door.
     await this.library.addVersion(this.boardId, this.editor.board, `Before restoring ${new Date(v.at).toLocaleString()}`)
-    // The page history carries on through a restore (versions don't keep it).
+    // The page history carries on through a restore (versions don't keep it); a version left
+    // without its page is dropped when the wiki is next read.
     const now = this.editor.board.revs
-    this.editor.replaceBoard(now ? { ...old, revs: now.filter((r) => old.pages?.some((p) => p.id === r.page)) } : old, `Restored the version from ${new Date(v.at).toLocaleString()} — Ctrl Z to undo`)
+    this.editor.replaceBoard(now ? { ...old, revs: now } : old, `Restored the version from ${new Date(v.at).toLocaleString()} — Ctrl Z to undo`)
+    this.editor.savePagesAfterRestore(`The wiki went back to ${new Date(v.at).toLocaleString()}`)
   }
 
   /**
    * One wiki page through the saved versions, newest first: each time its title or words changed,
    * when and by whom (versions where the page stayed the same are folded into the change before).
    */
-  async pageHistory(pageId: string): Promise<PageVersion[]> {
+  async pageHistory(pageId: string, before = Infinity): Promise<PageVersion[]> {
     if (!this.boardId) return []
     const out: PageVersion[] = []
     for (const v of await this.library.versions(this.boardId)) {
+      // Only the ones older than `before` (the page's first saved version), without reading the rest.
+      if (v.at >= before) continue
       const b = await this.library.loadVersion(this.boardId, v.at)
       const page = b && getPage(b, pageId)
       if (!b || !page) continue
@@ -848,7 +852,7 @@ export class Workspace {
     // While there's unread news, keep the old snapshot; nothing counts as seen while hidden.
     if (!id || this.editor.catchUp || (typeof document !== 'undefined' && document.visibilityState === 'hidden' && !now)) return
     const save = () => {
-      if (this.boardId === id && !this.editor.catchUp) void this.library.kv.set(seenKey(id), { board: this.editor.board, at: Date.now() })
+      if (this.boardId === id && !this.editor.catchUp) void this.library.kv.set(seenKey(id), { board: { ...this.editor.board, revs: undefined }, at: Date.now() })
     }
     if (now) save()
     else this.seenTimer = setTimeout(save, SEEN_DELAY)

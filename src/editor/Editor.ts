@@ -31,7 +31,7 @@ import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
-import { embedKeys } from '../model/markdown'
+import { embedKeys, toggleTask } from '../model/markdown'
 import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
@@ -677,14 +677,25 @@ export class Editor {
     if (this.readOnly) return false
     const before = this.board
     // A page someone typed on since the proposal keeps both their words and the proposal's.
+    const merged = new Set<string>()
     patches = patches.map((p) => {
       const base = p.k === 'body' && p.v ? bases?.[p.id] : undefined
-      return base === undefined || p.k !== 'body' || !p.v ? p : { ...p, v: { ...p.v, text: merge3(base, W.pageText(before, p.id), p.v.text) } }
+      if (base === undefined || p.k !== 'body' || !p.v) return p
+      const text = merge3(base, W.pageText(before, p.id), p.v.text)
+      if (text !== p.v.text) merged.add(p.id)
+      return { ...p, v: { ...p.v, text } }
     })
+    // Such a page's versions are saved afresh around the change, so history shows what it really says.
+    if (merged.size) {
+      patches = patches.filter((p) => p.k !== 'rev' || !p.v || !merged.has(p.v.page))
+      this.saveVersions(merged)
+    }
     this.finishEditing()
     this.aiPreview = null
+    const start = this.board
     this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
-    if (this.board === before) return false
+    if (merged.size) this.saveVersions(merged, { at: Date.now(), by: 'AI', note: summary })
+    if (this.board === start) return false
     const change: AiChange = { id, at: Date.now(), summary, forward: diff(before, this.board), inverse: diff(this.board, before), undone: false }
     this.aiHistory = [...this.aiHistory, change]
     this.onAiHistory?.(this.aiHistory)
@@ -703,8 +714,9 @@ export class Editor {
   toggleAiChange(id: string) {
     const c = this.aiHistory.find((x) => x.id === id)
     if (!c || this.readOnly) return
-    const patches = c.undone ? c.forward : c.inverse
-    this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
+    // Versions stay whichever way the change goes.
+    const patches = (c.undone ? c.forward : c.inverse).filter((p) => p.k !== 'rev')
+    this.edit((b) => this.keepLog(withIdsAfter(applyPatches(b, patches), patches)))
     this.aiHistory = this.aiHistory.map((x) => (x.id === id ? { ...x, undone: !x.undone } : x))
     this.onAiHistory?.(this.aiHistory)
     this.setStatus(c.undone ? `Redid: ${c.summary}` : `Undid: ${c.summary}`)
@@ -719,17 +731,26 @@ export class Editor {
   private keepLog(b: Board): Board {
     const log = this.board.revs
     if (b.revs === log) return b
-    const kept = log?.filter((r) => W.getPage(b, r.page))
-    const next = { ...b, revs: kept }
-    if (!kept?.length) delete next.revs
+    // Every version now, for pages that are there; and a page undo brings back brings its history back.
+    const kept = new Map((log ?? []).filter((r) => W.getPage(b, r.page)).map((r) => [r.id, r]))
+    for (const r of b.revs ?? []) if (!kept.has(r.id) && !W.getPage(this.board, r.page) && W.getPage(b, r.page)) kept.set(r.id, r)
+    const next: Board = { ...b, revs: [...kept.values()] }
+    if (!next.revs!.length) delete next.revs
     return next
   }
 
   /** Saves versions of pages (outside undo: see {@link keepLog}). */
+  /** When this person last saved (or found saved) a version of each page, for the every-few-minutes rule. */
+  private versionSaved = new Map<string, number>()
+
   private saveVersions(pages: Iterable<string>, opts: RV.SaveOptions = {}) {
     if (this.readOnly || !W.isWiki(this.board)) return
     let b = this.board
-    for (const id of pages) b = RV.savePageVersion(b, id, opts)
+    const now = Date.now()
+    for (const id of pages) {
+      b = RV.savePageVersion(b, id, opts)
+      this.versionSaved.set(id, now)
+    }
     if (b === this.board) return
     this.apply(b)
     this.emit()
@@ -742,10 +763,61 @@ export class Editor {
 
   /** Done writing on a page: what it says now becomes a version, with an optional note. */
   endPageEdit(id: string, note?: string) {
-    this.saveVersions([id], { note })
+    const changed = RV.unsavedChanges(this.board, id)
+    const before = RV.latestRev(this.board, id)?.note
+    this.saveVersions([id], { note, me: this.author.trim() || undefined })
+    // A note with nothing changed only joins your own latest version; say so when it couldn't.
+    if (note?.trim() && !changed && RV.latestRev(this.board, id)?.note === before) this.setStatus('Nothing changed, so the note wasn’t kept')
   }
 
-  /** Marks a saved version as a milestone (kept for good), or gives it a note. */
+  /** After the whole wiki went back to an earlier version: each page that changed gets a version saying so. */
+  savePagesAfterRestore(note: string) {
+    if (!W.isWiki(this.board)) return
+    this.saveVersions(
+      (this.board.pages ?? []).filter((p) => RV.unsavedChanges(this.board, p.id)).map((p) => p.id),
+      { at: Date.now(), by: this.author.trim() || undefined, note },
+    )
+  }
+
+  /** Ticks or unticks a checklist item while reading: saved as a small version, credited to whoever ticked. */
+  tickTask(id: string, line: number) {
+    if (this.readOnly) return
+    const before = W.pageText(this.board, id)
+    const after = toggleTask(before, line)
+    if (after === before) return
+    // What it said first, so the tick is credited for the tick alone.
+    this.saveVersions([id])
+    this.setPageText(id, after)
+    const raw = after.replace(/\r\n?/g, '\n').split('\n')[line] ?? ''
+    const done = /\[[xX]\]/.test(raw)
+    const words = raw.replace(/^[\s>]*(?:[-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s*/, '').trim()
+    const short = words.length > 40 ? `${words.slice(0, 39)}…` : words
+    const me = this.author.trim() || undefined
+    this.saveVersions([id], { at: Date.now(), by: me, quick: true, note: `${done ? 'Ticked' : 'Unticked'} “${short}”` })
+  }
+
+  /** A wiki panel to open (from Ctrl+K): the open page's history, recent changes, or adding Markdown files. */
+  wikiPanel: 'history' | 'recent' | 'import' | null = null
+  /** The page whose changes since the last visit are showing (it outlives the page view it opens). */
+  changesOf: string | null = null
+  /** Pages of "Since you were here" already looked at: their dots and banner rows go. */
+  catchUpSeen = new Set<string>()
+
+  showChanges(id: string | null) {
+    this.changesOf = id
+    if (id) {
+      this.page = id
+      this.catchUpSeen.add(id)
+    }
+    this.emit()
+  }
+
+  openWikiPanel(panel: 'history' | 'recent' | 'import') {
+    this.wikiPanel = panel
+    this.emit()
+  }
+
+  /** Marks a saved version to keep for good, or gives it a note. */
   markPageVersion(revId: string, mark: { note?: string; keep?: boolean }) {
     if (this.readOnly) return
     const next = RV.markRev(this.board, revId, mark)
@@ -1218,6 +1290,7 @@ export class Editor {
 
   setCatchUp(c: (CU.CatchUp & { before: Board }) | null) {
     this.catchUp = c
+    this.catchUpSeen = new Set()
     this.showingCatchUp = false
     this.emit()
   }
@@ -1461,6 +1534,7 @@ export class Editor {
 
   openPage(id: string, heading: string | null = null) {
     this.page = id
+    if (this.catchUp?.pages) this.catchUpSeen.add(id)
     this.pageHeading = heading
     this.emit()
   }
@@ -1495,8 +1569,9 @@ export class Editor {
   setPageText(id: string, text: string) {
     if (this.readOnly) return
     // A long stretch of writing still leaves versions behind, every few minutes.
-    const last = RV.latestRev(this.board, id)
-    if (last && Date.now() - last.at > RV.REV_EVERY && RV.unsavedChanges(this.board, id)) this.saveVersions([id])
+    // (Counted from when a version was last saved here, not when its words were written.)
+    const saved = this.versionSaved.get(id)
+    if (saved !== undefined && Date.now() - saved > RV.REV_EVERY && RV.unsavedChanges(this.board, id)) this.saveVersions([id])
     const before = this.board
     this.apply(W.setPageBody(this.board, id, text, Date.now(), this.author.trim() || undefined))
     if (this.board === before) return
@@ -1534,8 +1609,8 @@ export class Editor {
     this.lastTyping = null
     this.saveVersions([id])
     this.edit((b) => W.setPageMeta(W.setPageBody(b, id, text, Date.now(), this.author.trim() || undefined), id, { title }))
-    this.saveVersions([id], { note: `Put back the version ${when}` })
-    this.setStatus(`Put back the page as written ${when} — Ctrl Z to undo`)
+    this.saveVersions([id], { note: `Put back ${when}` })
+    this.setStatus(`Put back ${when} — undo takes it back`)
   }
 
   /** Moves a page (and its sub-pages) under `parent` (undefined: the top), before `before` or last. */

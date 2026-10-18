@@ -321,6 +321,9 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
           Save version
         </button>
       </form>
+      {isWiki(ws.editor.board) && (
+        <p className="muted versions-wiki-note">This takes every page of the wiki back. To undo just one page, use its Page history (⋯ on the page).</p>
+      )}
       <div className="versions-body">
         <ol className="version-list">
           {versions?.map((v) => (

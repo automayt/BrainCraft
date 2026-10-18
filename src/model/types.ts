@@ -128,8 +128,12 @@ export interface PageRev {
   text: string
   /** What changed, in the writer's words. */
   note?: string
-  /** A milestone: kept however many versions come after it. */
+  /** Kept for good, however many versions come after it. */
   keep?: boolean
+  /** Its number on the page, fixed when saved (older versions going doesn't renumber the rest). */
+  n?: number
+  /** A small change (ticking checklist items) that the same person's next small change joins. */
+  quick?: boolean
 }
 
 export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery'

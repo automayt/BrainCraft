@@ -1,10 +1,10 @@
 /** The macros that look at the rest of the wiki: a page tree, open tasks, recent changes, another page shown here. */
 
-import { type ReactNode, useMemo } from 'react'
-import { type Block, headings, inlineText, parseMarkdown, taskItems, toggleTask } from '../../model/markdown'
+import { type ReactNode, useMemo, useState } from 'react'
+import { type Block, headings, inlineText, parseMarkdown, taskItems } from '../../model/markdown'
 import { argText } from '../../model/macros'
 import * as RV from '../../model/revisions'
-import type { Page, PageBody } from '../../model/types'
+import type { Board, Page, PageBody } from '../../model/types'
 import * as W from '../../model/wiki'
 import { formatTime } from '../BoardView'
 import { useEditor } from '../useEditor'
@@ -65,30 +65,32 @@ function PageTreeMacro({ under }: { under?: string }) {
       ))}
     </ul>
   )
-  return <nav className="md-pagetree" aria-label="Pages">{tree.length ? list(tree) : <p className="muted">No pages under this one yet.</p>}</nav>
+  return <nav className="md-pagetree" aria-label="Page tree on this page">{tree.length ? list(tree) : <p className="muted">No pages under this one yet.</p>}</nav>
 }
 
 function TasksMacro({ page, here, withDone }: { page: Page; here: boolean; withDone: boolean }) {
   const editor = useEditor()
   const board = editor.board
   const ro = editor.readOnly
-  const groups = useMemo(() => {
+  // Ticked here a moment ago: still shown (struck through) until the page is left, so a slip is easy to untick.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
+  const { groups, more } = useMemo(() => {
     const scope = here ? W.withDescendants(board, page.id) : null
     let left = TASKS_SHOWN
+    let more = 0
     const out: { page: Page; items: { line: number; text: string; done: boolean }[] }[] = []
     for (const p of W.pageOrder(board)) {
-      if (left <= 0) break
       if (scope && !scope.has(p.id)) continue
-      const items = taskItems(blocksOf(W.getBody(board, p.id)))
+      const all = taskItems(blocksOf(W.getBody(board, p.id)))
         // Empty boxes (a template's blanks) aren't tasks yet.
-        .filter((it) => (withDone || !it.task) && inlineText(it.c).trim())
-        .slice(0, left)
-        .map((it) => ({ line: it.line, text: inlineText(it.c), done: !!it.task }))
+        .filter((it) => (withDone || !it.task || ticked.has(`${p.id}:${it.line}`)) && inlineText(it.c).trim())
+      const items = all.slice(0, Math.max(0, left)).map((it) => ({ line: it.line, text: inlineText(it.c), done: !!it.task }))
+      more += all.length - items.length
       left -= items.length
       if (items.length) out.push({ page: p, items })
     }
-    return out
-  }, [board, page.id, here, withDone])
+    return { groups: out, more }
+  }, [board, page.id, here, withDone, ticked])
   if (!groups.length) return <p className="md-tasks muted">{withDone ? 'No checklists yet.' : 'Nothing left to do. 🎉'}</p>
   return (
     <div className="md-tasks">
@@ -105,7 +107,10 @@ function TasksMacro({ page, here, withDone }: { page: Page; here: boolean; withD
                     type="checkbox"
                     checked={it.done}
                     disabled={ro}
-                    onChange={() => editor.setPageText(g.page.id, toggleTask(W.pageText(editor.board, g.page.id), it.line))}
+                    onChange={() => {
+                      setTicked(new Set(ticked).add(`${g.page.id}:${it.line}`))
+                      editor.tickTask(g.page.id, it.line)
+                    }}
                   />
                   <span>{it.text}</span>
                 </label>
@@ -114,6 +119,7 @@ function TasksMacro({ page, here, withDone }: { page: Page; here: boolean; withD
           </ul>
         </section>
       ))}
+      {more > 0 && <p className="muted">And {more} more (showing the first {TASKS_SHOWN}).</p>}
     </div>
   )
 }
@@ -145,10 +151,23 @@ function RecentMacro({ count }: { count: number }) {
   )
 }
 
+/** The page an include names: by title, by id, or by a title it had before a rename (from its history). */
+function findShown(board: Board, name: string): Page | undefined {
+  const byTitle = W.pageByTitle(board, name)
+  if (byTitle) return byTitle
+  const byId = W.getPage(board, name)
+  if (byId && !byId.trashed) return byId
+  const t = name.trim().toLowerCase()
+  if (!t) return undefined
+  const old = [...(board.revs ?? [])].reverse().find((r) => r.title.trim().toLowerCase() === t)
+  const page = old && W.getPage(board, old.page)
+  return page && !page.trashed ? page : undefined
+}
+
 function IncludeMacro({ name, page, actions }: { name: string; page: Page; actions: MarkdownActions }) {
   const editor = useEditor()
   const board = editor.board
-  const shown = W.pageByTitle(board, name) ?? (W.getPage(board, name)?.trashed ? undefined : W.getPage(board, name))
+  const shown = findShown(board, name)
   const body = shown ? W.getBody(board, shown.id) : undefined
   const blocks = blocksOf(body)
   if (!name) return <p className="md-macro-bad">{'{{include "Page title"}}'}: which page?</p>
@@ -159,7 +178,7 @@ function IncludeMacro({ name, page, actions }: { name: string; page: Page; actio
     headings: headings(blocks),
     copyHeading: undefined,
     children: () => <p className="muted">(The pages under “{shown.title || 'Untitled'}”.)</p>,
-    toggle: actions.toggle && ((line) => editor.setPageText(shown.id, toggleTask(W.pageText(editor.board, shown.id), line))),
+    toggle: actions.toggle && ((line) => editor.tickTask(shown.id, line)),
     macro: (b) => <WikiMacro block={b} page={shown} actions={actions} inside />,
   }
   return (

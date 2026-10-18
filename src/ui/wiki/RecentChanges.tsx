@@ -20,7 +20,12 @@ export function RecentChanges({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const board = editor.board
   const changes = RV.recentChanges(board, SHOWN)
-  const day = (at: number) => new Date(at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  const day = (at: number) => {
+    const d = new Date(at)
+    const today = new Date()
+    const days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000)
+    return days === 0 ? 'Today' : days === 1 ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  }
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} className="modal page-history recent-changes" role="dialog" aria-modal="true" aria-label="Recent changes in this wiki">
@@ -54,12 +59,17 @@ export function RecentChanges({ onClose }: { onClose: () => void }) {
                     <span className="muted">
                       {' '}
                       version {RV.revNumber(board, rev)}
-                      {rev.by ? ` · ${rev.by}` : ''} · {formatTime(rev.at)} · {prev ? `+${c.added} −${c.removed}` : 'first version'}
+                      {rev.by ? ` · ${rev.by}` : ''} · {formatTime(rev.at)} · {prev ? `+${c.added} −${c.removed}` : RV.revNumber(board, rev) > 1 ? 'older versions dropped' : 'first version'}
                       {prev && prev.title !== rev.title ? ` · renamed from “${prev.title || 'Untitled'}”` : ''}
                       {page?.trashed ? ' · in the Trash' : ''}
                     </span>
-                    {rev.keep && <span className="rev-star" title="Milestone"> ★</span>}
-                    <button className="link recent-toggle" aria-expanded={open === rev.id} onClick={() => setOpen(open === rev.id ? null : rev.id)}>
+                    {rev.keep && <span className="rev-star" title="Kept for good"> ★</span>}
+                    <button
+                      className="link recent-toggle"
+                      aria-expanded={open === rev.id}
+                      aria-label={`What changed in version ${RV.revNumber(board, rev)} of ${page?.title || rev.title || 'Untitled'}`}
+                      onClick={() => setOpen(open === rev.id ? null : rev.id)}
+                    >
                       {open === rev.id ? 'hide' : 'what changed'}
                     </button>
                   </div>

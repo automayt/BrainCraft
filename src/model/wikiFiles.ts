@@ -37,14 +37,20 @@ export function pageMarkdown(b: Board, id: string, webLink: WebLink): string {
 
 /** A file or folder name from a title: no characters file systems refuse, not too long. */
 export function fileNameFor(title: string): string {
-  const safe = [...title]
-    .map((ch) => (ch.charCodeAt(0) < 32 ? ' ' : ch))
-    .join('')
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/^[.\s]+|[.\s]+$/g, '')
+  // By characters, not code units, so an emoji is never cut in half.
+  const safe = [
+    ...[...title]
+      .map((ch) => (ch.charCodeAt(0) < 32 ? ' ' : ch))
+      .join('')
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/^[.\s]+|[.\s]+$/g, ''),
+  ]
     .slice(0, 80)
-  return safe || 'Untitled'
+    .join('')
+    .trim()
+  // Names Windows keeps for itself can't be files there.
+  return /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(safe) ? `${safe}_` : safe || 'Untitled'
 }
 
 /** The whole wiki as .md files: each page, and its sub-pages in a folder of the same name. */
@@ -76,11 +82,16 @@ export interface ImportedPage {
 /** Markdown files as pages: the title from the first `# heading` (or the file's name), the rest as words. */
 export function pagesFromFiles(files: { name: string; text: string }[]): ImportedPage[] {
   return files.map((f) => {
-    const text = f.text.replace(/^﻿/, '').replace(/\r\n?/g, '\n')
-    const m = /^\s*#[ \t]+(.+?)[ \t#]*(?:\n|$)/.exec(text)
+    const text = f.text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+    // The title from a first line like "# Packing list": read by hand, the first line only (a
+    // pattern over the whole file took seconds on a long line of #s).
+    const start = text.length - text.trimStart().length
+    const lineEnd = text.indexOf('\n', start)
+    const first = text.slice(start, lineEnd < 0 ? text.length : lineEnd)
+    const heading = first.length <= 600 && /^#[ \t]/.test(first) ? first.slice(1).replace(/[ \t#]+$/, '').trim() : ''
     const fromName = f.name.replace(/^.*[\\/]/, '').replace(/\.(md|markdown|mdown|txt)$/i, '')
-    const title = (m ? m[1] : fromName).trim().slice(0, 500) || 'Untitled'
-    const rest = (m ? text.slice(m[0].length) : text).replace(/^\n+/, '')
+    const title = (heading || fromName).slice(0, 500) || 'Untitled'
+    const rest = (heading ? text.slice(lineEnd < 0 ? text.length : lineEnd + 1) : text).replace(/^\n+/, '')
     return { title, text: rest.slice(0, BODY_MAX) }
   })
 }

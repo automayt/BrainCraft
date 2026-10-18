@@ -204,7 +204,7 @@ shares live exactly like a board.
 
 - **The page list** on the left: **+ New page**, **+** on a page for a page
   under it, drag a page onto another to nest it (or above and below it to
-  reorder), use **Alt+Shift+arrows**, or **Move…** on the page (the way to do
+  reorder), use **Alt+Shift+arrows**, or **⋯ → Move…** on the page (the way to do
   it on a phone, where the list is behind **☰ Pages**). Undo and redo sit at
   the top of the list. Deleted pages go to the **Trash**, with their
   sub-pages, until you delete them for good.
@@ -248,49 +248,64 @@ shares live exactly like a board.
 - **`/` menu:** headings, checklists, lists, tables, code, quotes, tips and
   warnings, dividers, links to pages, a new sub-page, embeds and every macro.
 - **Macros:** write `{{name}}` on a line of its own, or pick one from the `/`
-  menu. A name BrainCraft doesn't know shows marked in red, so typos stand out.
+  menu or **Insert** (macros that go in a sentence go in at the caret, their
+  placeholder selected to type over). A name BrainCraft doesn't know, or one
+  that needs a line of its own written mid-sentence, shows marked in red, so
+  typos stand out. A few other names work too: `{{contents}}`, `{{todo}}`,
+  `{{date}}`.
   - `{{children}}` the pages under this one; `{{toc}}` this page's headings;
     `{{pagetree}}` every page (`{{pagetree here}}`: the ones under this page).
   - `{{tasks}}` every unticked checklist item in the wiki, grouped by page and
     tickable right there (`{{tasks here}}`: this page and the ones under it;
     `{{tasks all}}`: ticked ones too).
   - `{{recent 5}}` the latest changes across the wiki.
-  - `{{include "Page title"}}` shows another page's words here, kept in step.
+  - `{{include "Page title"}}` shows another page's words here, kept in step
+    (it still finds the page after a rename).
   - `{{expand Title}}` … `{{/expand}}` a section that stays closed until
     clicked; `{{columns}}` … `{{column}}` … `{{/columns}}` side by side
     (stacked on phones).
   - Inside a sentence: `{{status Booked}}` a coloured label (it picks a colour
-    from the words, or say one: `{{status Ideas purple}}`),
+    from the words, "Not booked" red and "Booked" green; or name one of grey,
+    blue, green, yellow, orange, red, purple: `{{status Ideas purple}}`),
     `{{countdown 2026-12-20}}` "63 days to go", `{{today}}` today's date.
+  - The trip, move and party templates use them: open tasks on the home page,
+    a countdown to fill in, a status column for bookings.
 - **Templates:** Your boards has a row of wikis to start from: blank, a trip,
   moving house, a party and a club handbook.
 - **Versions of a page:** a version is saved each time someone finishes
   writing on a page (with their note, if they wrote one in **What did you
   change?** beside Done), every ten minutes during a long stretch of writing,
   on a rename, when a version is put back, and when an AI assistant changes
-  the page. Versions live in the wiki, so friends in a live session see the
-  same history. The page shows its number ("version 7"); click it, or **⋯ →
-  History**, to see:
+  the page. Ticking a checklist item while reading saves a small version too,
+  credited to whoever ticked (ticks a moment apart make one version). Versions
+  live in the wiki, so friends in a live session see the same history; share
+  links and read-only copies carry the pages without it. The page shows its
+  number ("version 7"); click it, **⋯ → Page history**, or Ctrl+K, to see:
   - each version with who, when, their note and lines added and removed;
   - **Changes** against the version before, the page now, or any other one;
   - **The page then**, as it read;
   - **Who wrote what**: every line beside the version and person that wrote it;
-  - **Mark as milestone** to keep a version for good, a note on any version,
-    and **Put this version back** for just that page (one undo step, and
-    itself a new version).
-  Each page keeps its last 50 versions plus milestones; undo never removes a
-  version. Older history from before versions existed comes from the wiki's
-  backups. **Recent changes** at the foot of the page list shows the latest
+  - **Keep for good** on any version, a note on any version (a note never
+    replaces a friend's), and **Put this version back** for just that page
+    (one undo step, and itself a new version).
+  Version numbers never change. Each page keeps its last 50 versions plus the
+  ones kept for good, and the whole wiki at most 5 million characters of them
+  (the oldest go first); undo never removes a version. Older history from
+  before versions existed comes from the wiki's autosaves. Page history is for
+  one page; **Version history** in the menu takes the whole wiki back.
+  **Recent changes** at the foot of the page list (or Ctrl+K) shows the latest
   versions across the whole wiki, with what each one changed.
 - **Since you were here:** opening a wiki after friends worked on it lists the
   new, changed and removed pages, marks them in the page list, and **what
-  changed** shows the lines that are different since your last visit.
+  changed** shows the lines that are different since your last visit. A page
+  drops off the list once you've opened it.
 - **Search across wikis:** Ctrl+K in any board or wiki also finds pages in
   your other wikis.
 - **Markdown files in and out:** **⋯ → Download page (.md)**, or **Download
   wiki (.zip)** for every page as a Markdown file with sub-pages in folders.
-  Drop `.md` files on a wiki (or **⋯ → Add Markdown files…**) and each becomes
-  a page; links between pages travel as `[[Title]]`, so they still work.
+  Drop `.md` files anywhere on a wiki (or **⋯ → Add Markdown files…**) and
+  each becomes a page at the top of the page list; links between pages travel
+  as `[[Title]]`, so they still work. A .zip can't be dropped back in yet.
 
 ### Linked data: one dataset, many views
 
