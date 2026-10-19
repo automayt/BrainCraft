@@ -182,6 +182,11 @@ export function LiveSection() {
             {busy ? 'Starting…' : 'Start a live session'}
           </button>
           {error && <p className="error">{error}</p>}
+          {!ws.account && (
+            <p className="muted share-accounts">
+              This server shares boards by link. For sign-in, groups and admin controls, whoever runs it can turn on accounts (<code>BRAINCRAFT_ACCOUNTS=1</code>); the guide’s “Running a server” page says more.
+            </p>
+          )}
         </>
       ) : (
         <>

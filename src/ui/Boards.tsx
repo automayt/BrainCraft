@@ -131,6 +131,23 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
         )}
         {!query && (
           <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
+            <button
+              className="template guide-template"
+              onClick={() => {
+                onClose()
+                void ws.openGuide()
+              }}
+            >
+              <span className="thumb wiki-thumb" aria-hidden="true">
+                <span>🧭 Start here</span>
+                <span>🎨 The canvas</span>
+                <span>📘 Wikis</span>
+                <span>🤝 Together</span>
+                <span>🔌 The API</span>
+              </span>
+              <strong>BrainCraft guide</strong>
+              <small>How everything works, with a tour board</small>
+            </button>
             {WIKI_TEMPLATES.map((t) => (
               <button
                 key={t.id}

@@ -9495,3 +9495,37 @@ button.on,
 .help-guide:hover {
   background: var(--border);
 }
+
+/* Once per browser: where the guide and wikis are. */
+.whats-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  max-width: min(760px, 100%);
+  padding: 8px 8px 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  animation: pop 0.2s var(--ease);
+}
+.whats-new-msg {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.whats-new-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+}
+.guide-template .wiki-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.share-accounts {
+  margin-top: 10px;
+  font-size: 12px;
+}

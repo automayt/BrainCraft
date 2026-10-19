@@ -5,6 +5,7 @@ import { toScreen } from '../model/camera'
 import { REACTIONS } from '../model/reactions'
 import { LiveViewerBanner } from './Boards'
 import { CatchUpBanner } from './CatchUp'
+import { WhatsNew } from './WhatsNew'
 import { useEditor } from './useEditor'
 
 export const EMOTES = REACTIONS
@@ -181,6 +182,7 @@ export function Moments() {
       {/* Clear of a side panel (comments, a page beside the board). */}
       <div className="top-stack" style={editor.rightInset ? { right: 76 + editor.rightInset } : undefined}>
         <LiveViewerBanner />
+        {!editor.catchUp && <WhatsNew />}
         <CatchUpBanner />
         <TimerBadge />
       </div>

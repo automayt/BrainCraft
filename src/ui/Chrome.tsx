@@ -221,6 +221,7 @@ export function TopLeft() {
           <Popover onClose={close} className="file-menu">
             <MenuItem label="Your boards…" keys="Ctrl O" onClick={run(ui.openBoards)} />
             <MenuItem label="New board" onClick={run(ui.newBoard)} />
+            <MenuItem label="New wiki" onClick={run(() => void ws.newWiki())} />
             <MenuItem label="Open file…" onClick={run(ui.openFile)} />
             <hr />
             {ws.canWriteFiles ? (
