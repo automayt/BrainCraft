@@ -41,7 +41,7 @@ export type AiConnection =
   | { kind: 'server'; base: string; password?: string }
   | { kind: 'key'; apiKey: string }
   | { kind: 'openai'; base: string; apiKey?: string; password?: string; model: string; textTools: boolean; label: string }
-  | { kind: 'command'; base: string; password?: string; label: string }
+  | { kind: 'command'; base: string; password?: string; agent?: string; label: string }
 
 const serverUrl = (base: string, path: string) => new URL(path, base.endsWith('/') ? base : `${base}/`).href
 
@@ -62,7 +62,7 @@ export function makeBackend(c: AiConnection, model: AiModel = DEFAULT_MODEL): Ba
     const headers: Record<string, string> = c.password ? { 'x-braincraft-ai-password': c.password } : {}
     return new OpenAiBackend({ base: c.base, apiKey: c.apiKey, headers, model: c.model, textTools: c.textTools, label: c.label })
   }
-  if (c.kind === 'command') return new CommandBackend({ base: c.base, password: c.password, label: c.label })
+  if (c.kind === 'command') return new CommandBackend({ base: c.base, password: c.password, agent: c.agent, label: c.label })
   return new AnthropicBackend(makeClient(c), model, AI_MODELS.find((m) => m.id === model)?.label ?? model)
 }
 

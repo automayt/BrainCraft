@@ -12,6 +12,8 @@ export interface AiSettings {
   mode: 'server' | 'key' | 'openai'
   /** Which of the server's providers to use (mode "server"), when it offers more than one. */
   provider?: ServerProvider
+  /** Which of the server's command-line agents (provider "command"): "claude", "codex" or "custom". */
+  agent?: string
   /** The person's own Anthropic API key (mode "key"). Stored only in this browser. */
   apiKey?: string
   /** The BrainCraft server's AI password, when it has one (mode "server"). */
@@ -38,6 +40,7 @@ export function loadSettings(): AiSettings {
     return {
       mode: raw?.mode === 'key' || raw?.mode === 'openai' ? raw.mode : 'server',
       ...(PROVIDERS.includes(raw?.provider as ServerProvider) ? { provider: raw!.provider } : {}),
+      ...(typeof raw?.agent === 'string' ? { agent: raw.agent } : {}),
       apiKey: str(raw?.apiKey),
       password: str(raw?.password),
       model,
@@ -73,16 +76,20 @@ export interface ServerAi {
   textTools: boolean
   /** The command-line agent it runs (its program name, e.g. "claude" or "codex"). */
   command?: string
+  /** Its command-line agents: Claude Code, Codex, or its own command. */
+  agents: { id: string; label: string }[]
+  /** Its agents answer only the server's own computer (no AI password or accounts yet). */
+  agentsLocal: boolean
 }
 
-const NO_AI: ServerAi = { available: false, password: false, providers: [], openaiModels: [], textTools: false }
+const NO_AI: ServerAi = { available: false, password: false, providers: [], openaiModels: [], textTools: false, agents: [], agentsLocal: false }
 
 /** What AI the BrainCraft server offers (it says so in /api/health). */
 export async function serverAi(server: string | null): Promise<ServerAi> {
   if (!server) return NO_AI
   try {
     const res = await fetch(new URL('api/health', server))
-    const h = (await res.json()) as { ai?: boolean; aiPassword?: boolean; aiProviders?: unknown; aiModels?: unknown; aiTextTools?: unknown; aiCommand?: unknown }
+    const h = (await res.json()) as { ai?: boolean; aiPassword?: boolean; aiProviders?: unknown; aiModels?: unknown; aiTextTools?: unknown; aiCommand?: unknown; aiAgents?: unknown; aiAgentsLocal?: unknown }
     // Older servers only said whether they had Claude.
     const providers = Array.isArray(h.aiProviders) ? (h.aiProviders.filter((p) => PROVIDERS.includes(p as ServerProvider)) as ServerProvider[]) : h.ai ? (['anthropic'] as ServerProvider[]) : []
     return {
@@ -92,6 +99,13 @@ export async function serverAi(server: string | null): Promise<ServerAi> {
       openaiModels: Array.isArray(h.aiModels) ? h.aiModels.filter((m): m is string => typeof m === 'string') : [],
       textTools: h.aiTextTools === true,
       ...(typeof h.aiCommand === 'string' && h.aiCommand ? { command: h.aiCommand } : {}),
+      agents: Array.isArray(h.aiAgents)
+        ? h.aiAgents.flatMap((a) => (a && typeof a.id === 'string' && typeof a.label === 'string' ? [{ id: a.id, label: a.label }] : []))
+        : // Older servers had one agent command.
+          typeof h.aiCommand === 'string' && h.aiCommand
+          ? [{ id: '', label: h.aiCommand }]
+          : [],
+      agentsLocal: h.aiAgentsLocal === true,
     }
   } catch {
     return NO_AI
@@ -117,7 +131,10 @@ export function connectionFor(s: AiSettings, server: string | null, ai: ServerAi
     const model = (s.serverModel && ai.openaiModels.includes(s.serverModel) ? s.serverModel : ai.openaiModels[0]) ?? ''
     return { kind: 'openai', base: new URL('api/ai/openai', server.endsWith('/') ? server : `${server}/`).href, ...password, model, textTools: ai.textTools, label: `${model || 'The model'} on this server` }
   }
-  if (provider === 'command') return { kind: 'command', base: server, ...password, label: `${ai.command ?? 'The agent'} on this server` }
+  if (provider === 'command') {
+    const agent = ai.agents.find((a) => a.id === s.agent) ?? ai.agents[0]
+    return { kind: 'command', base: server, ...password, ...(agent?.id ? { agent: agent.id } : {}), label: `${agent?.label ?? ai.command ?? 'The agent'} on this server` }
+  }
   return { kind: 'server', base: server, ...password }
 }
 

@@ -26,7 +26,8 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
-import { CommandRunner, OpenAiProxy } from './aiProviders'
+import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
+import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
 import { readBoard, sendRead } from './boardReads'
 import { docsPage, openApiSpec } from './openapi'
@@ -314,10 +315,18 @@ const openAiProxy = OPENAI_BASE
 /** The model needs the tools described in the text (served without tool calling). */
 const AI_TEXT_TOOLS = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_AI_TEXT_TOOLS ?? '')
 const AI_COMMAND = process.env.BRAINCRAFT_AI_COMMAND?.trim() || ''
-const commandRunner = AI_COMMAND
-  ? new CommandRunner({ command: AI_COMMAND, gate: aiGate, timeoutMs: (Number(process.env.BRAINCRAFT_AI_TIMEOUT) || 300) * 1000 })
-  : null
-const aiProviders = [...(aiProxy ? ['anthropic'] : []), ...(openAiProxy ? ['openai'] : []), ...(commandRunner ? ['command'] : [])]
+const AI_TIMEOUT_MS = (Number(process.env.BRAINCRAFT_AI_TIMEOUT) || 300) * 1000
+/**
+ * Command-line agents, by id: the owner's BRAINCRAFT_AI_COMMAND ("custom"), and Claude Code and Codex
+ * when they're installed here (see aiAgents.ts; BRAINCRAFT_AI_AGENTS=off turns that off).
+ */
+const agents = new Map<string, { label: string; program: string; runner: CommandRunner }>()
+if (AI_COMMAND)
+  agents.set('custom', { label: `${programOf(AI_COMMAND)} (this server's agent command)`, program: programOf(AI_COMMAND), runner: new CommandRunner({ command: AI_COMMAND, gate: aiGate, timeoutMs: AI_TIMEOUT_MS }) })
+for (const a of agentsFromEnv(process.env))
+  if (!AI_COMMAND || programOf(AI_COMMAND) !== a.program) agents.set(a.id, { label: a.label, program: a.program, runner: new CommandRunner({ command: a.command, gate: aiGate, timeoutMs: AI_TIMEOUT_MS }) })
+const commandRunner = agents.size ? [...agents.values()][0].runner : null
+const aiProviders = [...(aiProxy ? ['anthropic'] : []), ...(openAiProxy ? ['openai'] : []), ...(agents.size ? ['command'] : [])]
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
@@ -330,7 +339,14 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       aiPassword: !!AI_PASSWORD,
       aiProviders,
       ...(openAiProxy ? { aiModels: await openAiProxy.models(), aiTextTools: AI_TEXT_TOOLS } : {}),
-      ...(commandRunner ? { aiCommand: commandRunner.program } : {}),
+      ...(agents.size
+        ? {
+            aiCommand: [...agents.values()][0].program,
+            aiAgents: [...agents].map(([id, a]) => ({ id, label: a.label })),
+            // Agents answer only this machine until there's a password or accounts.
+            aiAgentsLocal: !aiGate.guarded,
+          }
+        : {}),
       previews: true,
       accounts: !!accounts,
     })
@@ -391,8 +407,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       return openAiProxy.handle(req, res, await body())
     }
     if (url.pathname === '/api/ai/command') {
-      if (!commandRunner) return send(res, 404, { error: 'No agent command is set up on this server (BRAINCRAFT_AI_COMMAND)' })
-      return commandRunner.handle(req, res, await body())
+      if (!agents.size) return send(res, 404, { error: 'No command-line agent here: install Claude Code or Codex on the server, or set BRAINCRAFT_AI_COMMAND' })
+      const id = url.searchParams.get('agent')
+      const agent = id ? agents.get(id) : [...agents.values()][0]
+      if (!agent) return send(res, 404, { error: `No agent "${id}" here. This server has: ${[...agents.keys()].join(', ')}` })
+      return agent.runner.handle(req, res, await body())
     }
     return send(res, 404, { error: 'Not found' })
   }
@@ -559,8 +578,8 @@ server.listen(PORT, HOST, () => {
   )
   log(
     aiProviders.length
-      ? `AI assistant on: ${[aiProxy && 'Claude', openAiProxy && `model server at ${OPENAI_BASE}`, commandRunner && `"${AI_COMMAND}"${AI_PASSWORD ? '' : ' (this machine only, until BRAINCRAFT_AI_PASSWORD is set)'}`].filter(Boolean).join(', ')}${AI_PASSWORD ? ' (password required)' : ''}`
-      : 'AI assistant off (set ANTHROPIC_API_KEY, OPENAI_BASE_URL or BRAINCRAFT_AI_COMMAND to turn it on)',
+      ? `AI assistant on: ${[aiProxy && 'Claude', openAiProxy && `model server at ${OPENAI_BASE}`, agents.size && `${[...agents.values()].map((a) => a.label).join(' and ')}${aiGate.guarded ? '' : ' (this machine only, until BRAINCRAFT_AI_PASSWORD is set)'}`].filter(Boolean).join(', ')}${AI_PASSWORD ? ' (password required)' : ''}`
+      : 'AI assistant off (install Claude Code or Codex here, or set ANTHROPIC_API_KEY, OPENAI_BASE_URL or BRAINCRAFT_AI_COMMAND)',
   )
 })
 

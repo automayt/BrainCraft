@@ -446,10 +446,11 @@ shares live exactly like a board.
   notes beside it — previewed first, like every AI change.
 - **Pick where the model runs:** Claude (the BrainCraft server's key, or your
   own, which stays in your browser; Opus 5.5 by default, Sonnet 5.5 and Haiku
-  5.5 too), your own OpenAI-compatible model server such as vLLM, or a
-  command-line agent the BrainCraft server runs, `claude -p` or `codex exec`,
-  with whatever it's signed in to and configured with. See
-  [docs/AI.md](docs/AI.md).
+  5.5 too), your own OpenAI-compatible model server such as vLLM, or
+  **Claude Code (`claude -p`)** or **Codex (`codex exec`)** run by the
+  BrainCraft server, with whatever they're signed in to and configured with.
+  When `claude` or `codex` is installed where the server runs, it's in the
+  list with nothing to set up. See [docs/AI.md](docs/AI.md).
 
 ### Accounts, groups and single sign-on (for a team)
 

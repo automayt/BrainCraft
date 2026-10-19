@@ -142,16 +142,22 @@ describe('a command-line agent on the server', () => {
     expect(shown).toBe('Checking.')
     expect(r.stop).toBe('tool_use')
     expect(commandPrompt({ system: 'S', messages: [{ role: 'user', content: 'Hi' }], tools }).trimEnd().endsWith('## You (the assistant)')).toBe(true)
+    // A particular agent goes in the address.
+    await new CommandBackend({ base: 'http://srv:8080/', agent: 'claude', label: 'x', fetch: f }).turn({ system: 'S', messages: [{ role: 'user', content: 'Hi' }], tools }, () => {})
+    expect(sent[1].url).toBe('http://srv:8080/api/ai/command?agent=claude')
   })
 })
 
 describe('choosing where the assistant runs', () => {
-  const ai = { available: true, password: false, providers: ['anthropic', 'openai', 'command'] as ('anthropic' | 'openai' | 'command')[], openaiModels: ['qwen3', 'llama'], textTools: true, command: 'claude' }
+  const ai = { available: true, password: false, providers: ['anthropic', 'openai', 'command'] as ('anthropic' | 'openai' | 'command')[], openaiModels: ['qwen3', 'llama'], textTools: true, command: 'claude', agents: [{ id: 'claude', label: 'Claude Code (claude -p)' }, { id: 'codex', label: 'Codex (codex exec)' }], agentsLocal: true }
   const base = { model: 'claude-opus-5-5' as const }
   it('picks the server’s provider and model, or your own model server', () => {
     expect(connectionFor({ ...base, mode: 'server' }, 'http://s/', ai)).toEqual({ kind: 'server', base: 'http://s/' })
     expect(connectionFor({ ...base, mode: 'server', provider: 'openai', serverModel: 'llama' }, 'http://s/', ai)).toMatchObject({ kind: 'openai', base: 'http://s/api/ai/openai', model: 'llama', textTools: true })
-    expect(connectionFor({ ...base, mode: 'server', provider: 'command' }, 'http://s/', ai)).toMatchObject({ kind: 'command', base: 'http://s/', label: 'claude on this server' })
+    expect(connectionFor({ ...base, mode: 'server', provider: 'command' }, 'http://s/', ai)).toMatchObject({ kind: 'command', base: 'http://s/', agent: 'claude', label: 'Claude Code (claude -p) on this server' })
+    expect(connectionFor({ ...base, mode: 'server', provider: 'command', agent: 'codex' }, 'http://s/', ai)).toMatchObject({ agent: 'codex', label: 'Codex (codex exec) on this server' })
+    // An agent the server no longer has: its first one.
+    expect(connectionFor({ ...base, mode: 'server', provider: 'command', agent: 'gone' }, 'http://s/', ai)).toMatchObject({ agent: 'claude' })
     expect(connectionFor({ ...base, mode: 'openai', openaiBase: 'http://localhost:8000/v1', openaiModel: 'qwen3' }, null, ai)).toMatchObject({ kind: 'openai', base: 'http://localhost:8000/v1', model: 'qwen3', textTools: false })
     expect(connectionFor({ ...base, mode: 'openai', openaiBase: 'http://localhost:8000/v1' }, null, ai)).toBeNull()
     expect(connectionFor({ ...base, mode: 'server' }, 'http://s/', { ...ai, password: true })).toBeNull()

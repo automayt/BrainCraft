@@ -36,7 +36,8 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant (Claude) for everyone using this server, paid from this key. See [AI.md](AI.md). |
 | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` | — | Turns on the assistant with an OpenAI-compatible server such as vLLM. See [AI.md](AI.md). |
 | `BRAINCRAFT_AI_TEXT_TOOLS` | off | `1` when that model is served without tool calling. |
-| `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | Turns on the assistant with a command-line agent such as `claude -p` or `codex exec`, run per step (timeout in seconds, default 300). Only this machine may use it unless a password is set. See [AI.md](AI.md). |
+| `BRAINCRAFT_AI_AGENTS` | found | Claude Code (`claude -p`) and Codex (`codex exec`) are offered to the assistant when installed on this computer; `claude`, `codex` or `off` to choose. Only this machine may use them unless a password is set or accounts are on. See [AI.md](AI.md). |
+| `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | A command-line agent of your own, run per step (timeout in seconds, default 300); same rule about other machines. |
 | `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
 | `BRAINCRAFT_ACCOUNTS` | off | `1`: people sign in, groups carry permissions, boards have owners and access lists, and share links stop working. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_ADMINS` | — | Emails that are always admins (with accounts on). |
@@ -117,7 +118,7 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
 | `POST /api/ai/openai/chat/completions` | AI password, if set | The assistant's proxy to an OpenAI-compatible server (only with `OPENAI_BASE_URL`). |
-| `POST /api/ai/command` | AI password, or this machine | Runs the agent command once with `{"prompt"}` on its input; answers `{"text"}` (only with `BRAINCRAFT_AI_COMMAND`). |
+| `POST /api/ai/command?agent=` | AI password, or this machine | Runs one of the server's agents once (`claude`, `codex` or `custom`, as `/api/health` lists in `aiAgents`) with `{"prompt"}` on its input; answers `{"text"}`. |
 
 Example: post a status update onto a team board from a CI job.
 

@@ -94,8 +94,13 @@ ANTHROPIC_API_KEY=sk-ant-... node dist/braincraft-server.mjs
 # a vLLM (or other OpenAI-compatible) server
 OPENAI_BASE_URL=http://localhost:8000/v1 node dist/braincraft-server.mjs
 
-# Claude Code, with whatever account it's signed in to (its own tools turned off)
-BRAINCRAFT_AI_COMMAND='claude -p --tools "" --no-session-persistence' node dist/braincraft-server.mjs
+# Claude Code: nothing to set. If `claude` is installed where the server runs, the
+# assistant offers "Claude Code (claude -p)", with whatever account it's signed in to
+# (Codex too, if `codex` is installed). BRAINCRAFT_AI_AGENTS=off turns that off.
+node dist/braincraft-server.mjs
+
+# Claude Code with your own options, say another model
+BRAINCRAFT_AI_COMMAND='claude -p --tools "" --no-session-persistence --model sonnet' node dist/braincraft-server.mjs
 
 # Codex, with whatever model and account it's configured with (prompt read from standard input)
 BRAINCRAFT_AI_COMMAND='codex exec --skip-git-repo-check --sandbox read-only -' node dist/braincraft-server.mjs
@@ -109,13 +114,21 @@ BRAINCRAFT_AI_COMMAND='codex exec --skip-git-repo-check --sandbox read-only -' n
 | `OPENAI_API_KEY` | Optional. The key that server needs. |
 | `OPENAI_MODEL` | Optional. The model(s) to offer, comma-separated; without it, whatever the server lists at `/models`. |
 | `BRAINCRAFT_AI_TEXT_TOOLS` | Optional. `1` when that model is served without tool calling (see above). |
-| `BRAINCRAFT_AI_COMMAND` | A command-line agent to run for each step, such as `claude -p` or `codex exec`. |
+| `BRAINCRAFT_AI_AGENTS` | Optional. Which installed agents to offer: unset finds Claude Code (`claude`) and Codex (`codex`) on the server's PATH; `claude`, `codex` or `claude,codex` only those; `off` none. |
+| `BRAINCRAFT_AI_COMMAND` | A command-line agent of your own to run for each step, with your own options. |
 | `BRAINCRAFT_AI_TIMEOUT` | Optional. How long one agent step may take, in seconds (default 300). |
 | `BRAINCRAFT_AI_PASSWORD` | Optional. People must enter this password before using any of them. |
 
 ### A command-line agent
 
-With `BRAINCRAFT_AI_COMMAND`, the server runs that command for each step of
+**Claude Code and Codex are found by themselves:** when `claude` or `codex`
+is on the PATH of the computer the server runs on, the assistant's model list
+offers **Claude Code (claude -p)** and **Codex (codex exec)**, run as
+`claude -p --tools "" --no-session-persistence` and
+`codex exec --skip-git-repo-check --sandbox read-only -`. With
+`BRAINCRAFT_AI_COMMAND`, the server also offers a command of your own.
+
+The server runs the chosen command for each step of
 the conversation: the whole conversation goes to its standard input as text
 (with the tools described in it), and whatever it prints is the answer. That
 means:

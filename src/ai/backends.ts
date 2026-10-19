@@ -381,6 +381,8 @@ export interface CommandOptions {
   /** The BrainCraft server. */
   base: string
   password?: string
+  /** Which of its agents ("claude", "codex", "custom"); the first when left out. */
+  agent?: string
   label: string
   fetch?: typeof fetch
 }
@@ -397,7 +399,9 @@ export class CommandBackend implements Backend {
     const f = this.o.fetch ?? globalThis.fetch.bind(globalThis)
     let res: Response
     try {
-      res = await f(new URL('api/ai/command', this.o.base.endsWith('/') ? this.o.base : `${this.o.base}/`).href, {
+      const url = new URL('api/ai/command', this.o.base.endsWith('/') ? this.o.base : `${this.o.base}/`)
+      if (this.o.agent) url.searchParams.set('agent', this.o.agent)
+      res = await f(url.href, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(this.o.password ? { 'x-braincraft-ai-password': this.o.password } : {}) },
         body: JSON.stringify({ prompt: commandPrompt(req) }),

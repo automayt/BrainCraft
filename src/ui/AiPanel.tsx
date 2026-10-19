@@ -118,7 +118,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
-  const [server, setServer] = useState<ServerAi>({ available: false, password: false, providers: [], openaiModels: [], textTools: false })
+  const [server, setServer] = useState<ServerAi>({ available: false, password: false, providers: [], openaiModels: [], textTools: false, agents: [], agentsLocal: false })
   /** Models found on your own model server, or why none were. */
   const [found, setFound] = useState<string[] | string | null>(null)
   const [checked, setChecked] = useState(false)
@@ -178,12 +178,15 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   const serverChoices: { value: string; label: string }[] = [
     ...(server.providers.includes('anthropic') ? AI_MODELS.map((m) => ({ value: `anthropic:${m.id}`, label: `${m.label} — ${m.hint}` })) : []),
     ...(server.providers.includes('openai') ? (server.openaiModels.length ? server.openaiModels : ['']).map((m) => ({ value: `openai:${m}`, label: `${m || 'The model server'} — on this server’s model server` })) : []),
-    ...(server.providers.includes('command') ? [{ value: 'command:', label: `${server.command ?? 'The agent'} — run by this server (slower; each step starts it afresh)` }] : []),
+    ...(server.providers.includes('command')
+      ? server.agents.map((a) => ({ value: `command:${a.id}`, label: `${a.label} — signed in on the server's computer (slower: each step starts it afresh)` }))
+      : []),
   ]
-  const serverChoice = provider === 'anthropic' ? `anthropic:${settings.model}` : provider === 'openai' ? `openai:${settings.serverModel && server.openaiModels.includes(settings.serverModel) ? settings.serverModel : (server.openaiModels[0] ?? '')}` : 'command:'
+  const agent = server.agents.find((a) => a.id === settings.agent) ?? server.agents[0]
+  const serverChoice = provider === 'anthropic' ? `anthropic:${settings.model}` : provider === 'openai' ? `openai:${settings.serverModel && server.openaiModels.includes(settings.serverModel) ? settings.serverModel : (server.openaiModels[0] ?? '')}` : `command:${agent?.id ?? ''}`
   const pickServer = (value: string) => {
     const [p, rest] = [value.slice(0, value.indexOf(':')) as ServerProvider, value.slice(value.indexOf(':') + 1)]
-    update({ ...settings, mode: 'server', provider: p, ...(p === 'anthropic' ? { model: rest as AiModel } : p === 'openai' ? { serverModel: rest } : {}) })
+    update({ ...settings, mode: 'server', provider: p, ...(p === 'anthropic' ? { model: rest as AiModel } : p === 'openai' ? { serverModel: rest } : { agent: rest }) })
   }
 
   const send = async (text: string, images: AiImage[] = [], label?: string) => {
@@ -284,7 +287,11 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               <input type="radio" checked={settings.mode === 'server'} onChange={() => update({ ...settings, mode: 'server' })} />
               <span>
                 <strong>Use this BrainCraft server</strong>
-                <small>Its owner set up the AI; nothing to set up here.</small>
+                <small>
+                  {server.agents.length && server.providers.length === 1
+                    ? `${server.agents.map((a) => a.label).join(' or ')}, on the server's computer, with whoever is signed in there. Nothing to set up here.`
+                    : 'Its owner set up the AI; nothing to set up here.'}
+                </small>
               </span>
             </label>
           )}
@@ -295,7 +302,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               )}
               <label className="ai-model">
                 Model
-                <select value={serverChoice} onChange={(e) => pickServer(e.target.value)}>
+                <select aria-label="Model" value={serverChoice} onChange={(e) => pickServer(e.target.value)}>
                   {serverChoices.map((c) => (
                     <option key={c.value} value={c.value}>
                       {c.label}

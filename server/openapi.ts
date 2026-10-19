@@ -264,7 +264,7 @@ export function openApiSpec(o: SpecOptions) {
   if (o.ai.openai)
     add('/api/ai/openai/chat/completions', 'post', { tags: ['AI'], summary: 'Chat completions from this server’s OpenAI-compatible model server', operationId: 'aiChat', security: aiAuth, requestBody: { required: true, ...json({ type: 'object' }) }, responses: { '200': ok('The model’s answer') } })
   if (o.ai.command)
-    add('/api/ai/command', 'post', { tags: ['AI'], summary: 'Run this server’s agent command once', operationId: 'aiCommand', security: aiAuth, requestBody: { required: true, ...json({ type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] }) }, responses: { '200': ok('Its answer', { type: 'object', properties: { text: { type: 'string' } } }) } })
+    add('/api/ai/command', 'post', { tags: ['AI'], summary: 'Run one of this server’s command-line agents once (Claude Code, Codex, or its own command)', operationId: 'aiCommand', security: aiAuth, parameters: [query('agent', 'Which agent: an id from /api/health’s aiAgents (default: the first)')], requestBody: { required: true, ...json({ type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] }) }, responses: { '200': ok('Its answer', { type: 'object', properties: { text: { type: 'string' } } }) } })
 
   return {
     openapi: '3.1.0',
