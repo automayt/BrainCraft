@@ -92,7 +92,7 @@ export function makeSnap(source: Board, board: string, item: Id | undefined, at:
 }
 
 /** Fields a snapshot leaves out: talk about an object rather than the object. */
-const SNAP_DROP = ['notes', 'description', 'reactions', 'votes', 'runs', 'by'] as const
+const SNAP_DROP = ['notes', 'description', 'reactions', 'votes', 'runs', 'by', 'excalidraw'] as const
 
 /** A snapshot as a board to draw. */
 export const snapBoard = (s: Snap, title = ''): Board => ({ version: 1, title, items: s.items, connectors: s.connectors, nextId: 1, ...(s.datasets ? { datasets: s.datasets } : {}) })

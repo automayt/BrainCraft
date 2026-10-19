@@ -9571,3 +9571,50 @@ button.on,
 .start-new .template .thumb {
   aspect-ratio: 16 / 8;
 }
+
+/* ----- an Excalidraw drawing open for editing ----- */
+
+.drawing-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+}
+
+.drawing-editor.loading {
+  background: var(--backdrop);
+}
+
+.drawing-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 12px 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.drawing-editor-hint {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.drawing-editor-error {
+  color: var(--danger);
+}
+
+.drawing-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.drawing-editor-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}

@@ -5,6 +5,8 @@
  */
 
 import * as B from '../model/board'
+import { isDrawing, sceneText } from '../model/excalidraw'
+import type { ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
@@ -329,6 +331,11 @@ export class Editor {
   sendSignal: ((s: Signal) => boolean) | null = null
   /** Where the emote picker is open (screen position), if it is. */
   emotePicker: Vec | null = null
+  /**
+   * The Excalidraw drawing open for editing: an existing one (`id`), or a new one to put at `at`
+   * (or a scene brought in from a file or the clipboard, `scene`).
+   */
+  drawing: { id: Id | null; at: Vec; scene?: ExcalidrawScene } | null = null
   /** Typing a line of cursor chat. */
   chatting = false
   myColor = '#7048e8'
@@ -1774,6 +1781,48 @@ export class Editor {
     this.select([id])
   }
 
+  /** Opens a drawing in Excalidraw: the one with `id`, or a new one (in the middle of the view). */
+  openDrawing(id?: Id, scene?: ExcalidrawScene, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    const item = id === undefined ? undefined : B.getItem(this.board, id)
+    if (id !== undefined && !isDrawing(item)) return
+    if (id === undefined && this.readOnly) return
+    this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}) }
+    this.emit()
+  }
+
+  closeDrawing() {
+    this.drawing = null
+    this.emit()
+  }
+
+  /**
+   * Keeps a drawing: its scene and its picture (`src`, `w`×`h`, as drawn). An existing drawing keeps
+   * its width on the board and its middle; a new one is placed where it was opened. One undo step.
+   */
+  saveDrawing(id: Id | null, scene: ExcalidrawScene, picture: { src: string; w: number; h: number }, at?: Vec): Id | null {
+    if (this.readOnly) return null
+    const text = sceneText(scene)
+    const old = id === null ? undefined : B.getItem(this.board, id)
+    if (id !== null && !isDrawing(old)) return null
+    const ratio = picture.h / Math.max(1, picture.w)
+    let made: Id | null = id
+    this.edit((b) => {
+      if (old) {
+        const w = old.w
+        const h = Math.max(8, w * ratio)
+        return B.updateItem(b, old.id, (i) => ({ ...i, src: picture.src, excalidraw: scene, text, y: i.y + (i.h - h) / 2, h }))
+      }
+      const scale = Math.min(1, 640 / Math.max(picture.w, picture.h))
+      const w = Math.max(40, picture.w * scale)
+      const [next, newId] = B.addItem(b, B.newItem('image', rectFromCenter(at ?? this.drawing?.at ?? center(this.visibleWorld), w, w * ratio), { src: picture.src, text }))
+      made = newId
+      return B.updateItem(next, newId, (i) => ({ ...i, excalidraw: scene }))
+    })
+    this.tool = 'select'
+    if (made !== null) this.select([made])
+    return made
+  }
+
   /** Adds a card for web address `url` at the pointer; its preview fills in once the server reads the page. */
   addLink(url: string, at: Vec = this.pointer ?? center(this.visibleWorld)) {
     let id = -1
@@ -2751,6 +2800,8 @@ export class Editor {
       // Widgets handle clicks in their body; their title strip renames them.
       if (toWorld(this.camera, screen).y - target.y <= WIDGET_TITLE_H) this.startEditing(target.id)
       else this.select([target.id])
+    } else if (hit?.type === 'item' && isDrawing(target)) {
+      this.openDrawing(hit.id)
     } else if (hit?.type === 'item') {
       this.startEditing(hit.id)
     } else if (hit?.type === 'connector') {

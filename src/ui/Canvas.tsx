@@ -1,4 +1,6 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
+import { sceneFromText } from '../model/excalidraw'
+import { addDrawing } from './excalidraw/addDrawing'
 import { newWheelMemo, wheelHow } from './wheelHow'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
@@ -222,10 +224,21 @@ export function Canvas() {
         if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
       }}
       onDrop={async (e) => {
+        const at = toWorld(editor.camera, local(e))
+        // Excalidraw files become drawings on the board.
+        const drawings = Array.from(e.dataTransfer.files).filter((f) => /\.excalidraw$/i.test(f.name))
+        if (drawings.length) {
+          e.preventDefault()
+          for (const [k, f] of drawings.entries()) {
+            const scene = sceneFromText(await f.text())
+            if (scene) await addDrawing(editor, scene, { x: at.x + k * 40, y: at.y + k * 40 })
+            else editor.setStatus(`${f.name} isn’t an Excalidraw drawing`)
+          }
+          return
+        }
         const files = imageFiles(e.dataTransfer.files)
         if (!files.length) return
         e.preventDefault()
-        const at = toWorld(editor.camera, local(e))
         for (const [k, file] of files.entries()) {
           try {
             const img = await readImage(file)

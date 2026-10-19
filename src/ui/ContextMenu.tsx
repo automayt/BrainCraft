@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { hasSketch, sketchToBoard } from './sketch'
 import { VIEW_TYPES } from '../model/dataset'
 import { copyImage } from './ExportImage'
+import { download } from './imageExport'
+import { excalidrawFile, isDrawing, sceneText } from '../model/excalidraw'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
@@ -76,6 +78,14 @@ export function ContextMenu() {
     if (single && single.kind !== 'pen' && single.kind !== 'image' && single.kind !== 'link')
       entries.push({ label: single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline' ? 'Rename' : 'Edit text', keys: 'Enter', run: () => editor.startEditing(single.id) })
     if (single) entries.push({ label: `Comments${single.notes?.length ? ` (${single.notes.length})` : ''}`, keys: 'Alt C', run: () => editor.toggleNotes(true) })
+    if (isDrawing(single)) {
+      const scene = single.excalidraw
+      entries.push(
+        'sep',
+        { label: editor.readOnly ? 'Open in Excalidraw' : 'Edit in Excalidraw', keys: 'Double-click', run: () => editor.openDrawing(single.id) },
+        { label: 'Download as .excalidraw', run: () => download(new Blob([excalidrawFile(scene)], { type: 'application/json' }), `${(sceneText(scene).split('\n')[0] || editor.board.title || 'drawing').slice(0, 60)}.excalidraw`) },
+      )
+    }
     if (single?.kind === 'mind') {
       entries.push('sep', { label: 'Add sub-idea', keys: 'Tab', run: () => editor.addMindNode(single.id, 'child') })
       if (single.parent !== undefined) entries.push({ label: 'Add idea below', keys: 'Enter', run: () => editor.addMindNode(single.id, 'sibling') })
@@ -163,6 +173,7 @@ export function ContextMenu() {
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
       { label: 'Code block', run: () => editor.addCode('', undefined, editor.pointer ?? undefined) },
+      { label: 'Excalidraw drawing', run: () => editor.openDrawing(undefined, undefined, editor.pointer ?? undefined) },
       { label: 'Private brainstorm', run: () => editor.startBrainstorm() },
       { label: 'Spinner wheel', run: () => editor.addWheel() },
       'sep',

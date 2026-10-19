@@ -135,6 +135,16 @@ Ideas from the wiki review, roughly by value for a small group against effort:
   filters, a download, and a hash chain that shows hand edits.
 - [ ] Email for set-your-password links, when a mail server is set up.
 
+## Excalidraw on the canvas (October 2026)
+
+- [x] **Excalidraw drawings** as objects on the board: drawn in Excalidraw full
+  screen, kept as a picture plus its scene, reopened with a double-click,
+  pasted from Excalidraw or dropped as `.excalidraw` files, downloaded back.
+- [ ] An operation (and MCP tool) to make a drawing from Excalidraw elements,
+  drawn by the app when the board next opens.
+- [ ] Two people in one drawing at once (today the later Done wins).
+- [ ] The hand-drawn look as a style for BrainCraft's own shapes and lines.
+
 ## Guide and API docs (October 2026)
 
 - [x] **A built-in guide**: a wiki explaining the app, with a tour board built

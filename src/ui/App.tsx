@@ -1,4 +1,6 @@
-import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { sceneFromText } from '../model/excalidraw'
+import { addDrawing } from './excalidraw/addDrawing'
 import { AccessDialog } from './accounts/AccessDialog'
 import { AdminDialog } from './accounts/AdminDialog'
 import { SignIn, resetTokenOf } from './accounts/SignIn'
@@ -40,6 +42,8 @@ function isTyping(target: EventTarget | null) {
 }
 
 const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
+/** Excalidraw, loaded only when a drawing is opened. */
+const DrawingEditor = lazy(() => import('./excalidraw/DrawingEditor'))
 
 type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | null
 
@@ -65,7 +69,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -194,6 +198,8 @@ function App({ ws }: { ws: Workspace }) {
     requestAnimationFrame(() => editor.zoomToFit())
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // An open drawing has the keyboard to itself.
+      if (editor.drawing) return
       // While presenting, keys drive the slides and nothing else.
       if (editor.presenting) {
         // ...except Enter and Space on a focused control (Notes, Laser…), which press it.
@@ -298,7 +304,7 @@ function App({ ws }: { ws: Workspace }) {
       }
     }
     const onCopy = (e: ClipboardEvent) => {
-      if (isTyping(e.target) || isWiki(editor.board)) return
+      if (isTyping(e.target) || isWiki(editor.board) || editor.drawing) return
       const text = editor.copyText()
       if (!text) return
       e.clipboardData?.setData('text/plain', text)
@@ -306,7 +312,7 @@ function App({ ws }: { ws: Workspace }) {
       if (e.type === 'cut') editor.deleteSelection()
     }
     const onPaste = (e: ClipboardEvent) => {
-      if (isTyping(e.target) || isWiki(editor.board)) return
+      if (isTyping(e.target) || isWiki(editor.board) || editor.drawing) return
       // Images first: copying from a browser or screenshot tool puts the picture on the clipboard.
       const images = imageFiles(e.clipboardData?.files)
       if (images.length) {
@@ -324,7 +330,10 @@ function App({ ws }: { ws: Workspace }) {
         e.preventDefault()
         // A link to a wiki page becomes a card for that page.
         const to = targetFromUrl(text)
-        if (to?.page !== undefined) void ws.addPageCard(to, text.trim())
+        // Copied from Excalidraw (or an .excalidraw file's text): a drawing.
+        const scene = sceneFromText(text)
+        if (scene) void addDrawing(editor, scene)
+        else if (to?.page !== undefined) void ws.addPageCard(to, text.trim())
         else editor.pasteText(text)
       }
     }
@@ -394,6 +403,11 @@ function App({ ws }: { ws: Workspace }) {
             </>
           )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
+          {editor.drawing && (
+            <Suspense fallback={<div className="drawing-editor loading no-canvas" aria-busy="true" aria-label="Opening Excalidraw" />}>
+              <DrawingEditor key={`${editor.drawing.id}`} />
+            </Suspense>
+          )}
           {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}

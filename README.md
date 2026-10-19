@@ -95,6 +95,22 @@ The board fills the window and the controls float above it:
 A hint bar at the bottom of the canvas shows the shortcuts that apply to
 whatever you have selected.
 
+### Excalidraw drawings
+
+- **Draw in Excalidraw, right on the board:** right-click empty space →
+  **Excalidraw drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens full
+  screen with all its tools and its hand-drawn look; **Put on the board**
+  places the drawing as a sheet of paper among your notes and maps.
+- **Double-click a drawing** (or **Edit drawing** on its toolbar) to open it in
+  Excalidraw again; it keeps its size and place, and the change is one undo
+  step. In a live session everyone sees the new version.
+- **Paste from Excalidraw** (copy shapes there, paste here) or **drop an
+  `.excalidraw` file** on the board to bring a drawing in; right-click a
+  drawing → **Download as .excalidraw** to take it back out.
+- The words in a drawing are searchable, and drawings show in wiki pages like
+  any other object. Excalidraw and its fonts load only when you open a
+  drawing, from the app itself.
+
 ### Tables, Kanban boards and timelines
 
 These become interactive once selected; drag them by their title strip.

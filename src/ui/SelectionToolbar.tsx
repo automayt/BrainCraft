@@ -1,4 +1,5 @@
 import * as B from '../model/board'
+import { isDrawing } from '../model/excalidraw'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
@@ -291,7 +292,12 @@ export function SelectionToolbar() {
         ))}
       {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
       {items.length > 0 && <ReactMenu />}
-      {hasSketch(editor) && (
+      {items.length === 1 && isDrawing(items[0]) && (
+        <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
+          {editor.readOnly ? 'Open drawing' : 'Edit drawing'}
+        </button>
+      )}
+      {hasSketch(editor) && !items.some(isDrawing) && (
         <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
           ✦ To board
         </button>

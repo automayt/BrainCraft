@@ -88,6 +88,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude vllm codex model chat ai summarise cluster', run: ui.toggleAssistant },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
+    { id: 'excalidraw', label: 'Add an Excalidraw drawing', group: 'Create', aliases: 'excalidraw draw drawing sketch hand-drawn diagram whiteboard doodle', run: () => editor.openDrawing() },
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
     { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },

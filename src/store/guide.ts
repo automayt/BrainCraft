@@ -229,7 +229,8 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Status marks** (*to do*, *in progress*, *waiting*, *undecided*, *done*, *dropped*): pick one on the toolbar. The key along the bottom counts them and filters the board. ${link('This note', 'n4')} has one.
 - **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention another object and **[[** to link a board.
 - **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar.
-- **Lock** (**Ctrl+Shift+L**) a background so it can't be moved by accident; **group** (**Ctrl+G**) objects to move them as one.`,
+- **Lock** (**Ctrl+Shift+L**) a background so it can't be moved by accident; **group** (**Ctrl+G**) objects to move them as one.
+- **Excalidraw drawings:** right-click empty space → **Excalidraw drawing** for Excalidraw's hand-drawn sketching, right on the board. Double-click a drawing to change it.`,
         },
         {
           title: 'Mind maps',
@@ -291,6 +292,7 @@ Paste almost anything:
 | A fenced code block | Code with colours, in its language |
 | An image | The picture |
 | Mermaid | A flowchart |
+| Shapes copied in Excalidraw, or an .excalidraw file | An Excalidraw drawing |
 | JSON operations | Whatever they describe (see [[The API]]) |`,
         },
         {

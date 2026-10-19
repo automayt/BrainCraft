@@ -6,6 +6,7 @@ import { toMermaid } from '../model/mermaid'
 import { toOutline } from '../model/mindmap'
 import { linksIn, objectLabel, plainNote } from '../model/notes'
 import { search } from '../model/search'
+import { sceneText } from '../model/excalidraw'
 import { toCsv } from '../model/table'
 import type { Board, Id, Item, Kind, Status } from '../model/types'
 import * as W from '../model/wiki'
@@ -58,7 +59,9 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
     text: i.text,
     ...(i.description ? { description: plainNote(i.description) } : {}),
     comments: (i.notes ?? []).map((n) => ({ text: plainNote(n.text), at: new Date(n.at).toISOString(), ...(n.author ? { author: n.author } : {}) })),
-    data: i.view
+    data: i.excalidraw
+      ? { excalidraw: { elements: i.excalidraw.elements.length, text: sceneText(i.excalidraw) } }
+      : i.view
       ? dataOf(b, i)
       : i.table
       ? { csv: toCsv(i.table) }

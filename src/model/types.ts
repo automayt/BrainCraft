@@ -267,6 +267,19 @@ export type Arrowheads = 'end' | 'both' | 'none'
 
 export type Side = 'left' | 'right'
 
+/** An Excalidraw drawing's scene: its elements, and the pictures they show. */
+export interface ExcalidrawScene {
+  elements: unknown[]
+  files?: Record<string, ExcalidrawFile>
+}
+
+export interface ExcalidrawFile {
+  id: string
+  mimeType: string
+  dataURL: string
+  created: number
+}
+
 export interface Item extends Rect {
   id: Id
   kind: Kind
@@ -292,6 +305,8 @@ export interface Item extends Rect {
   notes?: Note[]
   /** Image data URL of an `image` item. */
   src?: string
+  /** An `image` item drawn in Excalidraw: the scene, so it opens again for editing (`src` is its picture). */
+  excalidraw?: ExcalidrawScene
   /** When a comment block was written. */
   createdAt?: number
   /** Runs of the flowchart this shape starts (runbook mode), oldest first. */
@@ -520,13 +535,14 @@ export function defaultFontSize(k: Kind): number {
 }
 
 /** What an object is called in lists: comment cards that became a vote, brainstorm or wheel, and flip cards, get their own names. */
-export function itemKindLabel(i: Pick<Item, 'kind' | 'poll' | 'brainstorm' | 'wheel' | 'back'>): string {
+export function itemKindLabel(i: Pick<Item, 'kind' | 'poll' | 'brainstorm' | 'wheel' | 'back' | 'excalidraw'>): string {
   if (i.kind === 'comment') {
     if (i.poll) return 'Vote'
     if (i.brainstorm) return 'Private brainstorm'
     if (i.wheel) return 'Spinner wheel'
   }
   if (i.kind === 'sticky' && typeof i.back === 'string') return 'Flip card'
+  if (i.kind === 'image' && i.excalidraw) return 'Excalidraw drawing'
   return KIND_LABELS[i.kind]
 }
 

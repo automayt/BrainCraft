@@ -33,6 +33,7 @@ import type {
 import { defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
+import { cleanExcalidraw } from './excalidraw'
 
 export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code']
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
@@ -255,6 +256,10 @@ export function cleanItem(raw: unknown): Item | null {
   if (notes) out.notes = notes
   const src = str(raw.src, 16 * 1024 * 1024)
   if (src) out.src = src
+  if (kind === 'image' && raw.excalidraw !== undefined) {
+    const scene = cleanExcalidraw(raw.excalidraw)
+    if (scene) out.excalidraw = scene
+  }
   const createdAt = num(raw.createdAt)
   if (createdAt !== undefined) out.createdAt = createdAt
   const runs = cleanRuns(raw.runs)
