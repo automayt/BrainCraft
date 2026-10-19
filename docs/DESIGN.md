@@ -101,10 +101,15 @@ dialog, in dark and light themes, at desktop width.
    hover.
 3. **Help starts with the guide** and five essentials, before every shortcut.
 
-**Phase C — the canvas chrome**
+**Phase C — the canvas chrome (done)**
 
-1. A quieter top bar *(started)*: Present is an ordinary button now, so the
-   yellow is the logo's and the dialogs' alone.
-2. The tool rail in labelled groups (write, draw, structure, data), with the
-   rarely used tools behind one button. *Next: try it with people first;
-   moving tools changes habits.*
+1. A quieter top bar: Present is an ordinary button now, so the yellow is the
+   logo's and the dialogs' alone.
+2. The tool rail in four groups, each named for screen readers: pick and
+   move; write (sticky note, text, comment block); think it through (mind map,
+   flowchart, lines); draw (shapes, pen, frame, Excalidraw). Tables, Kanban
+   boards, timelines, databases, images and code blocks wait behind the last
+   button, each with a line on what it's for; when one of them is the current
+   tool, that button shows it. Every key works as before. The rail went from
+   18 buttons to 14, so it fits shorter windows in one column; on a phone its
+   panels open above it instead of being clipped by it.

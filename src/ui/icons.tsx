@@ -173,6 +173,30 @@ export const SearchIcon = () => (
   </Svg>
 )
 
+/** An Excalidraw drawing: a sheet with a hand-drawn line on it. */
+export const DrawingIcon = () => (
+  <Svg>
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <path d="M7.5 15c1.2-3.2 2.6-4.6 3.8-2.4s2.4 2.6 5.2-2.6" />
+  </Svg>
+)
+
+export const CodeToolIcon = () => (
+  <Svg>
+    <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />
+  </Svg>
+)
+
+/** More tools: tables, plans and data, behind one button. */
+export const MoreToolsIcon = () => (
+  <Svg>
+    <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+    <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+    <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+    <path d="M16.75 13.5v6.5M13.5 16.75H20" />
+  </Svg>
+)
+
 export const ImageIcon = () => (
   <Svg>
     <rect x="3.5" y="5" width="17" height="14" rx="2" />

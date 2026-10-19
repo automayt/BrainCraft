@@ -25,7 +25,11 @@ The board fills the window and the controls float above it:
   who's here), **Ask AI**, **Present**, **Search** (Ctrl+K
   searches the board *and* runs any command by name; type `>` to show only
   commands), **Comments**, the theme and **Help** (?).
-- **Tool rail** (left): hover any tool to see its shortcut.
+- **Tool rail** (left), grouped by what the tools are for: picking and
+  moving, writing, thinking it through (mind maps, flowcharts, lines), and
+  drawing (shapes, the pen, frames, Excalidraw). The last button holds tables,
+  Kanban boards, timelines, databases, images and code blocks. Hover any tool
+  to see its shortcut; every key still works.
 - **Undo, redo and zoom** (bottom left), plus a **minimap** (bottom right).
 - **Right-click** anything for the actions that apply to it.
 

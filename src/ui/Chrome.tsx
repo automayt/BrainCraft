@@ -11,7 +11,9 @@ import { FLOW_SHAPES, type FlowShape, INKS } from '../model/types'
 import {
   BoardsIcon,
   CheckIcon,
+  CodeToolIcon,
   CommentsIcon,
+  DrawingIcon,
   FitIcon,
   FlowShapeIcon,
   HelpIcon,
@@ -19,6 +21,7 @@ import {
   Logo,
   MenuIcon,
   MinusIcon,
+  MoreToolsIcon,
   PlayIcon,
   PlusIcon,
   RedoIcon,
@@ -346,47 +349,139 @@ export function TopRight() {
   )
 }
 
-const GROUPS: Tool[][] = [
-  ['select', 'hand'],
-  ['sticky', 'text', 'rect', 'ellipse', 'comment'],
-  ['mind', 'flow', 'connector', 'pen'],
-  ['table', 'kanban', 'timeline', 'data', 'frame'],
+/** The rail, grouped by what the tools are for. */
+const GROUPS: { label: string; tools: Tool[] }[] = [
+  { label: 'Pick and move', tools: ['select', 'hand'] },
+  { label: 'Write', tools: ['sticky', 'text', 'comment'] },
+  { label: 'Think it through', tools: ['mind', 'flow', 'connector'] },
+  { label: 'Draw', tools: ['rect', 'ellipse', 'pen', 'frame'] },
+]
+
+/** Tables, plans and data: behind one button, each with what it's for. Their keys work as ever. */
+const MORE: { tool: Tool; hint: string }[] = [
+  { tool: 'table', hint: 'Rows and columns; or paste cells from a spreadsheet' },
+  { tool: 'kanban', hint: 'Cards in columns, with dates' },
+  { tool: 'timeline', hint: 'Lanes of events and milestones' },
+  { tool: 'data', hint: 'One set of records, shown as a table, Kanban, timeline, calendar or gallery' },
 ]
 
 export function ToolRail() {
   const editor = useEditor()
   const ui = useUi()
+  const [more, setMore] = useState(false)
+  const hidden = MORE.find((m) => m.tool === editor.tool)
+  // On a phone the rail is a sideways-scrolling bar, which would clip its panels: they go above it, on the page.
+  const place = (node: ReactNode) => (node && typeof matchMedia !== 'undefined' && matchMedia('(max-width: 720px)').matches ? createPortal(node, document.body) : node)
+  const toolButton = (tool: Tool) => {
+    const t = TOOLS.find((x) => x.tool === tool)!
+    return (
+      <button
+        key={tool}
+        className={`tool has-tip${editor.tool === tool ? ' active' : ''}`}
+        aria-label={t.label}
+        aria-pressed={editor.tool === tool}
+        onMouseDown={keepFocus}
+        onClick={() => {
+          setMore(false)
+          editor.setTool(tool)
+        }}
+      >
+        {TOOL_ICONS[tool]}
+        <Tip label={t.label} keys={t.key.toUpperCase()} />
+      </button>
+    )
+  }
   return (
     <nav className="island tool-rail no-canvas" aria-label="Tools">
-      {GROUPS.map((group, g) => (
-        <div className="tool-group" key={g}>
-          {group.map((tool) => {
-            const t = TOOLS.find((x) => x.tool === tool)!
-            return (
-              <button
-                key={tool}
-                className={`tool has-tip${editor.tool === tool ? ' active' : ''}`}
-                aria-label={t.label}
-                aria-pressed={editor.tool === tool}
-                onMouseDown={keepFocus}
-                onClick={() => editor.setTool(tool)}
-              >
-                {TOOL_ICONS[tool]}
-                <Tip label={t.label} keys={t.key.toUpperCase()} />
-              </button>
-            )
-          })}
-          {g === GROUPS.length - 1 && (
-            <button className="tool has-tip" aria-label="Add an image" onMouseDown={keepFocus} onClick={ui.openImage}>
-              <ImageIcon />
-              <Tip label="Image — or paste / drop one" />
+      {GROUPS.map((group) => (
+        <div className="tool-group" role="group" aria-label={group.label} key={group.label}>
+          {group.tools.map(toolButton)}
+          {group.label === 'Draw' && (
+            <button
+              className="tool has-tip"
+              aria-label="Excalidraw drawing"
+              onMouseDown={keepFocus}
+              onClick={() => {
+                setMore(false)
+                editor.openDrawing()
+              }}
+            >
+              <DrawingIcon />
+              <Tip label="Excalidraw drawing" />
             </button>
           )}
         </div>
       ))}
-      {editor.flowPalette && <FlowFlyout />}
-      {editor.tool === 'pen' && <PenFlyout />}
+      <div className="tool-group" role="group" aria-label="Tables, plans and more">
+        <button
+          className={`tool has-tip${hidden || more ? ' active' : ''}`}
+          aria-label={hidden ? `${TOOLS.find((t) => t.tool === hidden.tool)!.label} (more tools)` : 'Tables, Kanban boards, timelines and more'}
+          aria-expanded={more}
+          aria-haspopup="true"
+          onMouseDown={keepFocus}
+          onClick={() => setMore(!more)}
+        >
+          {hidden ? TOOL_ICONS[hidden.tool] : <MoreToolsIcon />}
+          {!more && <Tip label="Tables, Kanban boards, timelines and more" />}
+        </button>
+      </div>
+      {place(more && <MoreFlyout onClose={() => setMore(false)} onImage={ui.openImage} />)}
+      {place(!more && editor.flowPalette && <FlowFlyout />)}
+      {place(!more && editor.tool === 'pen' && <PenFlyout />)}
     </nav>
+  )
+}
+
+/** The tools behind the rail's last button: pick one and it's the current tool (or it's added). */
+function MoreFlyout({ onClose, onImage }: { onClose: () => void; onImage: () => void }) {
+  const editor = useEditor()
+  const ref = useRef<HTMLDivElement>(null)
+  useEscape(onClose)
+  useEffect(() => {
+    focusFirst(ref.current)
+    // A press anywhere else closes it (the rail's own button toggles it).
+    const away = (e: PointerEvent) => {
+      const t = e.target as Element | null
+      if (!ref.current?.contains(t) && !t?.closest?.('[aria-haspopup]')) onClose()
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [onClose])
+  const pick = (run: () => void) => () => {
+    onClose()
+    run()
+  }
+  return (
+    <div className="flyout island more-flyout" ref={ref} role="menu" aria-label="More tools" onKeyDown={moveFocus}>
+      <div className="popover-title">Tables, plans and more</div>
+      {MORE.map(({ tool, hint }) => {
+        const t = TOOLS.find((x) => x.tool === tool)!
+        return (
+          <button key={tool} role="menuitem" className={`flyout-option${editor.tool === tool ? ' on' : ''}`} onMouseDown={keepFocus} onClick={pick(() => editor.setTool(tool))}>
+            {TOOL_ICONS[tool]}
+            <span>
+              {t.label}
+              <small>{hint}</small>
+            </span>
+            <kbd>{t.key.toUpperCase()}</kbd>
+          </button>
+        )
+      })}
+      <button role="menuitem" className="flyout-option" onMouseDown={keepFocus} onClick={pick(onImage)}>
+        <ImageIcon />
+        <span>
+          Image
+          <small>Or paste or drop one on the board</small>
+        </span>
+      </button>
+      <button role="menuitem" className="flyout-option" onMouseDown={keepFocus} onClick={pick(() => editor.addCode())}>
+        <CodeToolIcon />
+        <span>
+          Code block
+          <small>Code with colours; or paste a fenced block</small>
+        </span>
+      </button>
+    </div>
   )
 }
 

@@ -191,7 +191,7 @@ function pages(key: string, spots: Record<string, Id>, now: number): GuidePage[]
 
 - **Top left:** the board menu: your boards, new, open, save, share, version history, import and export.
 - **Top right:** Share, Ask AI, Present, Search, Comments, the theme and Help (**?**).
-- **Left:** the tools. Hover one to see its key.
+- **Left:** the tools, grouped: writing, thinking it through, drawing. The last button holds tables, Kanban boards, timelines and more. Hover one to see its key.
 - **Ctrl+K** searches everything and runs any command by name. If you only remember one shortcut, make it this one.
 - **Right-click** (or press and hold on a touch screen) anything for what it can do.
 

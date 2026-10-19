@@ -9656,3 +9656,18 @@ button.on,
   flex: 1;
   min-height: 0;
 }
+
+/* The rail's last button: tables, plans and more. */
+.more-flyout .flyout-option kbd {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* Beside the rail, the "more" menu lines up with its button at the bottom. */
+@media (min-width: 721px) {
+  .tool-rail .more-flyout {
+    top: auto;
+    bottom: 0;
+    translate: none;
+  }
+}
