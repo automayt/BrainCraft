@@ -1,4 +1,7 @@
 import '@fontsource-variable/inter'
+// Wiki pages read in Literata, with optical sizes (see docs/DESIGN.md).
+import '@fontsource-variable/literata/opsz.css'
+import '@fontsource-variable/literata/opsz-italic.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'

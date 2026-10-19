@@ -108,74 +108,6 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
         </button>
       </header>
       <div className="boards-body">
-        {!query && (
-          <h3 className="templates-title" id="new-board-title">
-            New board <small>a canvas to draw and brainstorm on</small>
-          </h3>
-        )}
-        {!query && (
-          <section className="templates" aria-labelledby="new-board-title">
-            {TEMPLATES.map((t) => (
-              <button key={t.id} className="template" onClick={() => create(t)}>
-                <TemplateThumb id={t.id} />
-                <strong>{t.label}</strong>
-                <small>{t.hint}</small>
-              </button>
-            ))}
-          </section>
-        )}
-        {!query && (
-          <h3 className="templates-title" id="new-wiki-title">
-            New wiki <small>pages to write things down: plans, lists, notes</small>
-          </h3>
-        )}
-        {!query && (
-          <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
-            <button
-              className="template guide-template"
-              onClick={() => {
-                onClose()
-                void ws.openGuide()
-              }}
-            >
-              <span className="thumb wiki-thumb" aria-hidden="true">
-                <span>🧭 Start here</span>
-                <span>🎨 The canvas</span>
-                <span>📘 Wikis</span>
-                <span>🤝 Together</span>
-                <span>🔌 The API</span>
-              </span>
-              <strong>BrainCraft guide</strong>
-              <small>How everything works, with a tour board</small>
-            </button>
-            {WIKI_TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                className="template"
-                onClick={() => {
-                  onClose()
-                  void ws.newWiki(undefined, t.id)
-                }}
-              >
-                <span className="thumb wiki-thumb" aria-hidden="true">
-                  {t.pages.length ? (
-                    t.pages.slice(0, 5).map((p) => <span key={p.title}>{p.icon} {p.title}</span>)
-                  ) : (
-                    <>
-                      <i />
-                      <i />
-                      <i className="sub" />
-                      <i className="sub" />
-                      <i />
-                    </>
-                  )}
-                </span>
-                <strong>{t.id === 'wiki' ? 'Wiki' : `${t.label} wiki`}</strong>
-                <small>{t.hint}</small>
-              </button>
-            ))}
-          </section>
-        )}
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
         {ws.account?.user && (
           <section className="server-boards" aria-labelledby="server-boards-title">
@@ -228,6 +160,78 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           ))}
           {!shown.length && <p className="muted empty">No boards match “{query}”.</p>}
         </div>
+        {!query && (
+          <section className="start-new" aria-label="Start something new">
+          {!query && (
+            <h3 className="templates-title" id="new-board-title">
+              New board <small>a canvas to draw and brainstorm on</small>
+            </h3>
+          )}
+          {!query && (
+            <section className="templates" aria-labelledby="new-board-title">
+              {TEMPLATES.map((t) => (
+                <button key={t.id} className="template" onClick={() => create(t)}>
+                  <TemplateThumb id={t.id} />
+                  <strong>{t.label}</strong>
+                  <small>{t.hint}</small>
+                </button>
+              ))}
+            </section>
+          )}
+          {!query && (
+            <h3 className="templates-title" id="new-wiki-title">
+              New wiki <small>pages to write things down: plans, lists, notes</small>
+            </h3>
+          )}
+          {!query && (
+            <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
+              <button
+                className="template guide-template"
+                onClick={() => {
+                  onClose()
+                  void ws.openGuide()
+                }}
+              >
+                <span className="thumb wiki-thumb" aria-hidden="true">
+                  <span>🧭 Start here</span>
+                  <span>🎨 The canvas</span>
+                  <span>📘 Wikis</span>
+                  <span>🤝 Together</span>
+                  <span>🔌 The API</span>
+                </span>
+                <strong>BrainCraft guide</strong>
+                <small>How everything works, with a tour board</small>
+              </button>
+              {WIKI_TEMPLATES.map((t) => (
+                <button
+                  key={t.id}
+                  className="template"
+                  onClick={() => {
+                    onClose()
+                    void ws.newWiki(undefined, t.id)
+                  }}
+                >
+                  <span className="thumb wiki-thumb" aria-hidden="true">
+                    {t.pages.length ? (
+                      t.pages.slice(0, 5).map((p) => <span key={p.title}>{p.icon} {p.title}</span>)
+                    ) : (
+                      <>
+                        <i />
+                        <i />
+                        <i className="sub" />
+                        <i className="sub" />
+                        <i />
+                      </>
+                    )}
+                  </span>
+                  <strong>{t.id === 'wiki' ? 'Wiki' : `${t.label} wiki`}</strong>
+                  <small>{t.hint}</small>
+                </button>
+              ))}
+            </section>
+          )}
+          </section>
+        )}
       </div>
     </Dialog>
   )
