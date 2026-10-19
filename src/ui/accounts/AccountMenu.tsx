@@ -1,0 +1,186 @@
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { call } from '../../store/account'
+import { Dialog } from '../Boards'
+import { copyText } from '../copyText'
+import { timeAgo } from '../Boards'
+import { useWorkspace } from '../useWorkspace'
+
+/** The signed-in person's button: who they are, the admin screen, password, API tokens, sign out. */
+export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
+  const ws = useWorkspace()
+  const user = ws.account?.user
+  const [open, setOpen] = useState(false)
+  const [dialog, setDialog] = useState<'password' | 'tokens' | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  if (!user) return null
+  const pick = (f: () => void) => () => {
+    setOpen(false)
+    f()
+  }
+  return (
+    <div className="account-menu" ref={box}>
+      <button className="account-btn" aria-haspopup="menu" aria-expanded={open} title={`${user.name} (${user.email})`} onClick={() => setOpen(!open)}>
+        <span aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span>
+        <span className="sr-only">Your account</span>
+      </button>
+      {open && (
+        <ul role="menu" aria-label="Your account" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+          <li role="none" className="account-who">
+            <strong>{user.name}</strong>
+            <small className="muted">
+              {user.email}
+              {user.role === 'admin' ? ' · admin' : ''}
+            </small>
+          </li>
+          {user.role === 'admin' && (
+            <li role="none">
+              <button role="menuitem" onClick={pick(onAdmin)}>
+                People and groups…
+              </button>
+            </li>
+          )}
+          {user.password && (
+            <li role="none">
+              <button role="menuitem" onClick={pick(() => setDialog('password'))}>
+                Change password…
+              </button>
+            </li>
+          )}
+          <li role="none">
+            <button role="menuitem" onClick={pick(() => setDialog('tokens'))}>
+              API tokens…
+            </button>
+          </li>
+          <li role="none">
+            <button role="menuitem" onClick={pick(() => void ws.signOut())}>
+              Sign out
+            </button>
+          </li>
+        </ul>
+      )}
+      {dialog === 'password' && <PasswordDialog onClose={() => setDialog(null)} />}
+      {dialog === 'tokens' && <TokensDialog onClose={() => setDialog(null)} />}
+    </div>
+  )
+}
+
+function PasswordDialog({ onClose }: { onClose: () => void }) {
+  const ws = useWorkspace()
+  const [current, setCurrent] = useState('')
+  const [password, setPassword] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await call(ws.server!, 'api/auth/password', 'POST', { current, password })
+      ws.editor.setStatus('Password changed')
+      onClose()
+    } catch (err) {
+      setMsg((err as Error).message)
+    }
+  }
+  return (
+    <Dialog label="Change password" onClose={onClose} className="account-dialog">
+      <form onSubmit={submit}>
+        <header>
+          <h2>Change password</h2>
+        </header>
+        {msg && <p className="signin-error">{msg}</p>}
+        <label>
+          Current password
+          <input type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
+        </label>
+        <label>
+          New password <small className="muted">(at least 10 characters)</small>
+          <input type="password" autoComplete="new-password" required minLength={10} value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        <div className="account-actions">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary">Change it</button>
+        </div>
+      </form>
+    </Dialog>
+  )
+}
+
+interface TokenRow {
+  id: string
+  name: string
+  created: number
+  lastUsed?: number
+}
+
+/** Tokens for scripts and AI assistants (MCP) to reach the server as you. */
+function TokensDialog({ onClose }: { onClose: () => void }) {
+  const ws = useWorkspace()
+  const [tokens, setTokens] = useState<TokenRow[]>([])
+  const [name, setName] = useState('')
+  const [fresh, setFresh] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  useEffect(() => {
+    void call<{ tokens: TokenRow[] }>(ws.server!, 'api/auth/tokens').then((r) => setTokens(r.tokens), (e: Error) => setMsg(e.message))
+  }, [ws.server])
+  const make = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      const r = await call<{ token: string; tokens: TokenRow[] }>(ws.server!, 'api/auth/tokens', 'POST', { name: name || 'API token' })
+      setFresh(r.token)
+      setTokens(r.tokens)
+      setName('')
+    } catch (err) {
+      setMsg((err as Error).message)
+    }
+  }
+  return (
+    <Dialog label="API tokens" onClose={onClose} className="account-dialog">
+      <header>
+        <h2>API tokens</h2>
+        <button className="icon-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <p className="muted">For scripts and AI assistants that reach this server as you: send it as <code>Authorization: Bearer …</code>. A token can do what you can, so keep it secret.</p>
+      {msg && <p className="signin-error">{msg}</p>}
+      {fresh && (
+        <div className="token-fresh">
+          <p>Copy it now; it won’t be shown again.</p>
+          <code>{fresh}</code>
+          <button onClick={() => void copyText(fresh).then(() => ws.editor.setStatus('Token copied'))}>Copy</button>
+        </div>
+      )}
+      <form className="account-inline" onSubmit={make}>
+        <input aria-label="What it’s for" placeholder="What it’s for (e.g. “My laptop’s MCP”)" value={name} onChange={(e) => setName(e.target.value)} />
+        <button className="primary">Make a token</button>
+      </form>
+      <ul className="token-list">
+        {tokens.map((t) => (
+          <li key={t.id}>
+            <span>
+              <strong>{t.name}</strong>
+              <small className="muted">
+                {' '}
+                made {timeAgo(t.created)}
+                {t.lastUsed ? ` · last used ${timeAgo(t.lastUsed)}` : ' · not used yet'}
+              </small>
+            </span>
+            <button
+              className="danger-quiet"
+              onClick={async () => setTokens((await call<{ tokens: TokenRow[] }>(ws.server!, `api/auth/tokens/${t.id}`, 'DELETE')).tokens)}
+            >
+              Revoke
+            </button>
+          </li>
+        ))}
+        {!tokens.length && <li className="muted">No tokens yet.</li>}
+      </ul>
+    </Dialog>
+  )
+}

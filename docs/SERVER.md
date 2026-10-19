@@ -38,6 +38,12 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_AI_TEXT_TOOLS` | off | `1` when that model is served without tool calling. |
 | `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | Turns on the assistant with a command-line agent such as `claude -p` or `codex exec`, run per step (timeout in seconds, default 300). Only this machine may use it unless a password is set. See [AI.md](AI.md). |
 | `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
+| `BRAINCRAFT_ACCOUNTS` | off | `1`: people sign in, groups carry permissions, boards have owners and access lists, and share links stop working. See [ACCOUNTS.md](ACCOUNTS.md). |
+| `BRAINCRAFT_ADMINS` | — | Emails that are always admins (with accounts on). |
+| `BRAINCRAFT_PUBLIC_URL` | — | The server's public address, for sign-in links, secure cookies and the single sign-on redirect URI. |
+| `BRAINCRAFT_ALLOWED_ORIGINS` | — | Other origins allowed to call the API with a signed-in cookie. |
+| `BRAINCRAFT_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_NAME`, `_SCOPES`, `_GROUPS_CLAIM`, `_ALLOWED_DOMAINS` | — | Single sign-on with any OpenID Connect provider. See [ACCOUNTS.md](ACCOUNTS.md). |
+| `BRAINCRAFT_DEV_IDP` | off | `1`: a pretend sign-in provider at `/dev-idp` for trying single sign-on locally (localhost only). |
 | `BRAINCRAFT_TRUST_PROXY` | off | Set to `1` behind an HTTPS proxy so per-visitor limits (link previews) use the visitor's address from `X-Forwarded-For`. Leave off when the server faces the internet directly. |
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
 
@@ -65,8 +71,10 @@ Docs:
 - **Leave the live session (keep my copy)** turns the copy in your browser back into a normal
   board. The server copy stays for everyone else.
 
-There are no user accounts yet. Names shown to others are set in the share
-dialog or in the comments panel (the same name), and aren't verified.
+Without accounts, names shown to others are set in the share dialog or in the
+comments panel (the same name), and aren't verified. With
+`BRAINCRAFT_ACCOUNTS=1`, people sign in, boards have owners and access lists,
+and names are the accounts' names: see [ACCOUNTS.md](ACCOUNTS.md).
 
 ## How edits merge
 

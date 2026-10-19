@@ -18,6 +18,8 @@ export interface LiveInfo {
   role: 'edit' | 'view'
   /** Kept by whoever started the session, to hand out view-only links. */
   viewKey?: string
+  /** A board on a server with accounts: opened by signing in, not by a key. */
+  account?: boolean
 }
 
 export interface BoardMeta {

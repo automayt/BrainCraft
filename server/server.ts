@@ -10,18 +10,27 @@
  * OPENAI_API_KEY and OPENAI_MODEL if needed), BRAINCRAFT_AI_COMMAND (a command-line agent such as
  * `claude -p` or `codex exec`). BRAINCRAFT_AI_PASSWORD makes people enter a password first.
  *
- * Boards are shared by link, Google-Docs style: each has a secret edit key and a secret
- * view key. Anyone with a key can open the board in that role; nobody can list boards.
+ * Boards are shared by link: each has a secret edit key and a secret view key. Anyone with a key
+ * can open the board in that role; nobody can list boards.
+ *
+ * With BRAINCRAFT_ACCOUNTS=1, people sign in instead (see docs/ACCOUNTS.md): admins manage users
+ * and groups, groups carry permissions, each board has an owner and an access list, and the keys
+ * stop working. BRAINCRAFT_ADMINS, BRAINCRAFT_PUBLIC_URL, BRAINCRAFT_ALLOWED_ORIGINS and the
+ * BRAINCRAFT_OIDC_* settings go with it.
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
 import { CommandRunner, OpenAiProxy } from './aiProviders'
+import { AccountBoards } from './accounts/boards'
+import { Accounts } from './accounts/service'
+import { ssoFromEnv } from './accounts/oidc'
+import { DevIdp } from './accounts/devIdp'
 import { BusyError, PreviewCache, unfurl, UnfurlError } from './unfurl'
 import { OpError, opsFromText } from '../src/api/ops'
 import { type ClientMessage, type Role, type ServerMessage } from '../src/collab/protocol'
@@ -63,6 +72,7 @@ function save(room: Room) {
   const tmp = `${path}.tmp`
   writeFileSync(tmp, JSON.stringify(room.data))
   renameSync(tmp, path)
+  accountBoards?.index(room)
 }
 
 function scheduleSave(room: Room) {
@@ -162,9 +172,17 @@ function send(res: ServerResponse, status: number, body: unknown) {
 }
 
 function cors(req: IncomingMessage, res: ServerResponse) {
-  // Keys travel as bearer tokens, not cookies, so any page may call the API.
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  const origin = req.headers.origin
+  if (accounts) {
+    // Signed-in browsers carry a cookie: only the server's own pages (and ones its owner allows) may call.
+    if (!origin || !ALLOWED_ORIGINS.includes(origin.replace(/\/+$/, ''))) return
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+  } else {
+    // Keys travel as bearer tokens, not cookies, so any page may call the API.
+    res.setHeader('Access-Control-Allow-Origin', origin ?? '*')
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
   // Echo what the caller asks for: the Anthropic SDK sends its own headers to the AI proxy.
   res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] ?? 'content-type, authorization')
   res.setHeader('Vary', 'Origin')
@@ -219,7 +237,68 @@ function serveStatic(url: URL, res: ServerResponse) {
   res.end(readFileSync(file))
 }
 
-const aiGate = new AiGate({ password: AI_PASSWORD, equal: safeEqual, visitor })
+// ----- accounts ------------------------------------------------------------------------------
+
+const ACCOUNTS = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_ACCOUNTS ?? '')
+const list = (v: string | undefined) => (v ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+const PUBLIC_URL = process.env.BRAINCRAFT_PUBLIC_URL?.trim().replace(/\/+$/, '') || undefined
+const accounts = ACCOUNTS
+  ? new Accounts({
+      dir: join(DATA, 'accounts'),
+      admins: list(process.env.BRAINCRAFT_ADMINS),
+      publicUrl: PUBLIC_URL,
+      trustProxy: TRUST_PROXY,
+      visitor,
+      sso: await ssoFromEnv(process.env, PUBLIC_URL ?? `http://localhost:${PORT}`),
+      allowedDomains: list(process.env.BRAINCRAFT_OIDC_ALLOWED_DOMAINS),
+    })
+  : null
+/** The pretend sign-in provider, for trying single sign-on on this computer (BRAINCRAFT_DEV_IDP=1). */
+const devIdp = accounts?.sso && /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_DEV_IDP ?? '') ? new DevIdp(`${PUBLIC_URL ?? `http://localhost:${PORT}`}/dev-idp`) : null
+const ALLOWED_ORIGINS = list(process.env.BRAINCRAFT_ALLOWED_ORIGINS).map((o) => o.replace(/\/+$/, ''))
+const accountBoards = accounts
+  ? new AccountBoards(
+      accounts,
+      {
+        get: getRoom,
+        create(board, owner) {
+          const id = randomBytes(9).toString('base64url')
+          const now = Date.now()
+          const room = makeRoom({ id, board, version: 0, editKey: newKey(), viewKey: newKey(), nextSlot: 1, created: now, updated: now, owner, access: [] })
+          save(room)
+          log('created board', id)
+          return room
+        },
+        remove(id) {
+          rooms.delete(id)
+          clearTimeout(saveTimers.get(id))
+          saveTimers.delete(id)
+          rmSync(fileOf(id), { force: true })
+          log('deleted board', id)
+          return true
+        },
+        ids: () => readdirSync(join(DATA, 'boards')).flatMap((f) => (f.endsWith('.json') ? [f.slice(0, -5)] : [])),
+        peek(id) {
+          try {
+            return JSON.parse(readFileSync(fileOf(id), 'utf8')) as RoomData
+          } catch {
+            return null
+          }
+        },
+      },
+      ALLOWED_ORIGINS,
+    )
+  : null
+
+const aiGate = new AiGate({
+  password: AI_PASSWORD,
+  equal: safeEqual,
+  visitor,
+  accounts: accounts && ((req) => {
+    const u = accounts.userOf(req)
+    return !u ? 'signin' : accounts.can(u, 'ai.use') ? 'yes' : 'no'
+  }),
+})
 const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, gate: aiGate, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined }) : null
 const OPENAI_BASE = process.env.OPENAI_BASE_URL?.trim() || ''
 const openAiProxy = OPENAI_BASE
@@ -251,11 +330,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       ...(openAiProxy ? { aiModels: await openAiProxy.models(), aiTextTools: AI_TEXT_TOOLS } : {}),
       ...(commandRunner ? { aiCommand: commandRunner.program } : {}),
       previews: true,
+      accounts: !!accounts,
     })
+
+  // Accounts: sign-in, admin, people, and boards by access instead of keys.
+  if (accounts) {
+    const body = () => readBody(req)
+    if (await accounts.handle(req, res, url, body)) return
+    if (await accountBoards!.handle(req, res, url, body)) return
+  }
 
   // GET /api/unfurl?url=… → a link preview: title, description, picture and site name.
   if (parts[1] === 'unfurl') {
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
+    if (accounts && !accounts.userOf(req)) return send(res, 401, { error: 'Sign in first' })
     if (!previewAllowed(visitor(req))) return send(res, 429, { error: 'Too many link previews at once. Try again in a minute.' })
     const target = url.searchParams.get('url') ?? ''
     try {
@@ -379,6 +467,13 @@ function handle(req: IncomingMessage, res: ServerResponse) {
     })
     return
   }
+  if (devIdp && url.pathname.startsWith('/dev-idp/')) {
+    devIdp.handle(req, res, url, () => readBody(req)).catch((err) => {
+      log('test provider error', err)
+      if (!res.headersSent) send(res, 500, { error: 'Server error' })
+    })
+    return
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed' })
   serveStatic(url, res)
 }
@@ -390,11 +485,17 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_BODY })
 server.on('upgrade', (req, socket, head) => {
   let room: Room | null = null
   let role: Role | null = null
+  let user: { id: string; name: string } | undefined
   try {
     const url = parseUrl(req)
     const m = url && /^\/api\/boards\/([^/]+)\/live$/.exec(url.pathname)
     room = m ? getRoom(m[1]) : null
-    role = room?.roleFor(url!.searchParams.get('key'), safeEqual) ?? null
+    if (accountBoards && room) {
+      // With accounts, the session decides (and the page must be the server's own).
+      const who = accountBoards.socket(req, room)
+      role = who?.role ?? null
+      user = who ? { id: who.user.id, name: who.user.name } : undefined
+    } else role = room?.roleFor(url!.searchParams.get('key'), safeEqual) ?? null
   } catch (err) {
     log('upgrade error', err)
   }
@@ -406,7 +507,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
     const id = randomBytes(6).toString('base64url')
     const sendTo = (msg: ServerMessage) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg))
-    room.join({ id, role, send: sendTo })
+    room.join({ id, role, send: sendTo, ...(user ? { user } : {}) })
     log('joined', room.data.id, id, role, `(${room.members.size} here)`)
     ws.on('message', (data) => {
       let msg: ClientMessage | undefined
@@ -435,6 +536,11 @@ server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
   log(
+    accounts
+      ? `accounts on${accounts.sso ? ` with single sign-on (${accounts.sso.label})` : ''}${devIdp ? ' — TEST PROVIDER at /dev-idp: anyone can sign in as anyone, never use this for real' : ''}${accounts.needsSetup ? ' — open the server to create the first admin' : ''}`
+      : 'accounts off: boards are shared by link (set BRAINCRAFT_ACCOUNTS=1 for sign-in)',
+  )
+  log(
     aiProviders.length
       ? `AI assistant on: ${[aiProxy && 'Claude', openAiProxy && `model server at ${OPENAI_BASE}`, commandRunner && `"${AI_COMMAND}"${AI_PASSWORD ? '' : ' (this machine only, until BRAINCRAFT_AI_PASSWORD is set)'}`].filter(Boolean).join(', ')}${AI_PASSWORD ? ' (password required)' : ''}`
       : 'AI assistant off (set ANTHROPIC_API_KEY, OPENAI_BASE_URL or BRAINCRAFT_AI_COMMAND to turn it on)',
@@ -449,6 +555,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
       const room = rooms.get(id)
       if (room) save(room)
     }
+    accounts?.store.flush()
+    accounts?.store.saveBoards()
     process.exit(0)
   })
 }

@@ -40,6 +40,8 @@ export interface Member {
   send: (m: ServerMessage) => void
   /** Recent signal times, to keep emote spam in check. */
   signals?: number[]
+  /** The signed-in person (servers with accounts): their name is the one others see. */
+  user?: { id: string; name: string }
 }
 
 const SIGNALS_PER_5S = 15
@@ -58,6 +60,9 @@ export interface RoomData {
   nextSlot: number
   created: number
   updated: number
+  /** Servers with accounts: whose board it is, and who else may view, edit or manage it. */
+  owner?: string
+  access?: { who: 'user' | 'group'; id: string; level: 'view' | 'edit' | 'manage' }[]
 }
 
 const MAX_PATCHES = 5000
@@ -105,7 +110,7 @@ export class Room {
     this.members.set(m.id, m)
     const idBase = m.role === 'edit' ? this.data.nextSlot++ * ID_BLOCK : 0
     if (m.role === 'edit') this.changed(false)
-    m.send({ t: 'hello', board: this.data.board, version: this.data.version, you: { id: m.id, role: m.role, idBase }, peers: this.peers(m.id), timer: this.timerState() })
+    m.send({ t: 'hello', board: this.data.board, version: this.data.version, you: { id: m.id, role: m.role, idBase, ...(m.user ? { user: m.user } : {}) }, peers: this.peers(m.id), timer: this.timerState() })
   }
 
   leave(id: string) {
@@ -118,6 +123,8 @@ export class Room {
     if (!m || !msg || typeof msg !== 'object') return
     if (msg.t === 'presence') {
       m.presence = sanitizePresence(msg.presence)
+      // A signed-in person's name is their account's, whatever their browser says.
+      if (m.presence && m.user) m.presence.name = m.user.name.slice(0, 40)
       if (m.presence) this.broadcast({ t: 'presence', peer: { id, role: m.role, ...m.presence } }, id)
       return
     }

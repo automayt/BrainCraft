@@ -36,7 +36,7 @@ export interface TimerState {
 }
 
 export type ServerMessage =
-  | { t: 'hello'; board: Board; version: number; you: { id: string; role: Role; idBase: number }; peers: PeerInfo[]; timer?: TimerState | null }
+  | { t: 'hello'; board: Board; version: number; you: { id: string; role: Role; idBase: number; user?: { id: string; name: string } }; peers: PeerInfo[]; timer?: TimerState | null }
   | { t: 'signal'; from: string; signal: Signal }
   | { t: 'timer'; timer: TimerState | null }
   | { t: 'patch'; patches: Patch[]; from: string; version: number }

@@ -18,6 +18,7 @@ import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/proto
 import { catchUp } from '../model/catchup'
 import { type BoardRef, type LinkTarget, objectLabel } from '../model/notes'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
+import { type AccountInfo, call, can, fetchAccount, type ServerBoard } from './account'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
 
@@ -104,6 +105,10 @@ export class Workspace {
   boardId: string | null = null
   /** Every board in this browser, newest first (refreshed after changes). */
   boards: BoardMeta[] = []
+  /** On a server with accounts: who's signed in (null: no accounts, or no server). */
+  account: AccountInfo | null = null
+  /** The boards the signed-in person can reach on that server. */
+  serverBoards: ServerBoard[] = []
   saveState: SaveState = 'saved'
   /** The file the current board was opened from or saved to, when the browser can write files. */
   fileName: string | null = null
@@ -226,6 +231,8 @@ export class Workspace {
     const ws = new Workspace(editor, new Library(kv ?? (await openKV())))
     await ws.recover()
     ws.server = await findServer()
+    ws.account = await fetchAccount(ws.server)
+    if (ws.account?.user) await ws.signedIn(ws.account)
     if (await ws.openHash(hash)) return ws
     await ws.openLast()
     return ws
@@ -474,6 +481,11 @@ export class Workspace {
     const id = await this.library.create(board)
     this.libraryChanged()
     await this.switchTo(id)
+    // Signed in to a server with accounts: new boards live there, yours.
+    if (this.boardsOnServer) {
+      await this.startLive().catch((err: unknown) => this.editor.setStatus(`Couldn’t put the board on the server: ${(err as Error).message}`))
+      await this.loadServerBoards()
+    }
     return id
   }
 
@@ -877,19 +889,64 @@ export class Workspace {
     this.editor.readOnly = false
   }
 
+  // ----- accounts --------------------------------------------------------------------
+
+  /** Someone signed in (or was already): their name on everything, and the server's boards listed. */
+  async signedIn(info: AccountInfo) {
+    this.account = info
+    if (info.user) {
+      this.editor.setAuthor(info.user.name)
+      this.live?.setMe(this.me)
+    }
+    await this.loadServerBoards()
+    this.emit()
+  }
+
+  async signOut() {
+    if (this.server) await call(this.server, 'api/auth/logout', 'POST').catch(() => {})
+    this.closeLive()
+    this.account = this.account ? { ...this.account, user: null, permissions: [] } : null
+    this.serverBoards = []
+    this.emit()
+  }
+
+  /** The boards the signed-in person can reach on the server. */
+  async loadServerBoards() {
+    if (!this.server || !this.account?.user) return
+    try {
+      this.serverBoards = (await call<{ boards: ServerBoard[] }>(this.server, 'api/boards')).boards
+    } catch {
+      this.serverBoards = []
+    }
+    this.emit()
+  }
+
+  /** Opens a board from the server: this browser keeps a copy and joins it live. */
+  async openServerBoard(remote: ServerBoard) {
+    if (!this.server) return
+    const known = await this.library.findLive(this.server, remote.id)
+    let id = known?.id
+    if (!id) {
+      id = await this.library.create(emptyBoard(remote.title))
+      await this.library.setLive(id, { server: this.server, id: remote.id, key: '', role: remote.level === 'view' ? 'view' : 'edit', account: true })
+      this.libraryChanged()
+    }
+    await this.switchTo(id)
+  }
+
+  /** Whether new boards go to the server (a server with accounts, and permission to make them). */
+  get boardsOnServer() {
+    return !!this.account?.user && can(this.account, 'boards.create')
+  }
+
   /** Shares the open board through the server: anyone with the edit or view link joins live. */
   async startLive(server = this.server): Promise<LiveInfo | null> {
     if (!server || !this.boardId) return null
     if (this.liveInfo) return this.liveInfo
     await this.flush()
-    const res = await fetch(new URL('api/boards', server.endsWith('/') ? server : `${server}/`), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ board: this.editor.board }),
-    })
-    if (!res.ok) throw new Error(`The server said ${res.status}`)
-    const { id, editKey, viewKey } = (await res.json()) as { id: string; editKey: string; viewKey: string }
-    const info: LiveInfo = { server, id, key: editKey, role: 'edit', viewKey }
+    // On a server with accounts the board becomes yours there (no keys); otherwise it gets two links.
+    const { id, editKey, viewKey } = await call<{ id: string; editKey?: string; viewKey?: string }>(server, 'api/boards', 'POST', { board: this.editor.board }, !!this.account)
+    const info: LiveInfo = { server, id, key: editKey ?? '', role: 'edit', ...(viewKey ? { viewKey } : {}), ...(this.account ? { account: true } : {}) }
     await this.library.setLive(this.boardId, info)
     this.libraryChanged()
     await this.refresh()

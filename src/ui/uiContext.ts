@@ -26,6 +26,8 @@ export interface Ui {
   openBoards: () => void
   openVersions: () => void
   openShare: () => void
+  /** People and groups (admins, on a server with accounts). */
+  openAdmin: () => void
   openAi: () => void
   /** PNG, SVG, clipboard and PDF export. */
   openExport: () => void

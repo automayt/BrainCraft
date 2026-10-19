@@ -133,6 +133,16 @@ means:
   answers requests from the server's own machine; set a password to offer it
   to friends.
 
+### Your own model in a full agent
+
+An OpenAI-compatible server like vLLM only answers one request at a time;
+BrainCraft's assistant runs the loop around it (asking it, running the board
+tool it asks for, asking again), with board tools only. For your model inside
+a full agent with its own tools, configure Codex to use it as its model
+provider (a provider in `~/.codex/config.toml` with `base_url` set to your
+vLLM server's `/v1` and `wire_api = "chat"`), then run that Codex as the
+agent command above.
+
 ### What the server allows
 
 The app calls `POST /api/ai/v1/messages` (Claude),

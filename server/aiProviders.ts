@@ -170,7 +170,7 @@ export class CommandRunner {
     const reply = (status: number, message: string) => send(res, status, { error: message })
     if (req.method !== 'POST') return reply(405, 'Use POST')
     // An agent can read files and run programs here: from elsewhere, only with the password.
-    if (!this.o.gate.hasPassword && !fromThisMachine(req))
+    if (!this.o.gate.guarded && !fromThisMachine(req))
       return reply(403, 'This server runs a command-line agent for the assistant, so it only answers this machine. Its owner can set BRAINCRAFT_AI_PASSWORD to let others use it.')
     const denied = this.o.gate.check(req)
     if (denied) return reply(denied.status, denied.error)

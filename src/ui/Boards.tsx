@@ -1,6 +1,7 @@
 /** The board library, version history, share links and the read-only banner. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LEVEL_LABEL } from '../store/account'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
@@ -53,7 +54,7 @@ export function Thumb({ thumb, aspect }: { thumb: ThumbRect[]; aspect: number })
   )
 }
 
-function Dialog({ label, onClose, className = '', children }: { label: string; onClose: () => void; className?: string; children: React.ReactNode }) {
+export function Dialog({ label, onClose, className = '', children }: { label: string; onClose: () => void; className?: string; children: React.ReactNode }) {
   useEscape(onClose)
   const dialogRef = useRef<HTMLDivElement>(null)
   useDialog(dialogRef)
@@ -159,6 +160,36 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           </section>
         )}
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
+        {ws.account?.user && (
+          <section className="server-boards" aria-labelledby="server-boards-title">
+            <h3 className="templates-title" id="server-boards-title">
+              On this server <small>boards and wikis you can open, yours and shared with you</small>
+            </h3>
+            <ul className="access-list">
+              {ws.serverBoards
+                .filter((b) => !query.trim() || b.title.toLowerCase().includes(query.trim().toLowerCase()))
+                .map((b) => (
+                  <li key={b.id}>
+                    <button
+                      className="link server-board"
+                      onClick={() => {
+                        onClose()
+                        void ws.openServerBoard(b)
+                      }}
+                    >
+                      {b.kind === 'wiki' ? '📘 ' : ''}
+                      {b.title || 'Untitled'}
+                    </button>
+                    <small className="muted">
+                      {b.owner ? (b.owner.id === ws.account?.user?.id ? 'yours' : b.owner.name) : 'no owner'} · {LEVEL_LABEL[b.level].toLowerCase()} · {timeAgo(b.updated)}
+                    </small>
+                  </li>
+                ))}
+              {!ws.serverBoards.length && <li className="muted">Nothing here yet. New boards you make go to the server.</li>}
+            </ul>
+            <h3 className="templates-title">In this browser</h3>
+          </section>
+        )}
         <div className="board-grid">
           {shown.map((b) => (
             <BoardCard

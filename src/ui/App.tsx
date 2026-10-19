@@ -1,4 +1,7 @@
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { AccessDialog } from './accounts/AccessDialog'
+import { AdminDialog } from './accounts/AdminDialog'
+import { SignIn, resetTokenOf } from './accounts/SignIn'
 import { BrainCraftAPI } from '../api/api'
 import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
@@ -38,7 +41,7 @@ function isTyping(target: EventTarget | null) {
 
 const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -93,9 +96,13 @@ function App({ ws }: { ws: Workspace }) {
     download: () => ws.download(),
     saveFile: (saveAs) => void ws.saveFile(saveAs),
     newBoard: () => void ws.newBoard(),
-    openBoards: () => setDialog('boards'),
+    openBoards: () => {
+      void ws.loadServerBoards()
+      setDialog('boards')
+    },
     openVersions: () => setDialog('versions'),
     openShare: () => setDialog('share'),
+    openAdmin: () => setDialog('admin'),
     openAi: () => setDialog('ai'),
     openExport: () => setDialog('export'),
     assistant,
@@ -352,6 +359,8 @@ function App({ ws }: { ws: Workspace }) {
             for (const f of files) void ws.openFile(f)
           }}
         >
+          {/* A server with accounts: nothing until signed in (or choosing a password from a link). */}
+          {ws.account && (!ws.account.user || (typeof location !== 'undefined' && resetTokenOf(location.hash))) && <SignIn />}
           <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
             {wiki ? <WikiView /> : <Canvas />}
           </BoardErrorBoundary>
@@ -385,7 +394,8 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}
-          {dialog === 'share' && <ShareDialog onClose={close} />}
+          {dialog === 'share' && (ws.account ? <AccessDialog onClose={close} /> : <ShareDialog onClose={close} />)}
+          {dialog === 'admin' && <AdminDialog onClose={close} />}
           {dialog === 'ai' && <AiDialog bridge={bridge} onClose={close} />}
           {dialog === 'export' && <ExportDialog onClose={close} />}
           <input

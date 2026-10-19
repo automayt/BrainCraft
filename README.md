@@ -431,6 +431,20 @@ shares live exactly like a board.
   with whatever it's signed in to and configured with. See
   [docs/AI.md](docs/AI.md).
 
+### Accounts, groups and single sign-on (for a team)
+
+- Turn on accounts on a server (`BRAINCRAFT_ACCOUNTS=1`) and people sign in:
+  **admins** manage people and groups, **groups carry permissions** (make
+  boards, share them, use the AI, see everyone), so adding someone is putting
+  them in groups.
+- Every board has an **owner** and an **Access** list of people and groups who
+  can view, edit or manage it; the secret share links stop working.
+- Sign in with a password, or **single sign-on** with any OpenID Connect
+  provider (Entra ID, Okta, Google, Keycloak, Authentik…), with groups taken
+  from the provider. A built-in pretend provider lets you try it all locally.
+- API tokens let scripts and AI assistants act as you. See
+  [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
+
 ### AI assistants (MCP) and the API
 
 - **Connect Claude, Codex, Cursor or any MCP client** to work on your boards live:

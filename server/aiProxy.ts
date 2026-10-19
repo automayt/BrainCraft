@@ -55,6 +55,11 @@ export interface GateOptions {
   now?: () => number
   equal?: (a: string, b: string) => boolean
   visitor?: (req: IncomingMessage) => string
+  /**
+   * On a server with accounts: whether the request's signed-in person may use the AI ('yes'), may
+   * not ('no'), or isn't signed in ('signin'). It decides instead of the password and the budget.
+   */
+  accounts?: ((req: IncomingMessage) => 'yes' | 'no' | 'signin') | null
 }
 
 /**
@@ -72,12 +77,18 @@ export class AiGate {
       now: Date.now,
       equal: (a, b) => a === b,
       visitor: (req) => req.socket.remoteAddress ?? 'unknown',
+      accounts: null,
       ...(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as GateOptions),
     }
   }
 
   get hasPassword() {
     return !!this.o.password
+  }
+
+  /** Whether requests are vouched for (a password, or signed-in accounts), so the AI may be used from other machines. */
+  get guarded() {
+    return !!this.o.password || !!this.o.accounts
   }
 
   /** Counts one use against `who` in `map`; false once there have been `limit` in the window. */
@@ -94,6 +105,10 @@ export class AiGate {
 
   /** Why `req` may not use the AI now, or null if it may. */
   check(req: IncomingMessage): Reject | null {
+    if (this.o.accounts) {
+      const may = this.o.accounts(req)
+      return may === 'yes' ? null : may === 'signin' ? { status: 401, error: 'Sign in to use the AI' } : { status: 403, error: 'You can’t use the AI on this server. Ask an admin.' }
+    }
     const who = this.o.visitor(req)
     if (this.o.password) {
       if ((this.fails.get(who)?.filter((t) => this.o.now() - t < RATE.windowMs).length ?? 0) >= PASSWORD_TRIES)

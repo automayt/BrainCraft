@@ -114,6 +114,25 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [ ] **Page icons** picked in the app (today only templates and the API set
   them), and asking for the wiki's name when making a blank one.
 
+## Accounts (October 2026)
+
+- [x] **Accounts on a server** (`BRAINCRAFT_ACCOUNTS=1`): admins and users,
+  groups that carry permissions, a setup screen or `BRAINCRAFT_ADMINS` for the
+  first admin, and set-your-password links instead of email.
+- [x] **Boards with owners and access lists** (view, edit, manage, for people
+  or groups); boards from before accounts wait for an admin to give them an
+  owner.
+- [x] **Single sign-on** with any OpenID Connect provider, groups from the
+  provider, and a pretend provider for trying it locally and in tests.
+- [x] **API tokens** for scripts.
+- [ ] The MCP server signing in with an API token (the HTTP API already takes
+  them).
+- [ ] "People and groups…" in the command palette for admins.
+- [ ] Clear this browser's copies of server boards when signing out, as an
+  option for shared computers.
+- [ ] An admin log of sign-ins and access changes.
+- [ ] Email for set-your-password links, when a mail server is set up.
+
 ## Next up
 
 - [x] **Status marks.** Mark any object (a mind-map idea, a sticky, a card) as
