@@ -28,6 +28,8 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
 import { CommandRunner, OpenAiProxy } from './aiProviders'
 import { AccountBoards } from './accounts/boards'
+import { readBoard, sendRead } from './boardReads'
+import { docsPage, openApiSpec } from './openapi'
 import { Accounts } from './accounts/service'
 import { ssoFromEnv } from './accounts/oidc'
 import { DevIdp } from './accounts/devIdp'
@@ -333,6 +335,15 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       accounts: !!accounts,
     })
 
+  // The API described: OpenAPI for tools, and the same as a page to read.
+  if ((parts[1] === 'openapi.json' || parts[1] === 'docs') && parts.length === 2) {
+    if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
+    const spec = openApiSpec({ version: VERSION, accounts: !!accounts, ai: { anthropic: !!aiProxy, openai: !!openAiProxy, command: !!commandRunner } })
+    if (parts[1] === 'openapi.json') return send(res, 200, spec)
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+    return res.end(docsPage(spec))
+  }
+
   // Accounts: sign-in, admin, people, and boards by access instead of keys.
   if (accounts) {
     const body = () => readBody(req)
@@ -413,6 +424,12 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (!room) return send(res, 404, { error: 'No such board' })
   const role = room.roleFor(keyOf(req, url), safeEqual)
   if (!role) return send(res, 403, { error: 'Missing or wrong key' })
+
+  // GET /api/boards/:id/objects, /search, /mermaid, /pages… → reads (see boardReads.ts).
+  if (parts.length > 3 && req.method === 'GET') {
+    const read = readBoard(room.data.board, parts.slice(3), url.searchParams)
+    if (read) return sendRead(res, read)
+  }
 
   // GET /api/boards/:id → the board.
   if (parts.length === 3 && req.method === 'GET') {

@@ -85,6 +85,10 @@ function App({ ws }: { ws: Workspace }) {
       setThemeState(t)
     },
     openHelp: () => setDialog('help'),
+    openGuide: () => {
+      setDialog(null)
+      void ws.openGuide()
+    },
     openImport: (tab?: unknown) => {
       setImportTab(tab === 'export' ? 'export' : 'import')
       setDialog('import')
@@ -390,7 +394,7 @@ function App({ ws }: { ws: Workspace }) {
             </>
           )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
-          {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} />}
+          {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}

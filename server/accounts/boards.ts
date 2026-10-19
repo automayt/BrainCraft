@@ -5,6 +5,7 @@
  *   GET    /api/boards                  the boards you can reach (admins: all, unowned ones flagged)
  *   POST   /api/boards {board?}         a new board, yours ("Make boards")
  *   GET    /api/boards/:id              the board (at least view)
+ *   GET    /api/boards/:id/objects…     reads: objects, search, Mermaid, wiki pages (see boardReads.ts)
  *   POST   /api/boards/:id/ops {ops}    change it with operations (edit)
  *   GET    /api/boards/:id/access       who has access
  *   PUT    /api/boards/:id/access       change who has access, or the owner (manage)
@@ -17,6 +18,7 @@ import type { Role } from '../../src/collab/protocol'
 import type { Room, RoomData } from '../../src/collab/room'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
+import { readBoard, sendRead } from '../boardReads'
 import { atLeast, levelFor, roleOf } from './access'
 import type { Accounts } from './service'
 import { type BoardEntry, cleanGrants } from './store'
@@ -169,6 +171,14 @@ export class AccountBoards {
     // No difference between a board that doesn't exist and one you can't see.
     const level = room ? this.level(me, room.data) : null
     if (!room || !level) return json(res, 404, { error: 'No such board, or you don’t have access to it' }), true
+
+    if (parts.length > 3 && m === 'GET') {
+      const read = readBoard(room.data.board, parts.slice(3), url.searchParams)
+      if (read) {
+        this.peek(req, me, room.data, 'read')
+        return sendRead(res, read), true
+      }
+    }
 
     if (parts.length === 3 && m === 'GET') {
       this.peek(req, me, room.data, 'read')

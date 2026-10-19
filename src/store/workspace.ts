@@ -7,6 +7,7 @@ import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
 import { getBody, getPage, pageText } from '../model/wiki'
 import { wikiFromTemplate } from '../model/wikiTemplates'
+import { GUIDE_TITLE, guideWiki, tourBoard } from './guide'
 import { headings, parseMarkdown } from '../model/markdown'
 import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
@@ -400,8 +401,26 @@ export class Workspace {
         // Unreadable: start with the welcome board.
       }
     }
+    // A first visit also gets the guide, waiting in Your boards (made first, so the welcome board is the newest).
+    if (!legacy) await this.makeGuide().catch(() => undefined)
     const id = await this.library.create(first)
     storage?.removeItem(LEGACY_KEY)
+    await this.switchTo(id)
+  }
+
+  /** Makes the guide wiki and the tour board it shows pictures of; the guide's id. */
+  private async makeGuide(): Promise<string> {
+    const tour = tourBoard(this.editor.measure)
+    const tourId = await this.library.create(tour.board)
+    return this.library.create(guideWiki(tourId, tour, Date.now(), this.editor.me))
+  }
+
+  /** Opens the built-in guide, making it (and its tour board) if this browser hasn't got it. */
+  async openGuide() {
+    await this.flush()
+    const have = (await this.library.list()).find((b) => b.kind === 'wiki' && b.title === GUIDE_TITLE)
+    const id = have?.id ?? (await this.makeGuide())
+    if (!have) this.libraryChanged()
     await this.switchTo(id)
   }
 

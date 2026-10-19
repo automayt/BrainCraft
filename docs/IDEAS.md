@@ -135,6 +135,20 @@ Ideas from the wiki review, roughly by value for a small group against effort:
   filters, a download, and a hash chain that shows hand edits.
 - [ ] Email for set-your-password links, when a mail server is set up.
 
+## Guide and API docs (October 2026)
+
+- [x] **A built-in guide**: a wiki explaining the app, with a tour board built
+  by operations, live embeds, macros shown working, every shortcut, and a
+  try-it checklist; made on a first visit, and from Help or Ctrl+K.
+- [x] **The HTTP API documents itself** (`/api/docs`, `/api/openapi.json`),
+  and reads boards and wiki pages, not just whole boards.
+- [ ] The guide in other languages.
+- [ ] Refresh an old copy of the guide when a new version of BrainCraft
+  changes it (today it's made once; delete it and open it again for the new
+  one).
+- [ ] An MCP tool that reads the server's OpenAPI description, so assistants
+  can use a remote server without the browser.
+
 ## Next up
 
 - [x] **Status marks.** Mark any object (a mind-map idea, a sticky, a card) as

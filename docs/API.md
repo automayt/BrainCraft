@@ -8,7 +8,7 @@ two", "add a comment"). The same operations work in four places:
 | --- | --- |
 | **Paste** | Paste JSON operations anywhere on the board, or use **Import / Export → Import**. |
 | **JavaScript** | `window.BrainCraft.apply([...])` in the page (browser console, extensions, embedding pages). |
-| **HTTP** | `POST /api/boards/{id}/ops` on a [BrainCraft server](SERVER.md), with the board's edit key. Everyone looking at the board sees the result live. |
+| **HTTP** | `POST /api/boards/{id}/ops` on a [BrainCraft server](SERVER.md), with the board's edit key. Everyone looking at the board sees the result live. The server lists every route at `/api/docs` and as OpenAPI at `/api/openapi.json`. |
 | **MCP** | AI assistants call the `apply_ops` tool (see [MCP.md](MCP.md)). |
 
 A batch is applied **all or nothing** and is a **single undo step**: if any
@@ -145,6 +145,11 @@ direction (`TD`, `LR`, `BT`, `RL`), node shapes `[ ]` process, `{ }` decision,
 `---`, `-.->`, `==>`, `<-->` and `A & B --> C`, and labels can be written as
 `-->|label|` or `-- label -->`. `subgraph`, `classDef`, `style` and `click`
 lines are skipped.
+
+The server's reads give the same answers as `list`, `get` and `find` below:
+`GET /api/boards/{id}/objects`, `/objects/{objectId}`, `/search?q=`,
+`/mermaid`, and for wikis `/pages`, `/pages/{page}` and `/pages/{page}/history`
+(see [SERVER.md](SERVER.md)).
 
 ## JavaScript
 

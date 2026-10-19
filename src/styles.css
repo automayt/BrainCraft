@@ -9478,3 +9478,20 @@ button.on,
     grid-template-columns: 1fr;
   }
 }
+
+/* Help: the way to the guide. */
+.help-guide {
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.help-guide:hover {
+  background: var(--border);
+}

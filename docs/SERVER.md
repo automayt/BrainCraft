@@ -89,8 +89,15 @@ never create objects that clash.
 
 ## HTTP API
 
+**The server documents its own API:** open `/api/docs` on it for every route
+and operation, or give `/api/openapi.json` (OpenAPI 3.1) to an API tool, a
+client generator or an AI agent. Both describe the server as it runs: with or
+without accounts, and only the AI routes that are switched on.
+
 All board routes take the board's key, either as `Authorization: Bearer <key>`
-or as `?key=<key>`.
+or as `?key=<key>`. With accounts on, they take a signed-in session or an API
+token instead (see [ACCOUNTS.md](ACCOUNTS.md)), and the accounts routes are
+listed in `/api/docs`.
 
 | Request | Key | Does |
 | --- | --- | --- |
@@ -99,6 +106,14 @@ or as `?key=<key>`.
 | `POST /api/boards` with optional `{"board": …}` | — | Creates a shared board and returns `{"id", "editKey", "viewKey"}` |
 | `GET /api/boards/{id}` | edit or view | `{"id", "role", "version", "board", "people"}` |
 | `POST /api/boards/{id}/ops` with `{"ops": […]}` | edit | Applies [operations](API.md) as one change and returns `{"version", "results"}`. Everyone connected sees it immediately. |
+| `GET /api/boards/{id}/objects?kind=` | edit or view | The title, counts by kind, every object (id, kind, label, position, size, comments, status) and the lines between them; for a wiki, its pages. |
+| `GET /api/boards/{id}/objects/{objectId}` | edit or view | One object in full: text, description, comments and data (a table as CSV, Kanban cards, timeline lanes, a mind map's outline, a database view's records). |
+| `GET /api/boards/{id}/search?q=` | edit or view | Matches in text, comments, cells, cards and labels (in a wiki, pages), each with a snippet. |
+| `GET /api/boards/{id}/mermaid?ids=` | edit or view | The flowcharts (or just those objects) as Mermaid, as plain text. |
+| `GET /api/boards/{id}/pages` | edit or view | A wiki's page tree, with who edited each page and when. |
+| `GET /api/boards/{id}/pages/{page}?version=` | edit or view | One page by id or exact title (URL-encoded): its Markdown, place, sub-pages and backlinks; with `version`, that saved version. |
+| `GET /api/boards/{id}/pages/{page}/history` | edit or view | The page's saved versions, newest first. |
+| `GET /api/docs` · `GET /api/openapi.json` | — | This API, as a page and as OpenAPI 3.1. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
 | `POST /api/ai/openai/chat/completions` | AI password, if set | The assistant's proxy to an OpenAI-compatible server (only with `OPENAI_BASE_URL`). |

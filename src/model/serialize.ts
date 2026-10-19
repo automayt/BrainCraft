@@ -147,5 +147,7 @@ export function welcomeBoard(): Board {
   label(no, 'No')
   ;[b, done] = addStep(b, yes!, 'down', 'terminator')
   text(done, 'Share with the team')
+  // Where to learn the rest.
+  ;[b] = addItem(b, newItem('text', { x: 0, y: 420, w: 1000, h: 40 }, { text: '📘 New here? The BrainCraft guide is in Your boards (Ctrl+O), or in Help (?).', fontSize: 24 }))
   return b
 }

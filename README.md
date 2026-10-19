@@ -456,6 +456,10 @@ shares live exactly like a board.
 - Boards can also be built from JSON operations: paste them, or call
   `window.BrainCraft.apply([...])`. See [docs/API.md](docs/API.md), which
   includes a ready-made prompt for AI assistants.
+- The BrainCraft server's **HTTP API** changes boards with the same
+  operations and reads them (objects, search, Mermaid, wiki pages and their
+  history). It documents itself at `/api/docs`, with an OpenAPI description
+  at `/api/openapi.json` for tools and client generators.
 
 ### Whiteboard
 
@@ -504,6 +508,18 @@ shares live exactly like a board.
 - Undo and redo; deleting tells you what went, in case it was a slip.
 
 Press **?** in the app to see every shortcut.
+
+### The built-in guide
+
+- A first visit brings a **BrainCraft guide**: a wiki that explains every
+  part of the app, beside a **tour board** with a frame for each (mind maps,
+  flowcharts, Kanban and timelines, linked data, deciding together, code and
+  links, presenting). The guide's pages show pieces of the tour live, use the
+  wiki's macros as it describes them, list every shortcut, and end with a
+  checklist to try things out. The tour was built with the operations API,
+  and the guide's API page shows how.
+- Open it any time from Help (**?**), the board menu, or Ctrl+K → "guide";
+  it's an ordinary wiki, so add to it or share it.
 
 ## Development
 

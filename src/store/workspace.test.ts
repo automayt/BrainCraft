@@ -15,9 +15,10 @@ async function workspace(hash = '') {
 }
 
 describe('workspace', () => {
-  it('starts on the welcome board in an empty browser', async () => {
+  it('starts on the welcome board in an empty browser, with the guide and its tour beside it', async () => {
     const { ws, editor } = await workspace()
-    expect(ws.boards).toHaveLength(1)
+    expect(ws.boards.map((b) => b.title).sort()).toEqual(['BrainCraft guide', 'BrainCraft tour', 'Welcome to BrainCraft'])
+    expect(ws.boards.find((b) => b.title === 'BrainCraft guide')!.kind).toBe('wiki')
     expect(editor.board.title).toBe('Welcome to BrainCraft')
     expect(ws.readOnly).toBe(false)
   })
@@ -41,18 +42,31 @@ describe('workspace', () => {
     expect((await ws.library.load(first))!.title).toBe('Unsaved change')
     await ws.switchTo(first)
     expect(editor.board.title).toBe('Unsaved change')
-    expect(ws.boards.map((b) => b.id).sort()).toEqual([first, second].sort())
+    expect(ws.boards.map((b) => b.id)).toEqual(expect.arrayContaining([first, second]))
   })
 
   it('opens another board when the open one is deleted', async () => {
-    const { ws, editor } = await workspace()
+    const { ws } = await workspace()
     const first = ws.boardId!
-    await ws.newBoard(emptyBoard('Second'))
+    const second = await ws.newBoard(emptyBoard('Second'))
     await ws.remove(ws.boardId!)
-    expect(ws.boardId).toBe(first)
-    expect(editor.board.title).toBe('Welcome to BrainCraft')
+    // Another board in the library opens (the guide's boards are there too).
+    expect(ws.boardId).not.toBe(second)
+    expect(ws.boards.map((b) => b.id)).toContain(ws.boardId)
+    await ws.switchTo(first)
     await ws.remove(first)
-    expect(ws.boards).toHaveLength(1)
+    expect(ws.boards.map((b) => b.title).sort()).toEqual(['BrainCraft guide', 'BrainCraft tour'])
+  })
+
+  it('opens the guide, making it again only when it has gone', async () => {
+    const { ws, editor } = await workspace()
+    await ws.openGuide()
+    expect(editor.board.title).toBe('BrainCraft guide')
+    expect(ws.boards).toHaveLength(3)
+    await ws.remove(ws.boardId!)
+    await ws.openGuide()
+    expect(editor.board.title).toBe('BrainCraft guide')
+    expect(ws.boards.filter((b) => b.title === 'BrainCraft guide')).toHaveLength(1)
   })
 
   it('restores an old version as an undoable step and keeps what it replaced', async () => {
@@ -114,7 +128,7 @@ describe('workspace', () => {
   it('falls back to the library when a share link is damaged', async () => {
     const { ws } = await workspace('#view=not-a-board')
     expect(ws.readOnly).toBe(false)
-    expect(ws.boards).toHaveLength(1)
+    expect(ws.boards.map((b) => b.title)).toContain('Welcome to BrainCraft')
   })
 })
 
