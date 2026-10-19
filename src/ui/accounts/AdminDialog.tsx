@@ -1,15 +1,15 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { type AccountUser, type AdminData, call, type Group, type Permission, type ServerBoard } from '../../store/account'
+import { type AccountUser, type AdminData, type AuditEntry, type AuditKind, call, type Group, type Permission, type ServerBoard } from '../../store/account'
 import { Dialog, timeAgo } from '../Boards'
 import { copyText } from '../copyText'
 import { useWorkspace } from '../useWorkspace'
 
-type Tab = 'people' | 'groups' | 'boards' | 'signin'
+type Tab = 'people' | 'groups' | 'boards' | 'activity' | 'signin'
 
 /**
  * Admins: people (add, role, groups, turn off, password links), groups (what their members may
- * do, who's in them, which sign-in provider groups map to them), boards waiting for an owner, and
- * how this server signs people in.
+ * do, who's in them, which sign-in provider groups map to them), boards waiting for an owner, the
+ * activity log, and how this server signs people in.
  */
 export function AdminDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
@@ -34,6 +34,7 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
     ['people', 'People'],
     ['groups', 'Groups'],
     ['boards', 'Boards without an owner'],
+    ['activity', 'Activity'],
     ['signin', 'Sign-in'],
   ]
   return (
@@ -72,6 +73,8 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
           <Groups data={data} run={run} api={api} />
         ) : tab === 'boards' ? (
           <Unowned data={data} />
+        ) : tab === 'activity' ? (
+          <Activity />
         ) : (
           <SignInInfo />
         )}
@@ -323,6 +326,130 @@ function Unowned({ data }: { data: AdminData }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+const KINDS: [AuditKind | '', string][] = [
+  ['', 'All activity'],
+  ['people', 'People and groups'],
+  ['signin', 'Sign-ins'],
+  ['boards', 'Board access'],
+  ['security', 'Passwords and API tokens'],
+]
+
+/** Actions worth a second look: failed sign-ins, admins opening boards nobody shared with them. */
+const NOTABLE = new Set(['signin.failed', 'board.open-as-admin', 'user.remove', 'group.remove', 'board.delete'])
+
+/** The activity log: who changed what, newest first, with a check that nobody edited it by hand. */
+function Activity() {
+  const ws = useWorkspace()
+  const [kind, setKind] = useState<AuditKind | ''>('')
+  const [admins, setAdmins] = useState(false)
+  const [q, setQ] = useState('')
+  const [query, setQuery] = useState('')
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null)
+  const [more, setMore] = useState(false)
+  const [check, setCheck] = useState<{ ok: boolean; count: number; brokenAt?: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Typing settles for a moment before asking the server.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(q.trim()), 300)
+    return () => clearTimeout(t)
+  }, [q])
+
+  const load = async (before?: number) => {
+    setError(null)
+    const params = new URLSearchParams({ limit: '100', ...(kind ? { kind } : {}), ...(admins ? { admins: '1' } : {}), ...(query ? { q: query } : {}), ...(before ? { before: String(before) } : {}) })
+    try {
+      const r = await call<{ entries: AuditEntry[]; more: boolean }>(ws.server!, `api/admin/audit?${params}`)
+      setEntries((old) => (before && old ? [...old, ...r.entries] : r.entries))
+      setMore(r.more)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  useEffect(() => void load(), [kind, admins, query, ws.server])
+  useEffect(() => void call<{ ok: boolean; count: number; brokenAt?: number }>(ws.server!, 'api/admin/audit/verify').then(setCheck, () => setCheck(null)), [ws.server])
+
+  const download = new URL('api/admin/audit/download', ws.server ?? location.href).href
+  return (
+    <div className="audit">
+      <div className="audit-filters">
+        <input type="search" aria-label="Find in the activity" placeholder="Find a person, board or word" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select aria-label="Kind of activity" value={kind} onChange={(e) => setKind(e.target.value as AuditKind | '')}>
+          {KINDS.map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <label className="ai-check">
+          <input type="checkbox" checked={admins} onChange={(e) => setAdmins(e.target.checked)} /> Only what admins did
+        </label>
+        <a className="link" href={download} download>
+          Download all
+        </a>
+      </div>
+      {check &&
+        (check.ok ? (
+          <p className="muted admin-hint">
+            {check.count} {check.count === 1 ? 'entry' : 'entries'}, each checked against the one before: nothing has been changed or removed.
+          </p>
+        ) : (
+          <p className="signin-error" role="alert">
+            The log doesn’t match what was written from entry {check.brokenAt} on: its file was changed or cut by hand. Entries before that are intact.
+          </p>
+        ))}
+      {error && (
+        <p className="signin-error" role="alert">
+          {error}
+        </p>
+      )}
+      {!entries ? (
+        <p className="muted">Loading…</p>
+      ) : !entries.length ? (
+        <p className="muted">{query || kind || admins ? 'Nothing matches.' : 'Nothing has happened yet.'}</p>
+      ) : (
+        <ol className="audit-list">
+          {entries.map((e) => (
+            <li key={e.n} className={NOTABLE.has(e.action) ? 'notable' : ''}>
+              <time dateTime={new Date(e.at).toISOString()} title={new Date(e.at).toLocaleString()}>
+                {new Date(e.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </time>
+              <div>
+                <span>{e.text}</span>
+                <small className="muted">
+                  {[e.by ? `${e.by.email}${e.by.admin ? ' (admin)' : ''}` : null, e.ip ? `from ${e.ip}` : null, `#${e.n}`].filter(Boolean).join(' · ')}
+                </small>
+                {e.changes && (
+                  <details>
+                    <summary>What changed</summary>
+                    <table className="audit-changes">
+                      <tbody>
+                        {Object.entries(e.changes).map(([field, [before, after]]) => (
+                          <tr key={field}>
+                            <th scope="row">{field}</th>
+                            <td>{before}</td>
+                            <td aria-hidden="true">→</td>
+                            <td>{after}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {more && entries && (
+        <button className="link" onClick={() => void load(entries[entries.length - 1].n)}>
+          Show older
+        </button>
+      )}
+    </div>
   )
 }
 

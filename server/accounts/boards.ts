@@ -20,7 +20,11 @@ import type { Board } from '../../src/model/types'
 import { atLeast, levelFor, roleOf } from './access'
 import type { Accounts } from './service'
 import { type BoardEntry, cleanGrants } from './store'
-import type { Level, User } from './types'
+import type { Grant, Level, User } from './types'
+
+const LEVEL_WORDS: Record<Level, string> = { view: 'can view', edit: 'can edit', manage: 'can manage' }
+/** An admin opening the same board again within this long isn't noted again. */
+const PEEK_QUIET_MS = 60 * 60_000
 
 /** What the server gives this: its rooms, however it keeps them. */
 export interface RoomHost {
@@ -43,6 +47,8 @@ export class AccountBoards {
   private indexTimer: NodeJS.Timeout | undefined
   /** Origins allowed to open live sessions besides the server's own (BRAINCRAFT_ALLOWED_ORIGINS). */
   private origins: string[]
+  /** When each admin last opened each board they could only open as an admin. */
+  private peeks = new Map<string, number>()
 
   constructor(accounts: Accounts, host: RoomHost, origins: string[] = []) {
     this.accounts = accounts
@@ -80,13 +86,47 @@ export class AccountBoards {
     return levelFor(user, this.store.groups, { owner, access: access.access })
   }
 
+  /**
+   * Notes an admin opening a board that isn't shared with them (being an admin is what let them in),
+   * once an hour per board.
+   */
+  private peek(req: IncomingMessage, user: User, data: RoomData, how: string) {
+    if (user.role !== 'admin' || this.level({ ...user, role: 'user' }, data)) return
+    const key = `${user.id} ${data.id}`
+    const now = Date.now()
+    if (now - (this.peeks.get(key) ?? 0) < PEEK_QUIET_MS) return
+    if (this.peeks.size > 10_000) this.peeks.clear()
+    this.peeks.set(key, now)
+    this.accounts.log(req, user, { action: 'board.open-as-admin', target: boardTarget(data), text: `${user.name} ${how} “${data.board.title}”, which isn’t shared with them (as an admin)` })
+  }
+
+  private grantName = (g: Grant) =>
+    g.who === 'user' ? (this.store.user(g.id)?.name ?? 'someone since removed') : (this.store.groups.find((x) => x.id === g.id)?.name ?? 'a group since removed')
+
+  /** "Planners can edit (was can view); removed Sam", or nothing when it's the same. */
+  private accessChanges(before: Grant[], after: Grant[]): string[] {
+    const same = (a: Grant, b: Grant) => a.who === b.who && a.id === b.id
+    const out: string[] = []
+    for (const g of after) {
+      const was = before.find((x) => same(x, g))
+      if (!was) out.push(`${this.grantName(g)} ${LEVEL_WORDS[g.level]}`)
+      else if (was.level !== g.level) out.push(`${this.grantName(g)} ${LEVEL_WORDS[g.level]} (was ${LEVEL_WORDS[was.level]})`)
+    }
+    for (const g of before) if (!after.some((x) => same(x, g))) out.push(`removed ${this.grantName(g)}`)
+    return out
+  }
+
+  private accessWords = (grants: Grant[]) => grants.map((g) => `${this.grantName(g)} ${LEVEL_WORDS[g.level]}`).join(', ') || 'nobody else'
+
   /** The role a live connection gets, and who it is; null to refuse (wrong origin, no access). */
   socket(req: IncomingMessage, room: Room): { role: Role; user: User } | null {
     const origin = req.headers.origin
     if (origin && origin.replace(/\/+$/, '') !== this.accounts.origin(req) && !this.origins.includes(origin)) return null
     const user = this.accounts.userOf(req)
     const role = roleOf(this.level(user, room.data))
-    return user && role ? { role, user } : null
+    if (!user || !role) return null
+    this.peek(req, user, room.data, 'joined the live session of')
+    return { role, user }
   }
 
   /** Handles a board route; false when it isn't one. */
@@ -131,11 +171,13 @@ export class AccountBoards {
     if (!room || !level) return json(res, 404, { error: 'No such board, or you don’t have access to it' }), true
 
     if (parts.length === 3 && m === 'GET') {
+      this.peek(req, me, room.data, 'read')
       return json(res, 200, { id: room.data.id, role: roleOf(level), level, version: room.data.version, board: room.data.board, people: room.members.size }), true
     }
 
     if (parts[3] === 'ops' && m === 'POST') {
       if (!atLeast(level, 'edit')) return json(res, 403, { error: 'You can only view this board' }), true
+      this.peek(req, me, room.data, 'changed')
       const ops = opsFromText(await body())
       if (!ops) return json(res, 400, { error: 'Send {"ops": [...]} (see docs/API.md)' }), true
       try {
@@ -164,10 +206,27 @@ export class AccountBoards {
           const widened = grants.some((g) => !before.some((x) => x.who === g.who && x.id === g.id && atLeast(x.level, g.level)))
           if (widened && !this.accounts.can(me, 'boards.share')) return json(res, 403, { error: 'You can’t give others access to boards. Ask an admin.' }), true
           room.data.access = grants
+          const changed = this.accessChanges(before, grants)
+          if (changed.length)
+            this.accounts.log(req, me, {
+              action: 'board.access',
+              target: boardTarget(room.data),
+              changes: { access: [this.accessWords(before), this.accessWords(grants)] },
+              text: `${me.name} changed who has “${room.data.board.title}”: ${changed.join('; ')}`,
+            })
         }
         if (b.owner !== undefined) {
           if (typeof b.owner !== 'string' || !this.store.user(b.owner)) return json(res, 400, { error: 'The new owner must be someone on this server' }), true
           if (me.role !== 'admin' && room.data.owner !== me.id) return json(res, 403, { error: 'Only the owner (or an admin) can hand a board over' }), true
+          const was = room.data.owner ? this.store.user(room.data.owner) : undefined
+          const to = this.store.user(b.owner)!
+          if (b.owner !== room.data.owner)
+            this.accounts.log(req, me, {
+              action: 'board.owner',
+              target: boardTarget(room.data),
+              changes: { owner: [was?.name ?? 'nobody', to.name] },
+              text: `${me.name} handed “${room.data.board.title}” to ${to.name} (it was ${was ? `${was.name}’s` : 'nobody’s'})`,
+            })
           room.data.owner = b.owner
         }
         room.onChange?.()
@@ -178,6 +237,8 @@ export class AccountBoards {
 
     if (parts.length === 3 && m === 'DELETE') {
       if (level !== 'manage') return json(res, 403, { error: 'Only people who manage this board can delete it' }), true
+      const owner = room.data.owner ? this.store.user(room.data.owner) : undefined
+      this.accounts.log(req, me, { action: 'board.delete', target: boardTarget(room.data), text: `${me.name} deleted “${room.data.board.title}”${owner && owner.id !== me.id ? ` (${owner.name}’s board)` : ''} from the server` })
       this.host.remove(room.data.id)
       delete this.store.boards[room.data.id]
       this.store.saveBoards()
@@ -204,6 +265,8 @@ export class AccountBoards {
     }
   }
 }
+
+const boardTarget = (d: RoomData) => ({ kind: 'board' as const, id: d.id, name: d.board.title })
 
 const entryOf = (d: RoomData): BoardEntry => ({
   title: d.board.title,

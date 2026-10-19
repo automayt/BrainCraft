@@ -67,6 +67,38 @@ permissions.
   data (or use a private window).
 - Names in live sessions are the accounts' names, so you can trust who's who.
 
+## The activity log
+
+**People and groups… → Activity** lists what happened on the server, newest
+first, with who did it, when, and from which address:
+
+- **People and groups:** the server's setup, people added, changed (role,
+  groups, turned off or on), given a set-your-password link or removed;
+  groups made, changed (permissions, members, provider groups) or removed;
+  someone made an admin by `BRAINCRAFT_ADMINS`; the log being downloaded.
+- **Sign-ins:** with a password or single sign-on, sign-outs, failed tries
+  (wrong password, an unknown email, a turned-off account, a provider
+  refusing), and accounts made or linked by single sign-on.
+- **Board access:** who has a board (people and groups added, removed or
+  given another level), boards handed over or deleted, and **an admin opening
+  a board that isn't shared with them** (noted once an hour per board).
+- **Passwords and API tokens:** passwords changed or chosen from a link, API
+  tokens made or revoked.
+
+Changes show what they were before and after. Filter by kind, by "only what
+admins did", or by words (a name, an email, a board), and **Download all** for
+the whole log as JSON lines. Only admins can see it. Passwords, links and
+tokens are never written to it; a failed sign-in notes the email only when
+what was typed is one.
+
+The log is `BRAINCRAFT_DATA/accounts/audit.jsonl`, only ever added to. Each
+entry includes a hash of the one before it, so if the file is edited or
+entries are cut out, the Activity tab says from which entry on it no longer
+matches. Past 10 MB the file is set aside as `audit-<number>.jsonl` and a new
+one continues; nothing is deleted, so archive old files as your rules require.
+For a copy the server can't touch, ship the file to your log system (it's one
+JSON object per line).
+
 ## Single sign-on (OpenID Connect)
 
 BrainCraft speaks OpenID Connect, which nearly every identity provider offers:
@@ -188,4 +220,5 @@ curl -H "Authorization: Bearer bct_..." https://boards.example.org/api/boards
   `BRAINCRAFT_TRUST_PROXY=1`) so cookies are marked Secure and links use the
   right address.
 - Accounts live in `BRAINCRAFT_DATA/accounts/` (`users.json`, `groups.json`,
-  `sessions.json`, `boards.json`); back them up with the boards.
+  `sessions.json`, `boards.json`, and the activity log `audit.jsonl`); back
+  them up with the boards.

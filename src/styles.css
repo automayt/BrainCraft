@@ -9269,6 +9269,7 @@ button.on,
 
 .admin-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 0 18px 10px;
 }
@@ -9404,5 +9405,76 @@ button.on,
   .admin-table td {
     padding: 0;
     border: none;
+  }
+}
+
+/* The activity log (People and groups → Activity). */
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.audit-filters input[type='search'] {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.audit-list li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 4px 12px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.audit-list li.notable {
+  box-shadow: inset 3px 0 0 #d9822b;
+  padding-left: 10px;
+}
+.audit-list time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.audit-list small {
+  display: block;
+  margin-top: 2px;
+}
+.audit-list details {
+  margin-top: 4px;
+}
+.audit-list summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.audit-changes {
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.audit-changes th,
+.audit-changes td {
+  padding: 2px 8px 2px 0;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.audit-changes th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.audit > .link {
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .audit-list li {
+    grid-template-columns: 1fr;
   }
 }

@@ -121,3 +121,30 @@ describe('boards on a server with accounts', () => {
     expect(inbox.find((m) => m.t === 'presence')?.peer?.name).toBe('Sam')
   })
 })
+
+describe('the activity log for boards', () => {
+  it('notes access changes, handing over and deleting, and an admin opening a board not shared with them (once)', async () => {
+    const s = await server()
+    const id = String((await s.call('POST', '/api/boards', s.sam.cookie, { board: emptyBoard('Trip') })).body.id)
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'view' }, { who: 'group', id: s.team.id, level: 'edit' }] })
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'edit' }] })
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'edit' }] }) // the same: nothing noted
+    await s.call('GET', `/api/boards/${id}`, s.ann)
+    await s.call('GET', `/api/boards/${id}`, s.ann)
+    await s.call('GET', `/api/boards/${id}`, s.lee.cookie)
+    // Her own board isn't news.
+    const own = String((await s.call('POST', '/api/boards', s.ann, { board: emptyBoard('Mine') })).body.id)
+    await s.call('GET', `/api/boards/${own}`, s.ann)
+    await s.call('PUT', `/api/boards/${id}/access`, s.ann, { owner: s.lee.id })
+    await s.call('DELETE', `/api/boards/${id}`, s.ann)
+    const texts = s.accounts.audit.query({ kind: 'boards' }).entries.map((e) => e.text)
+    expect(texts).toEqual([
+      'Ann deleted “Trip” (Lee’s board) from the server',
+      'Ann handed “Trip” to Lee (it was Sam’s)',
+      'Ann read “Trip”, which isn’t shared with them (as an admin)',
+      'Sam changed who has “Trip”: Lee can edit (was can view); removed Team',
+      'Sam changed who has “Trip”: Lee can view; Team can edit',
+    ])
+    expect(s.accounts.audit.query({ kind: 'boards' }).entries[3].changes).toEqual({ access: ['Lee can view, Team can edit', 'Lee can edit'] })
+  })
+})

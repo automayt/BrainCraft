@@ -442,6 +442,8 @@ shares live exactly like a board.
 - Sign in with a password, or **single sign-on** with any OpenID Connect
   provider (Entra ID, Okta, Google, Keycloak, Authentik…), with groups taken
   from the provider. A built-in pretend provider lets you try it all locally.
+- An **activity log** shows admins what changed, who signed in, and who opened
+  what, and notices if its file was edited by hand.
 - API tokens let scripts and AI assistants act as you. See
   [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
 

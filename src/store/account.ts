@@ -71,6 +71,20 @@ export interface AdminData {
   link?: string
 }
 
+/** One entry in the server's activity log. */
+export interface AuditEntry {
+  n: number
+  at: number
+  action: string
+  by: { id: string; name: string; email: string; admin?: true } | null
+  ip?: string
+  target?: { kind: string; id: string; name?: string }
+  text: string
+  changes?: Record<string, [string, string]>
+}
+
+export type AuditKind = 'people' | 'signin' | 'boards' | 'security'
+
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {

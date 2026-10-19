@@ -130,7 +130,9 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [ ] "People and groups…" in the command palette for admins.
 - [ ] Clear this browser's copies of server boards when signing out, as an
   option for shared computers.
-- [ ] An admin log of sign-ins and access changes.
+- [x] **An activity log** of admins' changes, sign-ins, access changes, tokens
+  and admins opening boards not shared with them, with before and after,
+  filters, a download, and a hash chain that shows hand edits.
 - [ ] Email for set-your-password links, when a mail server is set up.
 
 ## Next up
