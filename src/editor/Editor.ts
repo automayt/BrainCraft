@@ -1627,6 +1627,14 @@ export class Editor {
     if (this.board === was && parent !== undefined && W.withDescendants(was, id).has(parent)) this.setStatus('A page can’t go inside one of its own sub-pages')
   }
 
+  /** Protects a page (and the pages under it), or lifts its protection. */
+  setPageProtected(id: string, on: boolean) {
+    const page = W.getPage(this.board, id)
+    if (!page || this.readOnly) return
+    this.edit((b) => W.setPageMeta(b, id, { protected: on }))
+    this.setStatus(on ? `“${page.title || 'Untitled'}” is protected` : `“${page.title || 'Untitled'}” is no longer protected`)
+  }
+
   trashPage(id: string) {
     const page = W.getPage(this.board, id)
     if (!page) return

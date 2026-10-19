@@ -246,13 +246,15 @@ function updatePage(b: Board, id: string, f: (p: Page) => Page): Board {
 }
 
 /** Renames a page or changes its icon. */
-export function setPageMeta(b: Board, id: string, meta: { title?: string; icon?: string | null }): Board {
+export function setPageMeta(b: Board, id: string, meta: { title?: string; icon?: string | null; protected?: boolean }): Board {
   return updatePage(b, id, (p) => {
     const next: Page = { ...p }
     if (meta.title !== undefined) next.title = meta.title.slice(0, 500)
     if (meta.icon === null) delete next.icon
     else if (meta.icon !== undefined) next.icon = meta.icon
-    return next.title === p.title && next.icon === p.icon ? p : next
+    if (meta.protected === true) next.protected = true
+    else if (meta.protected === false) delete next.protected
+    return next.title === p.title && next.icon === p.icon && next.protected === p.protected ? p : next
   })
 }
 

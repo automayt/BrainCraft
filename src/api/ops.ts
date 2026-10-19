@@ -95,7 +95,7 @@ export type Op =
   | { op: 'addComment'; id: Ref; text: string; author?: string }
   /** Wiki pages (in a wiki only). `page`, `parent` and `before` take a page id, a `ref` or an exact title. */
   | { op: 'createPage'; title: string; parent?: string; before?: string; text?: string; icon?: string; ref?: string; note?: string }
-  | { op: 'updatePage'; page: string; title?: string; text?: string; append?: string; icon?: string | null; note?: string }
+  | { op: 'updatePage'; page: string; title?: string; text?: string; append?: string; icon?: string | null; note?: string; protected?: boolean }
   | { op: 'movePage'; page: string; parent?: string | null; before?: string }
   | { op: 'deletePage'; page: string }
 
@@ -626,6 +626,10 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           // The page as it was, then as changed: both in its history.
           b = RV.savePageVersion(b, id)
           if (op.title !== undefined || op.icon !== undefined) b = W.setPageMeta(b, id, { ...(op.title !== undefined ? { title: text(op.title, 'title') } : {}), ...(op.icon !== undefined ? { icon: op.icon === null ? null : text(op.icon, 'icon') } : {}) })
+          if (op.protected !== undefined) {
+            if (typeof op.protected !== 'boolean') fail(index, op, '"protected" should be true or false')
+            b = W.setPageMeta(b, id, { protected: op.protected })
+          }
           if (op.text !== undefined || op.append !== undefined) {
             const base = op.text !== undefined ? text(op.text, 'text') : W.pageText(b, id)
             const extra = op.append !== undefined ? text(op.append, 'append') : ''

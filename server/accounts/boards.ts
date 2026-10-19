@@ -19,6 +19,7 @@ import type { Room, RoomData } from '../../src/collab/room'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
 import { readBoard, sendRead } from '../boardReads'
+import { boardWrite } from '../boardWrites'
 import { atLeast, levelFor, roleOf } from './access'
 import type { Accounts } from './service'
 import { type BoardEntry, cleanGrants } from './store'
@@ -121,14 +122,15 @@ export class AccountBoards {
   private accessWords = (grants: Grant[]) => grants.map((g) => `${this.grantName(g)} ${LEVEL_WORDS[g.level]}`).join(', ') || 'nobody else'
 
   /** The role a live connection gets, and who it is; null to refuse (wrong origin, no access). */
-  socket(req: IncomingMessage, room: Room): { role: Role; user: User } | null {
+  socket(req: IncomingMessage, room: Room): { role: Role; user: User; level: Level } | null {
     const origin = req.headers.origin
     if (origin && origin.replace(/\/+$/, '') !== this.accounts.origin(req) && !this.origins.includes(origin)) return null
     const user = this.accounts.userOf(req)
-    const role = roleOf(this.level(user, room.data))
-    if (!user || !role) return null
+    const level = this.level(user, room.data)
+    const role = roleOf(level)
+    if (!user || !role || !level) return null
     this.peek(req, user, room.data, 'joined the live session of')
-    return { role, user }
+    return { role, user, level }
   }
 
   /** Handles a board route; false when it isn't one. */
@@ -172,6 +174,12 @@ export class AccountBoards {
     const level = room ? this.level(me, room.data) : null
     if (!room || !level) return json(res, 404, { error: 'No such board, or you don’t have access to it' }), true
 
+    // Exports, and writing wiki pages one by one.
+    if (parts.length > 3 && (await boardWrite(room, m, parts.slice(3), url.searchParams, body, { canEdit: atLeast(level, 'edit'), manages: level === 'manage' }, res))) {
+      if (m === 'GET') this.peek(req, me, room.data, 'exported')
+      return true
+    }
+
     if (parts.length > 3 && m === 'GET') {
       const read = readBoard(room.data.board, parts.slice(3), url.searchParams)
       if (read) {
@@ -191,11 +199,11 @@ export class AccountBoards {
       const ops = opsFromText(await body())
       if (!ops) return json(res, 400, { error: 'Send {"ops": [...]} (see docs/API.md)' }), true
       try {
-        const results = room.applyOps(ops)
+        const results = room.applyOps(ops, { manages: level === 'manage' })
         this.index(room)
         return json(res, 200, { version: room.data.version, results }), true
       } catch (err) {
-        return json(res, err instanceof OpError ? 422 : 500, { error: (err as Error).message }), true
+        return json(res, err instanceof OpError ? (/manage this wiki/.test(err.message) ? 403 : 422) : 500, { error: (err as Error).message }), true
       }
     }
 

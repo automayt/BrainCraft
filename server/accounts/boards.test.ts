@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Room, type RoomData } from '../../src/collab/room'
 import { emptyBoard } from '../../src/model/board'
+import { emptyWiki } from '../../src/model/wiki'
 import { fakeMeasure } from '../../src/model/test-helpers'
 import { AccountBoards, type RoomHost } from './boards'
 import { cookieOf, req, res, tempDir } from './fakes'
@@ -146,5 +147,51 @@ describe('the activity log for boards', () => {
       'Sam changed who has “Trip”: Lee can view; Team can edit',
     ])
     expect(s.accounts.audit.query({ kind: 'boards' }).entries[3].changes).toEqual({ access: ['Lee can view, Team can edit', 'Lee can edit'] })
+  })
+})
+
+describe('wikis on a server with accounts', () => {
+  it('follow the access list for reading, writing pages and exporting, and keep protected pages for managers', async () => {
+    const s = await server()
+    const kim = await (async () => {
+      const made = await s.call('POST', '/api/admin/users', s.ann, { email: 'kim@x.org', name: 'Kim' })
+      const cookie = cookieOf(await s.call('POST', '/api/auth/reset', '', { token: String(made.body.link).split('#reset=')[1], password: 'Kim long password' }))
+      return { cookie, id: (made.body.user as { id: string }).id }
+    })()
+    const id = String((await s.call('POST', '/api/boards', s.sam.cookie, { board: emptyWiki('Club') })).body.id)
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'edit' }, { who: 'user', id: kim.id, level: 'view' }] })
+
+    // Lee can edit: add and change pages.
+    const made = await s.call('POST', `/api/boards/${id}/pages`, s.lee.cookie, { title: 'Rules', text: 'Be kind', note: 'First go' })
+    expect(made.status).toBe(201)
+    expect(made.body).toMatchObject({ title: 'Rules', text: 'Be kind' })
+    expect((await s.call('PUT', `/api/boards/${id}/pages/Rules`, s.lee.cookie, { append: '- No spoilers' })).body).toMatchObject({ text: 'Be kind\n- No spoilers' })
+    // Kim can only look, and export.
+    expect((await s.call('POST', `/api/boards/${id}/pages`, kim.cookie, { title: 'Mine' })).status).toBe(403)
+    expect((await s.call('POST', `/api/boards/${id}/ops`, kim.cookie, { ops: [{ op: 'createPage', title: 'Mine' }] })).status).toBe(403)
+    const html = await s.call('GET', `/api/boards/${id}/export?format=html`, kim.cookie)
+    expect(html.status).toBe(200)
+    expect(html.headers['content-type']).toMatch(/text\/html/)
+    expect(String(html.body.text)).toContain('No spoilers')
+    expect(String((await s.call('GET', `/api/boards/${id}/pages/Rules/export?format=md`, kim.cookie)).body.text)).toContain('# Rules')
+    // Nobody else can, and can't tell it's there.
+    const stranger = await s.call('GET', `/api/boards/${id}/export?format=md`, s.lee.cookie.replace(/=.*/, '=nope'))
+    expect(stranger.status).toBe(401)
+
+    // Only Sam (who manages it) may protect it; then Lee may not change it, by any route.
+    expect((await s.call('PUT', `/api/boards/${id}/pages/Rules`, s.lee.cookie, { protected: true })).status).toBe(403)
+    expect((await s.call('PUT', `/api/boards/${id}/pages/Rules`, s.sam.cookie, { protected: true })).status).toBe(200)
+    expect((await s.call('PUT', `/api/boards/${id}/pages/Rules`, s.lee.cookie, { text: 'Rules are off' })).status).toBe(403)
+    expect((await s.call('POST', `/api/boards/${id}/pages`, s.lee.cookie, { title: 'Loophole', parent: 'Rules' })).status).toBe(403)
+    expect((await s.call('DELETE', `/api/boards/${id}/pages/Rules`, s.lee.cookie)).status).toBe(403)
+    expect((await s.call('POST', `/api/boards/${id}/ops`, s.lee.cookie, { ops: [{ op: 'updatePage', page: 'Rules', text: 'x' }] })).status).toBe(403)
+    // Sam still can; Lee can still write elsewhere.
+    expect((await s.call('PUT', `/api/boards/${id}/pages/Rules`, s.sam.cookie, { text: 'Be very kind' })).status).toBe(200)
+    expect((await s.call('POST', `/api/boards/${id}/pages`, s.lee.cookie, { title: 'Ideas' })).status).toBe(201)
+    // Live: the connection carries who manages it, which the room uses to guard protected pages.
+    const live = (cookie: string) => s.boards.socket(req('GET', { cookie }), s.rooms.get(id)!)
+    expect(live(s.sam.cookie)).toMatchObject({ role: 'edit', level: 'manage' })
+    expect(live(s.lee.cookie)).toMatchObject({ role: 'edit', level: 'edit' })
+    expect(live(kim.cookie)).toMatchObject({ role: 'view', level: 'view' })
   })
 })

@@ -395,6 +395,7 @@ export function cleanPage(v: unknown): Page | null {
     ...(icon ? { icon } : {}),
     created: created ?? 0,
     ...(trashed !== undefined && trashed > 0 ? { trashed } : {}),
+    ...(v.protected === true ? { protected: true as const } : {}),
   }
 }
 

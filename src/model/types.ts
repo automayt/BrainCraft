@@ -93,6 +93,8 @@ export interface Page {
   created: number
   /** When it went to the trash (with its sub-pages); restorable until deleted for good. */
   trashed?: number
+  /** Only people who manage the wiki may change this page and the pages under it (see protection.ts). */
+  protected?: true
 }
 
 /** A copy of what a page's embed shows, kept in the wiki. `key` is `board` or `board#item`. */

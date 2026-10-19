@@ -114,6 +114,12 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/pages` | edit or view | A wiki's page tree, with who edited each page and when. |
 | `GET /api/boards/{id}/pages/{page}?version=` | edit or view | One page by id or exact title (URL-encoded): its Markdown, place, sub-pages and backlinks; with `version`, that saved version. |
 | `GET /api/boards/{id}/pages/{page}/history` | edit or view | The page's saved versions, newest first. |
+| `POST /api/boards/{id}/pages` with `{"title", "parent"?, "before"?, "text"?, "icon"?, "note"?}` | edit | Adds a page; answers with it (201). |
+| `PUT /api/boards/{id}/pages/{page}` with `{"title"?, "text"?, "append"?, "icon"?, "note"?, "protected"?}` | edit | Changes a page, keeping a version from before and after; `protected` is for people who manage the wiki. |
+| `POST /api/boards/{id}/pages/{page}/move` with `{"parent"?, "before"?}` | edit | Moves a page with its sub-pages (`"parent": null` for the top). |
+| `DELETE /api/boards/{id}/pages/{page}` | edit | Moves a page and its sub-pages to the trash. |
+| `GET /api/boards/{id}/pages/{page}/export?format=md\|html` | edit or view | One page as a Markdown file or a web page. |
+| `GET /api/boards/{id}/export?format=json\|md\|html\|zip` | edit or view | The whole board as a file: `json` (a `.braincraft` file) or `md` for any board; a wiki also as `html` (one printable web page with a contents list) or `zip` (a Markdown file per page). |
 | `GET /api/docs` · `GET /api/openapi.json` | — | This API, as a page and as OpenAPI 3.1. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |

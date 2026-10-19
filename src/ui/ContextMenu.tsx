@@ -4,6 +4,7 @@ import { VIEW_TYPES } from '../model/dataset'
 import { copyImage } from './ExportImage'
 import { download } from './imageExport'
 import { excalidrawFile, isDrawing, sceneText } from '../model/excalidraw'
+import { itemCsv } from '../model/boardMarkdown'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
@@ -78,6 +79,10 @@ export function ContextMenu() {
     if (single && single.kind !== 'pen' && single.kind !== 'image' && single.kind !== 'link')
       entries.push({ label: single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline' ? 'Rename' : 'Edit text', keys: 'Enter', run: () => editor.startEditing(single.id) })
     if (single) entries.push({ label: `Comments${single.notes?.length ? ` (${single.notes.length})` : ''}`, keys: 'Alt C', run: () => editor.toggleNotes(true) })
+    if (single && (single.kind === 'table' || single.kind === 'data')) {
+      const csv = itemCsv(editor.board, single)
+      if (csv !== null) entries.push({ label: 'Download CSV', run: () => download(new Blob([csv], { type: 'text/csv' }), `${(single.text || 'table').slice(0, 60)}.csv`) })
+    }
     if (isDrawing(single)) {
       const scene = single.excalidraw
       entries.push(

@@ -371,6 +371,16 @@ export class Workspace {
   }
 
   /** Nothing here can be changed: a snapshot link, or a live session joined with the view link. */
+  /**
+   * Whether this person manages the open board: on a server with accounts, its owner, a manager or
+   * an admin; anywhere else nobody does (protected pages are a guard anyone who can edit may lift).
+   */
+  get managesBoard(): boolean {
+    const live = this.liveInfo
+    if (!live?.account) return false
+    return this.serverBoards.find((b) => b.id === live.id)?.level === 'manage'
+  }
+
   get viewOnly() {
     return this.readOnly || this.liveInfo?.role === 'view'
   }

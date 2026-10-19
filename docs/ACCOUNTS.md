@@ -99,6 +99,20 @@ one continues; nothing is deleted, so archive old files as your rules require.
 For a copy the server can't touch, ship the file to your log system (it's one
 JSON object per line).
 
+## Wikis
+
+A wiki is a board like any other: its owner and its **Access** list decide
+who reads it (view), writes in it (edit) and manages it (manage), in the app,
+in live sessions, through the API and for exports.
+
+**Protected pages:** someone who manages a wiki can protect a page (page menu
+**⋯ → Protect page…**). Then only people who manage the wiki can change that
+page or the pages under it, or add pages there; everyone else who can edit
+reads it, with a note saying why. The server refuses anyone else's changes to
+it, live or through the API (403). On a server without accounts nobody
+"manages", so protection there is a guard in the app that anyone who can edit
+may lift.
+
 ## Single sign-on (OpenID Connect)
 
 BrainCraft speaks OpenID Connect, which nearly every identity provider offers:

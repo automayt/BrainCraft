@@ -171,6 +171,62 @@ export function openApiSpec(o: SpecOptions) {
     security: boardAuth,
     responses: { '200': ok('The versions'), '409': error('The board is a canvas, not a wiki'), ...denied },
   })
+  const notWiki = { '409': error('The board is a canvas, not a wiki') }
+  const cantEdit = { '403': error(o.accounts ? 'You can only view it, or the page is protected (only people who manage the wiki may change it)' : 'A view key') }
+  add('/api/boards/{id}/pages', 'post', {
+    tags: ['Wikis'],
+    summary: 'Add a page',
+    description: 'The same as the createPage operation: `parent` and `before` take a page id or exact title; its first version carries `note`.',
+    operationId: 'createPage',
+    parameters: [boardId],
+    security: boardAuth,
+    requestBody: { required: true, ...json({ type: 'object', properties: { title: { type: 'string' }, parent: { type: 'string' }, before: { type: 'string' }, text: { type: 'string', description: 'Markdown' }, icon: { type: 'string' }, note: { type: 'string' } }, required: ['title'] }, { title: 'Meeting notes', parent: 'Home', text: '## Decisions\n- [ ] Book the hall', note: 'From Tuesday' }) },
+    responses: { '201': ok('The new page, as GET returns it'), '422': error('Something in it isn’t right; nothing changed'), ...cantEdit, ...notWiki, ...denied },
+  })
+  add('/api/boards/{id}/pages/{page}', 'put', {
+    tags: ['Wikis'],
+    summary: 'Change a page',
+    description: '`text` replaces its Markdown and `append` adds to the end; `note` says what changed. Its history keeps a version from before and after. `protected` (true or false) is for people who manage the wiki.',
+    operationId: 'updatePage',
+    parameters: [boardId, pageParam],
+    security: boardAuth,
+    requestBody: { required: true, ...json({ type: 'object', properties: { title: { type: 'string' }, text: { type: 'string' }, append: { type: 'string' }, icon: { type: ['string', 'null'] }, note: { type: 'string' }, protected: { type: 'boolean' } } }, { append: '- [ ] Send the invites', note: 'Added a task' }) },
+    responses: { '200': ok('The page now'), '404': error('No page with that id or title'), '422': error('Something in it isn’t right; nothing changed'), ...cantEdit, ...notWiki, ...denied },
+  })
+  add('/api/boards/{id}/pages/{page}', 'delete', {
+    tags: ['Wikis'],
+    summary: 'Move a page (and its sub-pages) to the trash',
+    operationId: 'trashPage',
+    parameters: [boardId, pageParam],
+    security: boardAuth,
+    responses: { '200': ok('Trashed', { type: 'object', properties: { page: { type: 'string' }, trashed: { const: true } } }), ...cantEdit, ...notWiki, ...denied },
+  })
+  add('/api/boards/{id}/pages/{page}/move', 'post', {
+    tags: ['Wikis'],
+    summary: 'Move a page with its sub-pages',
+    operationId: 'movePage',
+    parameters: [boardId, pageParam],
+    security: boardAuth,
+    requestBody: { required: true, ...json({ type: 'object', properties: { parent: { type: ['string', 'null'], description: 'A page, or null for the top' }, before: { type: 'string' } } }) },
+    responses: { '200': ok('The page in its new place'), '422': error('A page can’t go inside its own sub-pages'), ...cantEdit, ...notWiki, ...denied },
+  })
+  add('/api/boards/{id}/pages/{page}/export', 'get', {
+    tags: ['Wikis'],
+    summary: 'One page as a file',
+    operationId: 'exportPage',
+    parameters: [boardId, pageParam, query('format', 'md (default) or html', { enum: ['md', 'html'] })],
+    security: boardAuth,
+    responses: { '200': { description: 'The file', content: { 'text/markdown': { schema: { type: 'string' } }, 'text/html': { schema: { type: 'string' } } } }, ...notWiki, ...denied },
+  })
+  add('/api/boards/{id}/export', 'get', {
+    tags: ['Boards'],
+    summary: 'The whole board as a file',
+    description: 'Any board: `json` (a .braincraft file, the default) or `md` (a canvas as an outline; a wiki page after page). A wiki also: `html` (one web page with a contents list, printable) and `zip` (a Markdown file per page). Pictures and PDFs of a canvas come from the app.',
+    operationId: 'exportBoard',
+    parameters: [boardId, query('format', 'json, md, html (wikis) or zip (wikis)', { enum: ['json', 'md', 'html', 'zip'] })],
+    security: boardAuth,
+    responses: { '200': { description: 'The file, as an attachment' }, '400': error('A format this board doesn’t come in'), ...denied },
+  })
   if (o.accounts) {
     add('/api/boards/{id}/access', 'get', {
       tags: ['Boards'],

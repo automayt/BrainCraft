@@ -80,14 +80,14 @@ async function inlineFont(css: string, base: string): Promise<string> {
 const xhtml = (markup: string) => markup.replace(/(<foreignObject\b[^>]*>)\s*<([a-z][a-z0-9]*)(?![^>]*\bxmlns=)/g, '$1<$2 xmlns="http://www.w3.org/1999/xhtml"')
 
 /** A standalone SVG of `area` (or of the objects' bounds), drawn the way the board shows them now. */
-export async function boardSvg(editor: Editor, opts: { ids?: ReadonlySet<Id>; area?: Rect } = {}): Promise<Picture | null> {
+export async function boardSvg(editor: Editor, opts: { ids?: ReadonlySet<Id>; area?: Rect; theme?: string } = {}): Promise<Picture | null> {
   // The masked view: an export never shows other people's hidden brainstorm notes.
   let board = subset(editor.viewBoard, opts.ids)
   const bounds = opts.area ?? B.bounds(board)
   if (!bounds) return null
   const r = opts.area ?? expand(bounds, PAD)
   if (opts.area) board = { ...board, items: board.items.filter((i) => intersects(r, i)) }
-  const theme = document.documentElement.dataset.theme ?? 'dark'
+  const theme = opts.theme ?? document.documentElement.dataset.theme ?? 'dark'
   const view = createElement(BoardView, {
     board,
     hidden: editor.hidden,

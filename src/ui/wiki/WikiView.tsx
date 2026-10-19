@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { isProtected } from '../../model/protection'
 import { MovePage } from './MovePage'
 import { ChangesSince, PageHistory } from './PageHistory'
 import { WikiCatchUp } from './WikiCatchUp'
@@ -146,7 +147,13 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   const editor = useEditor()
   const ws = useWorkspace()
   const board = editor.board
-  const ro = editor.readOnly
+  // A protected page (or one under a protected page) is read-only, except to those who manage the
+  // wiki on a server with accounts; without accounts, anyone who can edit may lift the protection.
+  const locked = isProtected(board, page.id)
+  const ownLock = !!page.protected
+  const accounts = !!ws.liveInfo?.account
+  const canProtect = !editor.readOnly && (accounts ? ws.managesBoard : true)
+  const ro = editor.readOnly || (locked && !(accounts && ws.managesBoard))
   const body = W.getBody(board, page.id)
   const text = body?.text ?? ''
   const blocks = useMemo(() => parseMarkdown(text), [text])
@@ -158,6 +165,19 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   const [moving, setMoving] = useState(false)
   const [history, setHistory] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  /** These pages (or all) as a web page: downloaded when named, else printed. */
+  const exportPage = async (pages?: string[], file?: string) => {
+    editor.setStatus(file ? 'Making the web page…' : 'Getting it ready to print…')
+    try {
+      const { wikiPage, printHtml } = await import('../wikiExport')
+      const html = await wikiPage(ws, editor, board, pages)
+      if (file) download(new Blob([html], { type: 'text/html' }), file)
+      else printHtml(html)
+      editor.setStatus(file ? 'Downloaded the web page' : '')
+    } catch (err) {
+      editor.setStatus(`Couldn’t make it: ${(err as Error).message}`)
+    }
+  }
   // Ctrl+K asked for a page panel.
   useEffect(() => {
     if (editor.wikiPanel === 'history') setHistory(true)
@@ -232,11 +252,22 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
       {history && <PageHistory page={page} onClose={() => setHistory(false)} />}
       {editor.changesOf === page.id && editor.catchUp && <ChangesSince page={page} before={editor.catchUp.before} since={editor.catchUp.since} onClose={() => editor.showChanges(null)} />}
       <WikiCatchUp onShowChanges={(id) => editor.showChanges(id)} />
-      {ro && (
+      {editor.readOnly ? (
         <p className="wiki-readonly muted" role="status">
           {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : 'You’re reading this wiki. Ask for the edit link to write in it.'}
         </p>
-      )}
+      ) : locked ? (
+        <p className="wiki-protected" role="status">
+          <span aria-hidden="true">🔒 </span>
+          {ownLock ? 'Protected' : `Protected along with “${W.pagePath(board, page.id).find((p) => p.protected)?.title || 'a page above'}”`}
+          {': '}
+          {!ro
+            ? 'you manage this wiki, so you can change it; others who can edit it can’t.'
+            : canProtect
+              ? 'unprotect it in the page menu (⋯) to change it.'
+              : 'only people who manage this wiki can change it, or the pages under it.'}
+        </p>
+      ) : null}
       {path.length > 1 && (
         <nav className="wiki-crumbs" aria-label="This page is under">
           {path.slice(0, -1).map((p) => (
@@ -300,7 +331,38 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
             items={[
               { label: 'Page history', hint: 'Earlier versions of this page, what changed, and putting one back', run: () => setHistory(true) },
               ...(ro ? [] : [{ label: 'Move…', hint: 'Put this page somewhere else in the wiki', run: () => setMoving(true) }]),
+              ...(canProtect && (ownLock || !locked)
+                ? [
+                    ownLock
+                      ? { label: 'Remove protection', hint: 'Anyone who can edit the wiki can change this page again', run: () => editor.setPageProtected(page.id, false) }
+                      : {
+                          label: 'Protect page…',
+                          hint: accounts ? 'Only people who manage this wiki can change it and the pages under it' : 'Keeps it from being changed by accident; anyone who can edit can lift it',
+                          run: () => editor.setPageProtected(page.id, true),
+                        },
+                  ]
+                : []),
               { label: 'Download page (.md)', hint: 'This page as a Markdown file', run: () => download(new Blob([pageMarkdown(board, page.id, (to) => ws.linkTo(to))], { type: 'text/markdown' }), `${fileNameFor(page.title)}.md`) },
+              {
+                label: 'Download page as a web page (.html)',
+                hint: 'This page with its pictures, to open in any browser',
+                run: () => void exportPage([page.id], `${fileNameFor(page.title)}.html`),
+              },
+              {
+                label: 'Print or save page as PDF',
+                hint: 'This page, ready to print; choose “Save as PDF” in the print dialog',
+                run: () => void exportPage([page.id]),
+              },
+              {
+                label: 'Download wiki as a web page (.html)',
+                hint: 'Every page in one file, with a contents list and pictures; prints as a handbook',
+                run: () => void exportPage(undefined, `${fileNameFor(board.title)}.html`),
+              },
+              {
+                label: 'Print or save wiki as PDF',
+                hint: 'Every page, each on its own sheet',
+                run: () => void exportPage(),
+              },
               {
                 label: 'Download wiki (.zip)',
                 hint: 'Every page as a Markdown file, sub-pages in folders',

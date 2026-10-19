@@ -30,6 +30,7 @@ import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
 import { readBoard, sendRead } from './boardReads'
+import { boardWrite } from './boardWrites'
 import { docsPage, openApiSpec } from './openapi'
 import { Accounts } from './accounts/service'
 import { ssoFromEnv } from './accounts/oidc'
@@ -444,6 +445,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const role = room.roleFor(keyOf(req, url), safeEqual)
   if (!role) return send(res, 403, { error: 'Missing or wrong key' })
 
+  // Exports, and writing wiki pages one by one (see boardWrites.ts).
+  if (parts.length > 3 && (await boardWrite(room, req.method ?? 'GET', parts.slice(3), url.searchParams, () => readBody(req), { canEdit: role === 'edit' }, res))) return
+
   // GET /api/boards/:id/objects, /search, /mermaid, /pages… → reads (see boardReads.ts).
   if (parts.length > 3 && req.method === 'GET') {
     const read = readBoard(room.data.board, parts.slice(3), url.searchParams)
@@ -522,6 +526,7 @@ server.on('upgrade', (req, socket, head) => {
   let room: Room | null = null
   let role: Role | null = null
   let user: { id: string; name: string } | undefined
+  let manages: boolean | undefined
   try {
     const url = parseUrl(req)
     const m = url && /^\/api\/boards\/([^/]+)\/live$/.exec(url.pathname)
@@ -531,6 +536,7 @@ server.on('upgrade', (req, socket, head) => {
       const who = accountBoards.socket(req, room)
       role = who?.role ?? null
       user = who ? { id: who.user.id, name: who.user.name } : undefined
+      manages = who ? who.level === 'manage' : undefined
     } else role = room?.roleFor(url!.searchParams.get('key'), safeEqual) ?? null
   } catch (err) {
     log('upgrade error', err)
@@ -543,7 +549,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
     const id = randomBytes(6).toString('base64url')
     const sendTo = (msg: ServerMessage) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg))
-    room.join({ id, role, send: sendTo, ...(user ? { user } : {}) })
+    room.join({ id, role, send: sendTo, ...(user ? { user } : {}), ...(manages !== undefined ? { manages } : {}) })
     log('joined', room.data.id, id, role, `(${room.members.size} here)`)
     ws.on('message', (data) => {
       let msg: ClientMessage | undefined

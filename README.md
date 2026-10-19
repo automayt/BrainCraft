@@ -196,7 +196,10 @@ These become interactive once selected; drag them by their title strip.
 - **Board icons:** click the face next to the board's title to give it an
   emoji. It shows in the board list, the browser tab and links to the board,
   and travels with the board in live sessions.
-- **Export image or PDF (Ctrl+Shift+E):** the whole board or the selection
+- **Export (Ctrl+Shift+E):** the board as **Markdown** (frames as sections,
+  mind maps as lists, tables as tables, flowcharts as Mermaid, comments under
+  what they're on), and right-click a table or database → **Download CSV**.
+  As a picture: the whole board or the selection
   as PNG or SVG, or straight to the clipboard to paste into a chat. The PDF
   has one page per frame, like the slides. Right-click → **Copy as image**
   does the selection in one step.
@@ -321,6 +324,13 @@ shares live exactly like a board.
   drops off the list once you've opened it.
 - **Search across wikis:** Ctrl+K in any board or wiki also finds pages in
   your other wikis.
+- **Out as a web page or PDF:** **⋯ → Download wiki as a web page (.html)**
+  gives every page in one file, with a contents list, links between pages that
+  work, macros worked out and pictures of the boards it shows; **Print or save
+  as PDF** prints it, each page on its own sheet (or just this page).
+- **Protected pages:** **⋯ → Protect page…** keeps a page (and those under
+  it) for the people who manage the wiki; on a server with accounts the
+  server enforces it. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
 - **Markdown files in and out:** **⋯ → Download page (.md)**, or **Download
   wiki (.zip)** for every page as a Markdown file with sub-pages in folders.
   Drop `.md` files anywhere on a wiki (or **⋯ → Add Markdown files…**) and

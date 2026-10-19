@@ -9671,3 +9671,18 @@ button.on,
     translate: none;
   }
 }
+
+.export-sub {
+  margin: 16px 0 6px;
+  font-size: 13px;
+}
+
+/* A protected wiki page says so, and who may change it. */
+.wiki-protected {
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 8px;
+}

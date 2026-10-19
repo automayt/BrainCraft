@@ -59,7 +59,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'wheel', label: editor.selection.size > 1 ? 'Spin a wheel between these' : 'Add a spinner wheel', group: 'Together', aliases: 'wheel spinner spin random pick choose decide lottery raffle who', run: () => editor.addWheel() },
     { id: 'brainstorm', label: 'Start a private brainstorm', group: 'Together', aliases: 'brainstorm private hidden secret blind ideas reveal anonymous sticky', run: () => editor.startBrainstorm() },
     ...(editor.timer ? [{ id: 'timer-stop', label: 'Stop the timer', group: 'Together', aliases: 'timer stop cancel', run: () => editor.startTimer(null) }] : []),
-    { id: 'export-image', label: 'Export image or PDF…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print', run: ui.openExport },
+    { id: 'export-image', label: 'Export: image, PDF or Markdown…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print markdown md text', run: ui.openExport },
     { id: 'copy-image', label: editor.selection.size ? 'Copy selection as image' : 'Copy board as image', group: 'Board', aliases: 'png picture screenshot clipboard share chat', run: () => void copyImage(editor, editor.selection.size ? new Set(editor.selection) : undefined) },
     { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
     { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },

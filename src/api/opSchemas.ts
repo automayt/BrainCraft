@@ -129,7 +129,15 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   },
   updatePage: {
     summary: 'Changes a wiki page; its history keeps a version from before and after',
-    properties: { page: pageRef, title: str(), text: str('Replaces the Markdown'), append: str('Adds a line at the end'), icon: oneOf(str(), { type: 'null' }), note: str('What changed') },
+    properties: {
+      page: pageRef,
+      title: str(),
+      text: str('Replaces the Markdown'),
+      append: str('Adds a line at the end'),
+      icon: oneOf(str(), { type: 'null' }),
+      note: str('What changed'),
+      protected: bool('Only people who manage the wiki may change the page (and the pages under it); with accounts, only they may set this'),
+    },
     required: ['page'],
   },
   movePage: { summary: 'Moves a wiki page with its sub-pages', properties: { page: pageRef, parent: oneOf(pageRef, { type: 'null' }), before: pageRef }, required: ['page'] },

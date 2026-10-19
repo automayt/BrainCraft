@@ -110,7 +110,7 @@ Results carry the page's id as `page`.
 | Operation | Fields | Does |
 | --- | --- | --- |
 | `createPage` | `title`, `parent?`, `before?`, `text?` (Markdown), `icon?`, `ref?`, `note?` | A page under `parent` (or at the top), before `before` or last; its first version carries `note`. |
-| `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?`, `note?` | `text` replaces the page's Markdown; `append` adds a line at the end; `note` says what changed. The page's history keeps a version from before and after. |
+| `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?`, `note?`, `protected?` | `text` replaces the page's Markdown; `append` adds a line at the end; `note` says what changed. The page's history keeps a version from before and after. `protected: true` lets only the wiki's managers change it and the pages under it (with accounts, only they may set it). |
 | `movePage` | `page`, `parent?` (`null` for the top), `before?` | Moves it with its sub-pages. A page can't go inside its own sub-pages. |
 | `deletePage` | `page` | Moves it and its sub-pages to the trash. |
 
@@ -145,6 +145,10 @@ direction (`TD`, `LR`, `BT`, `RL`), node shapes `[ ]` process, `{ }` decision,
 `---`, `-.->`, `==>`, `<-->` and `A & B --> C`, and labels can be written as
 `-->|label|` or `-- label -->`. `subgraph`, `classDef`, `style` and `click`
 lines are skipped.
+
+On a server, wiki pages also have their own routes (`POST`, `PUT` and `DELETE`
+on `/api/boards/{id}/pages…`), and any board comes out as a file from
+`/api/boards/{id}/export?format=json|md|html|zip`.
 
 The server's reads give the same answers as `list`, `get` and `find` below:
 `GET /api/boards/{id}/objects`, `/objects/{objectId}`, `/search?q=`,

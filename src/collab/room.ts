@@ -3,7 +3,8 @@
  * patches and API operations are applied and passed on. No I/O here; the server wires it up.
  */
 
-import { type Op, type OpResult, applyOps } from '../api/ops'
+import { type Op, OpError, type OpResult, applyOps } from '../api/ops'
+import { protectedChange } from '../model/protection'
 import { cleanPatches } from '../model/sanitize'
 import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
@@ -42,6 +43,11 @@ export interface Member {
   signals?: number[]
   /** The signed-in person (servers with accounts): their name is the one others see. */
   user?: { id: string; name: string }
+  /**
+   * Whether they manage the board (servers with accounts). False means protected wiki pages are
+   * off limits to them; left out (shared by key), nobody manages and protection is the app's guard.
+   */
+  manages?: boolean
 }
 
 const SIGNALS_PER_5S = 15
@@ -163,6 +169,10 @@ export class Room {
       } catch {
         return m.send({ t: 'error', message: 'Bad patch', seq })
       }
+      if (isWiki && m.manages === false) {
+        const why = protectedChange(this.data.board, patches)
+        if (why) return m.send({ t: 'error', message: why, seq })
+      }
       if (next.items.length > MAX_ITEMS && next.items.length > this.data.board.items.length)
         return m.send({ t: 'error', message: `This board is full (${MAX_ITEMS.toLocaleString('en')} objects)`, seq })
       const pages = next.pages?.length ?? 0
@@ -192,13 +202,20 @@ export class Room {
     }
   }
 
-  /** Applies API operations as if someone edited the board, and passes the changes to everyone. */
-  applyOps(ops: Op[]): OpResult[] {
+  /**
+   * Applies API operations as if someone edited the board, and passes the changes to everyone.
+   * `manages: false` (someone signed in who doesn't manage it) keeps them off protected pages.
+   */
+  applyOps(ops: Op[], who: { manages?: boolean } = {}): OpResult[] {
     const before = this.data.board
     const { board, results } = applyOps(before, ops, { measure: this.measure })
     // Keep server-made ids out of every person's block.
     const after = layoutAll(board, this.measure)
     const patches = diff(before, after)
+    if (who.manages === false && before.kind === 'wiki') {
+      const why = protectedChange(before, patches)
+      if (why) throw new OpError(why)
+    }
     if (patches.length) this.applyServerPatches(patches, after)
     return results
   }

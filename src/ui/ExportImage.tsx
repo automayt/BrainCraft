@@ -1,7 +1,11 @@
-/** "Export image or PDF": a picture of the board or the selection, as PNG, SVG, the clipboard, or slides as PDF. */
+/**
+ * "Export": a picture of the board or the selection (PNG, SVG, the clipboard), slides as PDF, and
+ * the board as Markdown text.
+ */
 
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '../editor/Editor'
+import { boardMarkdown } from '../model/boardMarkdown'
 import { slides } from '../model/slides'
 import type { Id } from '../model/types'
 import { useDialog } from './useDialog'
@@ -73,9 +77,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className="modal export-dialog" role="dialog" aria-modal="true" aria-label="Export image or PDF" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
+      <div ref={ref} className="modal export-dialog" role="dialog" aria-modal="true" aria-label="Export" onKeyDown={(e) => e.key !== 'Escape' && e.stopPropagation()}>
         <header>
-          <h2>Export image or PDF</h2>
+          <h2>Export</h2>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
             ×
           </button>
@@ -121,6 +125,13 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               </button>
             </div>
             <p className="muted small">The PDF has one page per frame, in slide order — a handout of the presentation.</p>
+            <h3 className="export-sub">As text</h3>
+            <div className="export-actions">
+              <button disabled={!!busy} onClick={act('md', async (m) => m.download(new Blob([boardMarkdown(editor.board)], { type: 'text/markdown' }), name('md')))}>
+                Download Markdown (.md)
+              </button>
+            </div>
+            <p className="muted small">Frames become sections, mind maps lists, tables and databases tables, flowcharts Mermaid, with comments under what they’re on. Right-click a table or database for a CSV file.</p>
             {error && <p className="error">{error}</p>}
           </div>
         </div>

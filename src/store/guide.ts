@@ -372,7 +372,11 @@ Type **/** and pick **Embed from a board…**, or right-click an object on a can
 
 ## Files
 
-**⋯ → Download page (.md)**, or the whole wiki as a .zip of Markdown files. Drop **.md** files on a wiki and each becomes a page.`,
+From the page menu **⋯**: this page or the whole wiki as **Markdown** (a .zip of files for the wiki), as **one web page** with a contents list and pictures of the boards it shows, or **printed** (choose *Save as PDF* to get a PDF), each page on its own sheet. Drop **.md** files on a wiki and each becomes a page.
+
+## Protected pages
+
+**⋯ → Protect page…** keeps a page, and the pages under it, for the people who manage the wiki. On a server with accounts, nobody else can change it.`,
         },
         {
           title: 'Macros',
@@ -487,7 +491,8 @@ Every object has comments and a description (**Alt+C**). Comment blocks (**C**) 
       text: `- Boards **save as you work**, in this browser. The dot by the title says when.
 - **Version history** (board menu) keeps a version every ten minutes and any you name; restore one in one undoable step.
 - **Ctrl+S** saves a \`.braincraft\` file; open one with **Open file…** or by dropping it on the window.
-- **Export image or PDF** (**Ctrl+Shift+E**): the board or the selection as PNG, SVG or PDF (one page per frame).
+- **Export** (**Ctrl+Shift+E**): the board or the selection as PNG, SVG or PDF (one page per frame), or the board as Markdown. Right-click a table or database for CSV.
+- **A wiki** goes out as Markdown files (a page, or the whole wiki as a .zip), as one web page with its pictures, or printed (save as PDF): page menu **⋯**.
 - **Share:** a **snapshot link** packs the whole board into the link (nothing is uploaded; others see it read-only and can keep a copy), or a **live session** on a server.
 - The same board open in two tabs stays in step, no server needed.
 
