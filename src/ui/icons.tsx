@@ -131,21 +131,18 @@ export const RedoIcon = () => (
   </Svg>
 )
 
+/** BrainCraft's mark: a sticky note with its corner turned up, and a mind map drawn on it in ink. */
 export const Logo = ({ size = 26 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="logo">
-    <defs>
-      <linearGradient id="bc-logo" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="var(--logo-a)" />
-        <stop offset="1" stopColor="var(--logo-b)" />
-      </linearGradient>
-    </defs>
-    <rect width="32" height="32" rx="9" fill="url(#bc-logo)" />
-    <circle cx="16" cy="16" r="4.2" fill="#fff" />
-    <g stroke="#fff" strokeWidth="2.3" strokeLinecap="round" fill="none" opacity="0.92">
-      <path d="M20 14 C24 10 25 9 27 8" />
-      <path d="M20 18 C24 22 25 23 27 24" />
-      <path d="M12 14 C8 10 7 9 5 8" />
-      <path d="M12 18 C8 22 7 23 5 24" />
+    <path d="M5 2h22a3 3 0 0 1 3 3v16l-9 9H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3z" fill="var(--brand)" />
+    <path d="M30 21h-6a3 3 0 0 0-3 3v6z" fill="var(--brand-strong)" />
+    <path d="M30 21h-6a3 3 0 0 0-3 3v6" fill="none" stroke="var(--on-brand)" strokeOpacity="0.18" strokeWidth="1" />
+    <circle cx="16" cy="15" r="3.6" fill="var(--on-brand)" />
+    <g stroke="var(--on-brand)" strokeWidth="2.1" strokeLinecap="round" fill="none">
+      <path d="M19.2 13.4C22 11 23 10.2 25.5 9" />
+      <path d="M12.8 13.4C10 11 9 10.2 6.5 9" />
+      <path d="M12.8 16.6C10 19 9 19.8 6.5 21" />
+      <path d="M19.2 16.6C20.6 17.8 21 18.2 22 19" />
     </g>
   </svg>
 )

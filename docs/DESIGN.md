@@ -87,19 +87,24 @@ dialog, in dark and light themes, at desktop width.
    characters a line.
 3. Sentence case for every label.
 
-**Phase B — identity**
+**Phase B — identity (done)**
 
-1. An accent that belongs to BrainCraft rather than to software in general:
-   candidates taken from the sticky-note palette (a marker blue, or the
-   yellow of the first sticky note), tried on the canvas, the wiki and all four
-   themes before choosing; the logo follows.
-2. A hierarchy of containers: dialogs, cards and list rows each with their own
-   radius and surface, instead of one card for everything.
-3. Help that starts with the guide.
+1. **Sticky-note yellow** is BrainCraft's own colour (`--brand`, with
+   `--on-brand` ink for text on it): the logo, now a sticky note with its corner
+   turned up and a mind map drawn on it, and the one main action in a dialog.
+   Selection, focus and links keep a separate **ballpoint blue** (`--accent`),
+   because the canvas is full of pastel notes and selection must stand out on
+   all of them. The violet-to-magenta gradients are gone; the wordmark is plain
+   text, so the mark carries the colour.
+2. **Your things are cards; offers are not:** your boards keep their cards,
+   while "start something new" is a lighter list that only shows a card on
+   hover.
+3. **Help starts with the guide** and five essentials, before every shortcut.
 
 **Phase C — the canvas chrome**
 
-1. A quieter top bar: group Share, Present and Ask AI by how often they're
-   used.
+1. A quieter top bar *(started)*: Present is an ordinary button now, so the
+   yellow is the logo's and the dialogs' alone.
 2. The tool rail in labelled groups (write, draw, structure, data), with the
-   rarely used tools behind one button.
+   rarely used tools behind one button. *Next: try it with people first;
+   moving tools changes habits.*

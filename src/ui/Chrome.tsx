@@ -598,38 +598,63 @@ export function Help({ onClose, wiki = false, onGuide }: { onClose: () => void; 
       <div className="modal help" ref={dialogRef} role="dialog" aria-modal="true" aria-label="Help and shortcuts">
         <header>
           <h2>Help and shortcuts</h2>
-          {onGuide && (
-            <button className="help-guide" onClick={onGuide}>
-              📘 Open the guide
-            </button>
-          )}
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
             ×
           </button>
         </header>
-        <div className="help-grid">
-          {sections(wiki).map(([title, rows]) => (
-            <section key={title}>
-              <h3>{title}</h3>
-              <dl>
-                {rows.map(([keys, what]) => (
-                  <div key={keys}>
-                    <dt>
-                      {keys.split(' · ').map((part, i) => (
-                        <span key={i}>
-                          {i > 0 && <span className="or">or</span>}
-                          {part.split(' ').map((x, j) =>
-                            isKey(x) && !(x === '/' && part !== '/') ? <kbd key={j}>{x}</kbd> : <span key={j}> {x} </span>,
-                          )}
-                        </span>
-                      ))}
-                    </dt>
-                    <dd>{what}</dd>
-                  </div>
-                ))}
-              </dl>
+        <div className="help-body">
+          {onGuide && (
+            <section className="help-intro" aria-label="Getting started">
+              <div className="help-intro-guide">
+                <h3>New to BrainCraft?</h3>
+                <p>The guide explains every part of the app, with a tour board to try things on.</p>
+                <button className="primary" onClick={onGuide}>
+                  Open the guide
+                </button>
+              </div>
+              <ul className="help-essentials">
+                <li>
+                  <kbd>Ctrl</kbd> <kbd>K</kbd> finds anything and runs any command
+                </li>
+                <li>
+                  <strong>Right-click</strong> shows what something can do
+                </li>
+                <li>
+                  <strong>Double-click</strong> empty space for a sticky note
+                </li>
+                <li>
+                  <kbd>M</kbd> or <kbd>D</kbd>, then <kbd>Tab</kbd>: a mind map or a flowchart, one idea after another
+                </li>
+                <li>
+                  <kbd>Ctrl</kbd> <kbd>O</kbd> lists your boards and wikis
+                </li>
+              </ul>
             </section>
-          ))}
+          )}
+          <div className="help-grid">
+            {sections(wiki).map(([title, rows]) => (
+              <section key={title}>
+                <h3>{title}</h3>
+                <dl>
+                  {rows.map(([keys, what]) => (
+                    <div key={keys}>
+                      <dt>
+                        {keys.split(' · ').map((part, i) => (
+                          <span key={i}>
+                            {i > 0 && <span className="or">or</span>}
+                            {part.split(' ').map((x, j) =>
+                              isKey(x) && !(x === '/' && part !== '/') ? <kbd key={j}>{x}</kbd> : <span key={j}> {x} </span>,
+                            )}
+                          </span>
+                        ))}
+                      </dt>
+                      <dd>{what}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </div>
         </div>
       </div>
     </div>
