@@ -408,7 +408,7 @@ shares live exactly like a board.
 
 ### Ask AI: an assistant inside the board
 
-- **Ctrl+J** (or **Ask AI**, top right) opens a chat with Claude about the
+- **Ctrl+J** (or **Ask AI**, top right) opens a chat with an AI model about the
   board you're looking at. It reads the board, knows what you've selected,
   and links every object it mentions so you can click straight to it.
 - **Changes are previewed, never just made.** When you ask for changes
@@ -424,13 +424,16 @@ shares live exactly like a board.
   drop in a photo of a napkin or whiteboard, select it and press
   **✦ To board**. Claude reads the picture and proposes real shapes, ideas or
   notes beside it — previewed first, like every AI change.
-- Use the BrainCraft server's key (its owner pays) or paste your own Anthropic
-  API key, which stays in your browser. Claude Opus 5.5 by default; Sonnet 5.5
-  and Haiku 5.5 are options. See [docs/AI.md](docs/AI.md).
+- **Pick where the model runs:** Claude (the BrainCraft server's key, or your
+  own, which stays in your browser; Opus 5.5 by default, Sonnet 5.5 and Haiku
+  5.5 too), your own OpenAI-compatible model server such as vLLM, or a
+  command-line agent the BrainCraft server runs, `claude -p` or `codex exec`,
+  with whatever it's signed in to and configured with. See
+  [docs/AI.md](docs/AI.md).
 
 ### AI assistants (MCP) and the API
 
-- **Connect Claude, Cursor or any MCP client** to work on your boards live:
+- **Connect Claude, Codex, Cursor or any MCP client** to work on your boards live:
   it reads the board, builds mind maps, flowcharts and Kanban boards, and
   leaves comments, and every change is one undo step. Or point it at
   `.braincraft` files with no browser at all. See [docs/MCP.md](docs/MCP.md).
@@ -530,7 +533,7 @@ See [docs/SERVER.md](docs/SERVER.md).
 | Path | Purpose |
 | --- | --- |
 | `src/model/` | The document: items, connectors, hit testing, copy/paste, mind maps, flowcharts and Mermaid, tables, Kanban boards, timelines, link cards, comments and wiki-links, search, undo history, serialization. Pure functions over immutable data. |
-| `src/ai/` | The in-app assistant: the Claude conversation, its tools, proposals and settings. |
+| `src/ai/` | The in-app assistant: the conversation, its tools, proposals and settings, and where the model runs (Claude, an OpenAI-compatible server, or an agent command on the server). |
 | `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
 | `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
 | `src/collab/` | Live collaboration: board patches (also used by undo), the wire protocol, the server's room logic and the browser's live session. |

@@ -1,7 +1,9 @@
 /**
- * The in-app AI assistant: a chat with Claude about the open board.
+ * The in-app AI assistant: a chat with a model about the open board (Claude, a model on an
+ * OpenAI-compatible server such as vLLM, or a command-line agent on the BrainCraft server; see
+ * backends.ts).
  *
- * Claude reads the board through the same tools the MCP server offers (read_board, get_object,
+ * The model reads the board through the same tools the MCP server offers (read_board, get_object,
  * find). It never changes the board directly: it calls `propose_changes`, which checks the
  * operations against the current board and turns them into a preview the person applies or
  * discards. Applied proposals land in an AI history where each one can be undone on its own.
@@ -17,6 +19,7 @@ import { boardText } from './boardText'
 import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
 import { isWiki, pageText } from '../model/wiki'
+import { AnthropicBackend, type Backend, BackendError, CommandBackend, INVALID_TOOL, OpenAiBackend } from './backends'
 
 export const AI_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', hint: 'Most capable (default)' },
@@ -27,18 +30,40 @@ export const AI_MODELS = [
 export type AiModel = (typeof AI_MODELS)[number]['id']
 export const DEFAULT_MODEL: AiModel = 'claude-opus-5-5'
 
-/** How the app reaches Claude: through the BrainCraft server (its key) or with the person's own key. */
-export type AiConnection = { kind: 'server'; base: string; password?: string } | { kind: 'key'; apiKey: string }
+/**
+ * How the app reaches a model:
+ * - `server`: Claude through the BrainCraft server (its Anthropic key);
+ * - `key`: Claude with the person's own Anthropic key;
+ * - `openai`: an OpenAI-compatible server (vLLM…), straight from this browser or through the BrainCraft server;
+ * - `command`: a command-line agent the BrainCraft server runs (claude -p, codex exec…).
+ */
+export type AiConnection =
+  | { kind: 'server'; base: string; password?: string }
+  | { kind: 'key'; apiKey: string }
+  | { kind: 'openai'; base: string; apiKey?: string; password?: string; model: string; textTools: boolean; label: string }
+  | { kind: 'command'; base: string; password?: string; label: string }
 
-export function makeClient(c: AiConnection): Anthropic {
+const serverUrl = (base: string, path: string) => new URL(path, base.endsWith('/') ? base : `${base}/`).href
+
+export function makeClient(c: { kind: 'server'; base: string; password?: string } | { kind: 'key'; apiKey: string }): Anthropic {
   if (c.kind === 'key') return new Anthropic({ apiKey: c.apiKey, dangerouslyAllowBrowser: true })
   // The server adds the real key; this placeholder never leaves for Anthropic.
   return new Anthropic({
     apiKey: 'braincraft-server',
-    baseURL: new URL('api/ai', c.base.endsWith('/') ? c.base : `${c.base}/`).href,
+    baseURL: serverUrl(c.base, 'api/ai'),
     dangerouslyAllowBrowser: true,
     ...(c.password ? { defaultHeaders: { 'x-braincraft-ai-password': c.password } } : {}),
   })
+}
+
+/** The backend for a connection (with the Claude model to use, for the Anthropic ones). */
+export function makeBackend(c: AiConnection, model: AiModel = DEFAULT_MODEL): Backend {
+  if (c.kind === 'openai') {
+    const headers: Record<string, string> = c.password ? { 'x-braincraft-ai-password': c.password } : {}
+    return new OpenAiBackend({ base: c.base, apiKey: c.apiKey, headers, model: c.model, textTools: c.textTools, label: c.label })
+  }
+  if (c.kind === 'command') return new CommandBackend({ base: c.base, password: c.password, label: c.label })
+  return new AnthropicBackend(makeClient(c), model, AI_MODELS.find((m) => m.id === model)?.label ?? model)
 }
 
 export interface Proposal {
@@ -203,14 +228,13 @@ export class Assistant {
   usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
   /** The conversation so far, exactly as sent and received (thinking blocks included). */
   messages: Anthropic.Beta.BetaMessageParam[] = []
-  model: AiModel
-  private client: Anthropic
+  /** Where the model runs; it can change between messages (the conversation carries over). */
+  backend: Backend
   private host: AssistantHost
 
-  constructor(client: Anthropic, host: AssistantHost, model: AiModel = DEFAULT_MODEL) {
-    this.client = client
+  constructor(backend: Backend, host: AssistantHost) {
+    this.backend = backend
     this.host = host
-    this.model = model
   }
 
   /** Checks a proposal against the board as it is now; returns it, or the reason it doesn't fit. */
@@ -227,13 +251,14 @@ export class Assistant {
       const bases = Object.fromEntries(patches.flatMap((p) => (p.k === 'body' ? [[p.id, pageText(before, p.id)]] : [])))
       return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, ...(Object.keys(bases).length ? { bases } : {}), counts: countChanges(before, patches), status: 'pending' }
     } catch (err) {
-      // Anything an op trips over goes back to Claude to fix, never out of the conversation.
+      // Anything an op trips over goes back to the model to fix, never out of the conversation.
       if (err instanceof OpError) return err.message
       return `Those operations couldn't be applied: ${(err as Error)?.message ?? String(err)}. Check each field's type.`
     }
   }
 
   private async runTool(name: string, input: unknown, on: Callbacks): Promise<{ content: string; is_error?: boolean }> {
+    if (name === INVALID_TOOL) return { content: String((input as { error?: unknown })?.error ?? 'That tool call could not be read.'), is_error: true }
     if (name === 'propose_changes') {
       const p = this.propose(input)
       if (typeof p === 'string') return { content: p, is_error: true }
@@ -266,7 +291,7 @@ export class Assistant {
     }
   }
 
-  /** Sends a message and runs the conversation until Claude has answered. */
+  /** Sends a message and runs the conversation until the model has answered. */
   async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = []): Promise<void> {
     const sel = this.host.selection()
     const context = sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'
@@ -284,47 +309,35 @@ export class Assistant {
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
         on.status(step === 0 ? 'Thinking…' : 'Working…')
-        const fallbacks = this.model === 'claude-haiku-5-5' ? {} : { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const }
-        const stream = this.client.beta.messages.stream(
-          {
-            model: this.model,
-            max_tokens: 32000,
-            thinking: { type: 'adaptive' },
-            output_config: { effort: 'medium' },
-            system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-            // The conversation grows each step; automatic caching re-reads all of it at a tenth of the price.
-            cache_control: { type: 'ephemeral' },
-            tools: TOOLS,
-            messages: this.messages,
-            ...fallbacks,
-          },
-          { signal },
-        )
-        stream.on('text', (delta) => {
-          on.status(null)
-          on.text(delta)
-        })
-        let message: Anthropic.Beta.BetaMessage
+        let message: Awaited<ReturnType<Backend['turn']>>
         try {
-          message = await stream.finalMessage()
+          message = await this.backend.turn({ system: SYSTEM, messages: this.messages, tools: TOOLS }, (delta) => {
+            on.status(null)
+            on.text(delta)
+          }, signal)
           jsonRetries = 0
           this.tally(message.usage)
         } catch (err) {
           // Only a tool input that couldn't be parsed is worth re-asking; API errors go to the person.
-          if (err instanceof Anthropic.APIError || signal?.aborted || jsonRetries++ >= 2) throw err
+          if (err instanceof Anthropic.APIError || err instanceof BackendError || signal?.aborted || jsonRetries++ >= 2) throw err
           continue
         }
 
-        if (message.stop_reason === 'refusal') {
+        if (message.stop === 'refusal') {
           this.messages.push({ role: 'assistant', content: message.content })
-          on.text('\n\n_Claude declined this request._')
+          on.text('\n\n_The model declined this request._')
+          return
+        }
+        // A reply with nothing in it would make the next request invalid.
+        if (!message.content.length) {
+          on.text('_The model gave no answer. Try again, or ask differently._')
           return
         }
         this.messages.push({ role: 'assistant', content: message.content })
-        if (message.stop_reason === 'pause_turn') continue
+        if (message.stop === 'pause_turn') continue
         const uses = message.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use')
         if (!uses.length) return
-        if (message.stop_reason === 'max_tokens') {
+        if (message.stop === 'max_tokens') {
           // A tool call cut off by the length limit may look complete; never run it.
           this.messages.push({
             role: 'user',
@@ -374,12 +387,12 @@ export class Assistant {
     })
   }
 
-  private tally(u: Anthropic.Beta.BetaUsage | undefined) {
+  private tally(u: { input: number; output: number; cacheRead?: number; cacheWrite?: number } | undefined) {
     if (!u) return
-    this.usage.input += u.input_tokens ?? 0
-    this.usage.cacheRead += u.cache_read_input_tokens ?? 0
-    this.usage.cacheWrite += u.cache_creation_input_tokens ?? 0
-    this.usage.output += u.output_tokens ?? 0
+    this.usage.input += u.input
+    this.usage.cacheRead += u.cacheRead ?? 0
+    this.usage.cacheWrite += u.cacheWrite ?? 0
+    this.usage.output += u.output
   }
 
   reset() {
@@ -393,6 +406,7 @@ export function describeError(err: unknown): string {
   // The BrainCraft server's own refusals (its password, its hourly limit) say exactly what's wrong.
   const said = (err as { error?: { error?: { message?: unknown } } })?.error?.error?.message
   const server = typeof said === 'string' && /AI password|from this address/.test(said) ? `The BrainCraft server says: ${said}.` : ''
+  if (err instanceof BackendError) return err.message
   if (err instanceof Anthropic.AuthenticationError) return 'The API key was rejected. Check it in the AI settings.'
   if (err instanceof Anthropic.PermissionDeniedError) return server || 'This key or server isn’t allowed to use that model (or the server password is wrong).'
   if (err instanceof Anthropic.RateLimitError) return server || 'Rate limited by the API. Wait a moment and try again.'

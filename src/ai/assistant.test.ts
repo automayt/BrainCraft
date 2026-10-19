@@ -4,6 +4,7 @@ import { applyOps } from '../api/ops'
 import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
 import { Assistant, type Proposal } from './assistant'
+import { AnthropicBackend } from './backends'
 
 type Block = Record<string, unknown>
 
@@ -50,7 +51,7 @@ describe('assistant', () => {
     ])
     const proposals: Proposal[] = []
     let text = ''
-    const a = new Assistant(client, { board: () => b, measure: fakeMeasure, selection: () => [1] })
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [1] })
     await a.send('Group these', { text: (t) => (text += t), status: () => {}, proposal: (p) => proposals.push(p) })
 
     expect(text).toContain('#1')
@@ -79,7 +80,7 @@ describe('assistant', () => {
       { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Sorry.' }] },
     ])
     const proposals: Proposal[] = []
-    await new Assistant(client, { board: () => b, measure: fakeMeasure, selection: () => [] }).send('Connect', {
+    await new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [] }).send('Connect', {
       text: () => {},
       status: () => {},
       proposal: (p) => proposals.push(p),
@@ -96,14 +97,14 @@ describe('assistant', () => {
       { stop_reason: 'end_turn', content: [{ type: 'text', text: 'OK' }] },
     ])
     const proposals: Proposal[] = []
-    await new Assistant(client, { board: () => b, measure: fakeMeasure, selection: () => [] }).send('Add', { text: () => {}, status: () => {}, proposal: (p) => proposals.push(p) })
+    await new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [] }).send('Add', { text: () => {}, status: () => {}, proposal: (p) => proposals.push(p) })
     expect(proposals).toHaveLength(0)
     expect(((sent[1].messages as { content: Block[] }[]).at(-1)!.content[0] as Block).is_error).toBe(true)
   })
 
   it('skips the fallback parameter on Haiku', async () => {
     const { client, sent } = fakeClient([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Hi' }] }])
-    await new Assistant(client, { board, measure: fakeMeasure, selection: () => [] }, 'claude-haiku-5-5').send('Hi', { text: () => {}, status: () => {}, proposal: () => {} })
+    await new Assistant(new AnthropicBackend(client, 'claude-haiku-5-5', 'Haiku'), { board, measure: fakeMeasure, selection: () => [] }).send('Hi', { text: () => {}, status: () => {}, proposal: () => {} })
     expect(sent[0].fallbacks).toBeUndefined()
   })
 })
@@ -111,7 +112,7 @@ describe('assistant', () => {
 describe('pictures', () => {
   it('sends images before the text in the same message', async () => {
     const { client, sent } = fakeClient([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'A flowchart.' }] }])
-    await new Assistant(client, { board, measure: fakeMeasure, selection: () => [7] }).send('What is this?', { text: () => {}, status: () => {}, proposal: () => {} }, undefined, [
+    await new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board, measure: fakeMeasure, selection: () => [7] }).send('What is this?', { text: () => {}, status: () => {}, proposal: () => {} }, undefined, [
       { mediaType: 'image/png', data: 'iVBORw0KGgo=' },
     ])
     const content = (sent[0].messages as { content: Block[] }[])[0].content
@@ -129,7 +130,7 @@ describe('assistant after something goes wrong', () => {
       { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'propose_changes', input: { summary: 'x', ops: [{ op: 'createKanban', columns: 'To do' }] } }] },
       { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Fixed.' }] },
     ])
-    const a = new Assistant(client, { board: () => b, measure: fakeMeasure, selection: () => [] })
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [] })
     await a.send('Make a board', quiet)
     const second = sent[1].messages as { role: string; content: Block[] }[]
     expect(second.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true }] })
@@ -137,7 +138,7 @@ describe('assistant after something goes wrong', () => {
 
   it('answers tool calls left open when a request fails mid-step', async () => {
     const { client } = fakeClient([{ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'read_board', input: {} }] }])
-    const a = new Assistant(client, { board: board, measure: fakeMeasure, selection: () => [] })
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: board, measure: fakeMeasure, selection: () => [] })
     const status = (s: string | null) => {
       if (s === 'Reading the board…') throw new Error('The window closed')
     }

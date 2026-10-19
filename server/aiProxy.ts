@@ -33,7 +33,7 @@ const FIELDS = new Set(['model', 'max_tokens', 'messages', 'system', 'tools', 't
 /** Wrong passwords per address per window, before it has to wait. */
 const PASSWORD_TRIES = 20
 
-type Reject = { status: number; error: string }
+export type Reject = { status: number; error: string }
 
 /** Checks a Messages request body; returns the reason it's refused, or null. */
 export function checkRequest(body: unknown): string | null {
@@ -50,21 +50,34 @@ export function checkRequest(body: unknown): string | null {
   return null
 }
 
-export class AiProxy {
+export interface GateOptions {
+  password?: string
+  now?: () => number
+  equal?: (a: string, b: string) => boolean
+  visitor?: (req: IncomingMessage) => string
+}
+
+/**
+ * Who may use the server's AI: with BRAINCRAFT_AI_PASSWORD, whoever sends it (with a limit on wrong
+ * tries); without one, anyone, within an hourly budget per address. Shared by every AI provider.
+ */
+export class AiGate {
   private hits = new Map<string, number[]>()
   private fails = new Map<string, number[]>()
-  private o: Required<AiProxyOptions>
+  private o: Required<GateOptions>
 
-  constructor(o: AiProxyOptions) {
+  constructor(o: GateOptions = {}) {
     this.o = {
       password: '',
-      baseUrl: 'https://api.anthropic.com',
-      fetch: globalThis.fetch.bind(globalThis),
       now: Date.now,
       equal: (a, b) => a === b,
       visitor: (req) => req.socket.remoteAddress ?? 'unknown',
-      ...(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as AiProxyOptions),
+      ...(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as GateOptions),
     }
+  }
+
+  get hasPassword() {
+    return !!this.o.password
   }
 
   /** Counts one use against `who` in `map`; false once there have been `limit` in the window. */
@@ -79,7 +92,8 @@ export class AiProxy {
     return true
   }
 
-  private gate(req: IncomingMessage): Reject | null {
+  /** Why `req` may not use the AI now, or null if it may. */
+  check(req: IncomingMessage): Reject | null {
     const who = this.o.visitor(req)
     if (this.o.password) {
       if ((this.fails.get(who)?.filter((t) => this.o.now() - t < RATE.windowMs).length ?? 0) >= PASSWORD_TRIES)
@@ -94,6 +108,20 @@ export class AiProxy {
     if (!this.count(this.hits, who, RATE.limit)) return { status: 429, error: 'Too many AI requests from this address; try again later' }
     return null
   }
+}
+
+export class AiProxy {
+  private o: Required<Omit<AiProxyOptions, keyof GateOptions>>
+  private gate: AiGate
+
+  constructor(o: AiProxyOptions & { gate?: AiGate }) {
+    this.gate = o.gate ?? new AiGate(o)
+    this.o = {
+      apiKey: o.apiKey,
+      baseUrl: o.baseUrl ?? 'https://api.anthropic.com',
+      fetch: o.fetch ?? globalThis.fetch.bind(globalThis),
+    }
+  }
 
   /** Handles /api/ai/v1/messages with the request body already read. */
   async handle(req: IncomingMessage, res: ServerResponse, raw: string): Promise<void> {
@@ -103,7 +131,7 @@ export class AiProxy {
       res.end(JSON.stringify({ type: 'error', error: { type: status === 429 ? 'rate_limit_error' : status === 403 ? 'permission_error' : 'invalid_request_error', message: error } }))
     }
     if (req.method !== 'POST') return reply(405, 'Use POST')
-    const denied = this.gate(req)
+    const denied = this.gate.check(req)
     if (denied) return reply(denied.status, denied.error)
     let body: unknown
     try {

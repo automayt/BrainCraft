@@ -57,7 +57,7 @@ export function AiDialog({ bridge, onClose }: { bridge: Bridge; onClose: () => v
         </header>
         <div className="ai-body">
           <p className="muted">
-            Claude, Cursor and other MCP clients can read this board and build on it: mind maps, flowcharts, Kanban cards, comments. Everything they do is one undo step
+            Claude, Codex, Cursor and other MCP clients can read this board and build on it: mind maps, flowcharts, Kanban cards, comments. Everything they do is one undo step
             away.
           </p>
           <ol className="ai-steps">

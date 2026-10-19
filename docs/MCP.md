@@ -26,6 +26,14 @@ It works two ways:
    claude mcp add braincraft -- node /path/to/braincraft-mcp.mjs
    ```
 
+   Codex (`~/.codex/config.toml`):
+
+   ```toml
+   [mcp_servers.braincraft]
+   command = "node"
+   args = ["/path/to/braincraft-mcp.mjs"]
+   ```
+
    Claude Desktop (`claude_desktop_config.json`):
 
    ```json

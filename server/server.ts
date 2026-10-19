@@ -5,8 +5,10 @@
  *
  * Settings (environment): PORT, HOST, BRAINCRAFT_DATA (where boards are stored),
  * BRAINCRAFT_STATIC (the built app; defaults to this file's folder).
- * ANTHROPIC_API_KEY turns on the in-app AI assistant for everyone using this server;
- * BRAINCRAFT_AI_PASSWORD makes them enter a password first (see docs/AI.md).
+ * The in-app AI assistant, for everyone using this server (see docs/AI.md), runs with any of:
+ * ANTHROPIC_API_KEY (Claude), OPENAI_BASE_URL (an OpenAI-compatible server such as vLLM, with
+ * OPENAI_API_KEY and OPENAI_MODEL if needed), BRAINCRAFT_AI_COMMAND (a command-line agent such as
+ * `claude -p` or `codex exec`). BRAINCRAFT_AI_PASSWORD makes people enter a password first.
  *
  * Boards are shared by link, Google-Docs style: each has a secret edit key and a secret
  * view key. Anyone with a key can open the board in that role; nobody can list boards.
@@ -18,7 +20,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { AiProxy } from './aiProxy'
+import { AiGate, AiProxy } from './aiProxy'
+import { CommandRunner, OpenAiProxy } from './aiProviders'
 import { BusyError, PreviewCache, unfurl, UnfurlError } from './unfurl'
 import { OpError, opsFromText } from '../src/api/ops'
 import { type ClientMessage, type Role, type ServerMessage } from '../src/collab/protocol'
@@ -216,11 +219,39 @@ function serveStatic(url: URL, res: ServerResponse) {
   res.end(readFileSync(file))
 }
 
-const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, password: AI_PASSWORD, equal: safeEqual, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined, visitor }) : null
+const aiGate = new AiGate({ password: AI_PASSWORD, equal: safeEqual, visitor })
+const aiProxy = AI_KEY ? new AiProxy({ apiKey: AI_KEY, gate: aiGate, baseUrl: process.env.ANTHROPIC_BASE_URL || undefined }) : null
+const OPENAI_BASE = process.env.OPENAI_BASE_URL?.trim() || ''
+const openAiProxy = OPENAI_BASE
+  ? new OpenAiProxy({
+      baseUrl: OPENAI_BASE,
+      apiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
+      models: (process.env.OPENAI_MODEL ?? '').split(',').map((m) => m.trim()).filter(Boolean),
+      gate: aiGate,
+    })
+  : null
+/** The model needs the tools described in the text (served without tool calling). */
+const AI_TEXT_TOOLS = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_AI_TEXT_TOOLS ?? '')
+const AI_COMMAND = process.env.BRAINCRAFT_AI_COMMAND?.trim() || ''
+const commandRunner = AI_COMMAND
+  ? new CommandRunner({ command: AI_COMMAND, gate: aiGate, timeoutMs: (Number(process.env.BRAINCRAFT_AI_TIMEOUT) || 300) * 1000 })
+  : null
+const aiProviders = [...(aiProxy ? ['anthropic'] : []), ...(openAiProxy ? ['openai'] : []), ...(commandRunner ? ['command'] : [])]
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
-  if (parts[1] === 'health') return send(res, 200, { ok: true, name: 'braincraft', version: VERSION, ai: !!aiProxy, aiPassword: !!AI_PASSWORD, previews: true })
+  if (parts[1] === 'health')
+    return send(res, 200, {
+      ok: true,
+      name: 'braincraft',
+      version: VERSION,
+      ai: aiProviders.length > 0,
+      aiPassword: !!AI_PASSWORD,
+      aiProviders,
+      ...(openAiProxy ? { aiModels: await openAiProxy.models(), aiTextTools: AI_TEXT_TOOLS } : {}),
+      ...(commandRunner ? { aiCommand: commandRunner.program } : {}),
+      previews: true,
+    })
 
   // GET /api/unfurl?url=… → a link preview: title, description, picture and site name.
   if (parts[1] === 'unfurl') {
@@ -248,11 +279,23 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     }
   }
 
-  // POST /api/ai/v1/messages → the Anthropic Messages API, with this server's key.
+  // The assistant's providers: POST /api/ai/v1/messages (Claude, this server's key),
+  // /api/ai/openai/chat/completions (an OpenAI-compatible server), /api/ai/command (an agent).
   if (parts[1] === 'ai') {
-    if (!aiProxy) return send(res, 404, { error: 'AI is not set up on this server (ANTHROPIC_API_KEY)' })
-    if (url.pathname !== '/api/ai/v1/messages') return send(res, 404, { error: 'Not found' })
-    return aiProxy.handle(req, res, req.method === 'POST' ? await readBody(req) : '')
+    const body = async () => (req.method === 'POST' ? await readBody(req) : '')
+    if (url.pathname === '/api/ai/v1/messages') {
+      if (!aiProxy) return send(res, 404, { error: 'Claude is not set up on this server (ANTHROPIC_API_KEY)' })
+      return aiProxy.handle(req, res, await body())
+    }
+    if (url.pathname === '/api/ai/openai/chat/completions') {
+      if (!openAiProxy) return send(res, 404, { error: 'No model server is set up on this server (OPENAI_BASE_URL)' })
+      return openAiProxy.handle(req, res, await body())
+    }
+    if (url.pathname === '/api/ai/command') {
+      if (!commandRunner) return send(res, 404, { error: 'No agent command is set up on this server (BRAINCRAFT_AI_COMMAND)' })
+      return commandRunner.handle(req, res, await body())
+    }
+    return send(res, 404, { error: 'Not found' })
   }
 
   if (parts[1] !== 'boards') return send(res, 404, { error: 'Not found' })
@@ -391,7 +434,11 @@ process.on('uncaughtException', (err) => log('unexpected error', err))
 server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
-  log(aiProxy ? `AI assistant on${AI_PASSWORD ? ' (password required)' : ''}` : 'AI assistant off (set ANTHROPIC_API_KEY to turn it on)')
+  log(
+    aiProviders.length
+      ? `AI assistant on: ${[aiProxy && 'Claude', openAiProxy && `model server at ${OPENAI_BASE}`, commandRunner && `"${AI_COMMAND}"${AI_PASSWORD ? '' : ' (this machine only, until BRAINCRAFT_AI_PASSWORD is set)'}`].filter(Boolean).join(', ')}${AI_PASSWORD ? ' (password required)' : ''}`
+      : 'AI assistant off (set ANTHROPIC_API_KEY, OPENAI_BASE_URL or BRAINCRAFT_AI_COMMAND to turn it on)',
+  )
 })
 
 // Save everything before exiting.

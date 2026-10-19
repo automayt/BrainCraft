@@ -1,8 +1,8 @@
 /** The AI assistant panel: chat about the board, previewed changes, and the history of AI changes. */
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeClient } from '../ai/assistant'
-import { type AiSettings, type ServerAi, connectionFor, loadSettings, saveSettings, serverAi } from '../ai/settings'
+import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeBackend } from '../ai/assistant'
+import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
 import * as B from '../model/board'
 import { objectLabel } from '../model/notes'
 import { timeAgo } from './Boards'
@@ -118,7 +118,9 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
-  const [server, setServer] = useState<ServerAi>({ available: false, password: false })
+  const [server, setServer] = useState<ServerAi>({ available: false, password: false, providers: [], openaiModels: [], textTools: false })
+  /** Models found on your own model server, or why none were. */
+  const [found, setFound] = useState<string[] | string | null>(null)
   const [checked, setChecked] = useState(false)
   const [setup, setSetup] = useState(false)
   const [tab, setTab] = useState<'chat' | 'history'>('chat')
@@ -160,14 +162,28 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   }
 
   const session = () => {
+    if (!connection) return null
     let s = assistants.get(boardKey)
-    if (!s || !connection) {
-      if (!connection) return null
-      s = { assistant: new Assistant(makeClient(connection), { board: () => editor.board, readable: () => editor.viewBoard, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }, settings.model), turns: [] }
+    const backend = makeBackend(connection, settings.model)
+    if (!s) {
+      s = { assistant: new Assistant(backend, { board: () => editor.board, readable: () => editor.viewBoard, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }), turns: [] }
       assistants.set(boardKey, s)
     }
-    s.assistant.model = settings.model
+    // Settings may have changed since the last message; the conversation carries over.
+    s.assistant.backend = backend
     return s
+  }
+  const provider = serverProvider(settings, server)
+  /** The server's choices as one list: Claude models, its model server's models, its agent. */
+  const serverChoices: { value: string; label: string }[] = [
+    ...(server.providers.includes('anthropic') ? AI_MODELS.map((m) => ({ value: `anthropic:${m.id}`, label: `${m.label} — ${m.hint}` })) : []),
+    ...(server.providers.includes('openai') ? (server.openaiModels.length ? server.openaiModels : ['']).map((m) => ({ value: `openai:${m}`, label: `${m || 'The model server'} — on this server’s model server` })) : []),
+    ...(server.providers.includes('command') ? [{ value: 'command:', label: `${server.command ?? 'The agent'} — run by this server (slower; each step starts it afresh)` }] : []),
+  ]
+  const serverChoice = provider === 'anthropic' ? `anthropic:${settings.model}` : provider === 'openai' ? `openai:${settings.serverModel && server.openaiModels.includes(settings.serverModel) ? settings.serverModel : (server.openaiModels[0] ?? '')}` : 'command:'
+  const pickServer = (value: string) => {
+    const [p, rest] = [value.slice(0, value.indexOf(':')) as ServerProvider, value.slice(value.indexOf(':') + 1)]
+    update({ ...settings, mode: 'server', provider: p, ...(p === 'anthropic' ? { model: rest as AiModel } : p === 'openai' ? { serverModel: rest } : {}) })
   }
 
   const send = async (text: string, images: AiImage[] = [], label?: string) => {
@@ -268,19 +284,33 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               <input type="radio" checked={settings.mode === 'server'} onChange={() => update({ ...settings, mode: 'server' })} />
               <span>
                 <strong>Use this BrainCraft server</strong>
-                <small>Its owner pays for usage; nothing to set up.</small>
+                <small>Its owner set up the AI; nothing to set up here.</small>
               </span>
             </label>
           )}
-          {settings.mode === 'server' && server.available && server.password && (
-            <input type="password" className="ai-field" aria-label="Server AI password" placeholder="Server AI password" value={settings.password ?? ''} onChange={(e) => update({ ...settings, password: e.target.value })} />
+          {settings.mode === 'server' && server.available && (
+            <>
+              {server.password && (
+                <input type="password" className="ai-field" aria-label="Server AI password" placeholder="Server AI password" value={settings.password ?? ''} onChange={(e) => update({ ...settings, password: e.target.value })} />
+              )}
+              <label className="ai-model">
+                Model
+                <select value={serverChoice} onChange={(e) => pickServer(e.target.value)}>
+                  {serverChoices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
           )}
           <label className="ai-choice">
-            <input type="radio" checked={settings.mode === 'key' || !server.available} onChange={() => update({ ...settings, mode: 'key' })} />
+            <input type="radio" checked={settings.mode === 'key' || (settings.mode === 'server' && !server.available)} onChange={() => update({ ...settings, mode: 'key' })} />
             <span>
               <strong>Use my own Anthropic API key</strong>
               <small>
-                Stored only in this browser and sent only to Anthropic. Get one at{' '}
+                Claude, with a key stored only in this browser and sent only to Anthropic. Get one at{' '}
                 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
                   console.anthropic.com
                 </a>
@@ -288,30 +318,89 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               </small>
             </span>
           </label>
-          {(settings.mode === 'key' || !server.available) && (
-            <input
-              type="password"
-              className="ai-field"
-              aria-label="Anthropic API key"
-              placeholder="sk-ant-…"
-              autoFocus
-              autoComplete="off"
-              value={settings.apiKey ?? ''}
-              onChange={(e) => update({ ...settings, mode: 'key', apiKey: e.target.value })}
-            />
+          {(settings.mode === 'key' || (settings.mode === 'server' && !server.available)) && (
+            <>
+              <input
+                type="password"
+                className="ai-field"
+                aria-label="Anthropic API key"
+                placeholder="sk-ant-…"
+                autoFocus
+                autoComplete="off"
+                value={settings.apiKey ?? ''}
+                onChange={(e) => update({ ...settings, mode: 'key', apiKey: e.target.value })}
+              />
+              <label className="ai-model">
+                Model
+                <select value={settings.model} onChange={(e) => update({ ...settings, model: e.target.value as AiModel })}>
+                  {AI_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label} — {m.hint}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          <label className="ai-choice">
+            <input type="radio" checked={settings.mode === 'openai'} onChange={() => update({ ...settings, mode: 'openai' })} />
+            <span>
+              <strong>Use my own model server</strong>
+              <small>Any server with an OpenAI-compatible API, such as vLLM, reached straight from this browser.</small>
+            </span>
+          </label>
+          {settings.mode === 'openai' && (
+            <div className="ai-openai">
+              <input
+                className="ai-field"
+                aria-label="Model server address"
+                placeholder="http://localhost:8000/v1"
+                autoComplete="off"
+                value={settings.openaiBase ?? ''}
+                onChange={(e) => update({ ...settings, openaiBase: e.target.value })}
+              />
+              <input
+                type="password"
+                className="ai-field"
+                aria-label="Model server API key (if it needs one)"
+                placeholder="API key (if it needs one)"
+                autoComplete="off"
+                value={settings.openaiKey ?? ''}
+                onChange={(e) => update({ ...settings, openaiKey: e.target.value })}
+              />
+              <div className="ai-openai-model">
+                <input
+                  className="ai-field"
+                  aria-label="Model name"
+                  placeholder="Model name"
+                  list="ai-found-models"
+                  autoComplete="off"
+                  value={settings.openaiModel ?? ''}
+                  onChange={(e) => update({ ...settings, openaiModel: e.target.value })}
+                />
+                <button
+                  disabled={!settings.openaiBase?.trim()}
+                  onClick={async () => {
+                    const r = await listModels(settings.openaiBase!.trim(), settings.openaiKey?.trim() || undefined)
+                    setFound(r)
+                    if (Array.isArray(r) && !settings.openaiModel?.trim()) update({ ...settings, openaiModel: r[0] })
+                  }}
+                >
+                  Find models
+                </button>
+              </div>
+              <datalist id="ai-found-models">{Array.isArray(found) && found.map((m) => <option key={m} value={m} />)}</datalist>
+              {typeof found === 'string' && <p className="ai-waiting">{found}</p>}
+              {Array.isArray(found) && <p className="muted">Found: {found.join(', ')}</p>}
+              <label className="ai-check">
+                <input type="checkbox" checked={!!settings.textTools} onChange={(e) => update({ ...settings, textTools: e.target.checked })} />
+                <span>Describe the tools in the text (for a model served without tool calling)</span>
+              </label>
+              <p className="muted">The server has to allow this page’s address; vLLM does with <code>--allowed-origins</code>. Pictures need a model that can see them.</p>
+            </div>
           )}
           {!checked && <p className="muted">Checking for a server…</p>}
           {editor.pendingAiPrompt && <p className="ai-waiting">“{editor.pendingAiPrompt.label ?? 'Your question'}” will be sent as soon as the assistant is connected.</p>}
-          <label className="ai-model">
-            Model
-            <select value={settings.model} onChange={(e) => update({ ...settings, model: e.target.value as AiModel })}>
-              {AI_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} — {m.hint}
-                </option>
-              ))}
-            </select>
-          </label>
           {connection && setup && (
             <button className="primary" onClick={() => setSetup(false)}>
               Done
@@ -421,7 +510,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             />
             <div className="ai-compose-foot">
               <small className="muted" title={state ? usageTitle(state.assistant.usage) : undefined}>
-                {AI_MODELS.find((m) => m.id === settings.model)?.label}
+                {connection ? makeBackend(connection, settings.model).label : ''}
                 {state && usageLine(state.assistant.usage)}
               </small>
               {turns.length > 0 && !running && (

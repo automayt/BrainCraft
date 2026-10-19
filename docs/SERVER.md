@@ -33,8 +33,11 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `HOST` | `0.0.0.0` | Address to listen on. |
 | `BRAINCRAFT_DATA` | `./braincraft-data` | Where boards are stored, one JSON file each. Back this folder up. |
 | `BRAINCRAFT_STATIC` | the script's folder | The built app to serve. |
-| `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant for everyone using this server, paid from this key. See [AI.md](AI.md). |
-| `BRAINCRAFT_AI_PASSWORD` | — | With a key set: people must enter this password before using the assistant. |
+| `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant (Claude) for everyone using this server, paid from this key. See [AI.md](AI.md). |
+| `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` | — | Turns on the assistant with an OpenAI-compatible server such as vLLM. See [AI.md](AI.md). |
+| `BRAINCRAFT_AI_TEXT_TOOLS` | off | `1` when that model is served without tool calling. |
+| `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | Turns on the assistant with a command-line agent such as `claude -p` or `codex exec`, run per step (timeout in seconds, default 300). Only this machine may use it unless a password is set. See [AI.md](AI.md). |
+| `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
 | `BRAINCRAFT_TRUST_PROXY` | off | Set to `1` behind an HTTPS proxy so per-visitor limits (link previews) use the visitor's address from `X-Forwarded-For`. Leave off when the server faces the internet directly. |
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
 
@@ -90,6 +93,8 @@ or as `?key=<key>`.
 | `POST /api/boards/{id}/ops` with `{"ops": […]}` | edit | Applies [operations](API.md) as one change and returns `{"version", "results"}`. Everyone connected sees it immediately. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
+| `POST /api/ai/openai/chat/completions` | AI password, if set | The assistant's proxy to an OpenAI-compatible server (only with `OPENAI_BASE_URL`). |
+| `POST /api/ai/command` | AI password, or this machine | Runs the agent command once with `{"prompt"}` on its input; answers `{"text"}` (only with `BRAINCRAFT_AI_COMMAND`). |
 
 Example: post a status update onto a team board from a CI job.
 
