@@ -603,7 +603,9 @@ server instead. It serves the app as well:
 node dist/braincraft-server.mjs            # or: docker run -p 8080:8080 -v braincraft-data:/data braincraft
 ```
 
-See [docs/SERVER.md](docs/SERVER.md).
+See [docs/SERVER.md](docs/SERVER.md), and [docs/HTTPS.md](docs/HTTPS.md) for
+serving it over HTTPS (built in, or behind Caddy, nginx, Cloudflare Tunnel or
+Tailscale).
 
 ## Code layout
 

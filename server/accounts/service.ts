@@ -228,13 +228,20 @@ export class Accounts {
     }
     if (u?.disabled) return 'This account is turned off. Ask an admin.'
     if (!u) {
-      if (!email) return 'Your sign-in provider didn’t share a verified email, so no account could be made'
-      if (!this.allowedEmail(email)) return 'Accounts from that email domain aren’t allowed here'
-      u = this.store.addUser({ email, name: id.name?.trim().slice(0, 80) || email.split('@')[0], role: 'user', sso: { issuer: id.issuer, subject: id.subject } })
-      this.log(req, u, { action: 'sso.new-account', target: this.userTarget(u), text: `${u.name} (${u.email}) got an account by signing in with single sign-on` })
+      // Some providers (Microsoft Entra ID, often) send an email without saying it's verified. It can
+      // still name a new account, which is tied to the provider's identity, not to the email; but
+      // only a verified email links an existing account, passes the allowed domains, or makes an admin.
+      const given = id.email && validEmail(id.email) ? normalEmail(id.email) : undefined
+      if (!given) return 'Your sign-in provider didn’t share an email, so no account could be made'
+      if (this.o.allowedDomains.length && !(email && this.allowedEmail(email)))
+        return email ? 'Accounts from that email domain aren’t allowed here' : 'Your sign-in provider didn’t confirm your email, and this server only takes some email domains'
+      if (this.store.byEmail(given)) return 'That email belongs to an account already; your sign-in provider didn’t confirm it, so ask an admin'
+      u = this.store.addUser({ email: given, name: id.name?.trim().slice(0, 80) || given.split('@')[0], role: 'user', sso: { issuer: id.issuer, subject: id.subject } })
+      this.log(req, u, { action: 'sso.new-account', target: this.userTarget(u), text: `${u.name} (${u.email}) got an account by signing in with single sign-on${email ? '' : ' (email not confirmed by the provider)'}` })
     }
     this.store.updateUser(u.id, { ssoGroups: id.groups.slice(0, 200), ...(id.name ? { name: id.name.trim().slice(0, 80) } : {}) })
-    this.promote(u)
+    // BRAINCRAFT_ADMINS counts only an email the provider vouches for.
+    if (email && email === u.email) this.promote(u)
     return u
   }
 

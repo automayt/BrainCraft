@@ -148,3 +148,30 @@ describe('admins', () => {
     expect(((await call(a, 'GET', '/api/people?q=an', undefined, { cookie })).body.people as unknown[]).length).toBe(1)
   })
 })
+
+describe('single sign-on accounts and email', () => {
+  const who = (email: string, emailVerified: boolean, subject = email) => ({ issuer: 'https://idp', subject, email, emailVerified, name: email.split('@')[0], groups: [], returnTo: '/' })
+
+  it('makes an account from an email the provider didn’t confirm, but only a confirmed one links, passes domains or makes an admin', () => {
+    const a = new Accounts({ dir: tempDir(), admins: ['boss@x.org'] })
+    // Not confirmed (Microsoft Entra often doesn't say): still an account, tied to the provider's identity.
+    const sam = a.ssoUser(who('sam@x.org', false))
+    expect(typeof sam === 'string' ? sam : sam.email).toBe('sam@x.org')
+    // Not confirmed and someone else's: no account, no linking.
+    const made = a.store.addUser({ email: 'lee@x.org', name: 'Lee', role: 'user' })
+    expect(a.ssoUser(who('lee@x.org', false, 'other'))).toMatch(/belongs to an account already/)
+    expect(a.store.user(made.id)!.sso).toBeUndefined()
+    // Not confirmed: an admin's email doesn't make an admin…
+    const fake = a.ssoUser(who('boss@x.org', false, 'fake-boss'))
+    expect(typeof fake === 'string' ? fake : fake.role).toBe('user')
+    // …a confirmed one does.
+    const a2 = new Accounts({ dir: tempDir(), admins: ['boss@x.org'] })
+    const boss = a2.ssoUser(who('boss@x.org', true))
+    expect(typeof boss === 'string' ? boss : boss.role).toBe('admin')
+    // Allowed domains need a confirmed email.
+    const a3 = new Accounts({ dir: tempDir(), allowedDomains: ['x.org'] })
+    expect(a3.ssoUser(who('kim@x.org', false))).toMatch(/didn’t confirm your email/)
+    expect(a3.ssoUser(who('kim@y.org', true))).toMatch(/domain aren’t allowed/)
+    expect(typeof a3.ssoUser(who('kim@x.org', true))).not.toBe('string')
+  })
+})

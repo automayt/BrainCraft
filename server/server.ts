@@ -17,11 +17,16 @@
  * and groups, groups carry permissions, each board has an owner and an access list, and the keys
  * stop working. BRAINCRAFT_ADMINS, BRAINCRAFT_PUBLIC_URL, BRAINCRAFT_ALLOWED_ORIGINS and the
  * BRAINCRAFT_OIDC_* settings go with it.
+ *
+ * HTTPS: BRAINCRAFT_TLS_CERT and BRAINCRAFT_TLS_KEY (PEM files) make the server speak HTTPS itself;
+ * renewed certificates are picked up without a restart. Or put it behind a proxy that does
+ * (see docs/HTTPS.md).
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer as createTlsServer } from 'node:https'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -485,7 +490,7 @@ function parseUrl(req: IncomingMessage): URL | null {
   }
 }
 
-const server = createServer((req, res) => {
+function onRequest(req: IncomingMessage, res: ServerResponse) {
   // One malformed request must never take the server down for everyone.
   try {
     handle(req, res)
@@ -493,7 +498,33 @@ const server = createServer((req, res) => {
     log('request error', err)
     if (!res.headersSent) send(res, 400, { error: 'Bad request' })
   }
-})
+}
+
+// HTTPS, when given a certificate and its key (PEM files).
+const TLS_CERT = process.env.BRAINCRAFT_TLS_CERT?.trim()
+const TLS_KEY = process.env.BRAINCRAFT_TLS_KEY?.trim()
+if (!!TLS_CERT !== !!TLS_KEY) {
+  console.error('BRAINCRAFT_TLS_CERT and BRAINCRAFT_TLS_KEY go together: set both (or neither).')
+  process.exit(1)
+}
+const readTls = () => ({ cert: readFileSync(TLS_CERT!), key: readFileSync(TLS_KEY!) })
+const tlsServer = TLS_CERT ? createTlsServer(readTls(), onRequest) : null
+const server = tlsServer ?? createServer(onRequest)
+if (tlsServer) {
+  // Certificates renew (Let's Encrypt every 60-90 days): use the new one when its file changes.
+  let stamp = statSync(TLS_CERT!).mtimeMs
+  setInterval(() => {
+    try {
+      const now = statSync(TLS_CERT!).mtimeMs
+      if (now === stamp) return
+      tlsServer.setSecureContext(readTls())
+      stamp = now
+      log('picked up the renewed certificate')
+    } catch (err) {
+      log('couldn’t read the renewed certificate; still using the old one', err)
+    }
+  }, 60 * 60_000).unref()
+}
 
 function handle(req: IncomingMessage, res: ServerResponse) {
   const url = parseUrl(req)
@@ -575,7 +606,7 @@ server.on('upgrade', (req, socket, head) => {
 process.on('uncaughtException', (err) => log('unexpected error', err))
 
 server.listen(PORT, HOST, () => {
-  log(`BrainCraft ${VERSION} on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
+  log(`BrainCraft ${VERSION} on ${tlsServer ? 'https' : 'http'}://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
   log(
     accounts

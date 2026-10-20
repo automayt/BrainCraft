@@ -121,6 +121,9 @@ JumpCloud and others. People click **Sign in with …** and come back signed in.
 Accounts are made on first sign-in; an account an admin made earlier is linked
 by its verified email.
 
+**It needs HTTPS** (except on `localhost`): providers only send people back to
+an `https://` address. See [HTTPS.md](HTTPS.md) first.
+
 | Setting | Meaning |
 | --- | --- |
 | `BRAINCRAFT_OIDC_ISSUER` | The provider's issuer URL (its `/.well-known/openid-configuration` must be reachable from the server). |
@@ -150,8 +153,13 @@ Provider notes:
   Register an app (Web platform, the redirect URI above), create a client
   secret. For groups, add the *groups* claim in Token configuration; Entra
   sends group **object ids**, so list those ids in BrainCraft's groups.
-  Entra only sends `email_verified` for some accounts; accounts are still
-  made from `email`, but linking to an existing account needs it verified.
+  Entra often doesn't say an email is verified. Accounts are still made from
+  it (tied to the Microsoft identity, not the email), but linking to an
+  account an admin made, `BRAINCRAFT_OIDC_ALLOWED_DOMAINS` and
+  `BRAINCRAFT_ADMINS` only trust a verified email. For those, add the
+  optional claim `xms_edov` (email domain owner verified) in Token
+  configuration, or let people sign in first and then give them roles and
+  groups in People and groups.
 - **Okta:** issuer `https://<your org>.okta.com` (or a custom authorization
   server's issuer). Create an OIDC Web App; for groups, add a *groups* claim
   to the ID token (filter e.g. `Matches regex .*`) and the `groups` scope.
@@ -164,6 +172,67 @@ Provider notes:
   full path off) for groups.
 - **Authentik:** issuer `https://<host>/application/o/<app slug>/`. Create an
   OAuth2/OpenID provider (confidential); groups come in the `groups` claim.
+
+### Step by step: sign in with Google
+
+1. In [Google Cloud Console](https://console.cloud.google.com), make (or
+   pick) a project.
+2. **APIs & Services → OAuth consent screen:** choose *Internal* if everyone
+   is in your Google Workspace, otherwise *External* (then add the people as
+   test users, or publish the app). Give it a name and your support email.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID:**
+   type *Web application*; under *Authorized redirect URIs* add
+   `https://<your server>/api/auth/sso/callback` (copy it from People and
+   groups → **Sign-in**). Create, and copy the client ID and secret.
+4. Start BrainCraft with:
+
+   ```sh
+   BRAINCRAFT_ACCOUNTS=1
+   BRAINCRAFT_PUBLIC_URL=https://<your server>
+   BRAINCRAFT_OIDC_ISSUER=https://accounts.google.com
+   BRAINCRAFT_OIDC_CLIENT_ID=<client id>.apps.googleusercontent.com
+   BRAINCRAFT_OIDC_CLIENT_SECRET=<client secret>
+   BRAINCRAFT_OIDC_NAME=Sign in with Google
+   ```
+
+   Add `BRAINCRAFT_OIDC_ALLOWED_DOMAINS=yourcompany.com` to let only your
+   domain in (any Google account can sign in otherwise; they get the
+   Everyone group's permissions).
+5. The sign-in screen now has **Sign in with Google**. Google confirms
+   emails, so someone you added earlier is linked to their Google sign-in
+   the first time, and anyone in `BRAINCRAFT_ADMINS` is an admin.
+
+### Step by step: sign in with Microsoft (Entra ID, Microsoft 365)
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com):
+   **Identity → Applications → App registrations → New registration.** Name
+   it BrainCraft; *Accounts in this organizational directory only*; redirect
+   URI platform *Web*, address `https://<your server>/api/auth/sso/callback`.
+2. On its **Overview**, copy the *Application (client) ID* and the *Directory
+   (tenant) ID*.
+3. **Certificates & secrets → New client secret;** copy its *Value* (shown
+   once). Note when it expires: sign-in stops working then until you make a
+   new one.
+4. Optional, for groups: **Token configuration → Add groups claim** (security
+   groups). Entra sends group ids, so put those ids in BrainCraft groups'
+   *Sign-in provider groups*.
+5. Start BrainCraft with:
+
+   ```sh
+   BRAINCRAFT_ACCOUNTS=1
+   BRAINCRAFT_PUBLIC_URL=https://<your server>
+   BRAINCRAFT_OIDC_ISSUER=https://login.microsoftonline.com/<tenant id>/v2.0
+   BRAINCRAFT_OIDC_CLIENT_ID=<application id>
+   BRAINCRAFT_OIDC_CLIENT_SECRET=<secret value>
+   BRAINCRAFT_OIDC_NAME=Sign in with Microsoft
+   ```
+
+### On this Windows computer
+
+The **Redeploy BrainCraft** batch file on the Desktop sets the server's
+settings near the top; the sign-in ones are there, commented out with `rem`.
+Fill them in, remove the `rem`, and run it. Keep the client secret out of the
+BrainCraft folder (the batch file is outside it), and never commit it.
 
 ### Trying it without a provider
 

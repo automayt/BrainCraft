@@ -45,6 +45,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_ALLOWED_ORIGINS` | — | Other origins allowed to call the API with a signed-in cookie. |
 | `BRAINCRAFT_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_NAME`, `_SCOPES`, `_GROUPS_CLAIM`, `_ALLOWED_DOMAINS` | — | Single sign-on with any OpenID Connect provider. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_DEV_IDP` | off | `1`: a pretend sign-in provider at `/dev-idp` for trying single sign-on locally (localhost only). |
+| `BRAINCRAFT_TLS_CERT`, `BRAINCRAFT_TLS_KEY` | — | PEM files of a certificate and its key: the server speaks HTTPS itself, and picks up a renewed certificate within the hour. See [HTTPS.md](HTTPS.md). |
 | `BRAINCRAFT_TRUST_PROXY` | off | Set to `1` behind an HTTPS proxy so per-visitor limits (link previews) use the visitor's address from `X-Forwarded-For`. Leave off when the server faces the internet directly. |
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
 

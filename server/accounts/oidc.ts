@@ -236,7 +236,8 @@ export class OidcProvider implements SsoProvider {
       subject: String(claims.sub),
       ...(typeof claims.email === 'string' ? { email: claims.email } : {}),
       // Providers that don't say are trusted for their own users' emails only when told so.
-      emailVerified: claims.email_verified === true || claims.email_verified === 'true',
+      // Microsoft Entra says it with its optional "email domain owner verified" claim instead.
+      emailVerified: claims.email_verified === true || claims.email_verified === 'true' || claims.xms_edov === true || claims.xms_edov === 'true',
       ...(typeof claims.name === 'string' ? { name: claims.name } : typeof claims.preferred_username === 'string' ? { name: claims.preferred_username } : {}),
       groups,
       returnTo: saved.returnTo,
