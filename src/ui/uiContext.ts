@@ -17,6 +17,8 @@ export interface Ui {
   openHelp: () => void
   /** The built-in guide wiki (made, with its tour board, the first time). */
   openGuide: () => void
+  /** The open-source projects BrainCraft is built with, and their licences. */
+  openCredits: () => void
   /** The import/export dialog, on the Import tab unless told otherwise. */
   openImport: (tab?: 'import' | 'export') => void
   openFile: () => void

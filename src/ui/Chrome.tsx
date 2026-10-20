@@ -684,7 +684,7 @@ function sections(wiki: boolean): typeof SHORTCUTS {
 /** On a touch screen the touch gestures come first; elsewhere they come last. */
 const touchFirst = () => !!globalThis.matchMedia?.('(pointer: coarse)').matches
 
-export function Help({ onClose, wiki = false, onGuide }: { onClose: () => void; wiki?: boolean; onGuide?: () => void }) {
+export function Help({ onClose, wiki = false, onGuide, onCredits }: { onClose: () => void; wiki?: boolean; onGuide?: () => void; onCredits?: () => void }) {
   useEscape(onClose)
   const dialogRef = useRef<HTMLDivElement>(null)
   useDialog(dialogRef)
@@ -750,6 +750,14 @@ export function Help({ onClose, wiki = false, onGuide }: { onClose: () => void; 
               </section>
             ))}
           </div>
+          {onCredits && (
+            <p className="help-credits">
+              BrainCraft is built with open-source projects.{' '}
+              <button className="link" onClick={onCredits}>
+                Credits and licences
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>

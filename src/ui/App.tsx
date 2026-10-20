@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { sceneFromText } from '../model/excalidraw'
 import { addDrawing } from './excalidraw/addDrawing'
+import { CreditsDialog } from './Credits'
 import { AccessDialog } from './accounts/AccessDialog'
 import { AdminDialog } from './accounts/AdminDialog'
 import { SignIn, resetTokenOf } from './accounts/SignIn'
@@ -45,7 +46,7 @@ const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 /** Excalidraw, loaded only when a drawing is opened. */
 const DrawingEditor = lazy(() => import('./excalidraw/DrawingEditor'))
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -89,6 +90,7 @@ function App({ ws }: { ws: Workspace }) {
       setThemeState(t)
     },
     openHelp: () => setDialog('help'),
+    openCredits: () => setDialog('credits'),
     openGuide: () => {
       setDialog(null)
       void ws.openGuide()
@@ -408,7 +410,8 @@ function App({ ws }: { ws: Workspace }) {
               <DrawingEditor key={`${editor.drawing.id}`} />
             </Suspense>
           )}
-          {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} />}
+          {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} onCredits={ui.openCredits} />}
+          {dialog === 'credits' && <CreditsDialog onClose={close} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}

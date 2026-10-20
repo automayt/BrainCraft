@@ -9692,3 +9692,39 @@ button.on,
   font-family: 'Excalifont', 'Comic Shanns', 'Segoe Print', 'Bradley Hand', cursive;
   letter-spacing: 0;
 }
+
+/* Credits: thanks to the projects BrainCraft is built with. */
+.help-credits {
+  margin: 0 20px 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal.credits {
+  width: 620px;
+  max-height: 80vh;
+}
+
+.credits-body {
+  overflow-y: auto;
+  padding: 4px 20px 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.credits-featured {
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credits-featured li + li {
+  margin-top: 10px;
+}
+
+.credits-rest ul {
+  columns: 2 220px;
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}

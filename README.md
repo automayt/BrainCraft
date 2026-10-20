@@ -615,6 +615,30 @@ See [docs/SERVER.md](docs/SERVER.md).
 | `src/editor/Editor.ts` | Tools, selection, gestures and keyboard commands. Framework-independent and unit-tested. |
 | `src/ui/` | React components: SVG canvas, toolbars, text editing, comments panel, search, dialogs, and the table/Kanban/timeline views. |
 
+## Credits
+
+BrainCraft stands on open-source work. Thank you to the people behind:
+
+- [Excalidraw](https://github.com/excalidraw/excalidraw) (MIT): the drawing
+  editor for Excalidraw drawings, its converter from Mermaid, and its fonts
+  (Excalifont and Virgil, among others, under the SIL Open Font License)
+- [rough.js](https://github.com/rough-stuff/rough) (MIT): the hand-drawn look
+- [Mermaid](https://github.com/mermaid-js/mermaid) (MIT): reading flowcharts
+  for Excalidraw sketches
+- [React](https://react.dev) (MIT): the interface
+- [Inter](https://rsms.me/inter/) and [Literata](https://github.com/googlefonts/literata)
+  (SIL Open Font License): the typefaces
+- [ws](https://github.com/websockets/ws) (MIT) and the
+  [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript) (MIT): live
+  sessions and the assistant
+
+…and the 140 or so libraries they're built on. Every build lists exactly what
+it ships, with each project's copyright and licence text, in
+`dist/THIRD_PARTY_NOTICES.txt` (shown in the app under Help → **Credits and
+licences**). The build stops if a dependency would ship under a licence that
+hasn't been looked at (see `vite.licenses.ts`), and only the fonts whose
+licences are confirmed are shipped.
+
 ## License
 
 Licensed under either the [Apache License 2.0](LICENSE-APACHE) or the

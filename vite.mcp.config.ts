@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite'
+import { licenses } from './vite.licenses.ts'
 
 // Bundles the MCP server and the board code it shares into one dependency-free Node script.
 export default defineConfig({
+  plugins: [licenses()],
   build: {
     ssr: 'mcp/server.ts',
     outDir: 'dist',
