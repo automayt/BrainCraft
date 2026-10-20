@@ -34,6 +34,7 @@ import { AiGate, AiProxy } from './aiProxy'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
+import { BoardFiles } from './boardFiles'
 import { readBoard, sendRead } from './boardReads'
 import { boardWrite } from './boardWrites'
 import { docsPage, openApiSpec } from './openapi'
@@ -60,6 +61,13 @@ const SAVE_DELAY = 1000
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a)
 
 mkdirSync(join(DATA, 'boards'), { recursive: true })
+
+/** The bytes of boards' files (PDFs, documents…), beside the boards. */
+const files = new BoardFiles(join(DATA, 'files'), {
+  file: (Number(process.env.BRAINCRAFT_MAX_FILE_MB) || 50) * 1024 * 1024,
+  board: (Number(process.env.BRAINCRAFT_MAX_BOARD_FILES_MB) || 1024) * 1024 * 1024,
+  text: 2_000_000,
+})
 
 // ----- storage ---------------------------------------------------------------------------
 
@@ -283,11 +291,13 @@ const accountBoards = accounts
           clearTimeout(saveTimers.get(id))
           saveTimers.delete(id)
           rmSync(fileOf(id), { force: true })
+          files.removeBoard(id)
           log('deleted board', id)
           return true
         },
         ids: () => readdirSync(join(DATA, 'boards')).flatMap((f) => (f.endsWith('.json') ? [f.slice(0, -5)] : [])),
         loaded: (id) => rooms.get(id) ?? null,
+        files: (room, req, res, rest, canEdit) => files.handle(room.data.id, room.data.board, req, res, rest, canEdit),
         peek(id) {
           try {
             return JSON.parse(readFileSync(fileOf(id), 'utf8')) as RoomData
@@ -450,6 +460,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (!room) return send(res, 404, { error: 'No such board' })
   const role = room.roleFor(keyOf(req, url), safeEqual)
   if (!role) return send(res, 403, { error: 'Missing or wrong key' })
+
+  // Files kept with the board (see boardFiles.ts).
+  if (parts[3] === 'files' && (await files.handle(room.data.id, room.data.board, req, res, parts.slice(4), role === 'edit'))) return
 
   // Exports, and writing wiki pages one by one (see boardWrites.ts).
   if (parts.length > 3 && (await boardWrite(room, req.method ?? 'GET', parts.slice(3), url.searchParams, () => readBody(req), { canEdit: role === 'edit' }, res))) return

@@ -77,6 +77,22 @@ describe('drawings on the board', () => {
     expect(getItem(ed.board, id)).toMatchObject({ h: 200, y: 200 })
   })
 
+  it('drawn in place: goes exactly where it was drawn, stays open, and its saves undo as one step', () => {
+    const ed = new Editor(emptyBoard(), fakeMeasure)
+    ed.openDrawing(undefined, undefined, { x: 500, y: 300 })
+    const id = ed.saveDrawing(null, { elements: [rect('a')] }, picture, undefined, { x: 10, y: 20, w: 400, h: 200 })!
+    expect(getItem(ed.board, id)).toMatchObject({ x: 10, y: 20, w: 400, h: 200 })
+    // Still drawing it, now as that drawing.
+    expect(ed.drawing?.id).toBe(id)
+    ed.saveDrawing(id, { elements: [rect('a'), rect('b')] }, { ...picture, w: 600 }, undefined, { x: 10, y: 20, w: 600, h: 200 })
+    expect(getItem(ed.board, id)).toMatchObject({ w: 600 })
+    ed.closeDrawing()
+    expect([...ed.selection]).toEqual([id])
+    // Both saves were one drawing session: one undo takes the drawing away.
+    ed.undo()
+    expect(getItem(ed.board, id)).toBeUndefined()
+  })
+
   it('opens only drawings, and changes nothing when the board is read-only', () => {
     const ed = new Editor(emptyBoard(), fakeMeasure)
     ed.addImage('data:image/png;base64,AAAA', 100, 100)

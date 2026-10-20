@@ -113,6 +113,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Enter', 'In the title: start writing the page'],
       ['/ (at the start of a line) · Insert', 'Add a heading, checklist, table, sub-page, an embed from a board, or a macro'],
       ['[[', 'While writing: link to a page or a board'],
+      ['📎 Files', 'At the foot of the page list: PDFs, documents, slides and spreadsheets kept with the wiki; find, read, make a page from one'],
       ['@ · {{tasks @me}}', 'While writing: mention someone · list the checklist items that mention you'],
       ['Enter · Tab · Shift Tab', 'Continue a list or checklist · indent · outdent'],
       ['Ctrl B · Ctrl I', 'Bold · italic'],

@@ -18,6 +18,9 @@ import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
 import { catchUp } from '../model/catchup'
 import { type BoardRef, type LinkTarget, namesOnBoard, objectLabel, type Person } from '../model/notes'
+import { MAX_FILE_BYTES, formatSize, getFile, kindOf } from '../model/files'
+import type { BoardFile } from '../model/types'
+import { type FileStore, browserFiles, serverFiles } from './files'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type ServerMention } from './account'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
@@ -45,6 +48,13 @@ const GUEST_KEY = 'braincraft:guest'
 const SEEN_DELAY = 1500
 const seenKey = (id: string) => `seen:${id}`
 const COLOR_KEY = 'braincraft:color'
+
+/** A new file's id: random, URL-safe. */
+const randomId = () => {
+  const b = new Uint8Array(12)
+  crypto.getRandomValues(b)
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 /** When the signed-in person last looked at their mentions, per account. */
 const MENTIONS_SEEN = 'braincraft:mentions-seen:'
 const MENTIONS_EVERY_MS = 2 * 60_000
@@ -1076,7 +1086,136 @@ export class Workspace {
     this.libraryChanged()
     await this.refresh()
     this.connectLive(info)
+    void this.uploadLocalFiles(info)
     return info
+  }
+
+  // ----- files ----------------------------------------------------------------------
+
+  /** Where the open board's files go: its server when it's shared, else this browser. */
+  get fileStore(): FileStore | null {
+    const live = this.liveInfo
+    if (live) return serverFiles(live)
+    return this.boardId ? browserFiles(this.library.kv, this.boardId) : null
+  }
+
+  /** Where one file's bytes are (a file added before the board was shared may be in this browser only). */
+  private storeOf(f: BoardFile): FileStore | null {
+    if (f.local) return this.boardId ? browserFiles(this.library.kv, this.boardId) : null
+    return this.fileStore
+  }
+
+  /** Adds files to the open board: keeps their bytes, reads their words, and lists them. Returns their ids. */
+  async addFiles(list: readonly File[]): Promise<string[]> {
+    const store = this.fileStore
+    if (!store || this.viewOnly) {
+      this.editor.setStatus('Files can only be added to a board you can change')
+      return []
+    }
+    const { extract, canRead, plainWords } = await import('../files/extract')
+    const made: string[] = []
+    for (const file of list) {
+      if (file.size > MAX_FILE_BYTES) {
+        this.editor.setStatus(`${file.name} is too big (${formatSize(file.size)}; up to ${formatSize(MAX_FILE_BYTES)})`)
+        continue
+      }
+      const id = randomId()
+      const type = file.type || 'application/octet-stream'
+      try {
+        let text = ''
+        let pages: number | undefined
+        if (canRead(file.name, type)) {
+          this.editor.setStatus(`Reading ${file.name}…`)
+          const got = await extract(file.name, type, new Uint8Array(await file.arrayBuffer()))
+          text = got.markdown
+          pages = got.pages
+        }
+        this.editor.setStatus(`Keeping ${file.name}…`)
+        await store.put(id, file, type, text)
+        const by = this.editor.author.trim()
+        const excerpt = plainWords(text)
+        this.editor.addFile({
+          id,
+          name: file.name.slice(0, 200),
+          type,
+          size: file.size,
+          at: Date.now(),
+          ...(by ? { by } : {}),
+          ...(text.trim() ? { chars: text.length } : {}),
+          ...(pages ? { pages } : {}),
+          ...(excerpt ? { excerpt } : {}),
+          ...(store.where === 'browser' ? { local: true as const } : {}),
+        })
+        made.push(id)
+        this.editor.setStatus(
+          kindOf(file.name, type) === 'image' || !canRead(file.name, type)
+            ? `Added ${file.name}`
+            : text.trim()
+              ? `Added ${file.name}`
+              : `Added ${file.name}, but no words could be read from it (a scanned PDF, perhaps)`,
+        )
+      } catch (err) {
+        this.editor.setStatus(`Couldn’t add ${file.name}: ${(err as Error).message}`)
+      }
+    }
+    return made
+  }
+
+  /** A file's bytes, or null when they aren't reachable from here. */
+  async fileBlob(f: BoardFile): Promise<Blob | null> {
+    return (await this.storeOf(f)?.get(f.id).catch(() => null)) ?? null
+  }
+
+  /** A file's words (as Markdown), or null. */
+  async fileText(f: BoardFile): Promise<string | null> {
+    return (await this.storeOf(f)?.text(f.id).catch(() => null)) ?? null
+  }
+
+  /** Makes a wiki page (or a page with sub-pages, for a long one) from a file's words, and opens it. */
+  async pageFromFile(id: string, parent?: string): Promise<string> {
+    const f = getFile(this.editor.board, id)
+    if (!f) return ''
+    const text = await this.fileText(f)
+    if (text === null) {
+      this.editor.setStatus(f.local ? 'That file is only in the browser that added it' : 'Couldn’t read that file’s words')
+      return ''
+    }
+    const { wikiPagesFor } = await import('../files/toWiki')
+    const title = /^# (.+)$/m.exec(text)?.[1]
+    const plan = wikiPagesFor({ name: f.name, kind: kindOf(f.name, f.type), pages: f.pages, at: f.at, by: f.by }, text, title && text.trimStart().startsWith('# ') ? title : undefined)
+    return this.editor.addPagesFromPlan(plan, f.id, parent)
+  }
+
+  /** Deletes a file for good: its details and its bytes. */
+  async deleteFile(id: string) {
+    const f = getFile(this.editor.board, id)
+    if (!f) return
+    await this.storeOf(f)
+      ?.remove(f.id)
+      .catch(() => {})
+    this.editor.removeFile(id)
+  }
+
+  /** Files added before the board was shared go up to its server, so everyone there can open them. */
+  private async uploadLocalFiles(info: LiveInfo) {
+    if (!this.boardId) return
+    const here = browserFiles(this.library.kv, this.boardId)
+    const there = serverFiles(info)
+    for (const f of this.editor.board.files ?? []) {
+      if (!f.local) continue
+      try {
+        const blob = await here.get(f.id)
+        if (!blob) continue
+        await there.put(f.id, blob, f.type, (await here.text(f.id)) ?? '')
+        this.editor.updateFile(f.id, (x) => {
+          const next = { ...x }
+          delete next.local
+          return next
+        })
+      } catch (err) {
+        this.editor.setStatus(`Couldn’t put ${f.name} on the server: ${(err as Error).message}`)
+      }
+    }
   }
 
   /** Stops sharing from this browser: the board here becomes a normal board again. */

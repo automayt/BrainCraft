@@ -32,6 +32,7 @@ import type {
 } from './types'
 import { defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
+import { cleanFile, isFileId } from './files'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
 import { canSketch } from './sketch'
@@ -502,6 +503,15 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         else {
           const v = cleanRecord(p.v)
           if (v && v.id === p.id) out.push({ k: 'rec', ds: p.ds, id: p.id, v })
+        }
+        break
+      }
+      case 'file': {
+        if (!isFileId(p.id)) break
+        if (p.v === null) out.push({ k: 'file', id: p.id, v: null })
+        else {
+          const v = cleanFile(p.v)
+          if (v && v.id === p.id) out.push({ k: 'file', id: p.id, v })
         }
         break
       }

@@ -7,7 +7,17 @@ your BrainCraft server.
 
 - It reads the board before answering and knows what you've selected, so
   "these", "this" and "it" mean your selection.
-- Objects it mentions are links: click one to fly to it.
+- Objects it mentions are links: click one to fly to it. So are the wiki
+  pages and boards it mentions.
+- **Point it at things:** in your question, type **@** for an object or
+  **[[** for a wiki page or another board. Whatever you link is read and sent
+  along with the question, so the assistant has it without looking it up.
+- **Your other boards and wikis:** it can list them and read any of them
+  (the ones in this browser), not just the open one. It only ever changes the
+  open one.
+- **Files:** in a wiki, it can list the files kept with it and read their
+  words (PDFs, documents, slides, spreadsheets). **Ask AI about it** in
+  **📎 Files** starts it off.
 - It never changes the board on its own. It **proposes** changes, which
   appear on the board as a preview: new and changed objects are outlined in
   green, removed ones are crossed out in red. Hover a proposal card to see

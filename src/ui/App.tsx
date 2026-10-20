@@ -391,12 +391,21 @@ function App({ ws }: { ws: Workspace }) {
           <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
             {wiki ? <WikiView /> : <Canvas />}
           </BoardErrorBoundary>
-          <TopLeft />
-          <TopRight />
+          {/* A drawing open on the board has Excalidraw's tools in their place. */}
+          {!editor.drawing && (
+            <>
+              <TopLeft />
+              <TopRight />
+            </>
+          )}
           {!wiki && (
             <>
-              <ToolRail />
-              <BottomLeft />
+              {!editor.drawing && (
+                <>
+                  <ToolRail />
+                  <BottomLeft />
+                </>
+              )}
               <NotesPanel />
               <PagePeek />
             </>
@@ -419,7 +428,7 @@ function App({ ws }: { ws: Workspace }) {
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
           {editor.drawing && (
             <Suspense fallback={<div className="drawing-editor loading no-canvas" aria-busy="true" aria-label="Opening Excalidraw" />}>
-              <DrawingEditor key={`${editor.drawing.id}`} />
+              <DrawingEditor />
             </Suspense>
           )}
           {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} onCredits={ui.openCredits} />}

@@ -7,7 +7,7 @@
 import * as B from '../model/board'
 import { isDrawing, sceneText } from '../model/excalidraw'
 import { canSketch, flowComponent, setSketch } from '../model/sketch'
-import type { ExcalidrawScene } from '../model/types'
+import type { BoardFile, ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
@@ -33,6 +33,8 @@ import * as BS from '../model/brainstorm'
 import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
+import * as FS from '../model/files'
+import type { PagePlan } from '../files/toWiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys, toggleTask } from '../model/markdown'
 import * as WH from '../model/wheel'
@@ -461,7 +463,7 @@ export class Editor {
     this.onBoardChange?.(next)
   }
 
-  private commit(before: Board) {
+  private commit(before: Board, amend = false) {
     // Each undo step signs what it really changed with this person's name, for
     // "Since you were here" (a drag counts once, at its end, however far it went).
     const signed = CU.stampAuthors(before, this.board, this.me)
@@ -469,7 +471,8 @@ export class Editor {
       this.board = signed
       this.onBoardChange?.(signed)
     }
-    this.history.commit(before, this.board)
+    if (amend) this.history.amend(before, this.board)
+    else this.history.commit(before, this.board)
   }
 
   /** Runs `f` as one undoable step. */
@@ -808,6 +811,18 @@ export class Editor {
 
   /** A wiki panel to open (from Ctrl+K): the open page's history, recent changes, or adding Markdown files. */
   wikiPanel: 'history' | 'recent' | 'import' | null = null
+  /** The wiki's Files are open (on `select`, a file to show first). */
+  filesPanel: { select?: string } | null = null
+
+  openFiles(select?: string) {
+    this.filesPanel = select ? { select } : {}
+    this.emit()
+  }
+
+  closeFiles() {
+    this.filesPanel = null
+    this.emit()
+  }
   /** The page whose changes since the last visit are showing (it outlives the page view it opens). */
   changesOf: string | null = null
   /** Pages of "Since you were here" already looked at: their dots and banner rows go. */
@@ -1570,6 +1585,50 @@ export class Editor {
     return id
   }
 
+  // ----- files -----------------------------------------------------------------------
+
+  /** Keeps a file's details on the board (its bytes are already in the file store). */
+  addFile(f: BoardFile) {
+    this.edit((b) => FS.addFile(b, f))
+  }
+
+  updateFile(id: string, change: (f: BoardFile) => BoardFile) {
+    this.edit((b) => FS.updateFile(b, id, change))
+  }
+
+  /** To the trash (or back out of it). */
+  trashFile(id: string, on = true) {
+    this.edit((b) => FS.trashFile(b, id, on))
+  }
+
+  /** Forgets a file entirely; its bytes are the store's to delete. */
+  removeFile(id: string) {
+    this.edit((b) => FS.removeFile(b, id))
+  }
+
+  /**
+   * Makes the pages a file became (see toWiki.ts), under `parent` or at the top, as one step; the
+   * file remembers its page. Returns the main page's id ('' when the wiki is full).
+   */
+  addPagesFromPlan(plan: PagePlan, file?: string, parent?: string): string {
+    if (this.readOnly) return ''
+    const by = this.author.trim() || undefined
+    let root = ''
+    this.edit((b) => {
+      const add = (board: Board, p: PagePlan, under?: string): Board => {
+        const [next, id] = W.addPage(board, { title: p.title, parent: under, text: p.text, ...(p.icon ? { icon: p.icon } : {}) }, Date.now(), by)
+        if (!id) return board
+        if (!root) root = id
+        return p.children.reduce((acc, c) => add(acc, c, id), next)
+      }
+      const next = add(b, plan, parent)
+      return file && root ? FS.updateFile(next, file, (f) => ({ ...f, page: root })) : next
+    })
+    if (root) this.openPage(root)
+    else this.setStatus(`This wiki is full (${W.MAX_PAGES.toLocaleString('en')} pages)`)
+    return root
+  }
+
   setPageTitle(id: string, title: string) {
     if (W.getPage(this.board, id)?.title === title) return
     this.saveVersions([id])
@@ -1804,39 +1863,68 @@ export class Editor {
     if (id !== undefined && !isDrawing(item)) return
     if (id === undefined && this.readOnly) return
     this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}) }
+    // Its saves make an undo step of their own.
+    this.lastDrawingSave = null
+    this.selection.clear()
     this.emit()
   }
 
   closeDrawing() {
+    const id = this.drawing?.id
     this.drawing = null
+    this.lastDrawingSave = null
+    if (id !== null && id !== undefined && B.getItem(this.board, id)) this.select([id])
+    else this.emit()
+  }
+
+  /** The board as the last save of the open drawing left it, so the next save joins its undo step. */
+  private lastDrawingSave: Board | null = null
+
+  /** Moves the camera to exactly `c` (an open drawing's view moving the board with it). */
+  setCamera(c: Camera) {
+    if (c.x === this.camera.x && c.y === this.camera.y && c.zoom === this.camera.zoom) return
+    this.camera = c
     this.emit()
   }
 
   /**
-   * Keeps a drawing: its scene and its picture (`src`, `w`×`h`, as drawn). An existing drawing keeps
-   * its width on the board and its middle; a new one is placed where it was opened. One undo step.
+   * Keeps a drawing: its scene and its picture (`src`, `w`×`h`, as drawn). With `rect` it goes
+   * exactly there (drawn in place on the board); otherwise an existing drawing keeps its width and
+   * middle, and a new one is placed where it was opened. While a drawing is open, its saves undo as
+   * one step.
    */
-  saveDrawing(id: Id | null, scene: ExcalidrawScene, picture: { src: string; w: number; h: number }, at?: Vec): Id | null {
+  saveDrawing(id: Id | null, scene: ExcalidrawScene, picture: { src: string; w: number; h: number }, at?: Vec, rect?: Rect): Id | null {
     if (this.readOnly) return null
     const text = sceneText(scene)
     const old = id === null ? undefined : B.getItem(this.board, id)
     if (id !== null && !isDrawing(old)) return null
     const ratio = picture.h / Math.max(1, picture.w)
     let made: Id | null = id
-    this.edit((b) => {
-      if (old) {
-        const w = old.w
-        const h = Math.max(8, w * ratio)
-        return B.updateItem(b, old.id, (i) => ({ ...i, src: picture.src, excalidraw: scene, text, y: i.y + (i.h - h) / 2, h }))
-      }
+    const before = this.board
+    let next: Board
+    if (old) {
+      const w = old.w
+      const h = Math.max(8, w * ratio)
+      next = B.updateItem(this.board, old.id, (i) => ({ ...i, src: picture.src, excalidraw: scene, text, ...(rect ?? { y: i.y + (i.h - h) / 2, h }) }))
+    } else {
       const scale = Math.min(1, 640 / Math.max(picture.w, picture.h))
       const w = Math.max(40, picture.w * scale)
-      const [next, newId] = B.addItem(b, B.newItem('image', rectFromCenter(at ?? this.drawing?.at ?? center(this.visibleWorld), w, w * ratio), { src: picture.src, text }))
+      const [added, newId] = B.addItem(this.board, B.newItem('image', rect ?? rectFromCenter(at ?? this.drawing?.at ?? center(this.visibleWorld), w, w * ratio), { src: picture.src, text }))
       made = newId
-      return B.updateItem(next, newId, (i) => ({ ...i, excalidraw: scene }))
-    })
-    this.tool = 'select'
-    if (made !== null) this.select([made])
+      next = B.updateItem(added, newId, (i) => ({ ...i, excalidraw: scene }))
+    }
+    const open = !!this.drawing
+    this.apply(next)
+    this.commit(before, open && this.lastDrawingSave === before)
+    this.lastDrawingSave = open ? this.board : null
+    // A drawing being drawn stays open; one brought in from a file is selected.
+    if (!open) {
+      this.tool = 'select'
+      if (made !== null) this.select([made])
+    } else {
+      if (this.drawing && made !== null) this.drawing = { ...this.drawing, id: made }
+      this.emit()
+    }
     return made
   }
 

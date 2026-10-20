@@ -439,6 +439,20 @@ ${FENCE}
 > [!note] Since you were here
 > Opening a wiki after friends wrote in it lists the new and changed pages, and **what changed** shows the lines that are different since you last looked.`,
         },
+        {
+          title: 'Files',
+          icon: '📎',
+          text: `A wiki keeps documents too: PDFs, Word documents, slides, spreadsheets, CSV, web pages, text and pictures. Open **📎 Files** at the foot of the page list.
+
+- **Add them:** drop files anywhere on the wiki, or **Add files…**.
+- **Find them** by name, or by any word inside them.
+- **Read them** right there: PDFs in the browser's own viewer, the rest as text.
+- **Make a wiki page** from one: its headings, lists, tables and links come across, with a note saying which file it came from. A long document becomes a contents page with a page for each section.
+- **Ask AI about it:** the assistant reads the file and sums it up.
+
+> [!tip] Where they're kept
+> On the server when the wiki is shared, so everyone who can open the wiki can open its files; otherwise in this browser.`,
+        },
       ],
     },
     {

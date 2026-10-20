@@ -4,8 +4,10 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeBackend } from '../ai/assistant'
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
 import * as B from '../model/board'
-import { objectLabel } from '../model/notes'
+import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { timeAgo } from './Boards'
+import { useLinkPicker } from './NotesPanel'
+import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 
@@ -24,30 +26,47 @@ const QUICK: { label: string; prompt: string; needs?: 'selection'; changes?: tru
   { label: 'Decision log', prompt: 'Read the comments on the selected objects (or the whole board) and propose a comment block summarising the decisions made and the open questions.', changes: true },
 ]
 
-/** Answers as light Markdown: paragraphs, bullets, **bold**, `code`, and @[Label](#id) object links. */
-function RichText({ text, onObject }: { text: string; onObject: (id: number) => void }) {
-  const inline = (line: string, key: number): ReactNode => {
+/**
+ * Answers (and questions) as light Markdown: paragraphs, bullets, **bold**, `code`, @[Label](#id)
+ * object links, [[Title]](…) links to pages and boards, and mentions of people.
+ */
+function RichText({ text, onObject, onLink }: { text: string; onObject: (id: number) => void; onLink: (to: LinkTarget | null, label: string) => void }) {
+  const styled = (s: string, key: string): ReactNode[] => {
     const parts: ReactNode[] = []
-    const re = /@\[([^\]]+)\]\(#(\d+)\)|\*\*([^*]+)\*\*|`([^`]+)`|_([^_]+)_/g
+    const re = /\*\*([^*]+)\*\*|`([^`]+)`|_([^_]+)_/g
     let last = 0
     let m: RegExpExecArray | null
-    while ((m = re.exec(line))) {
-      if (m.index > last) parts.push(line.slice(last, m.index))
-      if (m[1]) {
-        const id = Number(m[2])
-        parts.push(
-          <button key={m.index} className="ai-ref" onClick={() => onObject(id)} title="Go to this object">
-            {m[1]}
-          </button>,
-        )
-      } else if (m[3]) parts.push(<strong key={m.index}>{m[3]}</strong>)
-      else if (m[4]) parts.push(<code key={m.index}>{m[4]}</code>)
-      else parts.push(<em key={m.index}>{m[5]}</em>)
+    while ((m = re.exec(s))) {
+      if (m.index > last) parts.push(s.slice(last, m.index))
+      if (m[1]) parts.push(<strong key={`${key}.${m.index}`}>{m[1]}</strong>)
+      else if (m[2]) parts.push(<code key={`${key}.${m.index}`}>{m[2]}</code>)
+      else parts.push(<em key={`${key}.${m.index}`}>{m[3]}</em>)
       last = m.index + m[0].length
     }
-    if (last < line.length) parts.push(line.slice(last))
-    return <Fragment key={key}>{parts}</Fragment>
+    if (last < s.length) parts.push(s.slice(last))
+    return parts
   }
+  const inline = (line: string, key: number): ReactNode => (
+    <Fragment key={key}>
+      {parseNote(line).map((p, n) => {
+        if ('text' in p) return <Fragment key={n}>{styled(p.text, `${key}.${n}`)}</Fragment>
+        if ('person' in p) return <PersonMention key={n} id={p.person} label={p.label} />
+        if ('mention' in p)
+          return (
+            <button key={n} className="ai-ref" onClick={() => onObject(p.mention)} title="Go to this object">
+              {p.label}
+            </button>
+          )
+        const page = p.link?.page !== undefined
+        return (
+          <button key={n} className="ai-ref" onClick={() => onLink(p.link, p.label)} title={page ? 'Open this page' : p.link?.item !== undefined ? 'Go to this object' : 'Open this board'}>
+            {page ? '📄 ' : p.link?.item === undefined ? '📋 ' : ''}
+            {p.label}
+          </button>
+        )
+      })}
+    </Fragment>
+  )
   const blocks: ReactNode[] = []
   let list: ReactNode[] = []
   const flush = () => {
@@ -166,7 +185,22 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     let s = assistants.get(boardKey)
     const backend = makeBackend(connection, settings.model)
     if (!s) {
-      s = { assistant: new Assistant(backend, { board: () => editor.board, readable: () => editor.viewBoard, measure: editor.measure, selection: () => [...editor.selection], view: () => editor.visibleWorld }), turns: [] }
+      s = {
+        assistant: new Assistant(backend, {
+          board: () => editor.board,
+          readable: () => editor.viewBoard,
+          measure: editor.measure,
+          selection: () => [...editor.selection],
+          view: () => editor.visibleWorld,
+          // The person's other boards and wikis in this browser, to read what a message links to.
+          others: () => ({ boards: ws.otherBoards, selfKeys: ws.selfKeys, read: (key) => ws.readBoard(key), me: editor.me }),
+          fileText: async (id) => {
+            const f = editor.board.files?.find((x) => x.id === id)
+            return f ? ws.fileText(f) : null
+          },
+        }),
+        turns: [],
+      }
       assistants.set(boardKey, s)
     }
     // Settings may have changed since the last message; the conversation carries over.
@@ -242,6 +276,19 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   }, [asked, !!connection, checked, running])
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
+  const follow = (to: LinkTarget | null, label: string) => {
+    const target = to ?? resolveName(label, editor.board, ws.otherBoards)
+    if (target) void ws.openLink(target)
+    else editor.setStatus(`Nothing is called “${label}”`)
+  }
+  // @ and [[ in the question: link objects, pages and boards, which go along with it.
+  const area = useRef<HTMLTextAreaElement>(null)
+  const picker = useLinkPicker(area, input, setInput, -1)
+  const ask = () => {
+    // Sent with its links; shown as typed.
+    const shown = input.trim()
+    if (shown) void send(picker.encode(input), [], shown)
+  }
   const pending = turns.flatMap((t) => t.proposals).filter((p) => p.status === 'pending')
   const latestPending = pending.at(-1)
   const history = [...editor.aiHistory].reverse()
@@ -450,7 +497,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
                 </div>
               ) : (
                 <div key={k} className="ai-msg assistant">
-                  {t.text && <RichText text={t.text} onObject={go} />}
+                  {t.text && <RichText text={t.text} onObject={go} onLink={follow} />}
                   {t.proposals.map((p) => (
                     <ProposalCard
                       key={p.id}
@@ -496,22 +543,31 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             className="ai-compose"
             onSubmit={(e) => {
               e.preventDefault()
-              void send(input)
+              ask()
             }}
           >
+            {picker.list}
             <textarea
+              ref={area}
               autoFocus
               value={input}
               rows={2}
-              placeholder={editor.selection.size ? `Ask about the ${editor.selection.size} selected…` : 'Ask anything about this board…'}
-              onChange={(e) => setInput(e.target.value)}
+              aria-label="Ask the assistant"
+              placeholder={editor.selection.size ? `Ask about the ${editor.selection.size} selected…` : 'Ask anything… (@ an object, [[ a page or board)'}
+              onChange={(e) => {
+                setInput(e.target.value)
+                picker.track(e.target)
+              }}
+              onSelect={(e) => picker.track(e.target as HTMLTextAreaElement)}
+              onPaste={picker.onPaste}
               onKeyDown={(e) => {
                 // Typing stays here; Ctrl shortcuts (Ctrl J to close, Ctrl K to search) still work.
                 if (!(e.ctrlKey || e.metaKey)) e.stopPropagation()
+                if (picker.onKey(e)) return
                 if (e.key === 'Escape' && !running) onClose()
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  void send(input)
+                  ask()
                 }
               }}
             />

@@ -4,6 +4,9 @@ import './assetPath'
 import { exportToSvg, restoreElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawScene } from '../../model/types'
 
+/** The margin around a drawing in its picture (scene units). */
+export const PAD = 20
+
 export interface Picture {
   src: string
   w: number
@@ -15,7 +18,7 @@ export async function pictureOf(scene: ExcalidrawScene): Promise<Picture> {
     elements: restoreElements(scene.elements as never, null),
     appState: { exportBackground: true, viewBackgroundColor: '#ffffff', exportWithDarkMode: false },
     files: (scene.files ?? {}) as never,
-    exportPadding: 20,
+    exportPadding: PAD,
   })
   const w = Number(svg.getAttribute('width')) || 400
   const h = Number(svg.getAttribute('height')) || 300

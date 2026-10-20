@@ -23,6 +23,7 @@ const FEATURED: [match: RegExp, what: string][] = [
   [/^Excalifont \(font\)$/, 'The handwriting on hand-drawn objects'],
   [/^@excalidraw\/mermaid-to-excalidraw$/, 'Sketching flowcharts in Excalidraw'],
   [/^mermaid$/, 'Reading flowcharts for those sketches'],
+  [/^pdfjs-dist$/, 'Reading PDFs kept in a wiki’s Files'],
   [/^react$/, 'The interface'],
   [/^@fontsource-variable\/inter$/, 'Inter, the interface’s typeface'],
   [/^@fontsource-variable\/literata$/, 'Literata, the typeface wiki pages are read in'],

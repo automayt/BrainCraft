@@ -3,6 +3,7 @@ import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
 import { useEditor } from '../useEditor'
 import { RecentChanges } from './RecentChanges'
+import { filesOf } from '../../model/files'
 
 type Where = 'before' | 'inside' | 'after'
 
@@ -243,6 +244,9 @@ export function PageTree({ current }: { current: Page | undefined }) {
       <div className="page-recent">
         <button className="link" onClick={() => setRecent(true)}>
           🕘 Recent changes
+        </button>
+        <button className="link" onClick={() => editor.openFiles()} title="PDFs, documents, slides and spreadsheets kept with this wiki">
+          📎 Files{filesOf(board).length ? ` (${filesOf(board).length})` : ''}
         </button>
       </div>
       {recent && <RecentChanges onClose={() => setRecent(false)} />}

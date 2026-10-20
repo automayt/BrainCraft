@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type Anthropic from '@anthropic-ai/sdk'
 import { applyOps } from '../api/ops'
 import { emptyBoard } from '../model/board'
+import { addFile } from '../model/files'
+import type { Board } from '../model/types'
+import { emptyWiki } from '../model/wiki'
 import { fakeMeasure } from '../model/test-helpers'
 import { Assistant, type Proposal } from './assistant'
 import { AnthropicBackend } from './backends'
@@ -149,3 +152,74 @@ describe('assistant after something goes wrong', () => {
     expect(last.content).toMatchObject([{ type: 'tool_result', tool_use_id: 't1', is_error: true }])
   })
 })
+
+describe('the assistant and other boards', () => {
+  const wiki = () => {
+    let w = applyOps(emptyWiki('Trip wiki'), [{ op: 'createPage', title: 'Packing', text: '# Packing\n- [ ] Tent\n- [ ] Stove' }], { measure: fakeMeasure }).board
+    w = applyOps(w, [{ op: 'createPage', title: 'Budget', text: 'Up to 400 each' }], { measure: fakeMeasure }).board
+    return w
+  }
+  const others = (w: Board) => ({ boards: [{ key: 'w1', title: 'Trip wiki', kind: 'wiki' as const, pages: (w.pages ?? []).map((p) => ({ id: p.id, title: p.title })) }], selfKeys: ['b1'], read: async (k: string) => (k === 'w1' ? w : null), me: 'Sam' })
+
+  it('sends what a message links to along with it: a page elsewhere, an object here', async () => {
+    const w = wiki()
+    const packing = w.pages!.find((p) => p.title === 'Packing')!
+    const { client, sent } = fakeClient([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Tent and stove.' }] }])
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: board, measure: fakeMeasure, selection: () => [], others: () => others(w) })
+    await a.send(`What's left on [[Packing]](board:w1/page:${packing.id}) for @[Faster checkout](#1)?`, { text: () => {}, status: () => {}, proposal: () => {} })
+    const said = JSON.stringify((sent[0].messages as { content: unknown }[])[0].content)
+    expect(said).toContain('What the message links to')
+    expect(said).toContain('- [ ] Tent')
+    expect(said).toContain('Faster checkout')
+    // A link to something that's gone says so rather than failing.
+    const { client: c2, sent: s2 } = fakeClient([{ stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] }])
+    const b2 = new Assistant(new AnthropicBackend(c2, 'claude-opus-5-5', 'Opus'), { board: board, measure: fakeMeasure, selection: () => [], others: () => others(w) })
+    await b2.send('See [[Old]](board:gone)', { text: () => {}, status: () => {}, proposal: () => {} })
+    expect(JSON.stringify(s2[0].messages)).toContain('isn\'t here any more')
+  })
+
+  it('lists the other boards and reads one with "board", never changing it', async () => {
+    const w = wiki()
+    const { client, sent } = fakeClient([
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'list_boards', input: {} }] },
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't2', name: 'read_page', input: { board: 'w1', page: 'Budget' } }] },
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't3', name: 'find', input: { board: 'nope', query: 'x' } }] },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Up to 400 each, see [[Budget]](board:w1/page:x).' }] },
+    ])
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: board, measure: fakeMeasure, selection: () => [], others: () => others(w) })
+    await a.send('What is the trip budget?', { text: () => {}, status: () => {}, proposal: () => {} })
+    const results = (n: number) => JSON.stringify((sent[n].messages as unknown[]).at(-1))
+    expect(results(1)).toContain('Trip wiki')
+    expect(results(1)).toContain('Packing')
+    expect(results(2)).toContain('Up to 400 each')
+    expect(results(3)).toContain('No board with the key')
+    // The tools say how to name another board.
+    const tools = sent[0].tools as { name: string; input_schema: { properties: Record<string, unknown> } }[]
+    expect(tools.find((t) => t.name === 'read_page')!.input_schema.properties.board).toBeTruthy()
+    expect(tools.some((t) => t.name === 'list_boards')).toBe(true)
+  })
+})
+
+describe('the assistant and files', () => {
+  it('lists the board’s files and reads one in chunks', async () => {
+    const b = addFile(board(), { id: 'file0001', name: 'Plan.pdf', type: 'application/pdf', size: 9, at: 1, chars: 50_000, excerpt: 'Day one' })
+    const text = `${'a'.repeat(40_000)}THE END`
+    const { client, sent } = fakeClient([
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'list_files', input: {} }] },
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't2', name: 'read_file', input: { id: 'file0001' } }] },
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't3', name: 'read_file', input: { id: 'file0001', from: 40_000 } }] },
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't4', name: 'read_file', input: { id: 'nope' } }] },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'It ends.' }] },
+    ])
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [], fileText: async (id) => (id === 'file0001' ? text : null) })
+    await a.send('What does the plan say?', { text: () => {}, status: () => {}, proposal: () => {} })
+    const result = (n: number) => JSON.stringify((sent[n].messages as unknown[]).at(-1))
+    expect(result(1)).toContain('Plan.pdf')
+    expect(result(1)).toContain('Day one')
+    expect(result(2)).toContain('read on with')
+    expect(result(2)).not.toContain('THE END')
+    expect(result(3)).toContain('THE END')
+    expect(result(4)).toContain('No file with the id')
+  })
+})
+

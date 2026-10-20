@@ -45,6 +45,8 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_ALLOWED_ORIGINS` | — | Other origins allowed to call the API with a signed-in cookie. |
 | `BRAINCRAFT_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_NAME`, `_SCOPES`, `_GROUPS_CLAIM`, `_ALLOWED_DOMAINS` | — | Single sign-on with any OpenID Connect provider. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_DEV_IDP` | off | `1`: a pretend sign-in provider at `/dev-idp` for trying single sign-on locally (localhost only). |
+| `BRAINCRAFT_MAX_FILE_MB` | 50 | The biggest file a wiki can keep. |
+| `BRAINCRAFT_MAX_BOARD_FILES_MB` | 1024 | All of one board's files together. |
 | `BRAINCRAFT_TLS_CERT`, `BRAINCRAFT_TLS_KEY` | — | PEM files of a certificate and its key: the server speaks HTTPS itself, and picks up a renewed certificate within the hour. See [HTTPS.md](HTTPS.md). |
 | `BRAINCRAFT_TRUST_PROXY` | off | Set to `1` behind an HTTPS proxy so per-visitor limits (link previews) use the visitor's address from `X-Forwarded-For`. Leave off when the server faces the internet directly. |
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Where to send AI requests, for an API gateway. |
@@ -122,6 +124,10 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/pages/{page}/export?format=md\|html` | edit or view | One page as a Markdown file or a web page. |
 | `GET /api/boards/{id}/export?format=json\|md\|html\|zip` | edit or view | The whole board as a file: `json` (a `.braincraft` file) or `md` for any board; a wiki also as `html` (one printable web page with a contents list) or `zip` (a Markdown file per page). |
 | `GET /api/docs` · `GET /api/openapi.json` | — | This API, as a page and as OpenAPI 3.1. |
+| `GET /api/boards/{id}/files/{file}` | edit or view | A file kept with the board (PDFs, pictures and plain text open in place; `?download=1` to save it). |
+| `GET /api/boards/{id}/files/{file}/text` | edit or view | The words read out of it, as Markdown. |
+| `PUT /api/boards/{id}/files/{file}` (and `…/text`) | edit | Keeps a file's bytes (the body, with its Content-Type) or its words. Files are stored under `BRAINCRAFT_DATA/files/`. |
+| `DELETE /api/boards/{id}/files/{file}` | edit | Deletes a file's bytes and words. |
 | `GET /api/boards/{id}/people` | edit or view (accounts) | Who can open the board, to @mention: names and ids (emails for people who may see everyone). |
 | `GET /api/mentions` | signed in (accounts) | Where you're @mentioned on the boards you can open: board, object or page, who wrote it, when, and the words around it. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |

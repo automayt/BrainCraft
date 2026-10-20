@@ -137,9 +137,11 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 
 ## Excalidraw on the canvas (October 2026)
 
-- [x] **Excalidraw drawings** as objects on the board: drawn in Excalidraw full
-  screen, kept as a picture plus its scene, reopened with a double-click,
-  pasted from Excalidraw or dropped as `.excalidraw` files, downloaded back.
+- [x] **Excalidraw drawings** as objects on the board: kept as a picture plus
+  its scene, reopened with a double-click, pasted from Excalidraw or dropped
+  as `.excalidraw` files, downloaded back.
+- [x] **Drawn in place:** Excalidraw opens over the board with the board's own
+  camera, on a sheet that grows as you draw, saving as you go.
 - [ ] An operation (and MCP tool) to make a drawing from Excalidraw elements,
   drawn by the app when the board next opens.
 - [ ] Two people in one drawing at once (today the later Done wins).
@@ -150,6 +152,19 @@ Ideas from the wiki review, roughly by value for a small group against effort:
   it.
 - [ ] Hand-drawn arrowheads and table/Kanban/timeline frames.
 - [ ] A board-wide default, so new objects start hand-drawn.
+
+## Files and the assistant's reach (October 2026)
+
+- [x] **A wiki's files:** PDFs, Word, slides, spreadsheets, CSV, web pages,
+  text and pictures kept with the wiki (on its server when shared), found by
+  any word in them, read in place, and made into wiki pages.
+- [x] **The assistant reads what you link** (@ objects, [[ pages and boards),
+  any of your boards and wikis, and a wiki's files.
+- [ ] Reading words from scanned PDFs and pictures (text recognition).
+- [ ] Files on canvas boards too, as cards you can open.
+- [ ] Linking to a file from a page or comment (`[[report.pdf]]`).
+- [ ] Keeping a page made from a file up to date when a new version of the
+  file is added.
 
 ## Guide and API docs (October 2026)
 

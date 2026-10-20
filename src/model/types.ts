@@ -397,6 +397,33 @@ export interface Board {
   snaps?: Snap[]
   /** Saved versions of the pages, oldest first (see `revisions.ts`). */
   revs?: PageRev[]
+  /** Files kept with the board (see `files.ts`). */
+  files?: BoardFile[]
+}
+
+/** A file kept with a board: its details (its bytes and text are in the file store). */
+export interface BoardFile {
+  id: string
+  name: string
+  /** Its media type, e.g. application/pdf. */
+  type: string
+  /** Bytes. */
+  size: number
+  /** When it was added. */
+  at: number
+  by?: string
+  /** How much text was read out of it (none for a picture, or a file nothing could be read from). */
+  chars?: number
+  /** A PDF's pages, or a deck's slides. */
+  pages?: number
+  /** The wiki page made from it. */
+  page?: string
+  /** Its opening words, for lists and search. */
+  excerpt?: string
+  /** Its bytes are only in the browser that added it (the board wasn't shared then). */
+  local?: true
+  /** When it went to the trash. */
+  trashed?: number
 }
 
 export const FORMAT_VERSION = 1

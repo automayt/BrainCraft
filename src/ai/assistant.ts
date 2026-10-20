@@ -16,6 +16,9 @@ import { type Patch, diff } from '../collab/patch'
 import { type Measure, layoutAll } from '../model/mindmap'
 import type { Rect } from '../model/geom'
 import { boardText } from './boardText'
+import { maskFor } from '../model/brainstorm'
+import type { BoardRef } from '../model/notes'
+import { referenceContext } from './references'
 import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
 import { isWiki, pageText } from '../model/wiki'
@@ -94,6 +97,19 @@ export interface AssistantHost {
   view?(): Rect
   /** The board as the person may see it (other people's hidden brainstorm notes blank), for reading. */
   readable?(): Board
+  /** This person's other boards and wikis, to read when a message links one or the model asks. */
+  others?(): Others
+  /** A file's words (Markdown), for read_file; null when they can't be had from here. */
+  fileText?(id: string): Promise<string | null>
+}
+
+export interface Others {
+  boards: readonly BoardRef[]
+  /** The keys links to the open board use. */
+  selfKeys: readonly string[]
+  read(key: string): Promise<Board | null>
+  /** This person's name (their own hidden brainstorm notes stay readable). */
+  me: string
 }
 
 export interface Callbacks {
@@ -104,7 +120,28 @@ export interface Callbacks {
   proposal(p: Proposal): void
 }
 
-const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history']
+const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards']
+
+/** How much of a file read_file gives at once (characters). */
+const FILE_CHUNK = 40_000
+
+const FILE_TOOLS: Anthropic.Beta.BetaTool[] = [
+  {
+    name: 'list_files',
+    description: 'The files kept with the open board or wiki (PDFs, documents, slides, spreadsheets): id, name, kind, size, pages, the wiki page made from it, and its opening words.',
+    input_schema: { type: 'object', properties: {} },
+    eager_input_streaming: true,
+  },
+  {
+    name: 'read_file',
+    description: `A file's words, as Markdown, ${FILE_CHUNK.toLocaleString('en')} characters at a time: pass "from" (a character offset) to read on. Says how long it is in all.`,
+    input_schema: { type: 'object', properties: { id: { type: 'string', description: 'The file id from list_files' }, from: { type: 'number' } }, required: ['id'] },
+    eager_input_streaming: true,
+  },
+]
+
+/** Read tools take this to read another board or wiki instead of the open one. */
+const BOARD_ARG = { type: 'string', description: 'Another board or wiki to read, by its key from list_boards. Leave out for the open one.' }
 
 const READ_BOARD: Anthropic.Beta.BetaTool = {
   name: 'read_board',
@@ -113,6 +150,7 @@ const READ_BOARD: Anthropic.Beta.BetaTool = {
   input_schema: {
     type: 'object',
     properties: {
+      board: BOARD_ARG,
       kind: { type: 'string', description: 'Only objects of this kind (sticky, text, rect, ellipse, frame, mind, flow, comment, image, pen, table, kanban, timeline, data)' },
       area: {
         type: 'object',
@@ -135,6 +173,9 @@ How to work:
 - To change the board, call propose_changes with operations and a one-line summary. Never claim you changed anything yourself: the person sees your proposal as a preview and applies or discards it. Prefer one well-formed proposal per request; if it is rejected with an error, fix the operations and propose again.
 - Place new content in free space unless asked otherwise: omit "at" to put it beside existing content, or place it just right of or below the relevant objects (positions and sizes come from read_board).
 - When you mention an object, link it as @[Label](#id) using its numeric id, so the person can click to it.
+- The person's other boards and wikis: list_boards gives their keys; every read tool takes "board" to read one of them. Link a page of this wiki as [[Title]](page:ID), a page elsewhere as [[Title]](board:KEY/page:ID), another board as [[Title]](board:KEY), and an object on another board as [[Label]](board:KEY#ID). Changes only ever go to the open board.
+- A message may end with what it links to, already read for you: use that rather than reading it again.
+- Files kept with the board (PDFs, documents, slides): list_files, then read_file. To make a wiki page from one, write it with createPage.
 - Be brief. Short paragraphs or bullets, no preamble.
 
 ${OPS_GUIDE}`
@@ -155,11 +196,11 @@ function hostFor(h: AssistantHost): ToolHost {
 
 function buildTools(): Anthropic.Beta.BetaTool[] {
   const read: Anthropic.Beta.BetaTool[] = TOOL_DEFS.filter((t) => READ_TOOLS.includes(t.name) && t.name !== 'read_board').map((t) => {
-    // The assistant always works on the open board, so the MCP-only "file" argument is left out.
-    const properties = Object.fromEntries(Object.entries(t.inputSchema.properties).filter(([k]) => k !== 'file'))
+    // The MCP-only "file" argument is left out; another board is named by "board" instead.
+    const properties = { ...Object.fromEntries(Object.entries(t.inputSchema.properties).filter(([k]) => k !== 'file')), ...(t.name === 'list_boards' ? {} : { board: BOARD_ARG }) }
     return {
       name: t.name,
-      description: t.description,
+      description: t.name === 'list_boards' ? 'The person’s other boards and wikis: key, title, kind, and a wiki’s pages. Read one by passing its key as "board" to the read tools.' : t.description,
       input_schema: { type: 'object', properties, ...(t.inputSchema.required ? { required: t.inputSchema.required } : {}) },
       eager_input_streaming: true,
     }
@@ -167,6 +208,7 @@ function buildTools(): Anthropic.Beta.BetaTool[] {
   return [
     READ_BOARD,
     ...read,
+    ...FILE_TOOLS,
     {
       name: 'propose_changes',
       description:
@@ -193,6 +235,9 @@ const STATUS: Record<string, string> = {
   find: 'Searching…',
   list_pages: 'Reading the pages…',
   read_page: 'Reading a page…',
+  list_boards: 'Looking at your boards…',
+  list_files: 'Looking at the files…',
+  read_file: 'Reading a file…',
   propose_changes: 'Preparing changes…',
 }
 
@@ -266,8 +311,34 @@ export class Assistant {
       const { added, changed, removed } = p.counts
       return { content: `Shown to the person as a preview (${added} new, ${changed} changed, ${removed} removed). They will apply or discard it.` }
     }
+    if (name === 'list_files' || name === 'read_file') return this.fileTool(name, input)
     if (!READ_TOOLS.includes(name)) return { content: `Unknown tool "${name}"`, is_error: true }
     if (!input || typeof input !== 'object') return { content: 'Tool input must be an object', is_error: true }
+    const others = this.host.others?.()
+    if (name === 'list_boards') {
+      if (!others) return { content: 'Only the open board can be read here.', is_error: true }
+      return {
+        content: JSON.stringify(
+          others.boards.map((b) => ({ key: b.key, title: b.title, kind: b.kind === 'wiki' ? 'wiki' : 'board', ...(b.pages ? { pages: b.pages.map((p) => ({ id: p.id, title: p.title })) } : {}) })),
+        ),
+      }
+    }
+    // Another board or wiki: read the same way, from this browser's copy.
+    const { board: key, ...rest } = input as { board?: unknown }
+    if (key !== undefined && (typeof key !== 'string' || !others?.selfKeys.includes(key))) {
+      if (typeof key !== 'string' || !others) return { content: '"board" must be a key from list_boards', is_error: true }
+      const raw = await others.read(key)
+      if (!raw) return { content: `No board with the key "${key}". Call list_boards for the keys.`, is_error: true }
+      const other = maskFor(raw, others.me)
+      if (name === 'read_board' && !isWiki(other)) return { content: boardText(other, { kind: (rest as { kind?: Kind }).kind }) }
+      try {
+        const out = await runTool({ ...hostFor(this.host), where: () => `the ${isWiki(other) ? 'wiki' : 'board'} "${other.title}"`, board: () => other }, name, rest as Record<string, unknown>)
+        return { content: typeof out === 'string' ? out : JSON.stringify(out) }
+      } catch (err) {
+        return { content: (err as Error).message, is_error: true }
+      }
+    }
+    input = rest
     // A wiki is read as its page tree (the generic tool describes it).
     if (name === 'read_board' && !isWiki(this.host.board())) {
       const x = input as { kind?: unknown; area?: unknown }
@@ -291,16 +362,49 @@ export class Assistant {
     }
   }
 
+  /** list_files and read_file: the open board's files. */
+  private async fileTool(name: string, input: unknown): Promise<{ content: string; is_error?: boolean }> {
+    const files = (this.host.board().files ?? []).filter((f) => !f.trashed)
+    if (name === 'list_files') {
+      if (!files.length) return { content: 'This board has no files.' }
+      return {
+        content: JSON.stringify(
+          files.map((f) => ({ id: f.id, name: f.name, type: f.type, size: f.size, ...(f.pages ? { pages: f.pages } : {}), ...(f.page ? { page: f.page } : {}), readable: !!f.chars, ...(f.excerpt ? { opening: f.excerpt } : {}) })),
+        ),
+      }
+    }
+    const x = (input ?? {}) as { id?: unknown; from?: unknown }
+    const f = files.find((y) => y.id === x.id)
+    if (!f) return { content: `No file with the id "${String(x.id)}". Call list_files for the ids.`, is_error: true }
+    if (!f.chars) return { content: `No words could be read from ${f.name} (a picture, a scanned PDF, or a kind of file BrainCraft can't read).`, is_error: true }
+    const text = await this.host.fileText?.(f.id).catch(() => null)
+    if (text === null || text === undefined) return { content: `${f.name} can't be read from here (it may be only in the browser that added it).`, is_error: true }
+    const from = typeof x.from === 'number' && x.from > 0 ? Math.floor(x.from) : 0
+    const part = text.slice(from, from + FILE_CHUNK)
+    const more = from + FILE_CHUNK < text.length
+    return { content: `${f.name}: characters ${from}–${from + part.length} of ${text.length}${more ? ` (read on with "from": ${from + FILE_CHUNK})` : ''}\n\n${part}` }
+  }
+
   /** Sends a message and runs the conversation until the model has answered. */
   async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = []): Promise<void> {
     const sel = this.host.selection()
     const context = sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'
+    // What the message links to (objects, pages, other boards), read and sent along.
+    const others = this.host.others?.()
+    on.status('Reading what you linked…')
+    const linked = await referenceContext(text, {
+      board: () => this.host.readable?.() ?? this.host.board(),
+      selfKeys: others?.selfKeys ?? [],
+      boards: others?.boards ?? [],
+      read: (key) => others?.read(key) ?? Promise.resolve(null),
+      me: others?.me ?? '',
+    }).catch(() => '')
     this.messages.push({
       role: 'user',
       content: [
         // Pictures first, then the words about them.
         ...images.map((img) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.data } })),
-        { type: 'text', text: `${context}\n\n${text}` },
+        { type: 'text', text: `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}` },
       ],
     })
     let jsonRetries = 0

@@ -117,7 +117,7 @@ type Candidate = LinkCandidate & { person?: string }
  * The @ and [[ pickers for a text box. The box shows "@Label" and "[[Label]]";
  * `encode` swaps the picked ones for real links when the text is saved.
  */
-function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string, setText: (t: string) => void, exclude: Id) {
+export function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string, setText: (t: string) => void, exclude: Id) {
   const editor = useEditor()
   const ws = useWorkspace()
   const picks = useRef(new Map<string, string>())

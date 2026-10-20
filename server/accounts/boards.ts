@@ -43,6 +43,8 @@ export interface RoomHost {
   peek(id: string): RoomData | null
   /** A board's room when it's open already (its latest words), without opening it. */
   loaded?(id: string): Room | null
+  /** Handles /api/boards/:id/files/… (`rest` follows "files"); false when it isn't a file route. */
+  files?(room: Room, req: IncomingMessage, res: ServerResponse, rest: string[], canEdit: boolean): Promise<boolean>
 }
 
 /** Mentions listed at most. */
@@ -201,6 +203,12 @@ export class AccountBoards {
         .slice(0, 500)
         .map((u) => ({ id: u.id, name: u.name, ...(emails ? { email: u.email } : {}) }))
       return json(res, 200, { people }), true
+    }
+
+    // Files kept with the board.
+    if (parts[3] === 'files' && this.host.files && (await this.host.files(room, req, res, parts.slice(4), atLeast(level, 'edit')))) {
+      if (req.method === 'GET') this.peek(req, me, room.data, 'opened a file of')
+      return true
     }
 
     // Exports, and writing wiki pages one by one.

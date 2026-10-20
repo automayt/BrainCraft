@@ -106,12 +106,15 @@ whatever you have selected.
 (This board is in [examples/Weekend away.braincraft](examples/Weekend%20away.braincraft): drop it on BrainCraft to open it.)
 
 - **Draw in Excalidraw, right on the board:** right-click empty space →
-  **Excalidraw drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens full
-  screen with all its tools and its hand-drawn look; **Put on the board**
-  places the drawing as a sheet of paper among your notes and maps.
-- **Double-click a drawing** (or **Edit drawing** on its toolbar) to open it in
-  Excalidraw again; it keeps its size and place, and the change is one undo
-  step. In a live session everyone sees the new version.
+  **Excalidraw drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens in place,
+  over the board, with all its tools and its hand-drawn look: you draw on a
+  sheet of paper among your notes and maps, and the sheet grows as you draw.
+  Scrolling and zooming move the board with you. **Done** (or Ctrl+Enter)
+  goes back to BrainCraft's tools.
+- **Double-click a drawing** (or **Edit drawing** on its toolbar) to draw in
+  it again, exactly where it is. It saves as you go, so friends in a live
+  session see it as it's drawn, and everything drawn in one go is one undo
+  step.
 - **Paste from Excalidraw** (copy shapes there, paste here) or **drop an
   `.excalidraw` file** on the board to bring a drawing in; right-click a
   drawing → **Download as .excalidraw** to take it back out.
@@ -353,6 +356,17 @@ shares live exactly like a board.
   Drop `.md` files anywhere on a wiki (or **⋯ → Add Markdown files…**) and
   each becomes a page at the top of the page list; links between pages travel
   as `[[Title]]`, so they still work. A .zip can't be dropped back in yet.
+- **Files: a knowledge base.** **📎 Files** at the foot of the page list keeps
+  PDFs, Word documents (.docx), slides (.pptx), spreadsheets (.xlsx, .csv),
+  web pages, text and pictures with the wiki: drop them anywhere on the wiki
+  or use **Add files…**. BrainCraft reads the words out of them, so you can
+  find a file by any word in it, read it right there (PDFs in the browser's
+  own viewer), and **Make a wiki page** from it: headings, lists, tables and
+  links come across, with a note saying which file it came from, and a long
+  document becomes a contents page with a page per section. **Ask AI about
+  it** has the assistant read it. Files go wherever the wiki is: on the
+  server for a shared wiki (anyone who can open the wiki can open them; only
+  people who can edit it can add or delete them), else in this browser.
 
 ### Linked data: one dataset, many views
 
@@ -467,6 +481,11 @@ shares live exactly like a board.
   history is kept with the board.
 - One-click actions: Summarise, Find gaps, Decision log, and with a selection,
   Cluster into themes, Make a mind map and Make a flowchart.
+- **Point it at things:** type **@** in your question for an object, or **[[**
+  for a wiki page or another board; what you link goes along with your
+  question, already read. It can also look through your other boards and
+  wikis itself, and read the files kept with a wiki, and its answers link the
+  pages and boards they mention.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
   **✦ To board**. Claude reads the picture and proposes real shapes, ideas or
@@ -618,6 +637,7 @@ Tailscale).
 | `src/ai/` | The in-app assistant: the conversation, its tools, proposals and settings, and where the model runs (Claude, an OpenAI-compatible server, or an agent command on the server). |
 | `src/api/` | The operations API (`window.BrainCraft`, pasted JSON), the AI tools shared with the MCP server, and the browser end of the MCP link. |
 | `src/store/` | The board library in IndexedDB, versions, files, share links and autosave. |
+| `src/files/` | Reading the words out of files kept with a wiki (PDF, Word, slides, spreadsheets, CSV, web pages) as Markdown, and turning them into wiki pages. |
 | `src/collab/` | Live collaboration: board patches (also used by undo), the wire protocol, the server's room logic and the browser's live session. |
 | `server/` | The BrainCraft server: hosting, shared boards, WebSockets, the HTTP API, link previews and the AI proxy, bundled into one Node script. |
 | `mcp/` | The MCP server for AI assistants, bundled into one Node script. |

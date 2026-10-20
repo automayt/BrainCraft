@@ -5384,7 +5384,19 @@ button.on,
 }
 
 .ai-compose {
+  position: relative;
   padding: 8px 12px 12px;
+}
+
+/* The @ and [[ picker opens above the question box (it sits at the foot of the panel). */
+.ai-compose .mention-picker {
+  top: auto;
+  bottom: calc(100% - 4px);
+  left: 12px;
+  right: 12px;
+  max-height: 260px;
+  margin: 0;
+  overflow-y: auto;
 }
 
 .ai-compose textarea {
@@ -8752,10 +8764,207 @@ button.on,
 
 /* "Recent changes" sits above the Trash at the foot of the page list. */
 .page-recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
   margin-top: auto;
   padding-top: 10px;
   font-size: 13px;
   border-top: 1px solid var(--border);
+}
+
+/* ----- a wiki's files ----- */
+
+.modal.files-dialog {
+  position: relative;
+  width: min(1120px, 96vw);
+  height: min(86vh, 900px);
+}
+
+.files-dialog header {
+  gap: 12px;
+}
+
+.files-dialog header h2 {
+  margin-right: auto;
+}
+
+.files-dialog header .muted {
+  font-size: 13px;
+}
+
+.files-body {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.files-search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.files-list ul {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.files-list li button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.files-list li button:hover {
+  background: var(--surface-2);
+}
+
+.files-list li button.on {
+  background: var(--accent-soft);
+}
+
+.file-icon {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.file-row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-row strong {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row small {
+  font-size: 12px;
+}
+
+.files-empty {
+  padding: 8px 4px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.files-none,
+.files-pick {
+  padding: 8px 4px;
+  font-size: 13px;
+}
+
+.files-trash-toggle {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.files-preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.file-head {
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-head h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.file-head p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+}
+
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+  overflow: auto;
+}
+
+.file-pdf {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.file-image {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 8px;
+}
+
+.files-drop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 3px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .files-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(160px, 38%) 1fr;
+  }
+
+  .files-list {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
 }
 
 .page-recent ~ .page-trash {
@@ -9705,48 +9914,55 @@ button.on,
 /* ----- an Excalidraw drawing open for editing ----- */
 
 .drawing-editor {
-  position: fixed;
+  /* Over the board (and its tools), in the canvas's place: the board shows through. */
+  position: absolute;
   inset: 0;
   z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: var(--canvas);
+  overflow: hidden;
 }
 
 .drawing-editor.loading {
-  background: var(--backdrop);
+  cursor: progress;
 }
 
-.drawing-editor-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  padding: 8px 12px 8px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
+.drawing-editor .excalidraw,
+.drawing-editor .excalidraw .excalidraw__canvas {
+  background: transparent;
 }
 
-.drawing-editor-hint {
-  flex: 1 1 240px;
-  min-width: 0;
+/* The drawing's sheet of paper, as its picture shows it (Excalidraw draws on top). */
+.drawing-sheet {
+  position: absolute;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 6px 24px rgb(0 0 0 / 0.18);
+  pointer-events: none;
+}
+
+.drawing-editor .drawing-done {
+  height: 36px;
+  padding: 0 16px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  border: none;
+  border-radius: 8px;
 }
 
 .drawing-editor-error {
-  color: var(--danger);
-}
-
-.drawing-editor-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.drawing-editor-body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  top: 64px;
+  right: 16px;
+  z-index: 5;
+  max-width: 300px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 8px;
 }
 
 /* The rail's last button: tables, plans and more. */
@@ -9819,4 +10035,8 @@ button.on,
   margin: 8px 0;
   padding-left: 18px;
   font-size: 13px;
+}
+
+.file-actions .danger-quiet {
+  color: var(--danger);
 }

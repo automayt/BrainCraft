@@ -284,6 +284,11 @@ export function linkCandidates(b: Board, query: string, boards: readonly BoardRe
   const named = boards
     .filter((r) => !q || r.title.toLowerCase().includes(q))
     .map((r) => ({ label: r.title, hint: `${r.icon ? `${r.icon} ` : ''}${r.kind === 'wiki' ? 'Wiki' : 'Board'}`, to: { board: r.key } }))
+  // In a wiki, its own pages come first.
+  const own = (b.pages ?? [])
+    .filter((p) => !p.trashed && (!q || p.title.toLowerCase().includes(q)))
+    .slice(0, limit)
+    .map((p) => ({ label: p.title || 'Untitled', hint: `${p.icon ?? '📄'} Page`, to: { page: p.id } }))
   // Wiki pages, once there's something to look for (there may be many).
   const pages = q
     ? boards.flatMap((r) =>
@@ -291,7 +296,7 @@ export function linkCandidates(b: Board, query: string, boards: readonly BoardRe
       )
     : []
   // Boards and pages first, but never crowding out the objects entirely.
-  return [...[...named, ...pages].slice(0, Math.max(4, limit - objects.length)), ...objects].slice(0, limit)
+  return [...[...own, ...named, ...pages].slice(0, Math.max(4, limit - objects.length)), ...objects].slice(0, limit)
 }
 
 export const hasNotes =(b: Board, id: Id) => !!getItem(b, id)?.notes?.length

@@ -4,7 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Board, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
+import type { Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -30,6 +30,8 @@ export type Patch =
   | { k: 'snap'; id: string; v: Snap | null }
   /** A saved version of a wiki page (added once; changed only for a note or milestone mark). */
   | { k: 'rev'; id: string; v: PageRev | null }
+  /** A file's details (its bytes go to the file store, not through here). */
+  | { k: 'file'; id: string; v: BoardFile | null }
 
 /** What a patch is about: two patches with the same key replace each other. */
 export function keyOf(p: Patch): string {
@@ -56,6 +58,8 @@ export function keyOf(p: Patch): string {
       return `s:${p.id}`
     case 'rev':
       return `v:${p.id}`
+    case 'file':
+      return `f:${p.id}`
   }
 }
 
@@ -173,6 +177,7 @@ export function diff(a: Board, z: Board): Patch[] {
     for (const s of a.snaps ?? []) if (!after.has(s.key)) out.push({ k: 'snap', id: s.key, v: null })
   }
   diffById(a.revs, z.revs, (id, v) => ({ k: 'rev', id, v }), out)
+  diffById(a.files, z.files, (id, v) => ({ k: 'file', id, v }), out)
   return out
 }
 
@@ -251,6 +256,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let bodies = b.bodies
   let snaps = b.snaps
   let revs = b.revs
+  let files = b.files
   // Versions by id, made on the first version patch: one pass however many arrive at once.
   let revMap: Map<string, PageRev> | null = null
   let pageIds: Set<string> | null = null
@@ -334,6 +340,12 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         if (pageIds.has(p.v.page)) revMap.set(p.id, p.v)
         break
       }
+      case 'file': {
+        const list = files ?? []
+        const at = list.findIndex((x) => x.id === p.id)
+        files = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
     }
   }
   const items = itemList.result() as Item[]
@@ -356,6 +368,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   if (revMap) revs = [...revMap.values()]
   if (revs?.length) next.revs = revs
   else delete next.revs
+  if (files?.length) next.files = files
+  else delete next.files
   return next
 }
 
@@ -403,6 +417,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return (b.snaps ?? []).find((s) => s.key === p.id) ?? null
       case 'rev':
         return (b.revs ?? []).find((r) => r.id === p.id) ?? null
+      case 'file':
+        return (b.files ?? []).find((f) => f.id === p.id) ?? null
     }
   }
 }

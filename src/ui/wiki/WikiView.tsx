@@ -23,6 +23,7 @@ import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions, smoothScroll } from './Markdown'
 import { PageEditor } from './PageEditor'
 import { PageTree } from './PageTree'
+import { FilesDialog } from './FilesDialog'
 import { ObjectEmbed } from './ObjectEmbed'
 
 const LAST_PAGE = 'braincraft:page:'
@@ -108,8 +109,12 @@ export function WikiView() {
         if (editor.readOnly) return editor.setStatus('This wiki is read-only here')
         const md = files.filter(isMarkdownFile)
         if (md.length) void importMarkdown(editor, md)
-        else if (files.some((f) => /\.zip$/i.test(f.name))) editor.setStatus('A .zip can’t be added yet: unzip it and drop the .md files')
-        else editor.setStatus('Only Markdown (.md) and text files can become pages')
+        // Anything else (PDFs, documents, slides…) goes into the wiki's files.
+        const rest = files.filter((f) => !isMarkdownFile(f) && !isBoardFile(f))
+        if (rest.length)
+          void ws.addFiles(rest).then((made) => {
+            if (made.length) editor.openFiles(made[made.length - 1])
+          })
       }}
     >
       <button
@@ -124,6 +129,7 @@ export function WikiView() {
       </button>
       {drawer && <div className="wiki-drawer-backdrop" onPointerDown={() => setDrawer(false)} />}
       <PageTree current={page} />
+      {editor.filesPanel && <FilesDialog />}
       <main className="wiki-main">
         {page ? (
           <PageView key={page.id} page={page} editing={editing && !editor.readOnly} setEditing={setEditing} />
