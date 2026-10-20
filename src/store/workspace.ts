@@ -17,9 +17,9 @@ import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
 import { colorFor, type LiveLink, liveFromHash, liveHash } from '../collab/protocol'
 import { catchUp } from '../model/catchup'
-import { type BoardRef, type LinkTarget, objectLabel } from '../model/notes'
+import { type BoardRef, type LinkTarget, namesOnBoard, objectLabel, type Person } from '../model/notes'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
-import { type AccountInfo, call, can, fetchAccount, type ServerBoard } from './account'
+import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type ServerMention } from './account'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
 
@@ -45,6 +45,9 @@ const GUEST_KEY = 'braincraft:guest'
 const SEEN_DELAY = 1500
 const seenKey = (id: string) => `seen:${id}`
 const COLOR_KEY = 'braincraft:color'
+/** When the signed-in person last looked at their mentions, per account. */
+const MENTIONS_SEEN = 'braincraft:mentions-seen:'
+const MENTIONS_EVERY_MS = 2 * 60_000
 
 export const FILE_EXT = '.braincraft'
 
@@ -110,6 +113,13 @@ export class Workspace {
   account: AccountInfo | null = null
   /** The boards the signed-in person can reach on that server. */
   serverBoards: ServerBoard[] = []
+  /** Where the signed-in person is @mentioned on that server, newest first. */
+  mentions: ServerMention[] = []
+  /** When they last looked at their mentions (newer ones count as unread). */
+  mentionsSeen = 0
+  /** Who can open the open server board, to @mention (and which board, and when it was asked). */
+  private boardPeople: { board: string; at: number; people: Person[] } | null = null
+  private mentionsTimer: ReturnType<typeof setInterval> | undefined
   saveState: SaveState = 'saved'
   /** The file the current board was opened from or saved to, when the browser can write files. */
   fileName: string | null = null
@@ -924,17 +934,103 @@ export class Workspace {
   async signedIn(info: AccountInfo) {
     this.account = info
     if (info.user) {
-      this.editor.setAuthor(info.user.name)
+      this.editor.setAuthor(info.user.name, info.user.id)
       this.live?.setMe(this.me)
+      this.mentionsSeen = Number(safeStorage()?.getItem(MENTIONS_SEEN + info.user.id)) || 0
     }
     await this.loadServerBoards()
     this.emit()
+    if (info.user) {
+      void this.loadMentions()
+      // New mentions show up without a reload: now and then, and on coming back to the tab.
+      if (this.mentionsTimer === undefined && typeof window !== 'undefined') {
+        this.mentionsTimer = setInterval(() => void this.loadMentions(), MENTIONS_EVERY_MS)
+        window.addEventListener('focus', () => void this.loadMentions())
+      }
+    }
+  }
+
+  // ----- mentions of people -----------------------------------------------------------
+
+  /** Where the signed-in person is mentioned, across the server's boards they can open. */
+  async loadMentions() {
+    if (!this.server || !this.account?.user) return
+    try {
+      this.mentions = (await call<{ mentions: ServerMention[] }>(this.server, 'api/mentions')).mentions
+      this.emit()
+    } catch {
+      // Kept as it was; the next try may reach the server.
+    }
+  }
+
+  /** Mentions by someone else since the person last looked. */
+  get unreadMentions(): number {
+    const me = this.account?.user?.name
+    return this.mentions.filter((m) => (m.at ?? 0) > this.mentionsSeen && m.by !== me).length
+  }
+
+  markMentionsSeen() {
+    const user = this.account?.user
+    if (!user) return
+    this.mentionsSeen = Date.now()
+    safeStorage()?.setItem(MENTIONS_SEEN + user.id, String(this.mentionsSeen))
+    this.emit()
+  }
+
+  /** Opens a mention: its board (joining it live), then the comment's object or the page. */
+  async openMention(m: ServerMention) {
+    // A board shared since the list was read is asked for again.
+    if (!this.serverBoards.some((b) => b.id === m.board)) await this.loadServerBoards()
+    const remote = this.serverBoards.find((b) => b.id === m.board)
+    if (!remote) {
+      this.editor.setStatus('That board isn’t shared with you any more')
+      return
+    }
+    if (this.liveInfo?.id !== m.board) {
+      await this.openServerBoard(remote)
+      await this.live?.whenSynced()
+    }
+    if (m.page !== undefined) return this.openLink({ page: m.page })
+    if (m.item === undefined) return
+    await this.openLink({ item: m.item })
+    if (m.note && getItem(this.editor.board, m.item)) this.editor.toggleNotes(true)
+  }
+
+  /**
+   * Everyone who can be @mentioned on the open board: on a server with accounts, the people who
+   * can open it; anyone here now; and names seen on it (comment and page writers). Not me.
+   */
+  get peopleToMention(): Person[] {
+    const out: Person[] = []
+    const live = this.liveInfo
+    if (live?.account && this.boardPeople?.board === live.id) out.push(...this.boardPeople.people)
+    for (const p of this.editor.peers.values()) if (p.user || p.name !== 'Guest') out.push({ ...(p.user ? { id: p.user } : {}), name: p.name, hint: 'Here now' })
+    for (const name of namesOnBoard(this.editor.board)) out.push({ name, hint: 'Wrote on this board' })
+    const me = this.editor.mentionMe
+    return out.filter((p) => (p.id ? p.id !== me.id : p.name.trim().toLowerCase() !== me.name.toLowerCase()))
+  }
+
+  /** Asks the server who can open the open board, at most once a minute. */
+  async loadBoardPeople() {
+    const live = this.liveInfo
+    if (!this.server || !live?.account || !this.account?.user) return
+    const had = this.boardPeople?.board === live.id ? this.boardPeople : null
+    if (had && Date.now() - had.at < 60_000) return
+    this.boardPeople = { board: live.id, at: Date.now(), people: had?.people ?? [] }
+    try {
+      const { people } = await call<{ people: { id: string; name: string; email?: string }[] }>(this.server, `api/boards/${encodeURIComponent(live.id)}/people`)
+      this.boardPeople = { board: live.id, at: Date.now(), people: people.map((p) => ({ id: p.id, name: p.name, ...(p.email ? { hint: p.email } : {}) })) }
+      this.emit()
+    } catch {
+      // Mentions by name still work.
+    }
   }
 
   async signOut() {
     if (this.server) await call(this.server, 'api/auth/logout', 'POST').catch(() => {})
     this.closeLive()
     this.account = this.account ? { ...this.account, user: null, permissions: [] } : null
+    this.editor.userId = ''
     this.serverBoards = []
     this.emit()
   }

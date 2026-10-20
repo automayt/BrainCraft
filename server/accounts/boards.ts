@@ -8,6 +8,8 @@
  *   GET    /api/boards/:id/objects…     reads: objects, search, Mermaid, wiki pages (see boardReads.ts)
  *   POST   /api/boards/:id/ops {ops}    change it with operations (edit)
  *   GET    /api/boards/:id/access       who has access
+ *   GET    /api/boards/:id/people       the people who can open it, to @mention
+ *   GET    /api/mentions                where you're @mentioned, across the boards you can open
  *   PUT    /api/boards/:id/access       change who has access, or the owner (manage)
  *   DELETE /api/boards/:id              delete it (manage)
  */
@@ -16,6 +18,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { OpError, opsFromText } from '../../src/api/ops'
 import type { Role } from '../../src/collab/protocol'
 import type { Room, RoomData } from '../../src/collab/room'
+import { maskFor } from '../../src/model/brainstorm'
+import { mentionsOf, objectLabel, parseNote } from '../../src/model/notes'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
 import { readBoard, sendRead } from '../boardReads'
@@ -37,7 +41,12 @@ export interface RoomHost {
   /** Every board id on disk, and a board's stored data without opening its room (for the index). */
   ids(): string[]
   peek(id: string): RoomData | null
+  /** A board's room when it's open already (its latest words), without opening it. */
+  loaded?(id: string): Room | null
 }
+
+/** Mentions listed at most. */
+const MENTIONS_SHOWN = 100
 
 const json = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -52,6 +61,8 @@ export class AccountBoards {
   private origins: string[]
   /** When each admin last opened each board they could only open as an admin. */
   private peeks = new Map<string, number>()
+  /** Who each board mentions, as of its last change, so listing mentions reads only boards that have yours. */
+  private mentioned = new Map<string, { updated: number; ids: Set<string> }>()
 
   constructor(accounts: Accounts, host: RoomHost, origins: string[] = []) {
     this.accounts = accounts
@@ -78,6 +89,7 @@ export class AccountBoards {
   /** Keeps the index in step with a room (its title, owner and access), written a moment later. */
   index(room: Room) {
     this.store.boards[room.data.id] = entryOf(room.data)
+    this.mentioned.delete(room.data.id)
     clearTimeout(this.indexTimer)
     this.indexTimer = setTimeout(() => this.store.saveBoards(), 1500)
     this.indexTimer.unref?.()
@@ -136,11 +148,16 @@ export class AccountBoards {
   /** Handles a board route; false when it isn't one. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'boards') return false
+    if (parts[1] !== 'boards' && parts[1] !== 'mentions') return false
     if (!this.accounts.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const me = this.accounts.userOf(req)
     if (!me) return json(res, 401, { error: 'Sign in first' }), true
     const m = req.method ?? 'GET'
+
+    if (parts[1] === 'mentions') {
+      if (m !== 'GET' || parts.length !== 2) return json(res, 405, { error: 'Method not allowed' }), true
+      return json(res, 200, { mentions: this.mentions(me) }), true
+    }
 
     if (parts.length === 2 && m === 'GET') {
       const boards = Object.entries(this.store.boards).flatMap(([id, e]) => {
@@ -173,6 +190,18 @@ export class AccountBoards {
     // No difference between a board that doesn't exist and one you can't see.
     const level = room ? this.level(me, room.data) : null
     if (!room || !level) return json(res, 404, { error: 'No such board, or you don’t have access to it' }), true
+
+    // Everyone who can open it, to mention: anyone on it sees their names anyway, but only people
+    // who may see the directory see emails.
+    if (parts[3] === 'people' && parts.length === 4 && m === 'GET') {
+      const emails = this.accounts.can(me, 'people.see')
+      const people = this.store.users
+        .filter((u) => !u.disabled && this.level(u, room.data))
+        .sort((a, z) => a.name.localeCompare(z.name))
+        .slice(0, 500)
+        .map((u) => ({ id: u.id, name: u.name, ...(emails ? { email: u.email } : {}) }))
+      return json(res, 200, { people }), true
+    }
 
     // Exports, and writing wiki pages one by one.
     if (parts.length > 3 && (await boardWrite(room, m, parts.slice(3), url.searchParams, body, { canEdit: atLeast(level, 'edit'), manages: level === 'manage' }, res))) {
@@ -265,6 +294,40 @@ export class AccountBoards {
     return json(res, 405, { error: 'Method not allowed' }), true
   }
 
+  /** Where `me` is mentioned on the boards they can open, newest first. */
+  private mentions(me: User) {
+    const out: { board: string; title: string; kind?: 'wiki'; at?: number; by?: string; excerpt: string; item?: number; label?: string; note?: string; page?: string; pageTitle?: string }[] = []
+    for (const [id, e] of Object.entries(this.store.boards)) {
+      if (!this.level(me, e)) continue
+      let seen = this.mentioned.get(id)
+      // Ids of accounts, and (lower case) names of mentions by name alone.
+      const mine = (x: { ids: Set<string> }) => x.ids.has(me.id) || x.ids.has(nameKey(me.name))
+      if (seen && seen.updated === e.updated && !mine(seen)) continue
+      const data = this.host.loaded?.(id)?.data ?? this.host.peek(id)
+      if (!data) continue
+      if (!seen || seen.updated !== e.updated) {
+        seen = { updated: e.updated, ids: whoIsMentioned(data.board) }
+        this.mentioned.set(id, seen)
+        if (!mine(seen)) continue
+      }
+      // A hidden brainstorm note's comments stay hidden here too.
+      for (const r of mentionsOf(maskFor(data.board, me.name), { id: me.id, name: me.name })) {
+        out.push({
+          board: id,
+          title: data.board.title,
+          ...(data.board.kind === 'wiki' ? { kind: 'wiki' as const } : {}),
+          ...(r.at !== undefined ? { at: r.at } : {}),
+          ...(r.by ? { by: r.by } : {}),
+          excerpt: r.excerpt,
+          ...(r.item ? { item: r.item.id, label: objectLabel(r.item) } : {}),
+          ...(r.note ? { note: r.note.id } : {}),
+          ...(r.page ? { page: r.page.id, pageTitle: r.page.title } : {}),
+        })
+      }
+    }
+    return out.sort((a, z) => (z.at ?? 0) - (a.at ?? 0)).slice(0, MENTIONS_SHOWN)
+  }
+
   /** Who has a board, with names, for the Access dialog. */
   private describe(room: Room, level: Level | null) {
     const s = this.store
@@ -282,6 +345,23 @@ export class AccountBoards {
       }),
     }
   }
+}
+
+const nameKey = (name: string) => `name:${name.replace(/\s+/g, ' ').trim().toLowerCase()}`
+
+/** Who a board mentions anywhere (comments, descriptions, pages): account ids, and names (see nameKey) of the rest. */
+function whoIsMentioned(b: Board): Set<string> {
+  const ids = new Set<string>()
+  const scan = (text: string) => {
+    if (!text.includes('](user:')) return
+    for (const p of parseNote(text)) if ('person' in p) ids.add(p.person || nameKey(p.label))
+  }
+  for (const i of b.items) {
+    if (i.description) scan(i.description)
+    for (const n of i.notes ?? []) scan(n.text)
+  }
+  for (const body of b.bodies ?? []) scan(body.text)
+  return ids
 }
 
 const boardTarget = (d: RoomData) => ({ kind: 'board' as const, id: d.id, name: d.board.title })

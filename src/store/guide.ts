@@ -227,7 +227,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Type to rename:** with one object selected, just start typing.
 - **Frames** hold what's inside them and become slides when you present.
 - **Status marks** (*to do*, *in progress*, *waiting*, *undecided*, *done*, *dropped*): pick one on the toolbar. The key along the bottom counts them and filters the board. ${link('This note', 'n4')} has one.
-- **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention another object and **[[** to link a board.
+- **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention someone or another object, and **[[** to link a board. On a server with accounts, the people you mention see it under **Mentions of you** in their account menu.
 - **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar.
 - **Lock** (**Ctrl+Shift+L**) a background so it can't be moved by accident; **group** (**Ctrl+G**) objects to move them as one.
 - **Excalidraw drawings:** right-click empty space → **Excalidraw drawing** for Excalidraw's hand-drawn sketching, right on the board. Double-click a drawing to change it.`,
@@ -409,7 +409,7 @@ ${FENCE}
 
 **\`{{pagetree}}\`** every page (\`{{pagetree here}}\`: the ones under this page).
 {{column}}
-**\`{{tasks}}\`** every unticked checklist item in the wiki, tickable right there (\`{{tasks here}}\`, \`{{tasks all}}\`).
+**\`{{tasks}}\`** every unticked checklist item in the wiki, tickable right there (\`{{tasks here}}\`, \`{{tasks all}}\`; \`{{tasks @me}}\` the ones that @mention you).
 
 **\`{{recent 5}}\`** the latest changes.
 

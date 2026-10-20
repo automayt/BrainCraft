@@ -287,6 +287,7 @@ const accountBoards = accounts
           return true
         },
         ids: () => readdirSync(join(DATA, 'boards')).flatMap((f) => (f.endsWith('.json') ? [f.slice(0, -5)] : [])),
+        loaded: (id) => rooms.get(id) ?? null,
         peek(id) {
           try {
             return JSON.parse(readFileSync(fileOf(id), 'utf8')) as RoomData

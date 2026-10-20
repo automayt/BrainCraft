@@ -1579,6 +1579,19 @@ button.on,
   border-radius: 5px;
 }
 
+.mention.person {
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0 5px;
+}
+
+.mention.person.me {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
 .mention.missing {
   color: var(--muted);
   background: var(--surface-2);
@@ -9071,9 +9084,88 @@ button.on,
   background: var(--accent-strong);
   border: none;
   border-radius: 50%;
+  position: relative;
 }
 
-.account-menu ul {
+/* New mentions, on the account button. */
+.account-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  color: #fff;
+  background: var(--danger, #d6336c);
+  border: 2px solid var(--surface);
+  border-radius: 9px;
+  box-sizing: content-box;
+}
+
+.account-menu .menu-count {
+  float: right;
+  margin-left: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.mention-list {
+  max-height: min(60vh, 520px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.mention-list li {
+  border-bottom: 1px solid var(--border);
+}
+
+.mention-list li.muted {
+  padding: 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mention-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.mention-list button:hover,
+.mention-list button:focus-visible {
+  background: var(--surface-2);
+}
+
+.mention-list li.new button {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.mention-where {
+  font-size: 13px;
+}
+
+.mention-excerpt {
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* The menu itself, not lists in the dialogs it opens. */
+.account-menu > ul {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;

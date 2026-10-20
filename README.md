@@ -168,8 +168,11 @@ These become interactive once selected; drag them by their title strip.
 - **Every object has comments.** Select it and press **Alt+C** (or click
   *Comments*) to open the panel on the right; with a keyboard, typing goes
   straight into the comment box. Comments are timestamped, show who
-  wrote them, and can be deleted. Type **@** to mention another object; the
-  mention links to it, and the other object lists it under "Linked from".
+  wrote them, and can be deleted. Type **@** to mention someone or another
+  object. A mentioned object links back ("Linked from"); a mentioned person
+  sees it marked, and on a server with accounts under **Mentions of you** in
+  their account menu (wiki pages too; `{{tasks @me}}` lists the checklist
+  items that mention you).
   With nothing selected, the panel shows every comment on the board.
 - **Comment blocks (C)** are notes you can place anywhere on the board.
 - **Ctrl+K** searches everything: text, comments, descriptions, statuses,

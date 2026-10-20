@@ -47,7 +47,7 @@ export function CreditsDialog({ onClose }: { onClose: () => void }) {
     return c ? [{ ...c, what }] : []
   })
   const rest = (credits ?? []).filter((c) => !featured.some((f) => f.name === c.name))
-  const link = (c: Credit) => (c.homepage && /^https:\/\//.test(c.homepage) ? c.homepage : undefined)
+  const link = (c: Credit) => (c.homepage?.startsWith('https://') ? c.homepage : undefined)
 
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>

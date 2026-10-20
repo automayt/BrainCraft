@@ -295,6 +295,8 @@ export class Editor {
   searchOpen = false
   /** Name stamped on new comments. */
   author = ''
+  /** The signed-in account's id ('' without one), so mentions of it are known to be of me. */
+  userId = ''
   /** A flowchart line dropped on empty space, waiting for the user to pick the next shape. */
   shapePicker: { from: Id; at: Vec; options: FlowShape[] } | null = null
   spaceDown = false
@@ -1278,9 +1280,15 @@ export class Editor {
     this.emit()
   }
 
-  setAuthor(name: string) {
+  setAuthor(name: string, userId = this.userId) {
     this.author = name
+    this.userId = userId
     this.emit()
+  }
+
+  /** Who I am, for finding mentions of me. */
+  get mentionMe(): N.Me {
+    return { ...(this.userId ? { id: this.userId } : {}), name: this.author.trim() }
   }
 
   /** What changed since this person last looked (shown until dismissed). */

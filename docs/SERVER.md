@@ -122,6 +122,8 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/pages/{page}/export?format=md\|html` | edit or view | One page as a Markdown file or a web page. |
 | `GET /api/boards/{id}/export?format=json\|md\|html\|zip` | edit or view | The whole board as a file: `json` (a `.braincraft` file) or `md` for any board; a wiki also as `html` (one printable web page with a contents list) or `zip` (a Markdown file per page). |
 | `GET /api/docs` · `GET /api/openapi.json` | — | This API, as a page and as OpenAPI 3.1. |
+| `GET /api/boards/{id}/people` | edit or view (accounts) | Who can open the board, to @mention: names and ids (emails for people who may see everyone). |
+| `GET /api/mentions` | signed in (accounts) | Where you're @mentioned on the boards you can open: board, object or page, who wrote it, when, and the words around it. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
 | `POST /api/ai/openai/chat/completions` | AI password, if set | The assistant's proxy to an OpenAI-compatible server (only with `OPENAI_BASE_URL`). |

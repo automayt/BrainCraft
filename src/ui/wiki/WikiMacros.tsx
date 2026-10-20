@@ -1,7 +1,7 @@
 /** The macros that look at the rest of the wiki: a page tree, open tasks, recent changes, another page shown here. */
 
 import { type ReactNode, useMemo, useState } from 'react'
-import { type Block, headings, inlineText, parseMarkdown, taskItems } from '../../model/markdown'
+import { type Block, headings, inlineText, parseMarkdown, taskIsFor, taskItems, tasksFor } from '../../model/markdown'
 import { argText } from '../../model/macros'
 import * as RV from '../../model/revisions'
 import type { Board, Page, PageBody } from '../../model/types'
@@ -27,7 +27,9 @@ export function WikiMacro({ block, page, actions, inside = false }: { block: Mac
     case 'pagetree':
       return <PageTreeMacro under={block.args.pos[0]?.toLowerCase() === 'here' ? page.id : undefined} />
     case 'tasks':
-      return <TasksMacro page={page} here={block.args.pos.some((w) => w.toLowerCase() === 'here')} withDone={block.args.pos.some((w) => w.toLowerCase() === 'all')} />
+      return (
+        <TasksMacro page={page} here={block.args.pos.some((w) => w.toLowerCase() === 'here')} withDone={block.args.pos.some((w) => w.toLowerCase() === 'all')} who={tasksFor(block.args)} />
+      )
     case 'recent':
       return <RecentMacro count={Number(block.args.pos[0]) || 5} />
     case 'include':
@@ -68,12 +70,13 @@ function PageTreeMacro({ under }: { under?: string }) {
   return <nav className="md-pagetree" aria-label="Page tree on this page">{tree.length ? list(tree) : <p className="muted">No pages under this one yet.</p>}</nav>
 }
 
-function TasksMacro({ page, here, withDone }: { page: Page; here: boolean; withDone: boolean }) {
+function TasksMacro({ page, here, withDone, who }: { page: Page; here: boolean; withDone: boolean; who: string | null }) {
   const editor = useEditor()
   const board = editor.board
   const ro = editor.readOnly
   // Ticked here a moment ago: still shown (struck through) until the page is left, so a slip is easy to untick.
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
+  const me = editor.mentionMe
   const { groups, more } = useMemo(() => {
     const scope = here ? W.withDescendants(board, page.id) : null
     let left = TASKS_SHOWN
@@ -84,14 +87,21 @@ function TasksMacro({ page, here, withDone }: { page: Page; here: boolean; withD
       const all = taskItems(blocksOf(W.getBody(board, p.id)))
         // Empty boxes (a template's blanks) aren't tasks yet.
         .filter((it) => (withDone || !it.task || ticked.has(`${p.id}:${it.line}`)) && inlineText(it.c).trim())
+        // {{tasks @me}}: the ones that mention the reader.
+        .filter((it) => !who || taskIsFor(it, who, me))
       const items = all.slice(0, Math.max(0, left)).map((it) => ({ line: it.line, text: inlineText(it.c), done: !!it.task }))
       more += all.length - items.length
       left -= items.length
       if (items.length) out.push({ page: p, items })
     }
     return { groups: out, more }
-  }, [board, page.id, here, withDone, ticked])
-  if (!groups.length) return <p className="md-tasks muted">{withDone ? 'No checklists yet.' : 'Nothing left to do. 🎉'}</p>
+  }, [board, page.id, here, withDone, ticked, who, me.id, me.name])
+  if (!groups.length)
+    return (
+      <p className="md-tasks muted">
+        {who === 'me' && !me.name ? 'Sign in or give your name to see the tasks that mention you.' : who ? `Nothing for ${who === 'me' ? 'you' : who} left to do. 🎉` : withDone ? 'No checklists yet.' : 'Nothing left to do. 🎉'}
+      </p>
+    )
   return (
     <div className="md-tasks">
       {groups.map((g) => (

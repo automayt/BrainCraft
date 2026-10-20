@@ -21,6 +21,7 @@ export function pageMarkdown(b: Board, id: string, webLink: WebLink): string {
   for (const part of parseNote(text)) {
     if ('text' in part) out += part.text
     else if ('mention' in part) out += part.label
+    else if ('person' in part) out += `@${part.label}`
     else if (!part.link) out += `[[${part.label}]]`
     else if (part.link.page !== undefined && part.link.board === undefined) out += `[[${getPage(b, part.link.page)?.title || part.label}]]`
     else {

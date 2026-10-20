@@ -6,7 +6,7 @@
  * escaped; the page runs no scripts.
  */
 
-import { type Block, type Inline, headings, macroText, parseMarkdown, taskItems } from './markdown'
+import { type Block, type Inline, headings, macroText, parseMarkdown, taskIsFor, taskItems, tasksFor } from './markdown'
 import { argText, countdown, parseDay, statusLook } from './macros'
 import type { LinkTarget } from './notes'
 import * as RV from './revisions'
@@ -81,6 +81,8 @@ function inline(c: Inline[], x: Ctx): string {
           return linkHtml(i.to, i.label, x)
         case 'mention':
           return esc(i.label)
+        case 'person':
+          return `<span class="person">@${esc(i.label)}</span>`
         case 'macro': {
           if (i.raw !== undefined) return esc(i.raw)
           if (i.name === 'status') {
@@ -137,7 +139,9 @@ function macroBlock(b: Extract<Block, { t: 'macro' }>, x: Ctx): string {
       const groups = pageOrder(x.b)
         .filter((p) => !scope || scope.has(p.id))
         .map((p) => {
-          const items = taskItems(parseMarkdown(getBody(x.b, p.id)?.text ?? '')).filter((t) => withDone || !t.task)
+          // A copy has no reader: {{tasks @me}} lists everyone's, {{tasks @Sam}} still Sam's.
+          const who = tasksFor(b.args)
+          const items = taskItems(parseMarkdown(getBody(x.b, p.id)?.text ?? '')).filter((t) => (withDone || !t.task) && (!who || who === 'me' || taskIsFor(t, who, { name: '' })))
           return items.length ? `<p class="task-page">${pageLink(p.id, x)}</p><ul class="checklist">${items.map((t) => `<li>${t.task ? '☑' : '☐'} ${inline(t.c, x)}</li>`).join('')}</ul>` : ''
         })
         .join('')

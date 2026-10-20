@@ -1,7 +1,7 @@
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { continueList, parseMarkdown, toggleTask } from '../../model/markdown'
 import { merge3 } from '../../model/merge'
-import { linkToken } from '../../model/notes'
+import { linkToken, personCandidates, personToken } from '../../model/notes'
 import { targetFromUrl } from '../../store/deepLink'
 import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
@@ -67,7 +67,8 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const ws = useWorkspace()
   const [draft, setDraft] = useState(text)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
-  const [pick, setPick] = useState<{ from: number; query: string; k: number } | null>(null)
+  /** The [[ picker, or (`person`) the @ picker of people. */
+  const [pick, setPick] = useState<{ from: number; query: string; k: number; person?: boolean } | null>(null)
   const [slash, setSlash] = useState<{ from: number; query: string; k: number } | null>(null)
   /** Where an embed being picked goes. */
   const [embedAt, setEmbedAt] = useState<number | null>(null)
@@ -139,6 +140,8 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   // The [[ picker: pages of this wiki, then other boards and wikis.
   const picks = useMemo((): Pick[] => {
     if (!pick) return []
+    if (pick.person)
+      return personCandidates(ws.peopleToMention, pick.query, 8).map((p) => ({ label: `@${p.name}`, hint: p.hint ?? 'Person', token: personToken(p.name, p.id) }))
     const q = pick.query.trim().toLowerCase()
     const pages = W.pageOrder(editor.board)
       .filter((p) => p.id !== page.id && (!q || p.title.toLowerCase().includes(q)))
@@ -150,16 +153,19 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
       .map((b) => ({ label: b.title || 'Untitled', hint: 'Board', token: linkToken(b.title || 'Untitled', { board: b.key }) }))
     const fresh = q && !pages.some((p) => p.label.toLowerCase() === q) ? [{ label: `New page “${pick.query.trim()}”`, hint: 'Made when you follow the link', token: `[[${pick.query.trim()}]]` }] : []
     return [...pages, ...boards, ...fresh]
-  }, [pick, editor.board, ws.otherBoards, page.id])
+  }, [pick, editor.board, ws.otherBoards, ws.peopleToMention, page.id])
 
   const track = (el: HTMLTextAreaElement) => {
     const caret = el.selectionStart
     const before = el.value.slice(0, caret)
     const m = /\[\[([^[\]\n]{0,60})$/.exec(before)
     const keep = (old: { from: number; query: string; k: number } | null, from: number, query: string) => ({ from, query, k: old && old.from === from && old.query === query ? old.k : 0 })
-    setPick((old) => (m ? keep(old, caret - m[0].length, m[1]) : null))
+    // "@" (not inside a word, so not an email address): people to mention.
+    const at = m ? null : /(?:^|[\s(])@([^\s@[\]()]{0,40})$/.exec(before)
+    if (at) void ws.loadBoardPeople()
+    setPick((old) => (m ? keep(old, caret - m[0].length, m[1]) : at ? { ...keep(old, caret - at[1].length - 1, at[1]), person: true } : null))
     // "/" at the start of a line: the menu of things to insert.
-    const s = m ? null : /(?:^|\n)\/([\w ]{0,24})$/.exec(before)
+    const s = m || at ? null : /(?:^|\n)\/([\w ]{0,24})$/.exec(before)
     setSlash((old) => (s ? keep(old, caret - s[1].length - 1, s[1]) : null))
   }
 
@@ -355,7 +361,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           <button title="Insert a heading, checklist, table, embed… (or type / at the start of a line)" aria-haspopup="listbox" onMouseDown={(e) => e.preventDefault()} onClick={openInsert}>
             Insert ▾
           </button>
-          <span className="muted page-editor-hint">Type / for headings, checklists, tables, embeds and macros · [[ to link a page</span>
+          <span className="muted page-editor-hint">Type / for headings, checklists, tables, embeds and macros · [[ to link a page · @ to mention someone</span>
         </div>
         <textarea
           ref={area}
@@ -449,7 +455,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           />
         )}
         {menu === 'pick' && pick && (
-          <ul className="page-picker" id={`${ids}-menu`} style={place} role="listbox" aria-label="Link to">
+          <ul className="page-picker" id={`${ids}-menu`} style={place} role="listbox" aria-label={pick.person ? 'Mention' : 'Link to'}>
             {picks.map((p, k) => (
               <li key={p.token + k} id={`${ids}-opt-${k}`} role="option" aria-selected={k === pick.k}>
                 <button className={k === pick.k ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(p)}>

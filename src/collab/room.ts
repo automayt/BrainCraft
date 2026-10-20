@@ -130,7 +130,10 @@ export class Room {
     if (msg.t === 'presence') {
       m.presence = sanitizePresence(msg.presence)
       // A signed-in person's name is their account's, whatever their browser says.
-      if (m.presence && m.user) m.presence.name = m.user.name.slice(0, 40)
+      if (m.presence && m.user) {
+        m.presence.name = m.user.name.slice(0, 40)
+        m.presence.user = m.user.id
+      }
       if (m.presence) this.broadcast({ t: 'presence', peer: { id, role: m.role, ...m.presence } }, id)
       return
     }

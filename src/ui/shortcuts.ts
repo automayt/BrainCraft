@@ -113,6 +113,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Enter', 'In the title: start writing the page'],
       ['/ (at the start of a line) · Insert', 'Add a heading, checklist, table, sub-page, an embed from a board, or a macro'],
       ['[[', 'While writing: link to a page or a board'],
+      ['@ · {{tasks @me}}', 'While writing: mention someone · list the checklist items that mention you'],
       ['Enter · Tab · Shift Tab', 'Continue a list or checklist · indent · outdent'],
       ['Ctrl B · Ctrl I', 'Bold · italic'],
       ['Esc · Ctrl Enter · Done', 'Stop writing'],
@@ -159,7 +160,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Comments',
     [
       ['Enter', 'Post (Shift Enter for a new line)'],
-      ['@', 'Mention another object'],
+      ['@', 'Mention someone (they see it under Mentions of you) or another object'],
       ['[[', 'Link a board or object (in comments and descriptions)'],
       ['C then click', 'Place a comment block'],
     ],

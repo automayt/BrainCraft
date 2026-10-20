@@ -78,6 +78,16 @@ export class LiveSession {
 
   /** Called each time the session has (re)loaded the server's board. */
   onSynced: (() => void) | null = null
+  private syncWaiters: (() => void)[] = []
+
+  /** Resolves once the server's board is here (at once if it is already), or after `ms` regardless. */
+  whenSynced(ms = 8000): Promise<void> {
+    if (this.synced) return Promise.resolve()
+    return new Promise((done) => {
+      this.syncWaiters.push(done)
+      setTimeout(done, ms)
+    })
+  }
 
   constructor(editor: Editor, server: string, link: LiveLink, me: Me) {
     this.editor = editor
@@ -200,6 +210,7 @@ export class LiveSession {
         }
         this.set('live')
         this.onSynced?.()
+        for (const done of this.syncWaiters.splice(0)) done()
         this.sendPresence(true)
         break
       }

@@ -115,11 +115,14 @@ describe('boards on a server with accounts', () => {
     expect(ws(s.lee.cookie, 'http://localhost:8080')).toBeNull()
     expect(ws('', 'http://localhost:8080')).toBeNull()
     // The name others see is the account's, whatever the browser claims.
-    const inbox: { t: string; peer?: { name: string } }[] = []
+    const inbox: { t: string; peer?: { name: string; user?: string } }[] = []
     room.join({ id: 'c1', role: 'edit', send: (m) => inbox.push(m as never), user: { id: s.sam.id, name: 'Sam' } })
     room.join({ id: 'c2', role: 'edit', send: (m) => inbox.push(m as never) })
-    room.receive('c1', { t: 'presence', presence: { name: 'The Admin', color: '#123456', cursor: null, selection: [], view: null } })
-    expect(inbox.find((m) => m.t === 'presence')?.peer?.name).toBe('Sam')
+    // Nor can it claim to be someone else's account (which is what @mentions of people use).
+    room.receive('c1', { t: 'presence', presence: { name: 'The Admin', color: '#123456', cursor: null, selection: [], view: null, user: s.ann } })
+    expect(inbox.find((m) => m.t === 'presence')?.peer).toMatchObject({ name: 'Sam', user: s.sam.id })
+    room.receive('c2', { t: 'presence', presence: { name: 'Kim', color: '#123456', cursor: null, selection: [], view: null, user: s.sam.id } })
+    expect(inbox.filter((m) => m.t === 'presence')[1]?.peer?.user).toBeUndefined()
   })
 })
 
@@ -193,5 +196,43 @@ describe('wikis on a server with accounts', () => {
     expect(live(s.sam.cookie)).toMatchObject({ role: 'edit', level: 'manage' })
     expect(live(s.lee.cookie)).toMatchObject({ role: 'edit', level: 'edit' })
     expect(live(kim.cookie)).toMatchObject({ role: 'view', level: 'view' })
+  })
+
+  it('lists where someone is @mentioned, only on boards they can open, and who can be mentioned', async () => {
+    const s = await server()
+    const id = String((await s.call('POST', '/api/boards', s.sam.cookie, { board: emptyBoard('Trip') })).body.id)
+    const ops = [
+      { op: 'createNote', ref: 'n', text: 'Tickets' },
+      { op: 'addComment', id: 'n', text: `@[Lee](user:${s.lee.id}) can you book these?`, author: 'Sam' },
+      { op: 'update', id: 'n', description: 'Ask @[Ann](user:) too' },
+    ]
+    expect((await s.call('POST', `/api/boards/${id}/ops`, s.sam.cookie, { ops })).status).toBe(200)
+    const mentions = async (cookie: string) => (await s.call('GET', '/api/mentions', cookie)).body.mentions as { board: string; excerpt: string; by?: string; label?: string; note?: string }[]
+    // Lee can't open it yet: nothing, not even that it's there.
+    expect(await mentions(s.lee.cookie)).toEqual([])
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'view' }] })
+    const lees = await mentions(s.lee.cookie)
+    expect(lees).toHaveLength(1)
+    expect(lees[0]).toMatchObject({ board: id, title: 'Trip', by: 'Sam', label: 'Tickets', excerpt: '@Lee can you book these?' })
+    expect(lees[0].note).toBeTruthy()
+    // Sam isn't mentioned; a later comment shows up at once (the board changed).
+    expect(await mentions(s.sam.cookie)).toEqual([])
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'edit' }] })
+    const note = s.rooms.get(id)!.data.board.items[0].id
+    await s.call('POST', `/api/boards/${id}/ops`, s.lee.cookie, { ops: [{ op: 'addComment', id: note, text: `Done, @[Sam](user:${s.sam.id})`, author: 'Lee' }] })
+    expect((await mentions(s.sam.cookie)).map((m) => m.excerpt)).toEqual(['Done, @Sam'])
+    // A mention by name alone finds the person of that name (Ann, an admin, can open every board).
+    expect((await mentions(s.ann)).map((m) => m.excerpt)).toEqual(['Ask @Ann too'])
+    // Signed out: refused.
+    expect((await s.call('GET', '/api/mentions', '')).status).toBe(401)
+
+    // Who can be mentioned: everyone who can open it, without emails unless you may see everyone.
+    const people = (await s.call('GET', `/api/boards/${id}/people`, s.lee.cookie)).body.people as { id: string; name: string; email?: string }[]
+    expect(people.map((p) => p.name)).toEqual(['Ann', 'Lee', 'Sam'])
+    expect(people.some((p) => p.email)).toBe(false)
+    expect(((await s.call('GET', `/api/boards/${id}/people`, s.ann)).body.people as { email?: string }[])[0].email).toBe('ann@x.org')
+    // Someone who can't open it can't ask.
+    const other = String((await s.call('POST', '/api/boards', s.lee.cookie, { board: emptyBoard('Lee’s') })).body.id)
+    expect((await s.call('GET', `/api/boards/${other}/people`, s.sam.cookie)).status).toBe(404)
   })
 })

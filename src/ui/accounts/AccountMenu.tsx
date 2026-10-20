@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { call } from '../../store/account'
+import { call, type ServerMention } from '../../store/account'
 import { Dialog } from '../Boards'
 import { copyText } from '../copyText'
 import { timeAgo } from '../Boards'
@@ -10,7 +10,7 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
   const ws = useWorkspace()
   const user = ws.account?.user
   const [open, setOpen] = useState(false)
-  const [dialog, setDialog] = useState<'password' | 'tokens' | null>(null)
+  const [dialog, setDialog] = useState<'password' | 'tokens' | 'mentions' | null>(null)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -19,15 +19,27 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
   if (!user) return null
+  const unread = ws.unreadMentions
   const pick = (f: () => void) => () => {
     setOpen(false)
     f()
   }
   return (
     <div className="account-menu" ref={box}>
-      <button className="account-btn" aria-haspopup="menu" aria-expanded={open} title={`${user.name} (${user.email})`} onClick={() => setOpen(!open)}>
+      <button
+        className="account-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`${user.name} (${user.email})${unread ? ` · ${unread} new ${unread === 1 ? 'mention' : 'mentions'}` : ''}`}
+        onClick={() => setOpen(!open)}
+      >
         <span aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span>
-        <span className="sr-only">Your account</span>
+        <span className="sr-only">Your account{unread ? `, ${unread} new ${unread === 1 ? 'mention' : 'mentions'}` : ''}</span>
+        {unread > 0 && (
+          <span className="account-badge" aria-hidden="true">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
       </button>
       {open && (
         <ul role="menu" aria-label="Your account" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
@@ -37,6 +49,11 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
               {user.email}
               {user.role === 'admin' ? ' · admin' : ''}
             </small>
+          </li>
+          <li role="none">
+            <button role="menuitem" onClick={pick(() => setDialog('mentions'))}>
+              Mentions of you…{unread > 0 && <span className="menu-count">{unread} new</span>}
+            </button>
           </li>
           {user.role === 'admin' && (
             <li role="none">
@@ -66,7 +83,57 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
       )}
       {dialog === 'password' && <PasswordDialog onClose={() => setDialog(null)} />}
       {dialog === 'tokens' && <TokensDialog onClose={() => setDialog(null)} />}
+      {dialog === 'mentions' && <MentionsDialog onClose={() => setDialog(null)} />}
     </div>
+  )
+}
+
+/** Where you're @mentioned, across the boards and wikis you can open; new ones marked. */
+function MentionsDialog({ onClose }: { onClose: () => void }) {
+  const ws = useWorkspace()
+  // What counted as new when it opened (looking marks them all seen).
+  const [seenBefore] = useState(ws.mentionsSeen)
+  useEffect(() => {
+    void ws.loadMentions().then(() => ws.markMentionsSeen())
+  }, [ws])
+  const me = ws.account?.user?.name
+  const where = (m: ServerMention) => (m.page !== undefined ? `📄 ${m.pageTitle || 'Untitled'}` : m.label ? (m.note ? `a comment on ${m.label}` : `the description of ${m.label}`) : '')
+  return (
+    <Dialog label="Mentions of you" onClose={onClose} className="account-dialog mentions-dialog">
+      <header>
+        <h2>Mentions of you</h2>
+        <button className="icon-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <p className="muted">Comments, descriptions and wiki pages that @mention you, on the boards and wikis you can open.</p>
+      <ul className="mention-list">
+        {ws.mentions.map((m) => (
+          <li key={`${m.board}/${m.item ?? ''}/${m.note ?? ''}/${m.page ?? ''}`} className={(m.at ?? 0) > seenBefore && m.by !== me ? 'new' : undefined}>
+            <button
+              onClick={() => {
+                onClose()
+                void ws.openMention(m)
+              }}
+            >
+              <span className="mention-where">
+                <strong>
+                  {m.kind === 'wiki' ? '📘 ' : ''}
+                  {m.title || 'Untitled'}
+                </strong>
+                {where(m) && <span className="muted"> › {where(m)}</span>}
+              </span>
+              <span className="mention-excerpt">{m.excerpt}</span>
+              <small className="muted">
+                {m.by ?? 'Someone'}
+                {m.at ? ` · ${timeAgo(m.at)}` : ''}
+              </small>
+            </button>
+          </li>
+        ))}
+        {!ws.mentions.length && <li className="muted">Nobody has mentioned you yet. When someone types @ and picks you in a comment or a page, it shows up here.</li>}
+      </ul>
+    </Dialog>
   )
 }
 

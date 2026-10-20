@@ -40,6 +40,24 @@ export interface ServerBoard {
   owner: { id: string; name: string } | null
 }
 
+/** Where someone was @mentioned: a comment or description on an object, or a wiki page. */
+export interface ServerMention {
+  board: string
+  title: string
+  kind?: 'wiki'
+  /** When it was written (none for a description). */
+  at?: number
+  by?: string
+  excerpt: string
+  item?: number
+  /** The object's name. */
+  label?: string
+  /** The comment's id, when it's in one. */
+  note?: string
+  page?: string
+  pageTitle?: string
+}
+
 export interface Grant {
   who: 'user' | 'group'
   id: string

@@ -5,7 +5,7 @@
  */
 
 import { type MacroArgs, argText, countdown, macroInfo, macroName, parseArgs, parseDay, statusLook } from './macros'
-import { type LinkTarget, tokenAt } from './notes'
+import { isMe, type LinkTarget, type Me, tokenAt } from './notes'
 import type { Id } from './types'
 
 export type Inline =
@@ -17,6 +17,8 @@ export type Inline =
   /** A BrainCraft link; `to` is null for a `[[Name]]` typed by hand. */
   | { t: 'link'; to: LinkTarget | null; label: string }
   | { t: 'mention'; id: Id; label: string }
+  /** A mention of a person: their account's id, or '' for a name alone. */
+  | { t: 'person'; id: string; label: string }
   | { t: 'br' }
   /**
    * A macro inside a sentence: `{{status Done}}`, `{{countdown 2026-12-20}}`, `{{today}}`. `raw` is set
@@ -129,7 +131,7 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const tok = tokenAt(s, i)
       if (tok && !('text' in tok.part)) {
         const p = tok.part
-        push('mention' in p ? { t: 'mention', id: p.mention, label: p.label } : { t: 'link', to: p.link, label: p.label })
+        push('mention' in p ? { t: 'mention', id: p.mention, label: p.label } : 'person' in p ? { t: 'person', id: p.person, label: p.label } : { t: 'link', to: p.link, label: p.label })
         i += tok.length
         continue
       }
@@ -201,6 +203,8 @@ export function inlineText(c: Inline[]): string {
         case 'link':
         case 'mention':
           return x.label
+        case 'person':
+          return `@${x.label}`
         case 'macro':
           return x.raw ?? macroText(x.name, x.args)
         default:
@@ -625,6 +629,37 @@ export function taskItems(blocks: Block[]): ListItem[] {
   }
   walk(blocks)
   return out
+}
+
+/** The people some words mention (in bold or italics too). */
+export function inlinePeople(c: Inline[]): { id: string; label: string }[] {
+  const out: { id: string; label: string }[] = []
+  const walk = (list: Inline[]) => {
+    for (const x of list) {
+      if (x.t === 'person') out.push({ id: x.id, label: x.label })
+      else if ('c' in x) walk(x.c)
+    }
+  }
+  walk(c)
+  return out
+}
+
+/**
+ * Whose tasks `{{tasks …}}` lists: `{{tasks @me}}` the reader's ('me'), `{{tasks @Sam Lee}}`
+ * Sam Lee's (by name), and everyone's (null) without an @.
+ */
+export function tasksFor(args: MacroArgs): string | null {
+  const words = args.pos.filter((w) => !/^(here|all)$/i.test(w))
+  const at = words.findIndex((w) => w.startsWith('@'))
+  if (at < 0) return null
+  const who = words.slice(at).join(' ').slice(1).trim()
+  return !who ? null : who.toLowerCase() === 'me' ? 'me' : who
+}
+
+/** Whether a checklist item mentions `who` (see {@link tasksFor}); `me` is the reader. */
+export function taskIsFor(it: ListItem, who: string, me: Me): boolean {
+  const name = who.toLowerCase()
+  return inlinePeople(it.c).some((p) => (who === 'me' ? isMe({ person: p.id, label: p.label }, me) : p.label.trim().toLowerCase() === name))
 }
 
 /** Ticks or unticks the checklist item on `line` (0-based). Returns the text unchanged if there isn't one. */

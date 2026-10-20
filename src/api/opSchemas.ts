@@ -106,7 +106,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     required: ['id'],
   },
   delete: { summary: 'Deletes objects (a mind-map idea takes its branch)', properties: { ids: list(ref) }, required: ['ids'] },
-  addComment: { summary: 'A timestamped comment on an object; @[Label](#id) mentions another', properties: { id: ref, text: str(), author: str() }, required: ['id', 'text'] },
+  addComment: { summary: 'A timestamped comment on an object; @[Label](#id) mentions another object, @[Name](user:) a person by name', properties: { id: ref, text: str(), author: str() }, required: ['id', 'text'] },
   createDatabase: {
     summary: 'One set of records shown as linked views that stay in sync',
     properties: {

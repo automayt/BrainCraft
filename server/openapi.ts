@@ -236,6 +236,15 @@ export function openApiSpec(o: SpecOptions) {
       security: boardAuth,
       responses: { '200': ok('The owner and the access list', { $ref: '#/components/schemas/Access' }), ...denied },
     })
+    add('/api/boards/{id}/people', 'get', {
+      tags: ['Boards'],
+      summary: 'Who can open the board, to @mention',
+      description: 'Names and account ids; emails too for people who may “See everyone”.',
+      operationId: 'boardPeople',
+      parameters: [boardId],
+      security: boardAuth,
+      responses: { '200': ok('The people', { type: 'object', properties: { people: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, email: { type: 'string' } } } } } }), ...denied },
+    })
     add('/api/boards/{id}/access', 'put', {
       tags: ['Boards'],
       summary: 'Change who has the board, or hand it over',
@@ -290,6 +299,7 @@ export function openApiSpec(o: SpecOptions) {
     add('/api/auth/tokens', 'get', me('Your API tokens', 'listTokens'))
     add('/api/auth/tokens', 'post', me('Make an API token (shown once)', 'createToken', { requestBody: { required: false, ...json({ type: 'object', properties: { name: { type: 'string' } } }) }, responses: { '201': ok('The token and your tokens', { type: 'object', properties: { token: { type: 'string', example: 'bct_…' } } }), '401': error('Not signed in') } }))
     add('/api/auth/tokens/{tokenId}', 'delete', me('Revoke an API token', 'revokeToken', { parameters: [path('tokenId', 'The token’s id from the list')] }))
+    add('/api/mentions', 'get', me('Where you’re @mentioned: comments, descriptions and wiki pages on the boards you can open, newest first (at most 100)', 'mentions'))
     add('/api/people', 'get', me('People and groups to share with', 'people', { parameters: [query('q', 'Part of a name or email (an exact email without “See everyone”)')] }))
     const admin = (summary: string, operationId: string, extra: Partial<Operation> = {}) => ({ tags: ['Admin'], summary, operationId, security: boardAuth, responses: { '200': ok('Done'), '401': error('Not signed in'), '403': error('Admins only') }, ...extra })
     add('/api/admin/users', 'get', admin('People, groups and permissions', 'adminUsers'))

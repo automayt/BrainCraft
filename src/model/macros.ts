@@ -31,7 +31,7 @@ export const MACROS: readonly MacroInfo[] = [
   { name: 'children', kind: 'block', label: 'Sub-page list', hint: '{{children}}: the pages under this one', insert: '{{children}}\n' },
   { name: 'toc', kind: 'block', label: 'Contents', hint: '{{toc}}: this page’s headings', insert: '{{toc}}\n' },
   { name: 'pagetree', kind: 'block', label: 'Page tree', hint: '{{pagetree}}: every page (or {{pagetree here}}: those under this one)', insert: '{{pagetree}}\n' },
-  { name: 'tasks', kind: 'block', label: 'Open tasks', hint: '{{tasks}}: unticked checklist items from every page ({{tasks here}}: this page and under; {{tasks all}}: ticked ones too)', insert: '{{tasks}}\n' },
+  { name: 'tasks', kind: 'block', label: 'Open tasks', hint: '{{tasks}}: unticked checklist items from every page ({{tasks here}}: this page and under; {{tasks all}}: ticked ones too; {{tasks @me}}: the ones that mention you)', insert: '{{tasks}}\n' },
   { name: 'recent', kind: 'block', label: 'Recent changes', hint: '{{recent 5}}: the latest saved versions across the wiki', insert: '{{recent 5}}\n' },
   { name: 'include', kind: 'block', label: 'Show another page', hint: '{{include "Page title"}}: that page’s words, here', insert: '{{include ""}}\n', caret: 11 },
   { name: 'expand', kind: 'container', label: 'Expandable section', hint: '{{expand Title}} … {{/expand}}: hidden until opened', insert: '{{expand Details}}\n\n{{/expand}}\n', caret: 19 },

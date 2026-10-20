@@ -13,6 +13,8 @@ import {
   mentionToken,
   objectLabel,
   parseNote,
+  personCandidates,
+  personToken,
   resolveName,
   toEditable,
 } from '../model/notes'
@@ -21,6 +23,7 @@ import type { CrossLink } from '../store/links'
 import { formatTime } from './BoardView'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
+import { PersonMention } from './PersonMention'
 import { targetFromUrl } from '../store/deepLink'
 
 
@@ -89,6 +92,7 @@ function NoteText({ text, onOpen }: { text: string; onOpen: (id: Id) => void }) 
       {parseNote(text).map((part, k) => {
         if ('text' in part) return <span key={k}>{part.text}</span>
         if ('link' in part) return <WikiLink key={k} to={part.link} label={part.label} />
+        if ('person' in part) return <PersonMention key={k} id={part.person} label={part.label} />
         const target = getItem(editor.viewBoard, part.mention)
         return (
           <button
@@ -105,6 +109,9 @@ function NoteText({ text, onOpen }: { text: string; onOpen: (id: Id) => void }) 
     </p>
   )
 }
+
+/** Something the pickers offer: a link, or a person (`person`: their account id, '' for a name). */
+type Candidate = LinkCandidate & { person?: string }
 
 /**
  * The @ and [[ pickers for a text box. The box shows "@Label" and "[[Label]]";
@@ -127,18 +134,28 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
 
   const before = text.slice(0, caret)
   const wiki = /\[\[([^[\]\n]*)$/.exec(before)
-  const mention = wiki ? null : /@([^\s@]*)$/.exec(before)
-  const candidates: LinkCandidate[] = wiki
+  // Not in the middle of a word, so an email address doesn't open it.
+  const mention = wiki ? null : /(?:^|[\s(])@([^\s@]*)$/.exec(before)
+  const typed = mention ? mention[1] : null
+  const asking = typed !== null
+  // Who can open this board, asked of the server the first time someone types @.
+  useEffect(() => {
+    if (asking) void ws.loadBoardPeople()
+  }, [asking, ws])
+  const people: Candidate[] =
+    typed !== null ? personCandidates(ws.peopleToMention, typed, 4).map((p) => ({ label: p.name, hint: p.hint ?? 'Person', to: {}, person: p.id ?? '' })) : []
+  const candidates: Candidate[] = wiki
     ? linkCandidates(editor.viewBoard, wiki[1], ws.otherBoards, exclude)
-    : mention
-      ? mentionCandidates(editor.viewBoard, mention[1], exclude).map((i) => ({ label: objectLabel(i), hint: itemKindLabel(i), to: { item: i.id } }))
+    : typed !== null
+      ? [...people, ...mentionCandidates(editor.viewBoard, typed, exclude, 8 - people.length).map((i) => ({ label: objectLabel(i), hint: itemKindLabel(i), to: { item: i.id } }))]
       : []
 
-  const insert = (c: LinkCandidate) => {
-    const typed = (wiki ?? mention)!
-    const start = caret - typed[0].length
+  const insert = (c: Candidate) => {
+    const found = wiki ?? mention!
+    // From the "@" itself, not the space or bracket before it.
+    const start = caret - (wiki ? found[0].length : found[1].length + 1)
     const shown = wiki ? `[[${c.label}]]` : `@${c.label}`
-    picks.current.set(shown, wiki ? linkToken(c.label, c.to) : mentionToken(c.label, c.to.item!))
+    picks.current.set(shown, wiki ? linkToken(c.label, c.to) : c.person !== undefined ? personToken(c.label, c.person) : mentionToken(c.label, c.to.item!))
     // Skip past a "]]" the browser or the person already typed.
     const rest = text.slice(caret).replace(wiki ? /^\]{0,2}/ : /^/, '')
     const next = `${text.slice(0, start)}${shown} ${rest}`
@@ -168,7 +185,7 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
     candidates.length > 0 ? (
       <ul className="mention-picker" role="listbox">
         {candidates.map((c, k) => (
-          <li key={`${c.to.board ?? ''}#${c.to.item ?? ''}/${c.to.page ?? ''}`}>
+          <li key={c.person !== undefined ? `@${c.person || c.label}` : `${c.to.board ?? ''}#${c.to.item ?? ''}/${c.to.page ?? ''}`}>
             <button
               role="option"
               aria-selected={k === pick}
@@ -178,7 +195,7 @@ function useLinkPicker(ref: RefObject<HTMLTextAreaElement | null>, text: string,
                 insert(c)
               }}
             >
-              <span>{c.label}</span>
+              <span>{c.person !== undefined ? `@${c.label}` : c.label}</span>
               <small>{c.hint}</small>
             </button>
           </li>

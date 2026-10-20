@@ -42,10 +42,11 @@ export interface LinkTarget {
 
 // `@[Label](#12)` mentions; `[[Label]](#12)` / `[[Label]](board:key)` / `[[Label]](board:key#12)`
 // wiki-links; `[[Label]](page:id#heading)` / `[[Label]](board:key/page:id)` page links; and
-// `[[Name]]` links typed by hand that are matched to a page, board or object by name.
+// `[[Name]]` links typed by hand that are matched to a page, board or object by name; and
+// `@[Name](user:ID)` mentions of a person (`@[Name](user:)` for someone without an account).
 // Labels are bounded (and one line): unbounded ones made "@[@[@[…" take seconds to scan.
 const TOKEN =
-  /@\[([^\]\n]{0,300})\]\(#(\d+)\)|\[\[([^[\]\n]{0,300})\]\]\((?:board:([\w-]+))?(?:\/?page:([\w-]+)(?:#([\p{L}\p{M}\p{N}_-]+))?|#(\d+))?\)|\[\[([^[\]\n]{1,300})\]\]/gu
+  /@\[([^\]\n]{0,300})\]\(#(\d+)\)|\[\[([^[\]\n]{0,300})\]\]\((?:board:([\w-]+))?(?:\/?page:([\w-]+)(?:#([\p{L}\p{M}\p{N}_-]+))?|#(\d+))?\)|\[\[([^[\]\n]{1,300})\]\]|@\[([^\]\n]{1,80})\]\(user:([\w-]{0,64})\)/gu
 const TOKEN_AT = new RegExp(TOKEN.source, 'yu')
 
 const clean = (label: string) => label.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim()
@@ -61,8 +62,16 @@ export function linkToken(label: string, to: LinkTarget): string {
   return `[[${clean(label)}]](${board}${where})`
 }
 
-/** `link` is null for a `[[Name]]` typed by hand: it points at whatever is called that. */
-export type NotePart = { text: string } | { mention: Id; label: string } | { link: LinkTarget | null; label: string }
+/** A mention of a person: their account's id, or '' for someone known only by name. */
+export function personToken(name: string, id = ''): string {
+  return `@[${clean(name).slice(0, 80) || 'Someone'}](user:${id})`
+}
+
+/**
+ * `link` is null for a `[[Name]]` typed by hand: it points at whatever is called that. `person` is
+ * a person's account id ('' for a name only).
+ */
+export type NotePart = { text: string } | { mention: Id; label: string } | { link: LinkTarget | null; label: string } | { person: string; label: string }
 
 /** Splits note text into plain runs, mentions and wiki-links. */
 export function parseNote(text: string): NotePart[] {
@@ -79,6 +88,7 @@ export function parseNote(text: string): NotePart[] {
 
 function partOf(m: RegExpMatchArray): NotePart {
   if (m[2] !== undefined) return { mention: Number(m[2]), label: m[1] }
+  if (m[10] !== undefined) return { person: m[10], label: m[9].trim() }
   if (m[8] !== undefined) return { link: null, label: m[8].trim() }
   if (m[4] === undefined && m[5] === undefined && m[7] === undefined) return { text: m[0] }
   return {
@@ -102,7 +112,7 @@ export function tokenAt(text: string, at: number): { part: NotePart; length: num
 /** Note text with mentions and links shown as their labels, for search and previews. */
 export function plainNote(text: string): string {
   return parseNote(text)
-    .map((p) => ('text' in p ? p.text : 'mention' in p ? `@${p.label}` : p.label))
+    .map((p) => ('text' in p ? p.text : 'mention' in p || 'person' in p ? `@${p.label}` : p.label))
     .join('')
 }
 
@@ -128,6 +138,11 @@ export function toEditable(text: string): { text: string; picks: Map<string, str
       if ('mention' in p) {
         const shown = `@${p.label}`
         picks.set(shown, mentionToken(p.label, p.mention))
+        return shown
+      }
+      if ('person' in p) {
+        const shown = `@${p.label}`
+        picks.set(shown, personToken(p.label, p.person))
         return shown
       }
       const shown = `[[${p.label}]]`
@@ -280,3 +295,120 @@ export function linkCandidates(b: Board, query: string, boards: readonly BoardRe
 }
 
 export const hasNotes =(b: Board, id: Id) => !!getItem(b, id)?.notes?.length
+
+// ----- mentions of people ---------------------------------------------------------------
+
+/** Who "I" am, to find mentions of me: my account's id when signed in, and my name. */
+export interface Me {
+  id?: string
+  name: string
+}
+
+/** Whether a mention is of `me`: by account when it names one, else by name (ignoring case). */
+export function isMe(part: { person: string; label: string }, me: Me): boolean {
+  if (part.person) return !!me.id && part.person === me.id
+  const name = clean(me.name).toLowerCase()
+  return !!name && clean(part.label).toLowerCase() === name
+}
+
+/** Whether `text` mentions `me`. */
+export function mentionsMe(text: string, me: Me): boolean {
+  // Most text mentions nobody: skip the parse.
+  if (!text.includes('](user:')) return false
+  return parseNote(text).some((p) => 'person' in p && isMe(p, me))
+}
+
+/** Someone who can be mentioned: an account (`id`), or a name seen on the board or in the session. */
+export interface Person {
+  id?: string
+  name: string
+  /** A second line in the picker: their email, "Here now", "Commented here". */
+  hint?: string
+}
+
+/** People whose name (or email) matches `query`, accounts before names alone, each person once. */
+export function personCandidates(people: readonly Person[], query: string, limit = 6): Person[] {
+  const q = query.trim().toLowerCase()
+  const seen = new Set<string>()
+  const ids = new Set(people.filter((p) => p.id).map((p) => clean(p.name).toLowerCase()))
+  const out: Person[] = []
+  for (const p of [...people.filter((x) => x.id), ...people.filter((x) => !x.id)]) {
+    const name = clean(p.name)
+    if (!name) continue
+    const key = p.id ? `#${p.id}` : name.toLowerCase()
+    // A name alone that an account already has is that account.
+    if (seen.has(key) || (!p.id && ids.has(key))) continue
+    if (q && !name.toLowerCase().includes(q) && !(p.hint ?? '').toLowerCase().includes(q)) continue
+    seen.add(key)
+    out.push({ ...p, name })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/** Where someone was mentioned on a board: a comment (`item` and `note`), a description (`item`), or a wiki `page`. */
+export interface MentionRef {
+  item?: Item
+  note?: Note
+  page?: Page
+  /** When it was written (unknown for a description). */
+  at?: number
+  by?: string
+  /** The words around it, as plain text. */
+  excerpt: string
+}
+
+/** The text around the first mention of `me` in `text`, as plain text. */
+function excerptAround(text: string, me: Me, size = 160): string {
+  let at = 0
+  let found = -1
+  const plain = parseNote(text)
+    .map((p) => {
+      const s = 'text' in p ? p.text : 'mention' in p || 'person' in p ? `@${p.label}` : p.label
+      if (found < 0 && 'person' in p && isMe(p, me)) found = at
+      at += s.length
+      return s
+    })
+    .join('')
+  // The line it's on (a page's checklist item, say), around it when that's long.
+  const pos = Math.max(0, found)
+  const lineStart = plain.lastIndexOf('\n', pos - 1) + 1
+  const lineEnd = plain.indexOf('\n', pos) < 0 ? plain.length : plain.indexOf('\n', pos)
+  const start = Math.max(lineStart, pos - size / 2)
+  const end = Math.min(lineEnd, start + size)
+  const line = plain
+    .slice(start, end)
+    // Markdown's marks: a list's bullet and box, a heading's #, emphasis.
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, '')
+    .replace(/^\s*#{1,6}\s+/, '')
+    .replace(/[*_`|>]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return (start > lineStart ? '…' : '') + line + (end < lineEnd ? '…' : '')
+}
+
+/** Every place on the board that mentions `me`, newest first (descriptions, which have no time, last). */
+export function mentionsOf(b: Board, me: Me): MentionRef[] {
+  const out: MentionRef[] = []
+  for (const item of b.items) {
+    if (item.description && mentionsMe(item.description, me)) out.push({ item, excerpt: excerptAround(item.description, me) })
+    for (const note of item.notes ?? []) {
+      if (mentionsMe(note.text, me)) out.push({ item, note, at: note.at, ...(note.author ? { by: note.author } : {}), excerpt: excerptAround(note.text, me) })
+    }
+  }
+  const bodies = new Map((b.bodies ?? []).map((x) => [x.id, x]))
+  for (const page of b.pages ?? []) {
+    const body = bodies.get(page.id)
+    if (page.trashed || !body || !mentionsMe(body.text, me)) continue
+    out.push({ page, at: body.at, ...(body.by ? { by: body.by } : {}), excerpt: excerptAround(body.text, me) })
+  }
+  return out.sort((a, z) => (z.at ?? -1) - (a.at ?? -1))
+}
+
+/** Names of people seen on the board (comment authors and page writers), for mentioning them. */
+export function namesOnBoard(b: Board): string[] {
+  const names = new Set<string>()
+  for (const item of b.items) for (const n of item.notes ?? []) if (n.author) names.add(n.author)
+  for (const body of b.bodies ?? []) if (body.by) names.add(body.by)
+  return [...names]
+}

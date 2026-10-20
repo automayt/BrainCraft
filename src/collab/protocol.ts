@@ -15,6 +15,8 @@ export interface Presence {
   selection: Id[]
   /** The part of the board on their screen, for following them. */
   view: Rect | null
+  /** Their account's id, on a server with accounts (set by the server, never by the browser). */
+  user?: string
 }
 
 export interface PeerInfo extends Presence {

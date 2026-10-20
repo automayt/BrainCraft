@@ -67,6 +67,25 @@ permissions.
   data (or use a private window).
 - Names in live sessions are the accounts' names, so you can trust who's who.
 
+## Mentions
+
+Type **@** in a comment, a description or a wiki page and pick someone: the
+list offers the people who can open that board (and anyone there now). The
+mention is tied to their account, so it still finds them after a name change.
+
+- **Mentions of you…** in the account menu lists every comment, description
+  and page that mentions you, on the boards and wikis you can open, newest
+  first; the account button shows how many are new. Picking one opens the
+  board at that object's comments, or the wiki at that page.
+- **`{{tasks @me}}`** in a wiki page lists the unticked checklist items that
+  mention whoever is reading it (`{{tasks @Sam Lee}}`: Sam Lee's), so
+  "- [ ] Book the train @Sam" is an assignment.
+- Mentioning someone doesn't give them access: share the board with them
+  first (the list only offers people who can open it). Hidden brainstorm notes
+  stay hidden in the list.
+- Without accounts, **@** still offers the names of people here now and
+  people who've written on the board; a mention of your name is marked.
+
 ## The activity log
 
 **People and groups… → Activity** lists what happened on the server, newest

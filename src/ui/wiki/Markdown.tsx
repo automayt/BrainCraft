@@ -4,6 +4,7 @@ import { type Block, type Heading, type Inline, type ListItem, inlineText, macro
 import { type MacroArgs, argText, countdown, macroInfo, parseDay, statusLook } from '../../model/macros'
 import type { LinkTarget } from '../../model/notes'
 import type { Id } from '../../model/types'
+import { PersonMention } from '../PersonMention'
 
 /** What a page's links and boxes do; the wiki screen supplies these. */
 export interface MarkdownActions {
@@ -126,6 +127,8 @@ function inline(c: Inline[], a: MarkdownActions): ReactNode[] {
         return a.link(x.to, x.label, k)
       case 'mention':
         return a.mention(x.id, x.label, k)
+      case 'person':
+        return <PersonMention key={k} id={x.id} label={x.label} />
       case 'macro':
         return <InlineMacro key={k} name={x.name} args={x.args} raw={x.raw} />
     }
