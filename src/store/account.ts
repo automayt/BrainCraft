@@ -101,7 +101,7 @@ export interface AuditEntry {
   changes?: Record<string, [string, string]>
 }
 
-export type AuditKind = 'people' | 'signin' | 'boards' | 'security'
+export type AuditKind = 'people' | 'signin' | 'boards' | 'security' | 'settings'
 
 export class ApiError extends Error {
   status: number

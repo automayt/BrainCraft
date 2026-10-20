@@ -43,8 +43,8 @@ Everyone signed in is in the built-in **Everyone** group, which starts with
 *Make boards* and *Use the AI assistant*; change it to suit. A person's
 permissions are their groups' together.
 
-Manage all of this from the account button (top right) → **People and
-groups…**: add people (they get a one-time link to choose a password, valid
+Manage all of this from the account button (top right) → **Admin…**: add
+people (they get a one-time link to choose a password, valid
 for a week, which you send them; no mail server needed), set roles, put people
 in groups, turn accounts off, and make groups with checkboxes for their
 permissions.
@@ -57,7 +57,7 @@ permissions.
   it from the server). Adding people needs *Share boards*.
 - The owner (or an admin) can hand a board to someone else.
 - Boards made before accounts were turned on have no owner: only admins see
-  them, under **People and groups… → Boards without an owner**, and can give
+  them, under **Admin… → Boards without an owner**, and can give
   each one an owner. A board whose owner was removed goes back to admins the
   same way.
 - "Your boards" lists the boards on the server you can open, with who owns
@@ -86,9 +86,18 @@ mention is tied to their account, so it still finds them after a name change.
 - Without accounts, **@** still offers the names of people here now and
   people who've written on the board; a mention of your name is marked.
 
+## The app's name
+
+**Admin… → Branding** names the app for everyone on this server: the browser
+tab, the top of the app, the sign-in screen, and wherever the app talks about
+itself (the guide, help, exported wiki pages). Everyone sees the new name the
+next time they open the app; leave it empty for the usual name. Without
+accounts, set `BRAINCRAFT_APP_NAME` on the server instead (it's also the name
+admins go back to). Renaming is noted in the activity log.
+
 ## The activity log
 
-**People and groups… → Activity** lists what happened on the server, newest
+**Admin… → Activity** lists what happened on the server, newest
 first, with who did it, when, and from which address:
 
 - **People and groups:** the server's setup, people added, changed (role,
@@ -103,6 +112,7 @@ first, with who did it, when, and from which address:
   a board that isn't shared with them** (noted once an hour per board).
 - **Passwords and API tokens:** passwords changed or chosen from a link, API
   tokens made or revoked.
+- **Settings:** the app renamed (see below).
 
 Changes show what they were before and after. Filter by kind, by "only what
 admins did", or by words (a name, an email, a board), and **Download all** for
@@ -178,7 +188,7 @@ Provider notes:
   `BRAINCRAFT_ADMINS` only trust a verified email. For those, add the
   optional claim `xms_edov` (email domain owner verified) in Token
   configuration, or let people sign in first and then give them roles and
-  groups in People and groups.
+  groups in **Admin…**.
 - **Okta:** issuer `https://<your org>.okta.com` (or a custom authorization
   server's issuer). Create an OIDC Web App; for groups, add a *groups* claim
   to the ID token (filter e.g. `Matches regex .*`) and the `groups` scope.

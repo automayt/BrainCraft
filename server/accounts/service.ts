@@ -19,7 +19,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { can, permissionsOf } from './access'
 import { type Actor, AUDIT_KINDS, type AuditInput, type AuditKind, AuditLog, type AuditTarget, changesOf, changeText } from './audit'
-import { AccountStore, checkPassword, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
+import { AccountStore, checkPassword, cleanAppName, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
 import { type AccountRole, type Group, PERMISSIONS, type Permission, publicUser, type User } from './types'
 
 export const COOKIE = 'braincraft_session'
@@ -58,6 +58,8 @@ export interface AccountsOptions {
   sso?: SsoProvider | null
   /** Sign-ins from these email domains only, when set. */
   allowedDomains?: string[]
+  /** The app's name until an admin sets one (BRAINCRAFT_APP_NAME). */
+  appName?: string
 }
 
 export const parseCookies = (header: string | undefined): Record<string, string> =>
@@ -94,7 +96,7 @@ export class Accounts {
   /** What admins changed, sign-ins and the like (see audit.ts). */
   audit: AuditLog
   sso: SsoProvider | null
-  private o: Required<Omit<AccountsOptions, 'sso' | 'publicUrl'>> & { publicUrl?: string }
+  private o: Required<Omit<AccountsOptions, 'sso' | 'publicUrl' | 'appName'>> & { publicUrl?: string; appName?: string }
   private loginByVisitor: (k: string) => boolean
   private loginByEmail: (k: string) => boolean
 
@@ -135,6 +137,11 @@ export class Accounts {
   actor = (u: User): Actor => ({ id: u.id, name: u.name, email: u.email, ...(u.role === 'admin' ? { admin: true as const } : {}) })
 
   /** Notes something in the activity log, with who did it and from where. */
+  /** What the app is called on this server: an admin's choice, else BRAINCRAFT_APP_NAME, else BrainCraft. */
+  appName(): string {
+    return this.store.settings.appName ?? this.o.appName ?? DEFAULT_APP_NAME
+  }
+
   log(req: IncomingMessage | null, by: User | null, entry: Omit<AuditInput, 'by' | 'ip'>) {
     this.audit.record({ ...entry, by: by ? this.actor(by) : null, ...(req ? { ip: this.o.visitor(req) } : {}) })
   }
@@ -417,6 +424,29 @@ export class Accounts {
     const all = () => ({ users: s.users.map(publicUser), groups: s.groups, permissions: PERMISSIONS, envAdmins: this.o.admins })
     const link = (u: User) => `${this.origin(req)}/#reset=${s.issue(u.id, 'reset')}`
     const admins = () => s.users.filter((u) => u.role === 'admin' && !u.disabled)
+
+    if (p[0] === 'settings' && !p[1]) {
+      const shown = () => ({ appName: s.settings.appName ?? '', defaultName: this.o.appName ?? DEFAULT_APP_NAME })
+      if (m === 'GET') return json(res, 200, shown())
+      if (m === 'PUT') {
+        const b = await read()
+        if (b.appName !== undefined && typeof b.appName !== 'string') return json(res, 400, { error: 'The name must be text' })
+        const before = this.appName()
+        const name = cleanAppName(b.appName)
+        if (name) s.settings.appName = name
+        else delete s.settings.appName
+        s.saveSettings()
+        const after = this.appName()
+        if (after !== before)
+          this.log(req, me, {
+            action: 'settings.change',
+            changes: { appName: [before, after] },
+            text: `${me.name} renamed the app from “${before}” to “${after}”`,
+          })
+        return json(res, 200, shown())
+      }
+      return json(res, 405, { error: 'Method not allowed' })
+    }
 
     if (p[0] === 'users') {
       if (!p[1] && m === 'GET') return json(res, 200, all())

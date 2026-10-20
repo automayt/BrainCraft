@@ -6,6 +6,7 @@ import { toScreen } from '../model/camera'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { copyText, isLocalAddress } from './copyText'
+import { appName } from '../store/brand'
 
 const initials = (name: string) =>
   name
@@ -103,7 +104,7 @@ function Copy({ text, label }: { text: string; label: string }) {
 function LocalOnly() {
   return (
     <p className="warning">
-      This page is open as <strong>localhost</strong>, so its links only work on this computer. To invite friends, open BrainCraft by this computer’s
+      This page is open as <strong>localhost</strong>, so its links only work on this computer. To invite friends, open {appName()} by this computer’s
       network address (such as http://192.168.1.20:8080) or its public address, and share from there.
     </p>
   )
@@ -191,14 +192,14 @@ export function LiveSection() {
       ) : (
         <>
           <p className="muted">
-            To edit together live, this app needs a BrainCraft server. Ask whoever runs yours for its address and paste it here (or, on your own computer, start one with <code>npm run serve</code>):
+            To edit together live, this app needs its server. Ask whoever runs yours for its address and paste it here (or, on your own computer, start one with <code>npm run serve</code>):
           </p>
           <form
             className="share-row"
             onSubmit={async (e) => {
               e.preventDefault()
               setBusy(true)
-              setError((await ws.useServer(address)) ? '' : 'No BrainCraft server answered at that address.')
+              setError((await ws.useServer(address)) ? '' : `No ${appName()} server answered at that address.`)
               setBusy(false)
             }}
           >

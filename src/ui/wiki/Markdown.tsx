@@ -5,6 +5,7 @@ import { type MacroArgs, argText, countdown, macroInfo, parseDay, statusLook } f
 import type { LinkTarget } from '../../model/notes'
 import type { Id } from '../../model/types'
 import { PersonMention } from '../PersonMention'
+import { appName } from '../../store/brand'
 
 /** What a page's links and boxes do; the wiki screen supplies these. */
 export interface MarkdownActions {
@@ -33,7 +34,7 @@ function InlineMacro({ name, args, raw }: { name: string; args: MacroArgs; raw?:
     return (
       <span
         className="md-macro-bad"
-        title={info ? `{{${info.name}}} works on a line of its own` : `BrainCraft has no macro called “${name}”. Type / at the start of a line to see the ones it has.`}
+        title={info ? `{{${info.name}}} works on a line of its own` : `${appName()} has no macro called “${name}”. Type / at the start of a line to see the ones it has.`}
       >
         {raw}
       </span>
@@ -66,7 +67,7 @@ function MacroView({ b, a }: { b: MacroBlock; a: MarkdownActions }) {
   if (!info) {
     return (
       <p>
-        <span className="md-macro-bad" title={`BrainCraft has no macro called “${b.name}”. Type / at the start of a line to see the ones it has.`}>
+        <span className="md-macro-bad" title={`${appName()} has no macro called “${b.name}”. Type / at the start of a line to see the ones it has.`}>
           {`{{${b.name}${b.args.pos.length || Object.keys(b.args.named).length ? ' …' : ''}}}`}
         </span>
       </p>

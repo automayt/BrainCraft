@@ -40,6 +40,7 @@ import { focusFirst, moveFocus } from './menuKeys'
 import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
 import { LiveBar } from './Live'
+import { appName } from '../store/brand'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -65,8 +66,8 @@ function BoardIcon() {
   // The browser tab shows it too.
   useEffect(() => {
     const t = editor.board.title || 'Untitled board'
-    document.title = `${icon ? `${icon} ` : ''}${t} · BrainCraft`
-  }, [icon, editor.board.title])
+    document.title = `${icon ? `${icon} ` : ''}${t} · ${appName()}`
+  }, [icon, editor.board.title, ws.version])
   if (ws.viewOnly && !icon) return null
   return (
     <div className="anchor">
@@ -198,7 +199,7 @@ export function TopLeft() {
     <div className="island top-left no-canvas">
       <div className="brand">
         <Logo />
-        <span className="wordmark">BrainCraft</span>
+        <span className="wordmark">{appName()}</span>
       </div>
       <span className="divider" />
       <button className="icon-btn has-tip" aria-label="Your boards" onMouseDown={keepFocus} onClick={ui.openBoards}>
@@ -247,7 +248,7 @@ export function TopLeft() {
               </>
             )}
             <hr />
-            <MenuItem label="The BrainCraft guide" onClick={run(ui.openGuide)} />
+            <MenuItem label={`The ${appName()} guide`} onClick={run(ui.openGuide)} />
             <MenuItem label="Help and shortcuts" keys="?" onClick={run(ui.openHelp)} />
           </Popover>
         )}
@@ -701,7 +702,7 @@ export function Help({ onClose, wiki = false, onGuide, onCredits }: { onClose: (
           {onGuide && (
             <section className="help-intro" aria-label="Getting started">
               <div className="help-intro-guide">
-                <h3>New to BrainCraft?</h3>
+                <h3>New to {appName()}?</h3>
                 <p>The guide explains every part of the app, with a tour board to try things on.</p>
                 <button className="primary" onClick={onGuide}>
                   Open the guide

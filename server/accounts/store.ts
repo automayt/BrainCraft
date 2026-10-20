@@ -77,6 +77,24 @@ export const hashToken = (secret: string) => createHash('sha256').update(secret)
 
 /** Sessions last 30 days from the last use. */
 export const SESSION_MS = 30 * 86_400_000
+export interface ServerSettings {
+  /** What the app is called on this server (the tab, the top of the app, the sign-in screen). */
+  appName?: string
+}
+
+/** At most this long. */
+export const APP_NAME_MAX = 40
+/** The app's name when nobody has chosen another. */
+export const DEFAULT_APP_NAME = 'BrainCraft'
+
+/** An app name as typed: one line, no markup characters, not too long; undefined when empty. */
+export function cleanAppName(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined
+  // eslint-disable-next-line no-control-regex
+  const name = v.replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, APP_NAME_MAX).trim()
+  return name || undefined
+}
+
 /** A set-your-password link works for a week. */
 export const RESET_MS = 7 * 86_400_000
 /** API tokens last a year. */
@@ -86,6 +104,8 @@ export class AccountStore {
   users: User[]
   groups: Group[]
   boards: Record<string, BoardEntry>
+  /** Server-wide settings admins change in the app (the app's name). */
+  settings: ServerSettings
   private tokens: Token[]
   private dir: string
   private now: () => number
@@ -98,6 +118,8 @@ export class AccountStore {
     this.users = readJson<User[]>(this.file('users'), []).filter((u) => u && typeof u.id === 'string' && validEmail(u.email))
     this.groups = readJson<Group[]>(this.file('groups'), []).filter((g) => g && typeof g.id === 'string')
     this.boards = readJson<Record<string, BoardEntry>>(this.file('boards'), {})
+    const settings = readJson<ServerSettings>(this.file('settings'), {})
+    this.settings = { ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}) }
     this.tokens = readJson<Token[]>(this.file('sessions'), []).filter((t) => t && t.expires > now())
     // Everyone is in this group; out of the box it may make boards and use the AI.
     if (!this.groups.some((g) => g.everyone)) {
@@ -120,6 +142,10 @@ export class AccountStore {
 
   saveBoards() {
     writeJson(this.file('boards'), this.boards)
+  }
+
+  saveSettings() {
+    writeJson(this.file('settings'), this.settings)
   }
 
   /** Token changes (every sign-in, every sliding refresh) are written a moment later, together. */

@@ -37,11 +37,12 @@ export const AUDIT_ACTIONS = {
   'token.revoke': 'security',
   'password.change': 'security',
   'password.reset': 'security',
+  'settings.change': 'settings',
 } as const
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS
 export type AuditKind = (typeof AUDIT_ACTIONS)[AuditAction]
-export const AUDIT_KINDS: AuditKind[] = ['people', 'signin', 'boards', 'security']
+export const AUDIT_KINDS: AuditKind[] = ['people', 'signin', 'boards', 'security', 'settings']
 
 /** Who did it, as they were then (so it still reads right after they're renamed or removed). */
 export interface Actor {

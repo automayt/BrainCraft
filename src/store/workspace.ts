@@ -25,6 +25,7 @@ import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './libr
 import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type ServerMention } from './account'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
+import { appName, fetchAppName, setAppName } from './brand'
 
 const CURRENT_KEY = 'braincraft:current'
 /** Where boards lived before there was a library. */
@@ -252,6 +253,9 @@ export class Workspace {
     const ws = new Workspace(editor, new Library(kv ?? (await openKV())))
     await ws.recover()
     ws.server = await findServer()
+    // What the app is called on this server.
+    const named = await fetchAppName(ws.server)
+    if (named !== null) setAppName(named)
     ws.account = await fetchAccount(ws.server)
     if (ws.account?.user) await ws.signedIn(ws.account)
     if (await ws.openHash(hash)) return ws
@@ -422,7 +426,7 @@ export class Workspace {
     const boards = await this.library.list()
     if (boards.length) return this.switchTo(boards[0].id)
     // First visit, or a browser that used the single-board version: bring that board over.
-    let first = welcomeBoard()
+    let first = welcomeBoard(appName())
     const legacy = storage?.getItem(LEGACY_KEY)
     if (legacy) {
       try {
@@ -573,7 +577,7 @@ export class Workspace {
       this.boardId = null
       const rest = await this.library.list()
       if (rest.length) await this.switchTo(rest[0].id)
-      else await this.newBoard(welcomeBoard())
+      else await this.newBoard(welcomeBoard(appName()))
     } else await this.refresh()
   }
 
@@ -1042,6 +1046,12 @@ export class Workspace {
     this.account = this.account ? { ...this.account, user: null, permissions: [] } : null
     this.editor.userId = ''
     this.serverBoards = []
+    this.emit()
+  }
+
+  /** The app was renamed (by an admin, here): everything showing its name shows the new one. */
+  setAppName(name: string) {
+    setAppName(name)
     this.emit()
   }
 

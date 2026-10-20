@@ -11,6 +11,7 @@ import { sketchIt } from './excalidraw/sketchIt'
 import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { THEMES } from './theme'
 import type { Ui } from './uiContext'
+import { appName } from '../store/brand'
 
 export interface Command {
   id: string
@@ -99,7 +100,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: () => ui.openImport('export') },
     { id: 'help', label: 'Help and shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys keyboard shortcuts touch help', run: ui.openHelp },
     { id: 'credits', label: 'Credits and open-source licences', group: 'Help', aliases: 'credits licences licenses open source about thanks attribution notices', run: ui.openCredits },
-    { id: 'guide', label: 'Open the BrainCraft guide', group: 'Help', aliases: 'guide manual docs documentation tutorial learn how tour introduction help api', run: ui.openGuide },
+    { id: 'guide', label: `Open the ${appName()} guide`, group: 'Help', aliases: 'guide manual docs documentation tutorial learn how tour introduction help api', run: ui.openGuide },
   ]
   if (hasSketch(editor))
     list.push({ id: 'sketch', label: 'Turn sketch into a board (AI)', group: 'Selection', aliases: 'sketch drawing photo picture napkin whiteboard ocr recognise convert ai', run: () => void sketchToBoard(editor) })

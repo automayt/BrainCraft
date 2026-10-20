@@ -10040,3 +10040,49 @@ button.on,
 .file-actions .danger-quiet {
   color: var(--danger);
 }
+
+/* ----- admin: branding ----- */
+
+.admin-branding {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.admin-branding label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.brand-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.brand-preview-tab {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+
+.brand-preview-word {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}

@@ -11,6 +11,7 @@ import { embedKeys } from '../model/markdown'
 import type { Board } from '../model/types'
 import { wikiHtml } from '../model/wikiHtml'
 import type { Workspace } from '../store/workspace'
+import { appName } from '../store/brand'
 
 const dataUrl = (blob: Blob) =>
   new Promise<string>((ok, fail) => {
@@ -47,7 +48,7 @@ async function pictures(ws: Workspace, editor: EditorType, wiki: Board, pages?: 
 
 /** The wiki (or the chosen pages) as one web page, pictures included. */
 export async function wikiPage(ws: Workspace, editor: EditorType, wiki: Board, pages?: string[]): Promise<string> {
-  return wikiHtml(wiki, { pages, webLink: (to) => ws.linkTo(to), pictures: await pictures(ws, editor, wiki, pages) })
+  return wikiHtml(wiki, { pages, webLink: (to) => ws.linkTo(to), pictures: await pictures(ws, editor, wiki, pages), appName: appName() })
 }
 
 /** Prints the web page (the browser offers saving it as a PDF), from a frame nobody sees. */

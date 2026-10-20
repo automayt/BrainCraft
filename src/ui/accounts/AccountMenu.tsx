@@ -58,7 +58,7 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
           {user.role === 'admin' && (
             <li role="none">
               <button role="menuitem" onClick={pick(onAdmin)}>
-                People and groups…
+                Admin…
               </button>
             </li>
           )}

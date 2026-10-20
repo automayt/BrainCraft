@@ -16,6 +16,7 @@ import { useEditor } from '../useEditor'
 import { useEscape } from '../useEscape'
 import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
+import { appName } from '../../store/brand'
 
 /** What the file input offers (anything can be added; these are the ones BrainCraft reads). */
 const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.csv,.tsv,.md,.markdown,.txt,.html,.htm,.json,.png,.jpg,.jpeg,.gif,.webp,*/*'
@@ -320,7 +321,7 @@ function FileView({ f, onPicked }: { f: BoardFile; onPicked: (id: string | null)
         ) : f.chars ? (
           <p className="muted">Reading…</p>
         ) : (
-          <p className="muted">BrainCraft can’t read the words in this kind of file, but it keeps it: download it to open it.</p>
+          <p className="muted">{appName()} can’t read the words in this kind of file, but it keeps it: download it to open it.</p>
         )}
       </div>
     </div>

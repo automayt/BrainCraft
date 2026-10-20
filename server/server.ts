@@ -34,6 +34,7 @@ import { AiGate, AiProxy } from './aiProxy'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
+import { cleanAppName, DEFAULT_APP_NAME } from './accounts/store'
 import { BoardFiles } from './boardFiles'
 import { readBoard, sendRead } from './boardReads'
 import { boardWrite } from './boardWrites'
@@ -251,12 +252,18 @@ function serveStatic(url: URL, res: ServerResponse) {
   if (!existsSync(file)) return send(res, 404, { error: 'The app is not built here. Run npm run build.' })
   const hashed = /[-.][A-Za-z0-9_-]{8}\.(js|css|woff2?)$/.test(file)
   res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' })
+  // The page's own title is the app's name here, so the tab is right before the app starts.
+  if (file.endsWith('index.html')) return res.end(readFileSync(file, 'utf8').replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(appName())}</title>`))
   res.end(readFileSync(file))
 }
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 // ----- accounts ------------------------------------------------------------------------------
 
 const ACCOUNTS = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_ACCOUNTS ?? '')
+/** The app's name for this server, when set in the environment (admins can change it in the app). */
+const ENV_APP_NAME = cleanAppName(process.env.BRAINCRAFT_APP_NAME)
 const list = (v: string | undefined) => (v ?? '').split(',').map((x) => x.trim()).filter(Boolean)
 const PUBLIC_URL = process.env.BRAINCRAFT_PUBLIC_URL?.trim().replace(/\/+$/, '') || undefined
 const accounts = ACCOUNTS
@@ -268,8 +275,11 @@ const accounts = ACCOUNTS
       visitor,
       sso: await ssoFromEnv(process.env, PUBLIC_URL ?? `http://localhost:${PORT}`),
       allowedDomains: list(process.env.BRAINCRAFT_OIDC_ALLOWED_DOMAINS),
+      ...(ENV_APP_NAME ? { appName: ENV_APP_NAME } : {}),
     })
   : null
+/** What the app is called here: an admin's choice (with accounts), else BRAINCRAFT_APP_NAME, else BrainCraft. */
+const appName = () => accounts?.appName() ?? ENV_APP_NAME ?? DEFAULT_APP_NAME
 /** The pretend sign-in provider, for trying single sign-on on this computer (BRAINCRAFT_DEV_IDP=1). */
 const devIdp = accounts?.sso && /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_DEV_IDP ?? '') ? new DevIdp(`${PUBLIC_URL ?? `http://localhost:${PORT}`}/dev-idp`) : null
 const ALLOWED_ORIGINS = list(process.env.BRAINCRAFT_ALLOWED_ORIGINS).map((o) => o.replace(/\/+$/, ''))
@@ -366,6 +376,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         : {}),
       previews: true,
       accounts: !!accounts,
+      appName: appName(),
     })
 
   // The API described: OpenAPI for tools, and the same as a page to read.

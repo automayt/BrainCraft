@@ -15,6 +15,7 @@ import { useWorkspace } from './useWorkspace'
 import { LiveSection } from './Live'
 import { copyText } from './copyText'
 import { useUi } from './uiContext'
+import { appName } from '../store/brand'
 
 export function timeAgo(t: number, now = Date.now()): string {
   const s = Math.round((now - t) / 1000)
@@ -199,7 +200,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                   <span>🤝 Together</span>
                   <span>🔌 The API</span>
                 </span>
-                <strong>BrainCraft guide</strong>
+                <strong>{appName()} guide</strong>
                 <small>How everything works, with a tour board</small>
               </button>
               {WIKI_TEMPLATES.map((t) => (

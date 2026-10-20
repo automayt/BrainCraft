@@ -45,6 +45,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_ALLOWED_ORIGINS` | — | Other origins allowed to call the API with a signed-in cookie. |
 | `BRAINCRAFT_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_NAME`, `_SCOPES`, `_GROUPS_CLAIM`, `_ALLOWED_DOMAINS` | — | Single sign-on with any OpenID Connect provider. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_DEV_IDP` | off | `1`: a pretend sign-in provider at `/dev-idp` for trying single sign-on locally (localhost only). |
+| `BRAINCRAFT_APP_NAME` | BrainCraft | What the app is called: the tab, the top of the app, the sign-in screen. With accounts, admins can change it in **Admin… → Branding**. |
 | `BRAINCRAFT_MAX_FILE_MB` | 50 | The biggest file a wiki can keep. |
 | `BRAINCRAFT_MAX_BOARD_FILES_MB` | 1024 | All of one board's files together. |
 | `BRAINCRAFT_TLS_CERT`, `BRAINCRAFT_TLS_KEY` | — | PEM files of a certificate and its key: the server speaks HTTPS itself, and picks up a renewed certificate within the hour. See [HTTPS.md](HTTPS.md). |

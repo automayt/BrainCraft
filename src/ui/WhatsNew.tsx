@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { GUIDE_TITLE } from '../store/guide'
 import { useUi } from './uiContext'
 import { useWorkspace } from './useWorkspace'
+import { appName } from '../store/brand'
 
 /** Which announcement this browser has seen; a new value shows the banner again once. */
 const KEY = 'braincraft.news'
@@ -41,11 +42,11 @@ export function WhatsNew() {
       <span className="whats-new-msg">
         {fresh ? (
           <>
-            <strong>New here?</strong> The BrainCraft guide shows every part of the app, with a tour board to try things on.
+            <strong>New here?</strong> The {appName()} guide shows every part of the app, with a tour board to try things on.
           </>
         ) : (
           <>
-            <strong>New in BrainCraft:</strong> wikis (pages to write together), a guide to every feature, and{ws.server ? ' an API reference at /api/docs' : ' a documented API'}.
+            <strong>New in {appName()}:</strong> wikis (pages to write together), a guide to every feature, and{ws.server ? ' an API reference at /api/docs' : ' a documented API'}.
           </>
         )}
       </span>

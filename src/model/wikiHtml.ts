@@ -23,6 +23,8 @@ export interface WikiHtmlOptions {
   pictures?: Map<string, string>
   /** When it was made (for countdowns, "today" and the footer). */
   now?: Date
+  /** What the app is called, for the footer. */
+  appName?: string
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
@@ -299,7 +301,7 @@ ${blocks(dropTitle(parseMarkdown(getBody(b, p.id)?.text ?? ''), p.title), x(p.id
 <nav class="contents" aria-label="Pages"><h2>${title}</h2>${contents}</nav>
 <main>
 ${sections}
-<footer>Exported from BrainCraft on ${esc(now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}.</footer>
+<footer>Exported from ${esc(o.appName ?? 'BrainCraft')} on ${esc(now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}.</footer>
 </main>
 </div>
 </body>

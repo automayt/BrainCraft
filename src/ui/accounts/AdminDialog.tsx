@@ -3,13 +3,14 @@ import { type AccountUser, type AdminData, type AuditEntry, type AuditKind, call
 import { Dialog, timeAgo } from '../Boards'
 import { copyText } from '../copyText'
 import { useWorkspace } from '../useWorkspace'
+import { appName } from '../../store/brand'
 
-type Tab = 'people' | 'groups' | 'boards' | 'activity' | 'signin'
+type Tab = 'people' | 'groups' | 'boards' | 'activity' | 'signin' | 'branding'
 
 /**
  * Admins: people (add, role, groups, turn off, password links), groups (what their members may
  * do, who's in them, which sign-in provider groups map to them), boards waiting for an owner, the
- * activity log, and how this server signs people in.
+ * activity log, how this server signs people in, and what the app is called here.
  */
 export function AdminDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
@@ -36,11 +37,12 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
     ['boards', 'Boards without an owner'],
     ['activity', 'Activity'],
     ['signin', 'Sign-in'],
+    ['branding', 'Branding'],
   ]
   return (
-    <Dialog label="People and groups" onClose={onClose} className="admin">
+    <Dialog label="Admin" onClose={onClose} className="admin">
       <header>
-        <h2>People and groups</h2>
+        <h2>Admin</h2>
         <button className="icon-close" aria-label="Close" onClick={onClose}>
           ×
         </button>
@@ -75,11 +77,79 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
           <Unowned data={data} />
         ) : tab === 'activity' ? (
           <Activity />
+        ) : tab === 'branding' ? (
+          <Branding />
         ) : (
           <SignInInfo />
         )}
       </div>
     </Dialog>
+  )
+}
+
+/** What the app is called on this server: the tab, the top of the app, the sign-in screen. */
+function Branding() {
+  const ws = useWorkspace()
+  const [saved, setSaved] = useState<{ appName: string; defaultName: string } | null>(null)
+  const [name, setName] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void call<{ appName: string; defaultName: string }>(ws.server!, 'api/admin/settings').then(
+      (r) => {
+        setSaved(r)
+        setName(r.appName)
+      },
+      (e: Error) => setMsg(e.message),
+    )
+  }, [ws.server])
+  const save = async (e?: FormEvent, value = name) => {
+    e?.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = await call<{ appName: string; defaultName: string }>(ws.server!, 'api/admin/settings', 'PUT', { appName: value })
+      setSaved(r)
+      setName(r.appName)
+      // This browser shows it at once; everyone else on their next visit.
+      ws.setAppName(r.appName || r.defaultName)
+      ws.editor.setStatus(`The app is called ${r.appName || r.defaultName} now`)
+    } catch (err) {
+      setMsg((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (!saved) return msg ? <p className="signin-error">{msg}</p> : <p className="muted">Loading…</p>
+  const shown = name.trim() || saved.defaultName
+  const changed = name.trim() !== saved.appName
+  return (
+    <form className="admin-branding" onSubmit={save}>
+      <p className="muted">What the app is called on this server: in the browser tab, at the top of the app, on the sign-in screen, and wherever it talks about itself. Everyone sees it the next time they open the app.</p>
+      <label>
+        App name
+        <input value={name} maxLength={40} placeholder={saved.defaultName} onChange={(e) => setName(e.target.value)} aria-describedby="brand-preview" />
+      </label>
+      <div className="brand-preview" id="brand-preview" aria-label="How it looks">
+        <span className="brand-preview-tab">
+          <span aria-hidden="true">📋</span> Trip plan · {shown}
+        </span>
+        <span className="brand-preview-word">✦ {shown}</span>
+      </div>
+      {msg && <p className="signin-error">{msg}</p>}
+      <div className="account-actions">
+        {saved.appName && (
+          <button type="button" disabled={busy} onClick={() => void save(undefined, '')}>
+            Use “{saved.defaultName}” again
+          </button>
+        )}
+        <span className="spacer" />
+        <button className="primary" disabled={busy || !changed}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      <p className="muted small">Now: {appName()}. Without a name here, it’s {saved.defaultName}{saved.defaultName === 'BrainCraft' ? '' : ' (from BRAINCRAFT_APP_NAME)'}.</p>
+    </form>
   )
 }
 
@@ -335,6 +405,7 @@ const KINDS: [AuditKind | '', string][] = [
   ['signin', 'Sign-ins'],
   ['boards', 'Board access'],
   ['security', 'Passwords and API tokens'],
+  ['settings', 'Settings'],
 ]
 
 /** Actions worth a second look: failed sign-ins, admins opening boards nobody shared with them. */

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { type AccountInfo, call } from '../../store/account'
 import { useWorkspace } from '../useWorkspace'
+import { appName } from '../../store/brand'
 
 /** A one-time link to choose a password (`#reset=…`), as an admin hands out. */
 export const resetTokenOf = (hash: string) => /(?:^#|&)reset=([\w-]{20,})/.exec(hash)?.[1] ?? null
@@ -51,7 +52,7 @@ export function SignIn() {
     <div className="signin no-canvas">
       <form className="signin-card" onSubmit={submit} aria-labelledby="signin-title">
         <div className="signin-brand" aria-hidden="true">
-          ✦ BrainCraft
+          ✦ {appName()}
         </div>
         <h1 id="signin-title">{mode === 'setup' ? 'Set up this server' : mode === 'reset' ? 'Choose a password' : 'Sign in'}</h1>
         {mode === 'setup' && <p className="muted">This server is new. Create the first admin account: you’ll add everyone else, and their groups, from the admin screen.</p>}

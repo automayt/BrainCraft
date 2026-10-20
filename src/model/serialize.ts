@@ -98,10 +98,10 @@ export function clipFromText(text: string): Clip | null {
 }
 
 /** The board shown on first visit. */
-export function welcomeBoard(): Board {
-  let b = emptyBoard('Welcome to BrainCraft')
+export function welcomeBoard(app = 'BrainCraft'): Board {
+  let b = emptyBoard(`Welcome to ${app}`)
   let id: number
-  ;[b] = addItem(b, newItem('frame', { x: -60, y: -40, w: 1180, h: 660 }, { text: 'Welcome to BrainCraft' }))
+  ;[b] = addItem(b, newItem('frame', { x: -60, y: -40, w: 1180, h: 660 }, { text: `Welcome to ${app}` }))
   ;[b] = addItem(
     b,
     newItem('text', { x: 0, y: 0, w: 760, h: 48 }, { text: 'Brainstorm on an infinite canvas', fontSize: 34 }),

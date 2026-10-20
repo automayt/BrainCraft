@@ -333,7 +333,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             <label className="ai-choice">
               <input type="radio" checked={settings.mode === 'server'} onChange={() => update({ ...settings, mode: 'server' })} />
               <span>
-                <strong>Use this BrainCraft server</strong>
+                <strong>Use this server</strong>
                 <small>
                   {server.agents.length && server.providers.length === 1
                     ? `${server.agents.map((a) => a.label).join(' or ')}, on the server's computer, with whoever is signed in there. Nothing to set up here.`

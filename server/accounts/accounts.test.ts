@@ -139,6 +139,36 @@ describe('admins', () => {
     expect((await call(a, 'GET', '/api/auth/me', undefined, { authorization: `Bearer ${token}` })).body).toMatchObject({ user: null })
   })
 
+  it('name the app for everyone, and only admins can', async () => {
+    const dir = tempDir()
+    const a = new Accounts({ dir })
+    const cookie = cookieOf(await call(a, 'POST', '/api/auth/setup', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
+    expect(a.appName()).toBe('BrainCraft')
+    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body).toEqual({ appName: '', defaultName: 'BrainCraft' })
+    // Tidied: one line, no markup characters, at most 40 long.
+    const put = await call(a, 'PUT', '/api/admin/settings', { appName: '  Acme <b>Notes</b>\n  ' }, { cookie })
+    expect(put.body).toMatchObject({ appName: 'Acme bNotes/b' })
+    expect(a.appName()).toBe('Acme bNotes/b')
+    await call(a, 'PUT', '/api/admin/settings', { appName: 'x'.repeat(60) }, { cookie })
+    expect(a.appName()).toHaveLength(40)
+    await call(a, 'PUT', '/api/admin/settings', { appName: 'Acme Notes' }, { cookie })
+    expect((await call(a, 'PUT', '/api/admin/settings', { appName: 7 }, { cookie })).status).toBe(400)
+    // Kept across a restart, and written in the activity log.
+    expect(new Accounts({ dir }).appName()).toBe('Acme Notes')
+    const log = (await call(a, 'GET', '/api/admin/audit', undefined, { cookie })).body.entries as { action: string; text: string }[]
+    expect(log.find((e) => e.action === 'settings.change')?.text).toMatch(/renamed the app from .* to “Acme Notes”/)
+    // Nobody else can change it, or even look.
+    const made = await call(a, 'POST', '/api/admin/users', { email: 'sam@x.org', name: 'Sam' }, { cookie })
+    const sam = cookieOf(await call(a, 'POST', '/api/auth/reset', { token: String(made.body.link).split('#reset=')[1], password: 'sams long password' }))
+    expect((await call(a, 'PUT', '/api/admin/settings', { appName: 'Mine' }, { cookie: sam })).status).toBe(403)
+    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie: sam })).status).toBe(403)
+    // Empty goes back to the server's own default (BRAINCRAFT_APP_NAME, when set).
+    const b = new Accounts({ dir, appName: 'Team Wiki' })
+    expect(b.appName()).toBe('Acme Notes')
+    await call(b, 'PUT', '/api/admin/settings', { appName: '' }, { cookie })
+    expect(b.appName()).toBe('Team Wiki')
+  })
+
   it('let people find others only by exact email without “See everyone”', async () => {
     const { a, cookie } = await admin()
     const link = String((await call(a, 'POST', '/api/admin/users', { email: 'sam@x.org', name: 'Sam' }, { cookie })).body.link)

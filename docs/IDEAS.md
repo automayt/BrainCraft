@@ -127,7 +127,9 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [x] **API tokens** for scripts.
 - [ ] The MCP server signing in with an API token (the HTTP API already takes
   them).
-- [ ] "People and groups…" in the command palette for admins.
+- [ ] "Admin…" in the command palette for admins.
+- [ ] Branding beyond the name: an icon for the tab and the top of the app, and
+  an accent colour.
 - [ ] Clear this browser's copies of server boards when signing out, as an
   option for shared computers.
 - [x] **An activity log** of admins' changes, sign-ins, access changes, tokens
