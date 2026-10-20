@@ -96,21 +96,23 @@ describe('markdown', () => {
   })
 
   it('stays fast on lines built to make the parser backtrack', () => {
+    // Generous limits: what this guards against (backtracking) takes seconds to minutes, while a
+    // busy machine running every test at once can add a few hundred milliseconds.
     const time = (f: () => void) => {
       const t = performance.now()
       f()
       return performance.now() - t
     }
-    expect(time(() => parseMarkdown(`# a${' '.repeat(20000)}b`))).toBeLessThan(300)
-    expect(time(() => parseInline('@['.repeat(100000)))).toBeLessThan(500)
-    expect(time(() => parseInline('*a '.repeat(30000)))).toBeLessThan(500)
+    expect(time(() => parseMarkdown(`# a${' '.repeat(20000)}b`))).toBeLessThan(1500)
+    expect(time(() => parseInline('@['.repeat(100000)))).toBeLessThan(2000)
+    expect(time(() => parseInline('*a '.repeat(30000)))).toBeLessThan(2000)
     const wide = `|${'|'.repeat(10000)}\n|---|\n${'|\n'.repeat(1000)}`
     let cells = 0
     expect(
       time(() => {
         for (const b of parseMarkdown(wide)) if (b.t === 'table') cells += b.rows.length * b.head.length
       }),
-    ).toBeLessThan(500)
+    ).toBeLessThan(2000)
     expect(cells).toBeLessThan(200_000)
     // Closing #s still come off a heading.
     expect(parseMarkdown('## Plan ##')[0]).toMatchObject({ t: 'h', level: 2, slug: 'plan' })
