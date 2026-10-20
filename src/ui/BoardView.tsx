@@ -15,6 +15,7 @@ import { type Board, type Connector, type Id, type Item, type Status, TEXT_ON_FI
 import { LinkCardView } from './LinkCardView'
 import { WheelFace } from './WheelFace'
 import { CodeBlockView } from './CodeBlockView'
+import { Rough } from './roughShapes'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -25,7 +26,7 @@ export function darken(hex: string, k = 0.72): string {
 function Text({ item, className, color }: { item: Item; className: string; color?: string }) {
   return (
     <foreignObject x={item.x} y={item.y} width={Math.max(item.w, 1)} height={Math.max(item.h, 1)}>
-      <div className={`item-text ${className}`} style={{ fontSize: item.fontSize, color }}>
+      <div className={`item-text ${className}${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color }}>
         {item.text}
       </div>
     </foreignObject>
@@ -59,10 +60,14 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
       const t = B.frameTitleRect(item)
       return (
         <g>
-          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} className="frame-rect" style={{ fill: frameFill(item.color) }} />
+          {item.sketch ? (
+            <Rough geom={{ kind: 'rect', x: item.x, y: item.y, w: item.w, h: item.h }} style={{ stroke: 'var(--frame-stroke)', fill: frameFill(item.color), seed: item.id, strokeWidth: 1.6 }} className="frame-rect" />
+          ) : (
+            <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} className="frame-rect" style={{ fill: frameFill(item.color) }} />
+          )}
           {!editing && (
             <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
-              <div className="frame-title" style={{ fontSize: item.fontSize }}>
+              <div className={`frame-title${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize }}>
                 {item.text || 'Untitled frame'}
               </div>
             </foreignObject>
@@ -103,7 +108,11 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
     case 'rect':
       return (
         <g>
-          <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
+          {item.sketch ? (
+            <Rough geom={{ kind: 'rect', x: item.x, y: item.y, w: item.w, h: item.h }} style={{ stroke: darken(item.color), fill: item.color, hatch: darken(item.color, 0.85), seed: item.id }} className="shape" />
+          ) : (
+            <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={6} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
+          )}
           {text && <Text item={item} className="centered" color={TEXT_ON_FILL} />}
         </g>
       )
@@ -111,7 +120,11 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
       const c = center(item)
       return (
         <g>
-          <ellipse cx={c.x} cy={c.y} rx={item.w / 2} ry={item.h / 2} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
+          {item.sketch ? (
+            <Rough geom={{ kind: 'ellipse', x: item.x, y: item.y, w: item.w, h: item.h }} style={{ stroke: darken(item.color), fill: item.color, hatch: darken(item.color, 0.85), seed: item.id }} className="shape" />
+          ) : (
+            <ellipse cx={c.x} cy={c.y} rx={item.w / 2} ry={item.h / 2} fill={item.color} stroke={darken(item.color)} strokeWidth={2} className="shape" />
+          )}
           {text && <Text item={item} className="centered ellipse" color={TEXT_ON_FILL} />}
         </g>
       )
@@ -193,7 +206,7 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
       {!editing && item.wheel && <WheelFace item={item} box={body} />}
       {!editing && !item.wheel && (
         <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
-          <div className="item-text comment-body" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
+          <div className={`item-text comment-body${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
             {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : item.brainstorm ? 'What are we brainstorming?' : 'Write a comment…'}</span>}
           </div>
         </foreignObject>
@@ -213,11 +226,20 @@ function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
   const t = flowTextRect(item)
   return (
     <g>
-      <path d={flowOutline(item)} fill={item.color} stroke={stroke} strokeWidth={2} strokeLinejoin="round" className="shape" />
-      {detail && <path d={detail} fill="none" stroke={stroke} strokeWidth={2} />}
+      {item.sketch ? (
+        <>
+          <Rough geom={{ kind: 'path', d: flowOutline(item) }} style={{ stroke, fill: item.color, hatch: darken(item.color, 0.85), seed: item.id }} className="shape" />
+          {detail && <Rough geom={{ kind: 'path', d: detail, closed: false }} style={{ stroke, seed: item.id + 1 }} />}
+        </>
+      ) : (
+        <>
+          <path d={flowOutline(item)} fill={item.color} stroke={stroke} strokeWidth={2} strokeLinejoin="round" className="shape" />
+          {detail && <path d={detail} fill="none" stroke={stroke} strokeWidth={2} />}
+        </>
+      )}
       {!editing && item.text && (
         <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
-          <div className="item-text centered flow" style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
+          <div className={`item-text centered flow${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
             {item.text}
           </div>
         </foreignObject>
@@ -228,7 +250,13 @@ function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
 
 function MindNode({ item, depth, editing }: { item: Item; depth: number; editing: boolean }) {
   const s = nodeStyle(depth)
-  const shape =
+  const shape = item.sketch && depth <= 1 ? (
+    <Rough
+      geom={{ kind: 'rect', x: item.x, y: item.y, w: item.w, h: item.h }}
+      style={depth === 0 ? { stroke: mindRootFill(item.color), fill: mindRootFill(item.color), seed: item.id } : { stroke: item.color, fill: 'var(--node-fill)', seed: item.id, strokeWidth: 2.5 }}
+      className="shape"
+    />
+  ) :
     depth === 0 ? (
       <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={14} className="shape" style={{ fill: mindRootFill(item.color) }} />
     ) : depth === 1 ? (
@@ -242,7 +270,7 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
       {!editing && (
         <foreignObject x={item.x} y={item.y} width={item.w} height={item.h}>
           <div
-            className={`mind-text${item.text ? '' : ' placeholder'}`}
+            className={`mind-text${item.text ? '' : ' placeholder'}${item.sketch ? ' hand' : ''}`}
             style={{
               fontSize: s.fontSize,
               fontWeight: s.weight,
@@ -265,7 +293,9 @@ const MindEdge = memo(function MindEdge({ n, p, depth }: { n: Item; p: Item; dep
   const x1 = right ? n.x : n.x + n.w
   const y1 = n.y + n.h / 2
   const mx = (x0 + x1) / 2
-  return <path d={`M${x0} ${y0}C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`} stroke={n.color} strokeWidth={depth === 1 ? 3.5 : 2.2} />
+  const d = `M${x0} ${y0}C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`
+  if (n.sketch) return <Rough geom={{ kind: 'path', d, closed: false }} style={{ stroke: n.color, seed: n.id, strokeWidth: depth === 1 ? 3 : 2 }} />
+  return <path d={d} stroke={n.color} strokeWidth={depth === 1 ? 3.5 : 2.2} />
 })
 
 /** Curved branches from each visible mind node to its parent. */
@@ -343,17 +373,23 @@ export const ConnectorView = memo(function ConnectorView({
   const color = selected ? 'var(--accent)' : ink(c.color)
   const arrows = c.arrows ?? 'end'
   const head = 12
+  // A line to or from something drawn by hand is drawn by hand too.
+  const hand = !!(from.sketch || to.sketch)
   return (
     <g>
-      <path
-        d={r.d}
-        fill="none"
-        className="connector-line"
-        style={{ stroke: color }}
-        strokeWidth={selected ? 3 : 2}
-        strokeLinejoin="round"
-        strokeDasharray={c.dashed ? '7 5' : undefined}
-      />
+      {hand ? (
+        <Rough geom={{ kind: 'path', d: r.d, closed: false }} style={{ stroke: color, seed: c.id, strokeWidth: selected ? 2.6 : 1.8, dashed: c.dashed }} className="connector-line" />
+      ) : (
+        <path
+          d={r.d}
+          fill="none"
+          className="connector-line"
+          style={{ stroke: color }}
+          strokeWidth={selected ? 3 : 2}
+          strokeLinejoin="round"
+          strokeDasharray={c.dashed ? '7 5' : undefined}
+        />
+      )}
       {arrows !== 'none' && <Arrowhead tip={r.end} dir={r.endDir} size={head} color={color} />}
       {arrows === 'both' && <Arrowhead tip={r.start} dir={{ x: -r.startDir.x, y: -r.startDir.y }} size={head} color={color} />}
       {c.label && !editing && (

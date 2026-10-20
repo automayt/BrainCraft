@@ -1,5 +1,6 @@
 import * as B from '../model/board'
 import { isDrawing } from '../model/excalidraw'
+import { canSketch } from '../model/sketch'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
@@ -295,6 +296,16 @@ export function SelectionToolbar() {
       {items.length === 1 && isDrawing(items[0]) && (
         <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
           {editor.readOnly ? 'Open drawing' : 'Edit drawing'}
+        </button>
+      )}
+      {items.some((i) => canSketch(i.kind)) && (
+        <button
+          className={editor.selectionSketched ? 'on' : ''}
+          aria-pressed={editor.selectionSketched}
+          title={editor.selectionSketched ? 'Draw with clean lines again' : 'Draw by hand: wobbly outlines and handwriting, like a sketch (a flowchart goes all at once)'}
+          onClick={() => editor.setSketch(!editor.selectionSketched)}
+        >
+          ✎ Hand-drawn
         </button>
       )}
       {hasSketch(editor) && !items.some(isDrawing) && (

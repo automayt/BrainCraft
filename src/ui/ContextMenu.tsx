@@ -5,6 +5,8 @@ import { copyImage } from './ExportImage'
 import { download } from './imageExport'
 import { excalidrawFile, isDrawing, sceneText } from '../model/excalidraw'
 import { itemCsv } from '../model/boardMarkdown'
+import { canSketch } from '../model/sketch'
+import { sketchIt } from './excalidraw/sketchIt'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
 import { useUi } from './uiContext'
@@ -98,8 +100,11 @@ export function ContextMenu() {
         entries.push({ label: single.collapsed ? 'Expand branch' : 'Collapse branch', keys: '/', run: () => editor.toggleCollapsed(single.id) })
       entries.push({ label: 'Tidy mind map', run: () => editor.tidyMindMap(single.id) })
     }
+    if (editor.selectedItems.some((i) => canSketch(i.kind)) && !editor.readOnly)
+      entries.push({ label: editor.selectionSketched ? 'Clean lines' : 'Hand-drawn look', run: () => editor.setSketch(!editor.selectionSketched) })
     if (single?.kind === 'flow') {
       const runs = runsOf(editor.board, single.id)?.runs.length ?? 0
+      if (!editor.readOnly) entries.push({ label: 'Sketch in Excalidraw', run: () => void sketchIt(editor, single.id) })
       entries.push(
         'sep',
         { label: 'Run flowchart', keys: 'Alt R', run: () => editor.startRun(single.id) },

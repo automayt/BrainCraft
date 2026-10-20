@@ -111,6 +111,16 @@ whatever you have selected.
 - **Paste from Excalidraw** (copy shapes there, paste here) or **drop an
   `.excalidraw` file** on the board to bring a drawing in; right-click a
   drawing → **Download as .excalidraw** to take it back out.
+- **Sketch a flowchart:** right-click any flowchart shape → **Sketch in
+  Excalidraw** draws the whole flowchart again, hand-drawn, as a drawing
+  beside it (through its Mermaid and Excalidraw's converter); the flowchart
+  stays the one to change and run.
+- **Hand-drawn look for BrainCraft's own objects:** **✎ Hand-drawn** on the
+  selection toolbar (or Ctrl+K → "Hand-drawn look for the whole board")
+  draws shapes, flowcharts, frames, notes and mind maps with wobbly pencil
+  outlines, hatched fills and handwriting, while they keep working as before:
+  Tab adds the next step (hand-drawn too), runs, Mermaid, exports. A
+  flowchart switches all at once, and lines follow what they join.
 - The words in a drawing are searchable, and drawings show in wiki pages like
   any other object. Excalidraw and its fonts load only when you open a
   drawing, from the app itself.

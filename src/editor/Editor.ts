@@ -6,6 +6,7 @@
 
 import * as B from '../model/board'
 import { isDrawing, sceneText } from '../model/excalidraw'
+import { canSketch, flowComponent, setSketch } from '../model/sketch'
 import type { ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
@@ -2210,6 +2211,28 @@ export class Editor {
   // ----- lock and groups --------------------------------------------------------------
 
   /** Locks (or unlocks) the selection: locked objects can't be clicked, moved or changed by accident. */
+  /**
+   * Draws objects by hand, or not: the selection (or `ids`), a flowchart shape bringing its whole
+   * flowchart. Lines follow the objects they join. One undo step.
+   */
+  setSketch(on: boolean, ids: Iterable<Id> = this.selection) {
+    if (this.readOnly) return
+    const all = new Set<Id>()
+    for (const id of ids) {
+      all.add(id)
+      for (const f of flowComponent(this.board, id)) all.add(f)
+    }
+    const before = this.board
+    this.edit((b) => setSketch(b, all, on))
+    if (this.board !== before) this.setStatus(on ? 'Hand-drawn' : 'Drawn with clean lines again')
+  }
+
+  /** Whether everything selected that can be drawn by hand is. */
+  get selectionSketched(): boolean {
+    const items = this.selectedItems.filter((i) => canSketch(i.kind))
+    return items.length > 0 && items.every((i) => i.sketch)
+  }
+
   setLocked(locked: boolean) {
     if (this.readOnly || !this.selection.size) return
     const ids = new Set(this.selection)

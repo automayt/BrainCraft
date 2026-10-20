@@ -143,7 +143,13 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [ ] An operation (and MCP tool) to make a drawing from Excalidraw elements,
   drawn by the app when the board next opens.
 - [ ] Two people in one drawing at once (today the later Done wins).
-- [ ] The hand-drawn look as a style for BrainCraft's own shapes and lines.
+- [x] **The hand-drawn look for BrainCraft's own objects:** rough.js outlines,
+  hatched fills and Excalifont handwriting, per object; flowcharts switch
+  whole and grow hand-drawn.
+- [x] **Sketch in Excalidraw:** a flowchart drawn again by Excalidraw, beside
+  it.
+- [ ] Hand-drawn arrowheads and table/Kanban/timeline frames.
+- [ ] A board-wide default, so new objects start hand-drawn.
 
 ## Guide and API docs (October 2026)
 

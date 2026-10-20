@@ -9686,3 +9686,9 @@ button.on,
   background: var(--surface-2);
   border-radius: 8px;
 }
+
+/* Hand-drawn objects write in handwriting (Excalifont; see ui/handFont.ts). */
+.hand {
+  font-family: 'Excalifont', 'Comic Shanns', 'Segoe Print', 'Bradley Hand', cursive;
+  letter-spacing: 0;
+}

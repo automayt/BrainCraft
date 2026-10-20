@@ -307,6 +307,8 @@ export interface Item extends Rect {
   notes?: Note[]
   /** Image data URL of an `image` item. */
   src?: string
+  /** Drawn by hand: a wobbly outline and handwriting (see sketch.ts). */
+  sketch?: true
   /** An `image` item drawn in Excalidraw: the scene, so it opens again for editing (`src` is its picture). */
   excalidraw?: ExcalidrawScene
   /** When a comment block was written. */

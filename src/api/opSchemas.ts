@@ -101,6 +101,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       ...size,
       locked: bool(),
       status: { enum: ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped', 'none'], description: '"none" clears it' },
+      sketch: bool('Drawn by hand: wobbly outlines and handwriting (shapes, flowchart shapes, notes, text, frames, mind maps)'),
     },
     required: ['id'],
   },

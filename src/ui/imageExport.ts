@@ -52,7 +52,7 @@ function styles(): Promise<string> {
         if (rule instanceof CSSFontFaceRule) {
           // Latin and Latin Extended cover most text; other scripts fall back to system fonts.
           const range = rule.style.getPropertyValue('unicode-range')
-          if (!/U\+0000-00FF|U\+0100-02BA|U\+0100-024F/i.test(range)) continue
+          if (!/U\+0000-00FF|U\+0100-02BA|U\+0100-024F/i.test(range) && !/Excalifont/.test(rule.cssText)) continue
           fonts.push(inlineFont(rule.cssText, sheet.href ?? location.href))
         } else parts.push(rule.cssText)
       }

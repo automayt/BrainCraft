@@ -64,7 +64,7 @@ export function addStep(b: Board, fromId: Id, dir: FlowDir, shape?: FlowShape): 
   const size = from.kind === 'flow' && from.shape === s ? { w: from.w, h: from.h } : { w: info.w, h: info.h }
   const r = placeNext(b, from, dir, size.w, size.h)
   let id: Id
-  ;[b, id] = addItem(b, flowItem(s, { x: r.x + r.w / 2, y: r.y + r.h / 2 }, size))
+  ;[b, id] = addItem(b, { ...flowItem(s, { x: r.x + r.w / 2, y: r.y + r.h / 2 }, size), ...(from.sketch ? { sketch: true as const } : {}) })
   ;[b] = connect(b, fromId, id, { style: 'elbow' })
   return [b, id]
 }
@@ -102,7 +102,8 @@ export function recommendShapes(b: Board, from: FlowShape | undefined): FlowShap
 /** Adds a `shape` step centred on `at`, linked from `fromId`. */
 export function addStepAt(b: Board, fromId: Id, shape: FlowShape, at: Vec): [Board, Id] {
   let id: Id
-  ;[b, id] = addItem(b, flowItem(shape, at))
+  // A hand-drawn flowchart grows hand-drawn.
+  ;[b, id] = addItem(b, { ...flowItem(shape, at), ...(getItem(b, fromId)?.sketch ? { sketch: true as const } : {}) })
   ;[b] = connect(b, fromId, id, { style: 'elbow' })
   return [b, id]
 }

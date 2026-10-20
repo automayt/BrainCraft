@@ -6,6 +6,8 @@ import { copyImage } from './ExportImage'
 import { type Editor, TOOLS } from '../editor/Editor'
 import { KIND_LABELS } from '../model/types'
 import { isWiki } from '../model/wiki'
+import { canSketch } from '../model/sketch'
+import { sketchIt } from './excalidraw/sketchIt'
 import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { THEMES } from './theme'
 import type { Ui } from './uiContext'
@@ -88,6 +90,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude vllm codex model chat ai summarise cluster', run: ui.toggleAssistant },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
+    { id: 'sketch-board', label: 'Hand-drawn look for the whole board', group: 'Board', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting whiteboard', run: () => editor.setSketch(true, editor.board.items.map((i) => i.id)) },
+    { id: 'clean-board', label: 'Clean lines for the whole board', group: 'Board', aliases: 'sketch hand drawn rough clean tidy neat style', run: () => editor.setSketch(false, editor.board.items.map((i) => i.id)) },
     { id: 'excalidraw', label: 'Add an Excalidraw drawing', group: 'Create', aliases: 'excalidraw draw drawing sketch hand-drawn diagram whiteboard doodle', run: () => editor.openDrawing() },
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
@@ -102,6 +106,10 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     const locked = editor.selectedItems.every((i) => i.locked)
     list.push({ id: 'lock', label: locked ? 'Unlock' : 'Lock (can’t be moved or changed by accident)', group: 'Selection', keys: 'Ctrl Shift L', aliases: 'lock pin freeze background fix unlock', run: () => editor.setLocked(!locked) })
   }
+  if (editor.selectedItems.some((i) => canSketch(i.kind)))
+    list.push({ id: 'sketch', label: editor.selectionSketched ? 'Clean lines for the selection' : 'Hand-drawn look for the selection', group: 'Selection', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting clean', run: () => editor.setSketch(!editor.selectionSketched) })
+  const flow = editor.selectedItems.find((i) => i.kind === 'flow')
+  if (flow && !editor.readOnly) list.push({ id: 'sketch-flowchart', label: 'Sketch this flowchart in Excalidraw', group: 'Selection', aliases: 'excalidraw sketch hand drawn flowchart drawing mermaid', run: () => void sketchIt(editor, flow.id) })
   if (editor.selection.size > 1) list.push({ id: 'group', label: 'Group', group: 'Selection', keys: 'Ctrl G', aliases: 'group combine together', run: () => editor.group() })
   if (editor.selectedItems.some((i) => i.group)) list.push({ id: 'ungroup', label: 'Ungroup', group: 'Selection', keys: 'Ctrl Shift G', aliases: 'ungroup separate split', run: () => editor.ungroup() })
   if (editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame'))
