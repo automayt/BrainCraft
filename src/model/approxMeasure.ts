@@ -2,8 +2,9 @@
 
 import type { Measure } from './mindmap'
 
-export const approxMeasure: Measure = (text, fontSize, weight, maxWidth) => {
-  const charW = fontSize * (weight >= 600 ? 0.58 : 0.54)
+export const approxMeasure: Measure = (text, fontSize, weight, maxWidth, hand = false) => {
+  // Handwriting runs a little wider than the interface's typeface.
+  const charW = fontSize * (weight >= 600 ? 0.58 : 0.54) * (hand ? 1.15 : 1)
   let lines = 0
   let widest = 0
   for (const para of text.split('\n')) {

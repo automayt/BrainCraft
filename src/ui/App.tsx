@@ -156,6 +156,18 @@ function App({ ws }: { ws: Workspace }) {
     editor.setRightInset(wide && (assistant || editor.notesOpen || !!editor.peek) ? 404 : 0)
   }, [editor, assistant, editor.notesOpen, editor.peek, editor.viewport.w])
 
+  // The handwriting loads when something hand-drawn first appears; then hand-drawn mind maps are
+  // measured again in it (until then they were measured in a stand-in).
+  useEffect(() => {
+    let asked = false
+    const stop = editor.subscribe(() => {
+      if (asked || !editor.board.items.some((i) => i.sketch && i.kind === 'mind')) return
+      asked = true
+      void document.fonts?.load('16px Excalifont').then(() => editor.relayout())
+    })
+    return () => void stop()
+  }, [editor])
+
   // Fonts change text measurements, so lay mind maps out again once Inter has loaded.
   useEffect(() => {
     editor.measureCache = clearMeasureCache

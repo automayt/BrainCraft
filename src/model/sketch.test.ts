@@ -73,3 +73,20 @@ describe('the hand-drawn look', () => {
     for (const [file] of HAND_FONT_FILES) expect(existsSync(`node_modules/@excalidraw/excalidraw/dist/prod/fonts/Excalifont/${file}`), file).toBe(true)
   })
 })
+
+describe('hand-drawn mind maps', () => {
+  it('are measured in the handwriting, so their words fit', async () => {
+    const { layoutAll } = await import('./mindmap')
+    const widths: boolean[] = []
+    const measure = (text: string, fontSize: number, _w: number, max: number, hand?: boolean) => {
+      widths.push(!!hand)
+      return { w: Math.min(max, text.length * fontSize * (hand ? 0.7 : 0.5)), h: fontSize * 1.3 }
+    }
+    const b = applyOps(emptyBoard(), [{ op: 'createMindMap', outline: 'Packing\n  Good coffee' }], { measure: fakeMeasure }).board
+    const plain = layoutAll(b, measure)
+    const leaf = (x: typeof b) => x.items.find((i) => i.text === 'Good coffee')!
+    const hand = layoutAll(setSketch(b, b.items.map((i) => i.id), true), measure)
+    expect(leaf(hand).w).toBeGreaterThan(leaf(plain).w)
+    expect(widths).toContain(true)
+  })
+})

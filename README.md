@@ -101,6 +101,10 @@ whatever you have selected.
 
 ### Excalidraw drawings
 
+![A hand-drawn flowchart, its Excalidraw sketch, and a hand-drawn mind map](docs/hand-drawn.jpg)
+
+(This board is in [examples/Weekend away.braincraft](examples/Weekend%20away.braincraft): drop it on BrainCraft to open it.)
+
 - **Draw in Excalidraw, right on the board:** right-click empty space →
   **Excalidraw drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens full
   screen with all its tools and its hand-drawn look; **Put on the board**
