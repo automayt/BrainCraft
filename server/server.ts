@@ -248,7 +248,11 @@ function serveStatic(url: URL, res: ServerResponse) {
   const path = normalize(join(STATIC, rel))
   // Never serve anything outside the app folder.
   if (!path.startsWith(STATIC + sep) && path !== STATIC) return send(res, 404, { error: 'Not found' })
-  const file = existsSync(path) && statSync(path).isFile() ? path : join(STATIC, 'index.html')
+  const found = existsSync(path) && statSync(path).isFile()
+  // A piece of the app that isn't here (one an open tab knew before an update) is missing, not the
+  // app's page: answering with the page would make the tab try to run HTML as code.
+  if (!found && rel.startsWith('/assets/')) return send(res, 404, { error: 'Not found: the app was updated since this page was opened. Reload it.' })
+  const file = found ? path : join(STATIC, 'index.html')
   if (!existsSync(file)) return send(res, 404, { error: 'The app is not built here. Run npm run build.' })
   const hashed = /[-.][A-Za-z0-9_-]{8}\.(js|css|woff2?)$/.test(file)
   res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache' })

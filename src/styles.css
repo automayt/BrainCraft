@@ -10127,3 +10127,18 @@ button.on,
 .brand-preview-word {
   font-size: 15px;
 }
+
+.modal.part-error {
+  width: min(440px, 92vw);
+  padding: 20px 22px;
+}
+
+.part-error h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.part-error p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}

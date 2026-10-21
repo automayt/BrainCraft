@@ -5,7 +5,7 @@
  */
 
 import * as B from '../model/board'
-import { isDrawing, sceneText } from '../model/excalidraw'
+import { EXCALIDRAW_ZOOM, isDrawing, sceneText, sceneWidth } from '../model/excalidraw'
 import { canSketch, flowComponent, setSketch } from '../model/sketch'
 import type { BoardFile, ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
@@ -1862,11 +1862,30 @@ export class Editor {
     const item = id === undefined ? undefined : B.getItem(this.board, id)
     if (id !== undefined && !isDrawing(item)) return
     if (id === undefined && this.readOnly) return
-    this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}) }
+    const where = item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at
+    this.drawing = { id: id ?? null, at: where, ...(scene ? { scene } : {}) }
+    this.cameraForDrawing(item, where)
     // Its saves make an undo step of their own.
     this.lastDrawingSave = null
     this.selection.clear()
     this.emit()
+  }
+
+  /**
+   * Room to draw: a new drawing opens at 100% (or closer), a small one grows to fill some of the
+   * screen, and the zoom stays where Excalidraw can follow it (it draws with the board's camera, and
+   * only zooms between 10% and 3000%). Centred on the drawing when the zoom changes.
+   */
+  private cameraForDrawing(item: Item | undefined, at: Vec) {
+    const view = this.openView
+    // Scene units per board unit, as the drawing's picture has them (its margin is 20 a side).
+    const s = item?.excalidraw ? item.w / Math.max(1, sceneWidth(item.excalidraw) + 40) : 1
+    let zoom = this.camera.zoom
+    if (!item) zoom = Math.max(zoom, 1)
+    else if (item.w * zoom < 360 || item.h * zoom < 240) zoom = Math.min((view.w * 0.6) / item.w, (view.h * 0.6) / item.h, Math.max(zoom, 2))
+    zoom = Math.min(Math.max(zoom, EXCALIDRAW_ZOOM.min / s), EXCALIDRAW_ZOOM.max / s)
+    if (Math.abs(zoom - this.camera.zoom) < 1e-9) return
+    this.camera = centerOn({ ...this.camera, zoom }, at, view)
   }
 
   closeDrawing() {

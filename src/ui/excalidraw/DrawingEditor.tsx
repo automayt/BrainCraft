@@ -19,7 +19,7 @@ import { placement } from './placement'
 
 /** A pause this long after drawing saves it. */
 const SAVE_AFTER_MS = 700
-/** The sheet a new, empty drawing starts on (board units). */
+/** The sheet a new, empty drawing starts on, in screen pixels (so it is easy to see at any zoom). */
 const NEW_SHEET = { w: 480, h: 320 }
 
 type Elements = Parameters<typeof getCommonBounds>[0]
@@ -47,7 +47,7 @@ export default function DrawingEditor() {
         place = placement(1, open.at.x - (x0 + x1) / 2, open.at.y - (y0 + y1) / 2)
       }
     }
-    return { place, elements, files: scene.files ?? {}, version: getSceneVersion(elements) }
+    return { place, elements, files: scene.files ?? {}, version: getSceneVersion(elements), zoom: editor.camera.zoom }
     // Fixed while it's open: later changes on the board don't move or reset it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -169,8 +169,8 @@ export default function DrawingEditor() {
   const sheet = (() => {
     const [x0, y0, x1, y1] = bounds ?? (() => {
       const c = { x: (open.at.x - place.ox) / place.s, y: (open.at.y - place.oy) / place.s }
-      const w = NEW_SHEET.w / place.s
-      const h = NEW_SHEET.h / place.s
+      const w = NEW_SHEET.w / (place.s * start.zoom)
+      const h = NEW_SHEET.h / (place.s * start.zoom)
       return [c.x - w / 2 + PAD, c.y - h / 2 + PAD, c.x + w / 2 - PAD, c.y + h / 2 - PAD]
     })()
     const left = (x0 - PAD + view.scrollX) * view.zoom

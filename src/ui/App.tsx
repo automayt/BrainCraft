@@ -28,7 +28,7 @@ import { WikiView } from './wiki/WikiView'
 import { PagePeek } from './wiki/PagePeek'
 import { targetFromUrl } from '../store/deepLink'
 import { NotesPanel } from './NotesPanel'
-import { BoardErrorBoundary } from './ErrorBoundary'
+import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
 import { ExportDialog } from './ExportImage'
@@ -351,12 +351,17 @@ function App({ ws }: { ws: Workspace }) {
         else editor.pasteText(text)
       }
     }
+    // A piece of the app that loads on first use couldn't be fetched: the app was updated since this
+    // tab opened. Say so, rather than leaving whatever was asked for silently undone.
+    const onStale = () => editor.setStatus('A new version of the app is ready: reload the page to use this')
+    window.addEventListener('vite:preloadError', onStale)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     document.addEventListener('copy', onCopy)
     document.addEventListener('cut', onCopy)
     document.addEventListener('paste', onPaste)
     return () => {
+      window.removeEventListener('vite:preloadError', onStale)
       document.removeEventListener('fullscreenchange', onFullscreen)
       window.removeEventListener('pagehide', onHide)
       window.removeEventListener('hashchange', onHash)
@@ -411,9 +416,11 @@ function App({ ws }: { ws: Workspace }) {
             </>
           )}
           {assistant && !editor.presenting && (
-            <Suspense fallback={<aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
-              <LazyAiPanel onClose={() => setAssistant(false)} />
-            </Suspense>
+            <PartBoundary what="the assistant" onClose={() => setAssistant(false)}>
+              <Suspense fallback={<aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
+                <LazyAiPanel onClose={() => setAssistant(false)} />
+              </Suspense>
+            </PartBoundary>
           )}
           <ContextMenu />
           <Toast />
@@ -427,9 +434,11 @@ function App({ ws }: { ws: Workspace }) {
           )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}
           {editor.drawing && (
-            <Suspense fallback={<div className="drawing-editor loading no-canvas" aria-busy="true" aria-label="Opening Excalidraw" />}>
-              <DrawingEditor />
-            </Suspense>
+            <PartBoundary what="Excalidraw" onClose={() => editor.closeDrawing()}>
+              <Suspense fallback={<div className="drawing-editor loading no-canvas" aria-busy="true" aria-label="Opening Excalidraw" />}>
+                <DrawingEditor />
+              </Suspense>
+            </PartBoundary>
           )}
           {dialog === 'help' && <Help onClose={close} wiki={isWiki(editor.board)} onGuide={ui.openGuide} onCredits={ui.openCredits} />}
           {dialog === 'credits' && <CreditsDialog onClose={close} />}
