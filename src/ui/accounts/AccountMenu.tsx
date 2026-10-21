@@ -4,6 +4,7 @@ import { Dialog } from '../Boards'
 import { copyText } from '../copyText'
 import { timeAgo } from '../Boards'
 import { useWorkspace } from '../useWorkspace'
+import { useClickAway } from '../useClickAway'
 
 /** The signed-in person's button: who they are, the admin screen, password, API tokens, sign out. */
 export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
@@ -12,12 +13,8 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
   const [open, setOpen] = useState(false)
   const [dialog, setDialog] = useState<'password' | 'tokens' | 'mentions' | null>(null)
   const box = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const away = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [open])
+  // A press anywhere else closes it (the dialogs it opens are inside it, so they don't).
+  useClickAway(box, () => setOpen(false), undefined, open)
   if (!user) return null
   const unread = ws.unreadMentions
   const pick = (f: () => void) => () => {

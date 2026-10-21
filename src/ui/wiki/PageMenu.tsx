@@ -1,4 +1,5 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { useClickAway } from '../useClickAway'
 
 export interface MenuItem {
   label: string
@@ -18,10 +19,9 @@ export function PageMenu({ items, label }: { items: MenuItem[]; label: string })
   useEffect(() => {
     if (!open) return
     box.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
-    const away = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
   }, [open])
+  // A press anywhere else closes it.
+  useClickAway(box, () => setOpen(false), undefined, open)
 
   const close = () => {
     setOpen(false)

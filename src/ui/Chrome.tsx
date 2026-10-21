@@ -40,6 +40,7 @@ import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
 import { LiveBar } from './Live'
 import { appName } from '../store/brand'
+import { useClickAway } from './useClickAway'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -125,6 +126,8 @@ function BoardIcon() {
 function Popover({ onClose, children, className = '' }: { onClose: () => void; children: ReactNode; className?: string }) {
   useEscape(onClose)
   const ref = useRef<HTMLDivElement>(null)
+  // A press anywhere else closes it; its own button (just before it) toggles it.
+  useClickAway(ref, onClose, () => ref.current?.previousElementSibling)
   // Opened from the keyboard (its button has focus; a click keeps focus on the board): the
   // first item takes focus, and the arrows move through the rest.
   useEffect(() => {
@@ -136,12 +139,9 @@ function Popover({ onClose, children, className = '' }: { onClose: () => void; c
     }
   }, [])
   return (
-    <>
-      <div className="scrim" onPointerDown={onClose} />
-      <div ref={ref} className={`popover ${className}`} role="menu" onKeyDown={moveFocus}>
-        {children}
-      </div>
-    </>
+    <div ref={ref} className={`popover ${className}`} role="menu" onKeyDown={moveFocus}>
+      {children}
+    </div>
   )
 }
 
@@ -440,14 +440,10 @@ function MoreFlyout({ onClose, onImage }: { onClose: () => void; onImage: () => 
   useEscape(onClose)
   useEffect(() => {
     focusFirst(ref.current)
-    // A press anywhere else closes it (the rail's own button toggles it).
-    const away = (e: PointerEvent) => {
-      const t = e.target as Element | null
-      if (!ref.current?.contains(t) && !t?.closest?.('[aria-haspopup]')) onClose()
-    }
-    document.addEventListener('pointerdown', away)
-    return () => document.removeEventListener('pointerdown', away)
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // A press anywhere else closes it (the rail's own button toggles it).
+  useClickAway(ref, onClose, () => document.querySelector('.tool-rail [aria-haspopup][aria-expanded="true"]'))
   const pick = (run: () => void) => () => {
     onClose()
     run()

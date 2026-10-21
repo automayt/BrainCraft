@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { useEscape } from './useEscape'
+import { useClickAway } from './useClickAway'
 
 const ITEMS = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)'
 
@@ -39,6 +40,8 @@ export function useButtonMenu() {
     })
   }, [])
   useEscape(close, !!at)
+  // A press anywhere else closes it; its own button toggles it.
+  useClickAway(menu, close, () => trigger.current, !!at)
   useEffect(() => {
     if (at?.keyboard) focusFirst(menu.current)
   }, [at])
