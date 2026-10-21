@@ -91,7 +91,7 @@ The board fills the window and the controls float above it:
 - **Drag a blue arrow to empty space** and BrainCraft suggests the next
   shape, with a description of each. The order follows what this board uses
   most after that kind of shape, then the usual conventions. Press **1–7** to
-  pick.
+  pick. **Shift-click** a blue arrow for the same choice, placed that way.
 - **Mermaid:** paste a Mermaid flowchart (or use **Import / Export**) to build
   it, laid out automatically. Export any flowchart back to Mermaid for docs
   and wikis that draw Mermaid diagrams.
@@ -546,7 +546,9 @@ shares live exactly like a board.
   sideways; zoom to fit, the minimap and pinching on touch screens work too.
 - Sticky notes, text, rectangles, ellipses, frames and a freehand pen.
 - **Connectors**: drag the blue dot on a selected item onto another item.
-  Drop it on empty space to create a new linked note.
+  Drop it on empty space and choose what to make there: another of the same
+  (Enter), a rectangle, ellipse, sticky note or text, or a decision diamond
+  or start/end oval, linked from it.
 - Frames carry their contents when you move them.
 - **Magnets:** drag a shape near another and it snaps one step away and
   connects. Sticky notes snap into neat rows and columns without lines. Hold

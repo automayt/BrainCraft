@@ -75,12 +75,11 @@ export default function DrawingEditor() {
       role="dialog"
       aria-modal="true"
       aria-label={item ? 'Edit drawing in Excalidraw' : 'New Excalidraw drawing'}
-      // Keys and clipboard belong to Excalidraw while it's open, not to the board behind it.
+      // The board's own keys stand aside while a drawing is open (see App), so Excalidraw hears
+      // every key, wherever the focus is; Ctrl Enter is Done.
       onKeyDown={(e) => {
-        e.stopPropagation()
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void done()
       }}
-      onKeyUp={(e) => e.stopPropagation()}
     >
       <header className="drawing-editor-bar">
         <strong>{item ? 'Drawing' : 'New drawing'}</strong>
@@ -103,6 +102,9 @@ export default function DrawingEditor() {
           initialData={initial}
           theme={dark ? 'dark' : 'light'}
           viewModeEnabled={readOnly}
+          // Its hotkeys (1–0 and the letters for tools) work at once, without clicking in first.
+          autoFocus
+          handleKeyboardGlobally
           UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, toggleTheme: false, changeViewBackgroundColor: false } }}
         />
       </div>

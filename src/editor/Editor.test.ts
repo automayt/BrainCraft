@@ -262,6 +262,51 @@ describe('flowchart editing', () => {
     expect(e.board.connectors).toHaveLength(2)
   })
 
+  it('Shift on a blue arrow asks which shape comes next', () => {
+    const e = editor()
+    place(e)
+    e.finishEditing()
+    const first = e.board.items[0]
+    e.select([first.id])
+    e.pointerDown({ x: 300, y: 200 }, 0, { shift: true }, { kind: 'flowAdd', dir: 'down' })
+    e.pointerUp({ x: 301, y: 200 })
+    // Nothing added yet: the picker is open below it.
+    expect(e.board.items).toHaveLength(1)
+    expect(e.shapePicker?.options[0]).toBe('process')
+    expect(e.shapePicker!.at.y).toBeGreaterThan(first.y + first.h)
+    e.keyDown('3', {})
+    expect(e.board.items.at(-1)).toMatchObject({ kind: 'flow', shape: 'decision' })
+    expect(e.board.connectors).toHaveLength(1)
+  })
+
+  it('a line dropped from a plain shape asks what comes next, another like it first', () => {
+    const e = editor()
+    e.load(applyOps(emptyBoard(), [{ op: 'createShape', shape: 'ellipse', text: 'Start', at: { x: 100, y: 100 }, w: 160, h: 80, color: 'blue' }], { measure: fakeMeasure }).board)
+    const oval = e.board.items[0]
+    // Drags a line from the oval's handle to a spot on the board (in board units, wherever the view is).
+    const dragTo = (world: { x: number; y: number }) => {
+      e.finishEditing()
+      e.select([oval.id])
+      e.pointerDown(toScreen(e.camera, { x: 278, y: 140 }), 0, {}, { kind: 'connect' })
+      e.pointerMove(toScreen(e.camera, world))
+      e.pointerUp(toScreen(e.camera, world))
+    }
+    dragTo({ x: 600, y: 140 })
+    expect(e.shapePicker?.options).toEqual(['ellipse', 'rect', 'sticky', 'text', 'decision', 'terminator'])
+    // Enter keeps it the same: another oval like this one.
+    e.keyDown('Enter', {})
+    expect(e.board.items.at(-1)).toMatchObject({ kind: 'ellipse', w: 160, h: 80, color: oval.color })
+    // Or pick by number: 2 is a rectangle (in the oval's colour), 5 a decision diamond.
+    dragTo({ x: 600, y: 500 })
+    e.keyDown('2', {})
+    expect(e.board.items.at(-1)).toMatchObject({ kind: 'rect', color: oval.color })
+    dragTo({ x: 150, y: 600 })
+    e.keyDown('5', {})
+    expect(e.board.items.at(-1)).toMatchObject({ kind: 'flow', shape: 'decision' })
+    // Every one is linked from the oval.
+    expect(e.board.connectors.filter((c) => c.from === oval.id)).toHaveLength(3)
+  })
+
   it('imports and exports Mermaid', () => {
     const e = editor()
     e.pasteText('flowchart LR\n  a([Start]) --> b{OK?}\n  b -->|yes| c[Done]')

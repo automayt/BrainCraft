@@ -167,7 +167,7 @@ export type Drag =
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
   | { type: 'create'; kind: Kind; start: Vec; current: Vec }
   | { type: 'draw'; points: Vec[] }
-  | { type: 'connect'; from: Id; current: Vec; origin: Vec; quick?: F.FlowDir }
+  | { type: 'connect'; from: Id; current: Vec; origin: Vec; quick?: F.FlowDir; choose?: boolean }
 
 /** Alignment lines a moving selection can snap to, in world units. */
 interface Snap {
@@ -261,6 +261,13 @@ const prefersReducedMotion = () => !!globalThis.matchMedia?.('(prefers-reduced-m
 const UNLOCK_HINT = () =>
   globalThis.matchMedia?.('(pointer: coarse)').matches ? 'Locked — press and hold it to unlock' : 'Locked — right-click or Alt-click it to unlock'
 
+/** Plain things the next-shape picker offers besides flowchart symbols. */
+export const PLAIN_NEXT = ['rect', 'ellipse', 'sticky', 'text'] as const
+export type PlainNext = (typeof PLAIN_NEXT)[number]
+/** What the next-shape picker offers: a flowchart symbol, or a plain shape, note or text. */
+export type NextShape = FlowShape | PlainNext
+export const isPlainNext = (k: string | undefined): k is PlainNext => (PLAIN_NEXT as readonly string[]).includes(k ?? '')
+
 export class Editor {
   board: Board
   camera: Camera = defaultCamera()
@@ -300,7 +307,7 @@ export class Editor {
   /** The signed-in account's id ('' without one), so mentions of it are known to be of me. */
   userId = ''
   /** A flowchart line dropped on empty space, waiting for the user to pick the next shape. */
-  shapePicker: { from: Id; at: Vec; options: FlowShape[] } | null = null
+  shapePicker: { from: Id; at: Vec; options: NextShape[] } | null = null
   spaceDown = false
   /** Last pointer position in world space, for pasting. */
   pointer: Vec | null = null
@@ -1826,14 +1833,38 @@ export class Editor {
   }
 
   /** Creates the shape chosen in the shape picker, linked from where the line started. */
-  pickShape(shape: FlowShape) {
+  pickShape(shape: NextShape) {
     const p = this.shapePicker
     if (!p) return
     this.shapePicker = null
     const before = this.board
-    const [b, id] = F.addStepAt(this.board, p.from, shape, p.at)
-    this.apply(b)
+    if (!isPlainNext(shape)) {
+      const [b, id] = F.addStepAt(this.board, p.from, shape, p.at)
+      this.apply(b)
+      this.startEditing(id, { before, created: true })
+      return
+    }
+    // Another of the same keeps its size and colour; a different kind starts as that kind does.
+    const source = B.getItem(this.board, p.from)
+    const same = source?.kind === shape
+    const size = same ? { w: source!.w, h: source!.h } : defaultSize(shape)
+    const shapes = (k?: Kind) => k === 'rect' || k === 'ellipse'
+    const color = same || (shapes(source?.kind) && shapes(shape)) ? { color: source!.color } : {}
+    const item = B.newItem(shape, rectFromCenter(p.at, size.w, size.h), { ...color, ...(same ? { fontSize: source!.fontSize } : {}), ...(source?.sketch ? { sketch: true as const } : {}) })
+    const [b, id] = B.addItem(this.board, item)
+    this.apply(B.connect(b, p.from, id)[0])
     this.startEditing(id, { before, created: true })
+  }
+
+  /** The next-shape picker where a step would go from `id` towards `dir` (Shift on a blue arrow). */
+  chooseFlowStep(id: Id, dir: F.FlowDir) {
+    const from = B.getItem(this.board, id)
+    if (!from || this.readOnly) return
+    const options = F.recommendShapes(this.board, from.shape)
+    const info = flowShapeInfo(options[0])
+    const r = F.placeNext(this.board, from, dir, info.w, info.h)
+    this.shapePicker = { from: id, at: { x: r.x + r.w / 2, y: r.y + r.h / 2 }, options }
+    this.emit()
   }
 
   cancelShapePicker() {
@@ -2536,7 +2567,8 @@ export class Editor {
           const item = this.single
           if (item) {
             const quick = handle.kind === 'flowAdd' ? handle.dir : undefined
-            this.drag = { type: 'connect', from: item.id, current: world, origin: screen, quick }
+            // Shift on a blue arrow: choose the next shape, rather than the usual one.
+            this.drag = { type: 'connect', from: item.id, current: world, origin: screen, quick, ...(quick && mods.shift ? { choose: true } : {}) }
           }
           this.emit()
           return
@@ -2767,9 +2799,11 @@ export class Editor {
         break
       }
       case 'connect':
-        // A click (not a drag) on a flowchart arrow adds the next step that way.
-        if (d.quick && dist(d.origin, screen) < 5) this.addFlowStep(d.from, d.quick)
-        else this.finishConnect(d.from, world)
+        // A click (not a drag) on a flowchart arrow adds the next step that way (with Shift, asks which).
+        if (d.quick && dist(d.origin, screen) < 5) {
+          if (d.choose) this.chooseFlowStep(d.from, d.quick)
+          else this.addFlowStep(d.from, d.quick)
+        } else this.finishConnect(d.from, world)
         break
     }
     this.emit()
@@ -2896,6 +2930,12 @@ export class Editor {
       this.shapePicker = { from, at: world, options: F.recommendShapes(this.board, source.shape) }
       return
     }
+    // A shape, note or text: which one next (another like it first, so 1 or Enter keeps it the same).
+    if (isPlainNext(source.kind)) {
+      this.shapePicker = { from, at: world, options: [source.kind, ...PLAIN_NEXT.filter((k) => k !== source.kind), 'decision', 'terminator'] }
+      this.emit()
+      return
+    }
     const item = B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize })
     const [b, id] = B.addItem(this.board, item)
     this.apply(B.connect(b, from, id)[0])
@@ -2955,9 +2995,13 @@ export class Editor {
       return true
     }
     if (this.shapePicker) {
-      // The same numbers as the shape panel, whatever order the suggestions come in.
-      const shape = /^[1-9]$/.test(k) ? FLOW_SHAPES[Number(k) - 1]?.shape : undefined
-      if (shape) this.pickShape(shape)
+      // Flowchart symbols: the same numbers as the shape panel, whatever order the suggestions come
+      // in. With plain shapes in the list too, the numbers are the list's.
+      const opts = this.shapePicker.options
+      const n = /^[1-9]$/.test(k) ? Number(k) : 0
+      const shape = !n ? undefined : opts.some(isPlainNext) ? opts[n - 1] : FLOW_SHAPES[n - 1]?.shape
+      if (k === 'Enter') this.pickShape(opts[0])
+      else if (shape) this.pickShape(shape)
       else if (k === 'Escape') this.cancelShapePicker()
       else return false
       return true
