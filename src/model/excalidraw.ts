@@ -43,20 +43,28 @@ export function cleanExcalidraw(raw: unknown): ExcalidrawScene | null {
   return JSON.stringify(scene).length <= MAX_SCENE_CHARS ? scene : null
 }
 
-/** How far Excalidraw zooms out and in. */
-export const EXCALIDRAW_ZOOM = { min: 0.1, max: 30 }
+const unbacked = new Map<string, string>()
 
-/** The width a drawing's elements span (scene units, ignoring rotation), 0 for an empty one. */
-export function sceneWidth(scene: ExcalidrawScene): number {
-  let lo = Infinity
-  let hi = -Infinity
-  for (const e of scene.elements as { x?: unknown; width?: unknown }[]) {
-    if (typeof e.x !== 'number' || !Number.isFinite(e.x)) continue
-    const w = typeof e.width === 'number' && Number.isFinite(e.width) ? e.width : 0
-    lo = Math.min(lo, e.x, e.x + w)
-    hi = Math.max(hi, e.x, e.x + w)
+/**
+ * A drawing's picture without the white sheet drawings used to be saved on (newer ones have none),
+ * so every drawing sits on the board like everything else.
+ */
+export function withoutBackground(src: string): string {
+  if (!src.startsWith('data:image/svg+xml')) return src
+  let hit = unbacked.get(src)
+  if (hit !== undefined) return hit
+  const comma = src.indexOf(',')
+  try {
+    const svg = decodeURIComponent(src.slice(comma + 1))
+    const bare = svg.replace(/<rect x="0" y="0" width="[\d.]+" height="[\d.]+" fill="#ffffff"\s*\/?>(?:<\/rect>)?/, '')
+    hit = bare === svg ? src : `${src.slice(0, comma + 1)}${encodeURIComponent(bare)}`
+  } catch {
+    hit = src
   }
-  return hi > lo ? hi - lo : 0
+  // A few hundred drawings' worth, not every picture ever seen.
+  if (unbacked.size > 300) unbacked.clear()
+  unbacked.set(src, hit)
+  return hit
 }
 
 /** Whether an item is an Excalidraw drawing. */

@@ -182,7 +182,7 @@ export function Moments() {
       {/* Clear of a side panel (comments, a page beside the board). */}
       <div className="top-stack" style={editor.rightInset ? { right: 76 + editor.rightInset } : undefined}>
         <LiveViewerBanner />
-        {!editor.catchUp && !editor.drawing && <WhatsNew />}
+        {!editor.catchUp && <WhatsNew />}
         <CatchUpBanner />
         <TimerBadge />
       </div>

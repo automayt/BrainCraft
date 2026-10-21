@@ -26,6 +26,31 @@ export function setSketch(b: Board, ids: Iterable<Id>, on: boolean): Board {
   return changed ? { ...b, items } : b
 }
 
+/** Makes the whole board hand-drawn (or not): the setting for new objects, and every object now. */
+export function setBoardSketch(b: Board, on: boolean): Board {
+  const next = setSketch(b, b.items.map((i) => i.id), on)
+  if (!!next.sketch === on) return next
+  const out: Board = { ...next }
+  if (on) out.sketch = true
+  else delete out.sketch
+  return out
+}
+
+/**
+ * On a hand-drawn board, objects made since `before` come out drawn by hand. New objects are the
+ * ones with ids handed out since then (an undone delete brings back an old id, and keeps its look).
+ */
+export function sketchNew(before: Board, after: Board): Board {
+  if (!after.sketch || after.nextId === before.nextId) return after
+  let changed = false
+  const items = after.items.map((i): Item => {
+    if (i.id < before.nextId || i.sketch !== undefined || !canSketch(i.kind)) return i
+    changed = true
+    return { ...i, sketch: true }
+  })
+  return changed ? { ...after, items } : after
+}
+
 /** Every flowchart shape joined to `id` by lines (its whole flowchart), or nothing when it isn't one. */
 export function flowComponent(b: Board, id: Id): Set<Id> {
   const start = getItem(b, id)

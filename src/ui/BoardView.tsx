@@ -16,6 +16,7 @@ import { LinkCardView } from './LinkCardView'
 import { WheelFace } from './WheelFace'
 import { CodeBlockView } from './CodeBlockView'
 import { Rough } from './roughShapes'
+import { withoutBackground } from '../model/excalidraw'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -149,6 +150,8 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
     case 'comment':
       return <CommentBlock item={item} editing={editing} />
     case 'image':
+      // An Excalidraw drawing has no background, and dark themes show it as Excalidraw's dark mode does.
+      if (item.excalidraw) return <image className="drawing-picture" href={withoutBackground(item.src ?? '')} x={item.x} y={item.y} width={item.w} height={item.h} preserveAspectRatio="none" />
       return <image href={item.src} x={item.x} y={item.y} width={item.w} height={item.h} preserveAspectRatio="none" />
     case 'table':
       return item.table ? <TableView item={item} live={live} editingTitle={editing} /> : null
@@ -347,10 +350,19 @@ export function CollapseToggles({
   )
 }
 
-function Arrowhead({ tip, dir, size, color }: { tip: Vec; dir: Vec; size: number; color: string }) {
+function Arrowhead({ tip, dir, size, color, hand }: { tip: Vec; dir: Vec; size: number; color: string; hand?: { seed: number; width: number } }) {
   const bx = tip.x - dir.x * size
   const by = tip.y - dir.y * size
   const w = size * 0.45
+  // Drawn by hand: an open V in pencil, the way a hand-drawn arrow ends.
+  if (hand) {
+    const b = size * 1.25
+    const ax = tip.x - dir.x * b
+    const ay = tip.y - dir.y * b
+    const v = b * 0.5
+    const d = `M${ax - dir.y * v} ${ay + dir.x * v}L${tip.x} ${tip.y}L${ax + dir.y * v} ${ay - dir.x * v}`
+    return <Rough geom={{ kind: 'path', d, closed: false }} style={{ stroke: color, seed: hand.seed, strokeWidth: hand.width }} />
+  }
   return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} style={{ fill: color }} />
 }
 
@@ -390,8 +402,8 @@ export const ConnectorView = memo(function ConnectorView({
           strokeDasharray={c.dashed ? '7 5' : undefined}
         />
       )}
-      {arrows !== 'none' && <Arrowhead tip={r.end} dir={r.endDir} size={head} color={color} />}
-      {arrows === 'both' && <Arrowhead tip={r.start} dir={{ x: -r.startDir.x, y: -r.startDir.y }} size={head} color={color} />}
+      {arrows !== 'none' && <Arrowhead tip={r.end} dir={r.endDir} size={head} color={color} hand={hand ? { seed: c.id, width: selected ? 2.6 : 1.8 } : undefined} />}
+      {arrows === 'both' && <Arrowhead tip={r.start} dir={{ x: -r.startDir.x, y: -r.startDir.y }} size={head} color={color} hand={hand ? { seed: c.id + 1, width: selected ? 2.6 : 1.8 } : undefined} />}
       {c.label && !editing && (
         <foreignObject x={r.mid.x - 120} y={r.mid.y - 20} width={240} height={40}>
           <div className="connector-label">

@@ -74,6 +74,7 @@ export function fromJson(json: string): Board {
     ...(snaps.length ? { snaps } : {}),
     ...(revs.length ? { revs } : {}),
     ...(files.length ? { files } : {}),
+    ...(raw.sketch === true ? { sketch: true as const } : {}),
   }
 }
 

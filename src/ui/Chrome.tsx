@@ -14,6 +14,7 @@ import {
   CodeToolIcon,
   CommentsIcon,
   DrawingIcon,
+  HandDrawnIcon,
   FitIcon,
   FlowShapeIcon,
   HelpIcon,
@@ -241,6 +242,13 @@ export function TopLeft() {
             {!ws.viewOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             {!isWiki(editor.board) && (
               <>
+                {!ws.viewOnly && (
+                  <>
+                    <hr />
+                    {/* Everything on the board, and everything added to it, drawn by hand. */}
+                    <MenuItem label="Hand-drawn board" checked={!!editor.board.sketch} onClick={run(() => editor.setBoardSketch(!editor.board.sketch))} />
+                  </>
+                )}
                 <hr />
                 {!ws.viewOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
                 <MenuItem label="Export: image, PDF or Markdown…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
@@ -409,6 +417,18 @@ export function ToolRail() {
             >
               <DrawingIcon />
               <Tip label="Excalidraw drawing" />
+            </button>
+          )}
+          {group.label === 'Draw' && !editor.readOnly && (
+            <button
+              className={`tool has-tip${editor.board.sketch ? ' active' : ''}`}
+              aria-label="Hand-drawn board"
+              aria-pressed={!!editor.board.sketch}
+              onMouseDown={keepFocus}
+              onClick={() => editor.setBoardSketch(!editor.board.sketch)}
+            >
+              <HandDrawnIcon />
+              <Tip label={editor.board.sketch ? 'Hand-drawn board (on): click for clean lines' : 'Hand-drawn board: everything drawn by hand'} />
             </button>
           )}
         </div>

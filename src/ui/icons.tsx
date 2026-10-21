@@ -165,6 +165,14 @@ export const DrawingIcon = () => (
   </Svg>
 )
 
+/** The hand-drawn look: a wobbly box drawn twice over, as a pencil does. */
+export const HandDrawnIcon = () => (
+  <Svg>
+    <path d="M5.2 6.3c4.4-.6 9.2-.4 13.6.2.5 3.8.3 7.6-.2 11.4-4.4.5-9 .6-13.4 0-.6-3.9-.5-7.8 0-11.6z" />
+    <path d="M6.1 5.4c-.3 4.4-.2 8.8.4 13.1M17.9 5.6c.4 4.3.3 8.6-.3 12.9" strokeOpacity="0.55" />
+  </Svg>
+)
+
 export const CodeToolIcon = () => (
   <Svg>
     <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />

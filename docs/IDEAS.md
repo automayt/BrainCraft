@@ -142,8 +142,11 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [x] **Excalidraw drawings** as objects on the board: kept as a picture plus
   its scene, reopened with a double-click, pasted from Excalidraw or dropped
   as `.excalidraw` files, downloaded back.
-- [x] **Drawn in place:** Excalidraw opens over the board with the board's own
-  camera, on a sheet that grows as you draw, saving as you go.
+- [x] **No white sheet:** drawings sit on the board without a background, in
+  the theme's colours (Excalidraw's dark mode on dark themes).
+- [x] Tried and dropped: Excalidraw open over the board, sharing its camera. It
+  never felt like the rest of the canvas (its own tools, handles and sheet);
+  the hand-drawn board does that natively instead.
 - [ ] An operation (and MCP tool) to make a drawing from Excalidraw elements,
   drawn by the app when the board next opens.
 - [ ] Two people in one drawing at once (today the later Done wins).
@@ -152,8 +155,12 @@ Ideas from the wiki review, roughly by value for a small group against effort:
   whole and grow hand-drawn.
 - [x] **Sketch in Excalidraw:** a flowchart drawn again by Excalidraw, beside
   it.
-- [ ] Hand-drawn arrowheads and table/Kanban/timeline frames.
-- [ ] A board-wide default, so new objects start hand-drawn.
+- [x] Hand-drawn arrowheads.
+- [x] **A hand-drawn board:** one switch draws everything by hand, and
+  everything added after.
+- [ ] Hand-drawn table, Kanban and timeline frames.
+- [ ] Bringing an Excalidraw drawing in as native objects (boxes, arrows,
+  text) instead of a picture.
 
 ## Files and the assistant's reach (October 2026)
 

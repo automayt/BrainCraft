@@ -482,6 +482,9 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
       case 'icon':
         out.push({ k: 'icon', v: cleanIcon(p.v) ?? null })
         break
+      case 'sketch':
+        if (typeof p.v === 'boolean') out.push({ k: 'sketch', v: p.v })
+        break
       case 'order':
         if (Array.isArray(p.v) && p.v.every((x) => num(x) !== undefined)) out.push({ k: 'order', v: p.v as number[] })
         break

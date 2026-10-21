@@ -399,6 +399,8 @@ export interface Board {
   revs?: PageRev[]
   /** Files kept with the board (see `files.ts`). */
   files?: BoardFile[]
+  /** A hand-drawn board: new objects come out drawn by hand (see `sketch.ts`). */
+  sketch?: true
 }
 
 /** A file kept with a board: its details (its bytes and text are in the file store). */

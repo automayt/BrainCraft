@@ -253,7 +253,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - Drag a blue arrow to empty space and BrainCraft suggests the next shape.
 - **Mermaid:** paste a Mermaid flowchart to build it, or export one for docs elsewhere. ${link('This one', 'flow')} came from Mermaid.
 - **Run it** (**Alt+R**): a flowchart becomes a step-by-step checklist, and each run is kept with its timing.
-- **Hand-drawn:** select a shape and press **✎ Hand-drawn** for pencil outlines and handwriting (the whole flowchart changes, and new steps follow). Or right-click → **Sketch in Excalidraw** for a hand-drawn copy beside it.`,
+- **Hand-drawn:** the **Hand-drawn board** switch (the squiggle in the tool rail) draws everything by hand, and everything you add after. Or select a shape and press **✎ Hand-drawn** for just that (the whole flowchart changes, and new steps follow). Or right-click → **Sketch in Excalidraw** for a hand-drawn copy beside it.`,
         },
         {
           title: 'Kanban boards and timelines',

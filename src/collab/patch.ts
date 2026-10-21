@@ -19,6 +19,8 @@ export type Patch =
   | { k: 'conn'; id: Id; v: Connector | null }
   | { k: 'title'; v: string }
   | { k: 'icon'; v: string | null }
+  /** The board is hand-drawn (new objects come out drawn by hand). */
+  | { k: 'sketch'; v: boolean }
   /** Paint order of the board's items (only sent when the order of existing items changes). */
   | { k: 'order'; v: Id[] }
   | { k: 'ds'; id: string; v: DatasetMeta | null }
@@ -44,6 +46,8 @@ export function keyOf(p: Patch): string {
       return 'title'
     case 'icon':
       return 'icon'
+    case 'sketch':
+      return 'sketch'
     case 'order':
       return 'order'
     case 'ds':
@@ -101,6 +105,7 @@ export function diff(a: Board, z: Board): Patch[] {
   const out: Patch[] = []
   if (a.title !== z.title) out.push({ k: 'title', v: z.title })
   if (a.icon !== z.icon) out.push({ k: 'icon', v: z.icon ?? null })
+  if (!!a.sketch !== !!z.sketch) out.push({ k: 'sketch', v: !!z.sketch })
 
   if (a.items !== z.items && sameIds(a.items, z.items)) {
     // The usual case (objects edited, none added, removed or reordered): compare in step.
@@ -252,6 +257,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let datasets = b.datasets
   let title = b.title
   let icon = b.icon
+  let sketch = !!b.sketch
   let pages = b.pages
   let bodies = b.bodies
   let snaps = b.snaps
@@ -276,6 +282,9 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         break
       case 'icon':
         icon = p.v ?? undefined
+        break
+      case 'sketch':
+        sketch = p.v
         break
       case 'item':
         itemList.set(p.id, p.v)
@@ -356,6 +365,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   const next: Board = { ...b, title, items, connectors }
   if (icon) next.icon = icon
   else delete next.icon
+  if (sketch) next.sketch = true
+  else delete next.sketch
   if (datasets?.length) next.datasets = datasets
   else delete next.datasets
   // A wiki keeps its lists even when empty; a canvas board only has them when there's something in them.
@@ -401,6 +412,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return b.title
       case 'icon':
         return b.icon ?? null
+      case 'sketch':
+        return !!b.sketch
       case 'order':
         return b.items.map((i) => i.id)
       case 'ds': {

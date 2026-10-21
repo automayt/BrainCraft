@@ -396,21 +396,12 @@ function App({ ws }: { ws: Workspace }) {
           <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
             {wiki ? <WikiView /> : <Canvas />}
           </BoardErrorBoundary>
-          {/* A drawing open on the board has Excalidraw's tools in their place. */}
-          {!editor.drawing && (
-            <>
-              <TopLeft />
-              <TopRight />
-            </>
-          )}
+          <TopLeft />
+          <TopRight />
           {!wiki && (
             <>
-              {!editor.drawing && (
-                <>
-                  <ToolRail />
-                  <BottomLeft />
-                </>
-              )}
+              <ToolRail />
+              <BottomLeft />
               <NotesPanel />
               <PagePeek />
             </>

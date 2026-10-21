@@ -9956,55 +9956,54 @@ button.on,
 /* ----- an Excalidraw drawing open for editing ----- */
 
 .drawing-editor {
-  /* Over the board (and its tools), in the canvas's place: the board shows through. */
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 60;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
 }
 
 .drawing-editor.loading {
-  cursor: progress;
+  background: var(--backdrop);
 }
 
-.drawing-editor .excalidraw,
-.drawing-editor .excalidraw .excalidraw__canvas {
-  background: transparent;
+.drawing-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 12px 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
 }
 
-/* The drawing's sheet of paper, as its picture shows it (Excalidraw draws on top). */
-.drawing-sheet {
-  position: absolute;
-  background: #fff;
-  border-radius: 2px;
-  box-shadow:
-    0 0 0 1px var(--accent),
-    0 6px 24px rgb(0 0 0 / 0.18);
-  pointer-events: none;
-}
-
-.drawing-editor .drawing-done {
-  height: 36px;
-  padding: 0 16px;
-  font-weight: 600;
-  color: var(--on-accent);
-  background: var(--accent-strong);
-  border: none;
-  border-radius: 8px;
+.drawing-editor-hint {
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .drawing-editor-error {
-  position: absolute;
-  top: 64px;
-  right: 16px;
-  z-index: 5;
-  max-width: 300px;
-  margin: 0;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: #fff;
-  background: var(--danger);
-  border-radius: 8px;
+  color: var(--danger);
+}
+
+.drawing-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.drawing-editor-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* An Excalidraw drawing on a dark board: as Excalidraw's own dark mode shows it. */
+:root[data-theme='dark'] .drawing-picture,
+:root[data-theme='hc-dark'] .drawing-picture {
+  filter: invert(93%) hue-rotate(180deg);
 }
 
 /* The rail's last button: tables, plans and more. */

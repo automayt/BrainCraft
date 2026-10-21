@@ -182,9 +182,6 @@ export function Canvas() {
   }
 
   const { camera, board } = editor
-  // A drawing open in Excalidraw is drawn by Excalidraw, in its place.
-  const open = editor.drawing?.id
-  const drawingHidden = open === null || open === undefined ? editor.hidden : new Set([...editor.hidden, open])
   const step = gridStep(camera.zoom)
   const cull = cullArea(editor)
   const cursor =
@@ -269,7 +266,7 @@ export function Canvas() {
         <g transform={`translate(${camera.x} ${camera.y}) scale(${camera.zoom})`}>
           <BoardView
             board={editor.viewBoard}
-            hidden={drawingHidden}
+            hidden={editor.hidden}
             editingId={editor.editing && !editor.editing.connector ? editor.editing.id : null}
             editingLabel={editor.editing?.connector ? editor.editing.id : null}
             selectedConnector={editor.selectedConnector}
@@ -288,19 +285,15 @@ export function Canvas() {
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
       </svg>
-      {board.items.length === 0 && editor.tool === 'select' && !editor.drawing && <EmptyBoard />}
+      {board.items.length === 0 && editor.tool === 'select' && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <PeerLayer />
       <Moments />
-      {!editor.drawing && (
-        <>
-          <SelectionToolbar />
-          <ShapePicker />
-          <Minimap />
-          <StatusKey />
-        </>
-      )}
+      <SelectionToolbar />
+      <ShapePicker />
+      <Minimap />
+      <StatusKey />
     </div>
   )
 }

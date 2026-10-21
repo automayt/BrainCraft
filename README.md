@@ -105,16 +105,22 @@ whatever you have selected.
 
 (This board is in [examples/Weekend away.braincraft](examples/Weekend%20away.braincraft): drop it on BrainCraft to open it.)
 
-- **Draw in Excalidraw, right on the board:** right-click empty space →
-  **Excalidraw drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens in place,
-  over the board, with all its tools and its hand-drawn look: you draw on a
-  sheet of paper among your notes and maps, and the sheet grows as you draw.
-  Scrolling and zooming move the board with you. **Done** (or Ctrl+Enter)
-  goes back to BrainCraft's tools.
-- **Double-click a drawing** (or **Edit drawing** on its toolbar) to draw in
-  it again, exactly where it is. It saves as you go, so friends in a live
-  session see it as it's drawn, and everything drawn in one go is one undo
-  step.
+- **A hand-drawn board, with BrainCraft's own tools:** the **Hand-drawn
+  board** switch (the squiggle in the Draw group of the tool rail, or the ☰
+  menu, or Ctrl+K) draws everything on the board by hand, and everything you
+  add after: shapes, notes, text, frames, flowcharts and mind maps get wobbly
+  pencil outlines, hatched fills and handwriting, and lines get pencil
+  arrowheads. They're ordinary board objects, so they select, move, connect,
+  take comments and sync live like everything else. Friends in a live session
+  get the same switch.
+- **Or draw in Excalidraw itself:** right-click empty space → **Excalidraw
+  drawing**, or Ctrl+K → "Excalidraw". Excalidraw opens full screen with all
+  its tools, in the app's dark or light theme; **Put on the board** places the
+  drawing among your notes and maps with no background of its own, its lines
+  in the theme's colours, as Excalidraw's own dark mode shows them.
+- **Double-click a drawing** (or **Edit drawing** on its toolbar) to open it in
+  Excalidraw again; it keeps its size and place, and the change is one undo
+  step. In a live session everyone sees the new version.
 - **Paste from Excalidraw** (copy shapes there, paste here) or **drop an
   `.excalidraw` file** on the board to bring a drawing in; right-click a
   drawing → **Download as .excalidraw** to take it back out.
@@ -122,9 +128,9 @@ whatever you have selected.
   Excalidraw** draws the whole flowchart again, hand-drawn, as a drawing
   beside it (through its Mermaid and Excalidraw's converter); the flowchart
   stays the one to change and run.
-- **Hand-drawn look for BrainCraft's own objects:** **✎ Hand-drawn** on the
-  selection toolbar (or Ctrl+K → "Hand-drawn look for the whole board")
-  draws shapes, flowcharts, frames, notes and mind maps with wobbly pencil
+- **Hand-drawn look for some objects:** **✎ Hand-drawn** on the
+  selection toolbar draws the selection by hand (or back with clean lines,
+  on a hand-drawn board): shapes, flowcharts, frames, notes and mind maps with wobbly pencil
   outlines, hatched fills and handwriting, while they keep working as before:
   Tab adds the next step (hand-drawn too), runs, Mermaid, exports. A
   flowchart switches all at once, and lines follow what they join.

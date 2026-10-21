@@ -5,8 +5,8 @@
  */
 
 import * as B from '../model/board'
-import { EXCALIDRAW_ZOOM, isDrawing, sceneText, sceneWidth } from '../model/excalidraw'
-import { canSketch, flowComponent, setSketch } from '../model/sketch'
+import { isDrawing, sceneText } from '../model/excalidraw'
+import { canSketch, flowComponent, setBoardSketch, setSketch, sketchNew } from '../model/sketch'
 import type { BoardFile, ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
@@ -457,13 +457,14 @@ export class Editor {
   private apply(b: Board) {
     if (this.readOnly) return
     // During a private brainstorm, notes written here are marked as this person's.
-    const next = M.layoutAll(BS.stampNew(this.board, b, this.me), this.measure)
+    // On a hand-drawn board, what's new comes out drawn by hand.
+    const next = M.layoutAll(sketchNew(this.board, BS.stampNew(this.board, b, this.me)), this.measure)
     if (next === this.board) return
     this.board = next
     this.onBoardChange?.(next)
   }
 
-  private commit(before: Board, amend = false) {
+  private commit(before: Board) {
     // Each undo step signs what it really changed with this person's name, for
     // "Since you were here" (a drag counts once, at its end, however far it went).
     const signed = CU.stampAuthors(before, this.board, this.me)
@@ -471,8 +472,7 @@ export class Editor {
       this.board = signed
       this.onBoardChange?.(signed)
     }
-    if (amend) this.history.amend(before, this.board)
-    else this.history.commit(before, this.board)
+    this.history.commit(before, this.board)
   }
 
   /** Runs `f` as one undoable step. */
@@ -1862,88 +1862,40 @@ export class Editor {
     const item = id === undefined ? undefined : B.getItem(this.board, id)
     if (id !== undefined && !isDrawing(item)) return
     if (id === undefined && this.readOnly) return
-    const where = item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at
-    this.drawing = { id: id ?? null, at: where, ...(scene ? { scene } : {}) }
-    this.cameraForDrawing(item, where)
-    // Its saves make an undo step of their own.
-    this.lastDrawingSave = null
-    this.selection.clear()
+    this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}) }
     this.emit()
-  }
-
-  /**
-   * Room to draw: a new drawing opens at 100% (or closer), a small one grows to fill some of the
-   * screen, and the zoom stays where Excalidraw can follow it (it draws with the board's camera, and
-   * only zooms between 10% and 3000%). Centred on the drawing when the zoom changes.
-   */
-  private cameraForDrawing(item: Item | undefined, at: Vec) {
-    const view = this.openView
-    // Scene units per board unit, as the drawing's picture has them (its margin is 20 a side).
-    const s = item?.excalidraw ? item.w / Math.max(1, sceneWidth(item.excalidraw) + 40) : 1
-    let zoom = this.camera.zoom
-    if (!item) zoom = Math.max(zoom, 1)
-    else if (item.w * zoom < 360 || item.h * zoom < 240) zoom = Math.min((view.w * 0.6) / item.w, (view.h * 0.6) / item.h, Math.max(zoom, 2))
-    zoom = Math.min(Math.max(zoom, EXCALIDRAW_ZOOM.min / s), EXCALIDRAW_ZOOM.max / s)
-    if (Math.abs(zoom - this.camera.zoom) < 1e-9) return
-    this.camera = centerOn({ ...this.camera, zoom }, at, view)
   }
 
   closeDrawing() {
-    const id = this.drawing?.id
     this.drawing = null
-    this.lastDrawingSave = null
-    if (id !== null && id !== undefined && B.getItem(this.board, id)) this.select([id])
-    else this.emit()
-  }
-
-  /** The board as the last save of the open drawing left it, so the next save joins its undo step. */
-  private lastDrawingSave: Board | null = null
-
-  /** Moves the camera to exactly `c` (an open drawing's view moving the board with it). */
-  setCamera(c: Camera) {
-    if (c.x === this.camera.x && c.y === this.camera.y && c.zoom === this.camera.zoom) return
-    this.camera = c
     this.emit()
   }
 
   /**
-   * Keeps a drawing: its scene and its picture (`src`, `w`×`h`, as drawn). With `rect` it goes
-   * exactly there (drawn in place on the board); otherwise an existing drawing keeps its width and
-   * middle, and a new one is placed where it was opened. While a drawing is open, its saves undo as
-   * one step.
+   * Keeps a drawing: its scene and its picture (`src`, `w`×`h`, as drawn). An existing drawing keeps
+   * its width on the board and its middle; a new one is placed where it was opened. One undo step.
    */
-  saveDrawing(id: Id | null, scene: ExcalidrawScene, picture: { src: string; w: number; h: number }, at?: Vec, rect?: Rect): Id | null {
+  saveDrawing(id: Id | null, scene: ExcalidrawScene, picture: { src: string; w: number; h: number }, at?: Vec): Id | null {
     if (this.readOnly) return null
     const text = sceneText(scene)
     const old = id === null ? undefined : B.getItem(this.board, id)
     if (id !== null && !isDrawing(old)) return null
     const ratio = picture.h / Math.max(1, picture.w)
     let made: Id | null = id
-    const before = this.board
-    let next: Board
-    if (old) {
-      const w = old.w
-      const h = Math.max(8, w * ratio)
-      next = B.updateItem(this.board, old.id, (i) => ({ ...i, src: picture.src, excalidraw: scene, text, ...(rect ?? { y: i.y + (i.h - h) / 2, h }) }))
-    } else {
+    this.edit((b) => {
+      if (old) {
+        const w = old.w
+        const h = Math.max(8, w * ratio)
+        return B.updateItem(b, old.id, (i) => ({ ...i, src: picture.src, excalidraw: scene, text, y: i.y + (i.h - h) / 2, h }))
+      }
       const scale = Math.min(1, 640 / Math.max(picture.w, picture.h))
       const w = Math.max(40, picture.w * scale)
-      const [added, newId] = B.addItem(this.board, B.newItem('image', rect ?? rectFromCenter(at ?? this.drawing?.at ?? center(this.visibleWorld), w, w * ratio), { src: picture.src, text }))
+      const [next, newId] = B.addItem(b, B.newItem('image', rectFromCenter(at ?? this.drawing?.at ?? center(this.visibleWorld), w, w * ratio), { src: picture.src, text }))
       made = newId
-      next = B.updateItem(added, newId, (i) => ({ ...i, excalidraw: scene }))
-    }
-    const open = !!this.drawing
-    this.apply(next)
-    this.commit(before, open && this.lastDrawingSave === before)
-    this.lastDrawingSave = open ? this.board : null
-    // A drawing being drawn stays open; one brought in from a file is selected.
-    if (!open) {
-      this.tool = 'select'
-      if (made !== null) this.select([made])
-    } else {
-      if (this.drawing && made !== null) this.drawing = { ...this.drawing, id: made }
-      this.emit()
-    }
+      return B.updateItem(next, newId, (i) => ({ ...i, excalidraw: scene }))
+    })
+    this.tool = 'select'
+    if (made !== null) this.select([made])
     return made
   }
 
@@ -2340,6 +2292,17 @@ export class Editor {
     const before = this.board
     this.edit((b) => setSketch(b, all, on))
     if (this.board !== before) this.setStatus(on ? 'Hand-drawn' : 'Drawn with clean lines again')
+  }
+
+  /**
+   * A hand-drawn board (or not): everything on it drawn by hand now, and everything made on it from
+   * now on too, for everyone in the session. One undo step.
+   */
+  setBoardSketch(on: boolean) {
+    if (this.readOnly) return
+    const before = this.board
+    this.edit((b) => setBoardSketch(b, on))
+    if (this.board !== before) this.setStatus(on ? 'Hand-drawn board: everything here, and everything you add, is drawn by hand' : 'Clean lines again')
   }
 
   /** Whether everything selected that can be drawn by hand is. */

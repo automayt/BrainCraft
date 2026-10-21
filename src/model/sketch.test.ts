@@ -7,7 +7,11 @@ import { roughPaths } from '../ui/roughShapes'
 import { emptyBoard, getItem } from './board'
 import { addStep } from './flowchart'
 import { cleanItem } from './sanitize'
-import { flowComponent, setSketch } from './sketch'
+import { flowComponent, setBoardSketch, setSketch, sketchNew } from './sketch'
+import { applyPatches, diff } from '../collab/patch'
+import { cleanPatches } from './sanitize'
+import { fromJson, toJson } from './serialize'
+import { withoutBackground } from './excalidraw'
 import { fakeMeasure } from './test-helpers'
 
 const board = () =>
@@ -90,3 +94,64 @@ describe('hand-drawn mind maps', () => {
     expect(widths).toContain(true)
   })
 })
+
+describe('a hand-drawn board', () => {
+  it('draws everything by hand, and everything added from then on', () => {
+    const b = setBoardSketch(board(), true)
+    expect(b.sketch).toBe(true)
+    // Everything that can be, is (a table can't).
+    expect(b.items.filter((i) => i.kind !== 'table').every((i) => i.sketch)).toBe(true)
+    // Made with the editor's tools afterwards: hand-drawn too.
+    const ed = new Editor(b, fakeMeasure)
+    ed.load({ ...b, items: b.items.map((i) => (i.text === 'End' ? { ...i, sketch: undefined } : i)) })
+    const end = ed.board.items.find((i) => i.text === 'End')!
+    ed.addFlowStep(end.id, 'down')
+    const made = ed.board.items.at(-1)!
+    expect(made).toMatchObject({ kind: 'flow', sketch: true })
+    // ...while one switched back to clean lines stays clean.
+    expect(ed.board.items.find((i) => i.text === 'End')!.sketch).toBeUndefined()
+    // Undo the board switch: clean lines, and new things clean again.
+    const plain = setBoardSketch(ed.board, false)
+    expect(plain.sketch).toBeUndefined()
+    expect(plain.items.some((i) => i.sketch)).toBe(false)
+  })
+
+  it('leaves alone what was already there, and objects switched back by hand', () => {
+    const b = { ...board(), sketch: true as const }
+    const later = applyOps(b, [{ op: 'createNote', ref: 'n', text: 'New' }], { measure: fakeMeasure }).board
+    const marked = sketchNew(b, later)
+    expect(marked.items.at(-1)!.sketch).toBe(true)
+    // The older objects weren't touched.
+    expect(marked.items.slice(0, -1).every((i) => !i.sketch)).toBe(true)
+    // Nothing new, nothing changes.
+    expect(sketchNew(marked, marked)).toBe(marked)
+    // Not a hand-drawn board: nothing changes.
+    expect(sketchNew(board(), applyOps(board(), [{ op: 'createNote', text: 'x' }], { measure: fakeMeasure }).board).items.at(-1)!.sketch).toBeUndefined()
+  })
+
+  it('reaches friends in a live session, and is saved with the board', () => {
+    const a = board()
+    const z = setBoardSketch(a, true)
+    const patches = cleanPatches(JSON.parse(JSON.stringify(diff(a, z))))
+    expect(patches).toContainEqual({ k: 'sketch', v: true })
+    expect(applyPatches(a, patches).sketch).toBe(true)
+    expect(applyPatches(z, cleanPatches([{ k: 'sketch', v: false }])).sketch).toBeUndefined()
+    expect(cleanPatches([{ k: 'sketch', v: 'yes' }])).toEqual([])
+    expect(fromJson(toJson(z)).sketch).toBe(true)
+    expect(fromJson(JSON.stringify({ ...JSON.parse(toJson(a)), sketch: 'yes' })).sketch).toBeUndefined()
+  })
+})
+
+describe('Excalidraw drawings on the board', () => {
+  it('sit on it without the white sheet older ones were saved on', () => {
+    const svg = '<svg width="100" height="50"><rect x="0" y="0" width="100" height="50" fill="#ffffff"></rect><path d="M0 0"/></svg>'
+    const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    const bare = decodeURIComponent(withoutBackground(src).split(',')[1])
+    expect(bare).toBe('<svg width="100" height="50"><path d="M0 0"/></svg>')
+    // Newer pictures (no sheet) and other pictures are left as they are.
+    const none = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg><path d="M0 0"/></svg>')}`
+    expect(withoutBackground(none)).toBe(none)
+    expect(withoutBackground('data:image/png;base64,AAAA')).toBe('data:image/png;base64,AAAA')
+  })
+})
+

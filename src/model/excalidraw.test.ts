@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { toScreen } from './camera'
 import { Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from './board'
 import { cleanExcalidraw, excalidrawFile, isDrawing, MAX_ELEMENTS, sceneFromText, sceneText } from './excalidraw'
@@ -76,45 +75,6 @@ describe('drawings on the board', () => {
     expect((getItem(ed.board, id)!.excalidraw!.elements as unknown[]).length).toBe(2)
     ed.undo()
     expect(getItem(ed.board, id)).toMatchObject({ h: 200, y: 200 })
-  })
-
-  it('opens with room to draw, and never further out than Excalidraw can zoom', () => {
-    const ed = new Editor(emptyBoard(), fakeMeasure)
-    ed.setViewport(1200, 800)
-    // Far out on a big board: a new drawing opens at 100%, on the spot asked for.
-    ed.setCamera({ x: 0, y: 0, zoom: 0.05 })
-    ed.openDrawing(undefined, undefined, { x: 5000, y: 3000 })
-    expect(ed.camera.zoom).toBe(1)
-    expect(toScreen(ed.camera, { x: 5000, y: 3000 })).toEqual({ x: 600, y: 400 })
-    ed.closeDrawing()
-    // Already close in: left as it is.
-    ed.setCamera({ x: 10, y: 20, zoom: 2 })
-    ed.openDrawing(undefined, undefined, { x: 100, y: 100 })
-    expect(ed.camera).toEqual({ x: 10, y: 20, zoom: 2 })
-    ed.closeDrawing()
-    // A drawing that's small on screen grows to fill some of it.
-    const id = ed.saveDrawing(null, { elements: [{ ...rect('a'), x: 0, width: 360 }] }, picture, { x: 0, y: 0 })!
-    ed.setCamera({ x: 0, y: 0, zoom: 0.1 })
-    ed.openDrawing(id)
-    const item = getItem(ed.board, id)!
-    expect(item.w * ed.camera.zoom).toBeGreaterThan(400)
-    expect(toScreen(ed.camera, { x: item.x + item.w / 2, y: item.y + item.h / 2 })).toEqual({ x: 600, y: 400 })
-  })
-
-  it('drawn in place: goes exactly where it was drawn, stays open, and its saves undo as one step', () => {
-    const ed = new Editor(emptyBoard(), fakeMeasure)
-    ed.openDrawing(undefined, undefined, { x: 500, y: 300 })
-    const id = ed.saveDrawing(null, { elements: [rect('a')] }, picture, undefined, { x: 10, y: 20, w: 400, h: 200 })!
-    expect(getItem(ed.board, id)).toMatchObject({ x: 10, y: 20, w: 400, h: 200 })
-    // Still drawing it, now as that drawing.
-    expect(ed.drawing?.id).toBe(id)
-    ed.saveDrawing(id, { elements: [rect('a'), rect('b')] }, { ...picture, w: 600 }, undefined, { x: 10, y: 20, w: 600, h: 200 })
-    expect(getItem(ed.board, id)).toMatchObject({ w: 600 })
-    ed.closeDrawing()
-    expect([...ed.selection]).toEqual([id])
-    // Both saves were one drawing session: one undo takes the drawing away.
-    ed.undo()
-    expect(getItem(ed.board, id)).toBeUndefined()
   })
 
   it('opens only drawings, and changes nothing when the board is read-only', () => {

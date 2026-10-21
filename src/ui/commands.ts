@@ -91,8 +91,9 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude vllm codex model chat ai summarise cluster', run: ui.toggleAssistant },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
-    { id: 'sketch-board', label: 'Hand-drawn look for the whole board', group: 'Board', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting whiteboard', run: () => editor.setSketch(true, editor.board.items.map((i) => i.id)) },
-    { id: 'clean-board', label: 'Clean lines for the whole board', group: 'Board', aliases: 'sketch hand drawn rough clean tidy neat style', run: () => editor.setSketch(false, editor.board.items.map((i) => i.id)) },
+    editor.board.sketch
+      ? { id: 'clean-board', label: 'Clean lines for the whole board', group: 'Board', aliases: 'sketch hand drawn rough clean tidy neat style board-wide', run: () => editor.setBoardSketch(false) }
+      : { id: 'sketch-board', label: 'Hand-drawn board (everything, and everything new)', group: 'Board', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting whiteboard board-wide', run: () => editor.setBoardSketch(true) },
     { id: 'excalidraw', label: 'Add an Excalidraw drawing', group: 'Create', aliases: 'excalidraw draw drawing sketch hand-drawn diagram whiteboard doodle', run: () => editor.openDrawing() },
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },

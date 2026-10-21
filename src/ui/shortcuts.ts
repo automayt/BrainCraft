@@ -24,6 +24,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['E', 'Send an emote from your cursor (nothing selected; 1–6 pick one)'],
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],
       ['Ctrl Shift L', 'Lock or unlock the selection'],
+      ['Hand-drawn board', 'The squiggle in the tool rail: everything drawn by hand, and everything you add after (or Ctrl K → Hand-drawn board)'],
       ['/', 'Cursor chat: say something next to your pointer (nothing selected)'],
       ['Enter', 'Place the current tool in the middle of the view'],
       ['Type', 'With one object selected, typing replaces its text (? and Shift P type too: press Esc first)'],
