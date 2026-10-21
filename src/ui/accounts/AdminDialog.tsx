@@ -134,7 +134,7 @@ function Branding() {
         <span className="brand-preview-tab">
           <span aria-hidden="true">📋</span> Trip plan · {shown}
         </span>
-        <span className="brand-preview-word">✦ {shown}</span>
+        <span className="brand-preview-word">{shown}</span>
       </div>
       {msg && <p className="signin-error">{msg}</p>}
       <div className="account-actions">

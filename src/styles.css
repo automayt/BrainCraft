@@ -18,6 +18,10 @@
   --muted: #9ba2b4;
   --faint: #808799;
   --accent: #7ea6ff;
+  /* The app's name: a purple-to-yellow gradient with a faint glow. */
+  --brand-from: #a66bff;
+  --brand-to: #ffd23f;
+  --brand-glow: rgba(166, 107, 255, 0.6);
   --accent-strong: #3f6fe0;
   --accent-soft: rgba(126, 166, 255, 0.16);
   --on-accent: #ffffff;
@@ -70,6 +74,9 @@
   --muted: #5f6676;
   --faint: #6b7280;
   --accent: #2f62e0;
+  --brand-from: #7a3ff2;
+  --brand-to: #c99400;
+  --brand-glow: rgba(122, 63, 242, 0.28);
   --accent-strong: #2556cc;
   --accent-soft: rgba(47, 98, 224, 0.12);
   --on-accent: #ffffff;
@@ -120,6 +127,10 @@
   --muted: #f2f2f2;
   --faint: #d0d0d0;
   --accent: #ffd60a;
+  /* High contrast: the name in plain text, no glow. */
+  --brand-from: #ffffff;
+  --brand-to: #ffffff;
+  --brand-glow: transparent;
   --accent-strong: #ffd60a;
   --accent-soft: rgba(255, 214, 10, 0.28);
   --on-accent: #000000;
@@ -172,6 +183,9 @@
   --muted: #111111;
   --faint: #333333;
   --accent: #0030d6;
+  --brand-from: #000000;
+  --brand-to: #000000;
+  --brand-glow: transparent;
   --accent-strong: #0030d6;
   --accent-soft: rgba(0, 48, 214, 0.16);
   --on-accent: #ffffff;
@@ -408,11 +422,28 @@ button.on,
   padding-right: 2px;
 }
 
+.wordmark,
+.signin-brand,
+.brand-preview-word {
+  /* The name stays text (it can be renamed), painted with the brand gradient. */
+  max-width: 220px;
+  overflow: hidden;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--brand-from);
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 9px var(--brand-glow));
+}
+
+/* Room around the glow, so it isn't clipped by the box. */
 .wordmark {
-  font-weight: 750;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  padding: 2px 4px;
 }
 
 .board-title {
@@ -2656,11 +2687,22 @@ button.on,
 }
 
 @media (max-width: 1100px) {
-  .search-pill span,
-  .wordmark {
+  .search-pill span {
     display: none;
   }
+  /* The name is the brand: it stays, shorter. */
+  .wordmark {
+    max-width: 130px;
+  }
   .hint-bar {
+    display: none;
+  }
+}
+
+/* Narrow windows and phones: no room for the name beside both top bars. */
+@media (max-width: 900px) {
+  .top-left .brand,
+  .top-left .brand + .divider {
     display: none;
   }
 }
@@ -9208,8 +9250,8 @@ button.on,
 }
 
 .signin-brand {
-  font-weight: 700;
-  color: var(--accent);
+  align-self: flex-start;
+  font-size: 20px;
 }
 
 .signin-card label,
@@ -10083,6 +10125,5 @@ button.on,
 }
 
 .brand-preview-word {
-  font-weight: 700;
-  overflow-wrap: anywhere;
+  font-size: 15px;
 }

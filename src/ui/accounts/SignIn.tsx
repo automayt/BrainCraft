@@ -52,7 +52,7 @@ export function SignIn() {
     <div className="signin no-canvas">
       <form className="signin-card" onSubmit={submit} aria-labelledby="signin-title">
         <div className="signin-brand" aria-hidden="true">
-          ✦ {appName()}
+          {appName()}
         </div>
         <h1 id="signin-title">{mode === 'setup' ? 'Set up this server' : mode === 'reset' ? 'Choose a password' : 'Sign in'}</h1>
         {mode === 'setup' && <p className="muted">This server is new. Create the first admin account: you’ll add everyone else, and their groups, from the admin screen.</p>}

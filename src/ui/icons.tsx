@@ -131,22 +131,6 @@ export const RedoIcon = () => (
   </Svg>
 )
 
-/** BrainCraft's mark: a sticky note with its corner turned up, and a mind map drawn on it in ink. */
-export const Logo = ({ size = 26 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="logo">
-    <path d="M5 2h22a3 3 0 0 1 3 3v16l-9 9H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3z" fill="var(--brand)" />
-    <path d="M30 21h-6a3 3 0 0 0-3 3v6z" fill="var(--brand-strong)" />
-    <path d="M30 21h-6a3 3 0 0 0-3 3v6" fill="none" stroke="var(--on-brand)" strokeOpacity="0.18" strokeWidth="1" />
-    <circle cx="16" cy="15" r="3.6" fill="var(--on-brand)" />
-    <g stroke="var(--on-brand)" strokeWidth="2.1" strokeLinecap="round" fill="none">
-      <path d="M19.2 13.4C22 11 23 10.2 25.5 9" />
-      <path d="M12.8 13.4C10 11 9 10.2 6.5 9" />
-      <path d="M12.8 16.6C10 19 9 19.8 6.5 21" />
-      <path d="M19.2 16.6C20.6 17.8 21 18.2 22 19" />
-    </g>
-  </svg>
-)
-
 /** A small drawing of a flowchart symbol, for palettes and menus. */
 export function FlowShapeIcon({ shape, size = 28 }: { shape: FlowShape; size?: number }) {
   const item = { x: 2, y: 6, w: 28, h: 18, kind: 'flow', shape } as Item

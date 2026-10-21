@@ -18,7 +18,6 @@ import {
   FlowShapeIcon,
   HelpIcon,
   ImageIcon,
-  Logo,
   MenuIcon,
   MinusIcon,
   MoreToolsIcon,
@@ -198,8 +197,9 @@ export function TopLeft() {
   return (
     <div className="island top-left no-canvas">
       <div className="brand">
-        <Logo />
-        <span className="wordmark">{appName()}</span>
+        <span className="wordmark" title={appName()}>
+          {appName()}
+        </span>
       </div>
       <span className="divider" />
       <button className="icon-btn has-tip" aria-label="Your boards" onMouseDown={keepFocus} onClick={ui.openBoards}>
