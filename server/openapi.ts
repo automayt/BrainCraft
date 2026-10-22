@@ -13,7 +13,7 @@ export interface SpecOptions {
   version: string
   accounts: boolean
   /** Which AI routes are switched on. */
-  ai: { anthropic: boolean; openai: boolean; command: boolean }
+  ai: { anthropic: boolean; openai: boolean; command: boolean; transcribe?: boolean }
 }
 
 type Schema = Record<string, unknown>
@@ -329,6 +329,8 @@ export function openApiSpec(o: SpecOptions) {
     add('/api/ai/v1/messages', 'post', { tags: ['AI'], summary: 'The Anthropic Messages API, through this server’s key', operationId: 'aiMessages', security: aiAuth, requestBody: { required: true, ...json({ type: 'object' }) }, responses: { '200': ok('The model’s answer (streamed when asked)') } })
   if (o.ai.openai)
     add('/api/ai/openai/chat/completions', 'post', { tags: ['AI'], summary: 'Chat completions from this server’s OpenAI-compatible model server', operationId: 'aiChat', security: aiAuth, requestBody: { required: true, ...json({ type: 'object' }) }, responses: { '200': ok('The model’s answer') } })
+  if (o.ai.transcribe)
+    add('/api/ai/transcribe', 'post', { tags: ['AI'], summary: 'Turn a recording into words, for talking to the assistant (any browser)', operationId: 'aiTranscribe', security: aiAuth, parameters: [query('lang', 'The speaker’s language, such as en-US')], requestBody: { required: true, content: { 'audio/webm': { schema: { type: 'string', format: 'binary' } }, 'audio/ogg': { schema: { type: 'string', format: 'binary' } }, 'audio/mp4': { schema: { type: 'string', format: 'binary' } }, 'audio/wav': { schema: { type: 'string', format: 'binary' } } } }, responses: { '200': ok('What was said', { type: 'object', properties: { text: { type: 'string' } } }) } })
   if (o.ai.command)
     add('/api/ai/command', 'post', { tags: ['AI'], summary: 'Run one of this server’s command-line agents once (Claude Code, Codex, or its own command)', operationId: 'aiCommand', security: aiAuth, parameters: [query('agent', 'Which agent: an id from /api/health’s aiAgents (default: the first)')], requestBody: { required: true, ...json({ type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] }) }, responses: { '200': ok('Its answer', { type: 'object', properties: { text: { type: 'string' } } }) } })
 

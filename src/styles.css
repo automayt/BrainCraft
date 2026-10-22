@@ -10255,3 +10255,76 @@ button.on,
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+
+/* ----- talking to the assistant ----- */
+
+.talk-btn {
+  white-space: nowrap;
+}
+
+.talk-error {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--danger);
+}
+
+.talk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+}
+
+.talk-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  background: var(--danger);
+  border-radius: 50%;
+  animation: talk-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes talk-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk-dot {
+    animation: none;
+  }
+}
+
+.talk-level {
+  position: relative;
+  width: 44px;
+  height: 6px;
+  flex: none;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+
+.talk-level i {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 80ms linear;
+}
+
+.talk-words {
+  flex: 1 1 140px;
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

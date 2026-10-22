@@ -44,6 +44,50 @@ your BrainCraft server.
 - **New chat** starts over. Each board has its own conversation while the
   tab is open.
 
+## Talking to it
+
+Press **🎙 Talk** and just talk, as you would to a person at the whiteboard.
+Nothing needs sending: at each pause, what you said goes to the assistant,
+which shapes the board as you speak. Open a new board and say "let's plan the
+launch: there's the website, the press release and the party", and it picks
+the form (a mind map for ideas around a topic, a flowchart for steps and
+decisions, notes, a table, a Kanban board or a timeline), then keeps building
+on it as you go on: "add a budget under the party", "no, make that a
+flowchart", "move the press release first".
+
+- Talking changes the board straight away, without a preview, so it can
+  keep up. Every change is still listed under **History**, to undo.
+- What you said while it was working waits, and goes as one turn when it's
+  done. **Go now** sends it without waiting for the pause.
+- **Stop talking** ends it (what you were saying still goes).
+- The microphone needs the page on https or on this computer (localhost); see
+  [HTTPS.md](HTTPS.md).
+
+**Which browser.** Firefox has no speech recognition of its own, so for it
+(and for the best results everywhere) the BrainCraft server turns speech into
+words with a speech-to-text model: set `BRAINCRAFT_TRANSCRIBE_URL` to any
+OpenAI-compatible transcription endpoint, such as Whisper served by vLLM.
+Then the app records each phrase, ends it at a pause, and the server
+transcribes it, in Firefox, Chrome, Edge and Safari alike. Without it, Chrome,
+Edge and Safari use their own recognition (which may send audio to the
+browser maker), and Firefox can't talk.
+
+```bash
+# Whisper on vLLM, beside your chat model
+vllm serve openai/whisper-large-v3-turbo --port 8001
+BRAINCRAFT_TRANSCRIBE_URL=http://localhost:8001/v1 BRAINCRAFT_TRANSCRIBE_MODEL=openai/whisper-large-v3-turbo node dist/braincraft-server.mjs
+```
+
+| Variable | Meaning |
+| --- | --- |
+| `BRAINCRAFT_TRANSCRIBE_URL` | An OpenAI-compatible server's address ending in `/v1`, with `/audio/transcriptions` (vLLM with a Whisper model, or a hosted one). |
+| `BRAINCRAFT_TRANSCRIBE_MODEL` | Optional. The model to ask (default `whisper-1`). |
+| `BRAINCRAFT_TRANSCRIBE_KEY` | Optional. The key that server needs. |
+
+Who may use it is decided like the rest of the assistant (the AI password, or
+signed in with "Use the AI"), with a higher hourly limit since every phrase is
+one request.
+
 This is separate from [connecting an outside AI assistant over MCP](MCP.md),
 which suits Claude Desktop, Claude Code or Cursor. Both use the same tools
 and [operations](API.md).

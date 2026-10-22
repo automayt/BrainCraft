@@ -134,7 +134,15 @@ export interface Callbacks {
   /** What it's doing ("Reading the board…"), or null when idle. */
   status(s: string | null): void
   proposal(p: Proposal): void
+  /**
+   * Talking live: applies a change to the open board at once (it goes in the AI history, to undo);
+   * true when it was. Without it, changes are previews to apply or discard.
+   */
+  apply?(p: Proposal): boolean
 }
+
+/** What a live turn tells the model, besides what was said. */
+const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk: call propose_changes, which is applied at once (they can undo it). Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup or restructure it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. When they correct themselves ("no, I meant…"), change what you made. When they are only thinking aloud and there is nothing to add yet, change nothing. Reply in one short line.]`
 
 const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards']
 
@@ -346,8 +354,14 @@ export class Assistant {
     if (name === 'propose_changes') {
       const p = this.propose(input)
       if (typeof p === 'string') return { content: p, is_error: true }
-      on.proposal(p)
       const { added, changed, removed } = p.counts
+      // Talking live: on the board at once.
+      if (on.apply?.(p)) {
+        p.status = 'applied'
+        on.proposal(p)
+        return { content: `Applied to the board (${added} new, ${changed} changed, ${removed} removed). They can undo it from History. Keep building on it as they talk.` }
+      }
+      on.proposal(p)
       return { content: `Shown to the person as a preview (${added} new, ${changed} changed, ${removed} removed). They will apply or discard it.` }
     }
     if (name === 'list_files' || name === 'read_file') return this.fileTool(name, input)
@@ -465,7 +479,7 @@ export class Assistant {
   }
 
   /** Sends a message and runs the conversation until the model has answered. */
-  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = []): Promise<void> {
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live = false): Promise<void> {
     const sel = this.host.selection()
     const others = this.host.others?.()
     const open = this.host.board()
@@ -485,7 +499,13 @@ export class Assistant {
       content: [
         // Pictures first, then the words about them.
         ...images.map((img) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.data } })),
-        { type: 'text', text: `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}` },
+        {
+          type: 'text',
+          text: live
+            ? // Talking: the board comes along every time, so changes follow it without reading it first.
+              `${context}\n${LIVE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 12_000)}\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}`
+            : `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}`,
+        },
       ],
     })
     let jsonRetries = 0

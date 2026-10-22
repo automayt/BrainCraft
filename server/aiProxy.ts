@@ -60,6 +60,8 @@ export interface GateOptions {
    * not ('no'), or isn't signed in ('signin'). It decides instead of the password and the budget.
    */
   accounts?: ((req: IncomingMessage) => 'yes' | 'no' | 'signin') | null
+  /** Requests an hour per address without a password or accounts (transcribing speech needs more). */
+  limit?: number
 }
 
 /**
@@ -78,6 +80,7 @@ export class AiGate {
       equal: (a, b) => a === b,
       visitor: (req) => req.socket.remoteAddress ?? 'unknown',
       accounts: null,
+      limit: RATE.limit,
       ...(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as GateOptions),
     }
   }
@@ -120,7 +123,7 @@ export class AiGate {
       }
       return null
     }
-    if (!this.count(this.hits, who, RATE.limit)) return { status: 429, error: 'Too many AI requests from this address; try again later' }
+    if (!this.count(this.hits, who, this.o.limit)) return { status: 429, error: 'Too many AI requests from this address; try again later' }
     return null
   }
 }

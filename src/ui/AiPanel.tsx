@@ -10,6 +10,7 @@ import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
+import { useTalk } from './useTalk'
 
 interface Turn {
   role: 'user' | 'assistant' | 'error'
@@ -271,9 +272,12 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     update({ ...settings, mode: 'server', provider: p, ...(p === 'anthropic' ? { model: rest as AiModel } : p === 'openai' ? { serverModel: rest } : { agent: rest }) })
   }
 
-  const send = async (text: string, images: AiImage[] = [], label?: string) => {
+  // A turn is with the assistant (kept outside React too, so a turn spoken meanwhile waits its go).
+  const busy = useRef(false)
+  const send = async (text: string, images: AiImage[] = [], label?: string, live = false) => {
     const s = session()
-    if (!s || !text.trim() || running) return
+    if (!s || !text.trim() || busy.current) return
+    busy.current = true
     // A long built-in request shows as its short label in the chat.
     s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [] })
     const reply: Turn = { role: 'assistant', text: '', proposals: [] }
@@ -295,16 +299,20 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           proposal: (p) => {
             reply.proposals.push(p)
             // Changes elsewhere can't be shown on this board; their card says where they go.
-            if (!p.target) editor.previewAi(p)
+            if (!p.target && p.status === 'pending') editor.previewAi(p)
             refresh()
           },
+          // Talking: changes go on the board as they come (each one in History, to undo).
+          ...(live ? { apply: (p: Proposal) => !editor.readOnly && editor.applyAi(p.id, p.summary, p.patches, p.bases) } : {}),
         },
         ctrl.signal,
         images,
+        live,
       )
     } catch (err) {
       s.turns.push({ role: 'error', text: describeError(err), proposals: [] })
     } finally {
+      busy.current = false
       abort.current = null
       setRunning(false)
       setStatus(null)
@@ -325,6 +333,8 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   }, [asked, !!connection, checked, running])
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
+  // Talking: each pause sends what was said, and the assistant shapes the board as it goes.
+  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
   const follow = (to: LinkTarget | null, label: string) => {
     const target = to ?? resolveName(label, editor.board, ws.otherBoards)
     if (target) void ws.openLink(target)
@@ -652,17 +662,60 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
                   New chat
                 </button>
               )}
-              {running ? (
+              {!talk.on && (
+                <button
+                  type="button"
+                  className="talk-btn"
+                  disabled={!connection || editor.readOnly || !talk.how}
+                  title={
+                    !talk.how
+                      ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari'
+                      : 'Talk: the assistant builds the board as you speak, no need to send'
+                  }
+                  onClick={() => void talk.start()}
+                >
+                  🎙 Talk
+                </button>
+              )}
+              {running && !talk.on ? (
                 <button type="button" onClick={() => abort.current?.abort()}>
                   Stop
                 </button>
               ) : (
-                <button className="primary" type="submit" disabled={!input.trim()}>
-                  Send
-                </button>
+                !talk.on && (
+                  <button className="primary" type="submit" disabled={!input.trim()}>
+                    Send
+                  </button>
+                )
               )}
             </div>
+            {talk.error && <p className="talk-error">{talk.error}</p>}
           </form>
+          {talk.on && (
+            <div className="talk-bar" role="status" aria-live="polite">
+              <span className="talk-dot" aria-hidden="true" />
+              <span className="talk-level" aria-hidden="true">
+                <i style={{ transform: `scaleX(${Math.max(0.04, talk.level)})` }} />
+              </span>
+              <span className="talk-words">
+                {talk.interim || talk.waiting ? (
+                  <>
+                    {talk.waiting} <span className="muted">{talk.interim}</span>
+                  </>
+                ) : (
+                  <span className="muted">{running ? 'Working on what you said… keep talking' : talk.state === 'transcribing' ? 'Hearing that…' : 'Listening: just talk'}</span>
+                )}
+              </span>
+              {talk.waiting && (
+                <button type="button" className="link" onClick={() => talk.flush()}>
+                  Go now
+                </button>
+              )}
+              <button type="button" className="primary" onClick={() => talk.stop()}>
+                Stop talking
+              </button>
+            </div>
+          )}
         </>
       )}
 

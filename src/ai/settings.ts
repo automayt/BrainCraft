@@ -80,6 +80,8 @@ export interface ServerAi {
   agents: { id: string; label: string }[]
   /** Its agents answer only the server's own computer (no AI password or accounts yet). */
   agentsLocal: boolean
+  /** It turns speech into words (for talking to the assistant in any browser). */
+  transcribe?: boolean
 }
 
 const NO_AI: ServerAi = { available: false, password: false, providers: [], openaiModels: [], textTools: false, agents: [], agentsLocal: false }
@@ -89,7 +91,7 @@ export async function serverAi(server: string | null): Promise<ServerAi> {
   if (!server) return NO_AI
   try {
     const res = await fetch(new URL('api/health', server))
-    const h = (await res.json()) as { ai?: boolean; aiPassword?: boolean; aiProviders?: unknown; aiModels?: unknown; aiTextTools?: unknown; aiCommand?: unknown; aiAgents?: unknown; aiAgentsLocal?: unknown }
+    const h = (await res.json()) as { transcribe?: boolean; ai?: boolean; aiPassword?: boolean; aiProviders?: unknown; aiModels?: unknown; aiTextTools?: unknown; aiCommand?: unknown; aiAgents?: unknown; aiAgentsLocal?: unknown }
     // Older servers only said whether they had Claude.
     const providers = Array.isArray(h.aiProviders) ? (h.aiProviders.filter((p) => PROVIDERS.includes(p as ServerProvider)) as ServerProvider[]) : h.ai ? (['anthropic'] as ServerProvider[]) : []
     return {
@@ -106,6 +108,7 @@ export async function serverAi(server: string | null): Promise<ServerAi> {
           ? [{ id: '', label: h.aiCommand }]
           : [],
       agentsLocal: h.aiAgentsLocal === true,
+      transcribe: h.transcribe === true,
     }
   } catch {
     return NO_AI

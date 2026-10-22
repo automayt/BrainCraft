@@ -31,6 +31,7 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
+import { Transcriber } from './transcribe'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
@@ -343,6 +344,20 @@ const openAiProxy = OPENAI_BASE
       gate: aiGate,
     })
   : null
+/** Speech to text for talking to the assistant (any OpenAI-compatible transcription endpoint). */
+const TRANSCRIBE_URL = process.env.BRAINCRAFT_TRANSCRIBE_URL?.trim() || ''
+const transcriber = TRANSCRIBE_URL
+  ? new Transcriber({
+      baseUrl: TRANSCRIBE_URL,
+      model: process.env.BRAINCRAFT_TRANSCRIBE_MODEL?.trim() || 'whisper-1',
+      apiKey: process.env.BRAINCRAFT_TRANSCRIBE_KEY?.trim() || undefined,
+      // Its own budget: talking sends a phrase every few seconds.
+      gate: new AiGate({ password: AI_PASSWORD, equal: safeEqual, visitor, limit: 2000, accounts: accounts && ((req) => {
+        const u = accounts.userOf(req)
+        return !u ? 'signin' : accounts.can(u, 'ai.use') ? 'yes' : 'no'
+      }) }),
+    })
+  : null
 /** The model needs the tools described in the text (served without tool calling). */
 const AI_TEXT_TOOLS = /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_AI_TEXT_TOOLS ?? '')
 const AI_COMMAND = process.env.BRAINCRAFT_AI_COMMAND?.trim() || ''
@@ -380,13 +395,14 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         : {}),
       previews: true,
       accounts: !!accounts,
+      transcribe: !!transcriber,
       appName: appName(),
     })
 
   // The API described: OpenAPI for tools, and the same as a page to read.
   if ((parts[1] === 'openapi.json' || parts[1] === 'docs') && parts.length === 2) {
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
-    const spec = openApiSpec({ version: VERSION, accounts: !!accounts, ai: { anthropic: !!aiProxy, openai: !!openAiProxy, command: !!commandRunner } })
+    const spec = openApiSpec({ version: VERSION, accounts: !!accounts, ai: { anthropic: !!aiProxy, openai: !!openAiProxy, command: !!commandRunner, transcribe: !!transcriber } })
     if (parts[1] === 'openapi.json') return send(res, 200, spec)
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
     return res.end(docsPage(spec))
@@ -437,6 +453,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (url.pathname === '/api/ai/openai/chat/completions') {
       if (!openAiProxy) return send(res, 404, { error: 'No model server is set up on this server (OPENAI_BASE_URL)' })
       return openAiProxy.handle(req, res, await body())
+    }
+    if (url.pathname === '/api/ai/transcribe') {
+      if (!transcriber) return send(res, 404, { error: 'Speech to text isn’t set up on this server (BRAINCRAFT_TRANSCRIBE_URL)' })
+      return transcriber.handle(req, res, url)
     }
     if (url.pathname === '/api/ai/command') {
       if (!agents.size) return send(res, 404, { error: 'No command-line agent here: install Claude Code or Codex on the server, or set BRAINCRAFT_AI_COMMAND' })

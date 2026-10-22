@@ -506,6 +506,13 @@ shares live exactly like a board.
   this to the Trip wiki" or "turn this page into a board": it proposes the
   change for that board or wiki (or a new one), and you apply it from the chat
   without leaving where you are.
+- **Talk to it:** press **🎙 Talk** and think out loud. At each pause what
+  you said goes to the assistant, which builds and reshapes the board as you
+  speak: it picks a mind map, flowchart, notes, table or timeline from what
+  you describe, and changes it when you correct yourself. Every change can be
+  undone from History. Works in Firefox, Chrome, Edge and Safari with the
+  server's speech to text (such as Whisper on vLLM); see
+  [AI.md](docs/AI.md#talking-to-it).
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
   **✦ To board**. Claude reads the picture and proposes real shapes, ideas or
