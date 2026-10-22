@@ -35,6 +35,12 @@ export function emptyWiki(title = 'Untitled wiki', now = Date.now()): Board {
   }
 }
 
+/** A new board or wiki, empty, for changes that make one (a new wiki has no pages until they add some). */
+export function blankBoard(kind: 'wiki' | 'board', title: string): Board {
+  const b: Board = { version: 1, title: title.trim().slice(0, 200) || (kind === 'wiki' ? 'Untitled wiki' : 'Untitled board'), items: [], connectors: [], nextId: 1 }
+  return kind === 'wiki' ? { ...b, kind: 'wiki', pages: [], bodies: [] } : b
+}
+
 export const getPage = (b: Board, id: string | undefined): Page | undefined => (id === undefined || !b.pages ? undefined : tree(b).byId.get(id))
 
 const bodyMaps = new WeakMap<PageBody[], Map<string, PageBody>>()

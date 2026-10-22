@@ -328,3 +328,27 @@ describe('live links', () => {
     ws.dispose()
   })
 })
+
+describe('the assistant’s changes elsewhere', () => {
+  it('makes a new wiki without leaving the open board, and adds pages to one in this browser', async () => {
+    const { ws, editor } = await workspace()
+    const open = ws.boardId
+    const made = await ws.applyElsewhere({ create: { kind: 'wiki', title: 'Ideas wiki' } }, [{ op: 'createPage', title: 'Checkout ideas', text: '- Faster checkout' }])
+    // Still on the board it was asked from.
+    expect(ws.boardId).toBe(open)
+    expect(editor.board.title).toBe('Welcome to BrainCraft')
+    const wiki = (await ws.library.load(made))!
+    expect(wiki.kind).toBe('wiki')
+    expect(wiki.pages!.map((p) => p.title)).toEqual(['Checkout ideas'])
+    // Then a page added to it by its key, and the board's list knows it.
+    await ws.applyElsewhere({ board: made }, [{ op: 'createPage', title: 'Saved carts' }])
+    expect((await ws.library.load(made))!.pages!.map((p) => p.title)).toEqual(['Checkout ideas', 'Saved carts'])
+    expect(ws.boards.find((b) => b.id === made)!.title).toBe('Ideas wiki')
+    // The open board is never changed this way.
+    await expect(ws.applyElsewhere({ board: open! }, [{ op: 'createNote', text: 'x' }])).rejects.toThrow(/open board/)
+    // Bad operations change nothing.
+    await expect(ws.applyElsewhere({ board: made }, [{ op: 'createNote', text: 'x' }])).rejects.toThrow()
+    expect((await ws.library.load(made))!.pages).toHaveLength(2)
+  })
+})
+

@@ -492,6 +492,10 @@ shares live exactly like a board.
   question, already read. It can also look through your other boards and
   wikis itself, and read the files kept with a wiki, and its answers link the
   pages and boards they mention.
+- **Across boards and wikis:** "make a wiki article from this board", "add
+  this to the Trip wiki" or "turn this page into a board": it proposes the
+  change for that board or wiki (or a new one), and you apply it from the chat
+  without leaving where you are.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
   **✦ To board**. Claude reads the picture and proposes real shapes, ideas or

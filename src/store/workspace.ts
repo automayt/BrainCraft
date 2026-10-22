@@ -5,7 +5,7 @@
 
 import type { AiChange, Editor } from '../editor/Editor'
 import { emptyBoard, getItem } from '../model/board'
-import { getBody, getPage, pageText } from '../model/wiki'
+import { blankBoard, getBody, getPage, pageText } from '../model/wiki'
 import { wikiFromTemplate } from '../model/wikiTemplates'
 import { GUIDE_TITLE, guideWiki, tourBoard } from './guide'
 import { headings, parseMarkdown } from '../model/markdown'
@@ -26,6 +26,9 @@ import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type Serve
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
 import { appName, fetchAppName, setAppName } from './brand'
+import { applyOps, type Op } from '../api/ops'
+import type { ElsewhereTarget } from '../ai/assistant'
+import { layoutAll } from '../model/mindmap'
 
 const CURRENT_KEY = 'braincraft:current'
 /** Where boards lived before there was a library. */
@@ -540,6 +543,55 @@ export class Workspace {
       await this.loadServerBoards()
     }
     return id
+  }
+
+  /**
+   * Applies operations to another board or wiki (by its link key), or makes a new one with them
+   * (for the assistant's changes elsewhere). A shared board is changed on its server, so everyone in
+   * it sees the change; a board only in this browser is changed here. Returns the board's id in this
+   * browser, to open it.
+   */
+  async applyElsewhere(target: ElsewhereTarget, ops: Op[]): Promise<string> {
+    const measure = this.editor.measure
+    if (target.create) {
+      const board = layoutAll(applyOps(blankBoard(target.create.kind, target.create.title), ops, { measure }).board, measure)
+      // Signed in to a server with accounts: new boards live there, yours.
+      if (this.boardsOnServer && this.server) {
+        const { id } = await call<{ id: string }>(this.server, 'api/boards', 'POST', { board }, true)
+        const local = await this.library.create(board)
+        await this.library.setLive(local, { server: this.server, id, key: '', role: 'edit', account: true })
+        this.libraryChanged()
+        await this.loadServerBoards()
+        await this.refresh()
+        return local
+      }
+      const local = await this.library.create(board)
+      this.libraryChanged()
+      await this.refresh()
+      return local
+    }
+    const meta = target.board ? this.findBoard(target.board) : undefined
+    if (!meta) throw new Error('That board isn’t in this browser')
+    if (meta.id === this.boardId) throw new Error('That’s the open board')
+    if (meta.live) {
+      const live = meta.live
+      const res = await fetch(new URL(`api/boards/${encodeURIComponent(live.id)}/ops`, live.server.endsWith('/') ? live.server : `${live.server}/`), {
+        method: 'POST',
+        credentials: live.account ? 'include' : 'omit',
+        headers: { 'x-braincraft': '1', 'content-type': 'application/json', ...(live.account ? {} : { authorization: `Bearer ${live.key}` }) },
+        body: JSON.stringify({ ops }),
+      })
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The server said ${res.status}`)
+      this.readBoards.delete(meta.id)
+      return meta.id
+    }
+    const board = await this.library.load(meta.id)
+    if (!board) throw new Error('That board couldn’t be read')
+    await this.library.save(meta.id, layoutAll(applyOps(board, ops, { measure }).board, measure))
+    this.readBoards.delete(meta.id)
+    this.libraryChanged()
+    await this.refresh()
+    return meta.id
   }
 
   /** Starts a new wiki (pages in a tree) and opens it. */

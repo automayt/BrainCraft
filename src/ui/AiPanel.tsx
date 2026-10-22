@@ -88,9 +88,57 @@ function RichText({ text, onObject, onLink }: { text: string; onObject: (id: num
   return <div className="ai-text">{blocks}</div>
 }
 
-function ProposalCard({ p, undone, onApply, onDiscard, onUndo, onHover }: { p: Proposal; undone: boolean; onApply: () => void; onDiscard: () => void; onUndo: () => void; onHover: (on: boolean) => void }) {
+function ProposalCard({
+  p,
+  undone,
+  onApply,
+  onDiscard,
+  onUndo,
+  onOpen,
+  onHover,
+}: {
+  p: Proposal
+  undone: boolean
+  onApply: () => void
+  onDiscard: () => void
+  onUndo: () => void
+  onOpen: () => void
+  onHover: (on: boolean) => void
+}) {
   const { added, changed, removed } = p.counts
   const parts = [added && `${added} new`, changed && `${changed} changed`, removed && `${removed} removed`].filter(Boolean).join(' · ')
+  const t = p.target
+  const what = t ? `${t.kind === 'wiki' ? 'wiki' : 'board'} “${t.title}”` : ''
+  if (t)
+    return (
+      <div className={`ai-proposal elsewhere ${p.status}`}>
+        <div className="ai-proposal-head">
+          <span className="ai-proposal-kind">{p.status === 'applied' ? (t.create ? 'Made' : 'Applied') : p.status === 'discarded' ? 'Discarded' : t.create ? `New ${t.kind === 'wiki' ? 'wiki' : 'board'}` : 'Change elsewhere'}</span>
+          <small>{parts}</small>
+        </div>
+        <p className="ai-proposal-where">
+          {t.kind === 'wiki' ? '📘' : '📋'} {t.create ? `A new ${what}` : `In the ${what}`}
+        </p>
+        <p>{p.summary}</p>
+        {p.status === 'pending' && (
+          <div className="ai-proposal-actions">
+            <button className="primary" onClick={onApply}>
+              {t.create ? `Make the ${t.kind === 'wiki' ? 'wiki' : 'board'}` : 'Apply'}
+            </button>
+            <button onClick={onDiscard}>Discard</button>
+            <small className="muted">{t.create ? 'Nothing is made until you do' : 'Changes that one, not this'}</small>
+          </div>
+        )}
+        {p.status === 'applied' && p.opened && (
+          <div className="ai-proposal-actions">
+            <button className="primary" onClick={onOpen}>
+              Open the {t.kind === 'wiki' ? 'wiki' : 'board'}
+            </button>
+            <small className="muted">Undo it there (a wiki keeps every page’s history)</small>
+          </div>
+        )}
+      </div>
+    )
   return (
     <div className={`ai-proposal ${p.status}`} onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
       <div className="ai-proposal-head">
@@ -193,7 +241,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           selection: () => [...editor.selection],
           view: () => editor.visibleWorld,
           // The person's other boards and wikis in this browser, to read what a message links to.
-          others: () => ({ boards: ws.otherBoards, selfKeys: ws.selfKeys, read: (key) => ws.readBoard(key), me: editor.me }),
+          others: () => ({ boards: ws.otherBoards, selfKeys: ws.selfKeys, read: (key) => ws.readBoard(key), me: editor.me, link: ws.linkKey }),
           fileText: async (id) => {
             const f = editor.board.files?.find((x) => x.id === id)
             return f ? ws.fileText(f) : null
@@ -246,7 +294,8 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
           status: (st) => setStatus(st),
           proposal: (p) => {
             reply.proposals.push(p)
-            editor.previewAi(p)
+            // Changes elsewhere can't be shown on this board; their card says where they go.
+            if (!p.target) editor.previewAi(p)
             refresh()
           },
         },
@@ -294,6 +343,19 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   const history = [...editor.aiHistory].reverse()
 
   const apply = (p: Proposal) => {
+    if (p.target) {
+      // Another board or wiki, or a new one: applied there, then it can be opened.
+      void ws.applyElsewhere(p.target, p.ops).then(
+        (id) => {
+          p.status = 'applied'
+          p.opened = id
+          editor.setStatus(`${p.target!.create ? 'Made' : 'Changed'} ${p.target!.kind === 'wiki' ? 'the wiki' : 'the board'} “${p.target!.title}”`)
+          refresh()
+        },
+        (err: Error) => editor.setStatus(`Couldn’t apply that: ${err.message}`),
+      )
+      return
+    }
     if (editor.readOnly) return editor.setStatus('This board is read-only')
     if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) p.status = 'applied'
     else editor.setStatus('Nothing left to change')
@@ -510,8 +572,9 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
                         refresh()
                       }}
                       onUndo={() => editor.toggleAiChange(p.id)}
+                      onOpen={() => p.opened && void ws.switchTo(p.opened)}
                       onHover={(on) => {
-                        if (p.status !== 'pending') return
+                        if (p.status !== 'pending' || p.target) return
                         editor.previewAi(on ? p : (latestPending ?? null))
                       }}
                     />

@@ -13,8 +13,15 @@ your BrainCraft server.
   **[[** for a wiki page or another board. Whatever you link is read and sent
   along with the question, so the assistant has it without looking it up.
 - **Your other boards and wikis:** it can list them and read any of them
-  (the ones in this browser), not just the open one. It only ever changes the
-  open one.
+  (the ones in this browser), not just the open one.
+- **Between boards and wikis:** ask it to "make a wiki article from this
+  board", "add this to the Trip wiki" or "turn this page into a board", and it
+  proposes the change for that other board or wiki, or a new one. The card
+  says where it goes; **Apply** (or **Make the wiki**) does it without leaving
+  the board you're on, and **Open the wiki** takes you there. A page written
+  from a board links back to it and can show its objects. Changes to a shared
+  board or wiki go through its server, so everyone in it sees them; undo
+  them there (a wiki keeps every page's history).
 - **Files:** in a wiki, it can list the files kept with it and read their
   words (PDFs, documents, slides, spreadsheets). **Ask AI about it** in
   **📎 Files** starts it off.

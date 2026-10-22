@@ -21,7 +21,7 @@ import type { BoardRef } from '../model/notes'
 import { referenceContext } from './references'
 import type { Board, Id, Kind } from '../model/types'
 import { uid } from '../model/uid'
-import { isWiki, pageText } from '../model/wiki'
+import { blankBoard, isWiki, pageText } from '../model/wiki'
 import { AnthropicBackend, type Backend, BackendError, CommandBackend, INVALID_TOOL, OpenAiBackend } from './backends'
 
 export const AI_MODELS = [
@@ -79,7 +79,21 @@ export interface Proposal {
   bases?: Record<string, string>
   counts: { added: number; changed: number; removed: number }
   status: 'pending' | 'applied' | 'discarded'
+  /** Changes to another board or wiki, or a new one, instead of the open board. */
+  target?: Elsewhere
+  /** Once applied elsewhere: the board's id in this browser, to open it. */
+  opened?: string
 }
+
+/** Another board or wiki (by its link key), or a new one to make. */
+export interface ElsewhereTarget {
+  /** An existing board or wiki, by its link key. */
+  board?: string
+  /** Or a new one. */
+  create?: { kind: 'wiki' | 'board'; title: string }
+}
+export type Elsewhere = ElsewhereTarget & { title: string; kind: 'wiki' | 'board' }
+
 
 /** A picture sent with a message (a sketch or photo from the board). */
 export interface AiImage {
@@ -110,6 +124,8 @@ export interface Others {
   read(key: string): Promise<Board | null>
   /** This person's name (their own hidden brainstorm notes stay readable). */
   me: string
+  /** The key other boards' links use for the open one (for links back to it). */
+  link?: string | null
 }
 
 export interface Callbacks {
@@ -175,6 +191,7 @@ How to work:
 - When you mention an object, link it as @[Label](#id) using its numeric id, so the person can click to it.
 - The person's other boards and wikis: list_boards gives their keys; every read tool takes "board" to read one of them. Link a page of this wiki as [[Title]](page:ID), a page elsewhere as [[Title]](board:KEY/page:ID), another board as [[Title]](board:KEY), and an object on another board as [[Label]](board:KEY#ID). Changes only ever go to the open board.
 - A message may end with what it links to, already read for you: use that rather than reading it again.
+- Boards and wikis work together. Each message says what is open and its key. To change ANOTHER board or wiki, or to make a new one, call propose_elsewhere: for example "make a wiki article from this board" is a new wiki (or a page in an existing wiki the person names) written from what you read on the board, and "turn this page into a board" is a new board with notes, mind maps or flowcharts. A page written from a board should link back to it as [[Board title]](board:KEY), and can show its objects with an embed line on its own, ![[Label]](board:KEY#ID) (or ![[Title]](board:KEY) for the whole board). Write real Markdown pages (headings, lists, tables), not a dump of the objects.
 - Files kept with the board (PDFs, documents, slides): list_files, then read_file. To make a wiki page from one, write it with createPage.
 - Be brief. Short paragraphs or bullets, no preamble.
 
@@ -210,6 +227,27 @@ function buildTools(): Anthropic.Beta.BetaTool[] {
     ...read,
     ...FILE_TOOLS,
     {
+      name: 'propose_elsewhere',
+      description:
+        'Proposes changes to ANOTHER board or wiki (its key from list_boards), or makes a NEW one ("create": {"kind": "wiki" or "board", "title"}). Use it to write a wiki page from what is on a canvas board, lay out a wiki page’s ideas on a board, add a page to an existing wiki, and so on. The ops are the ones for that kind of board: createPage/updatePage for a wiki, createNote/createFlowchart/… for a board. They are checked, then shown to the person, who applies them (nothing changes until then). An error result means nothing was proposed: fix it and try again.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string', description: 'One line saying what it does, e.g. "A wiki page summarising the Q4 plan board"' },
+          board: { type: 'string', description: 'The key of an existing board or wiki (from list_boards). Leave out to make a new one with "create".' },
+          create: {
+            type: 'object',
+            description: 'Make a new board or wiki for these changes',
+            properties: { kind: { type: 'string', enum: ['wiki', 'board'] }, title: { type: 'string' } },
+            required: ['kind', 'title'],
+          },
+          ops: { type: 'array', items: { type: 'object' }, description: 'The operations, in order' },
+        },
+        required: ['summary', 'ops'],
+      },
+      eager_input_streaming: true,
+    },
+    {
       name: 'propose_changes',
       description:
         'Proposes changes to the board as a batch of operations (see the operations guide in the system prompt). They are checked against the board, then shown to the person as a preview to apply or discard. An error result means nothing was proposed: fix the operations and try again.',
@@ -239,6 +277,7 @@ const STATUS: Record<string, string> = {
   list_files: 'Looking at the files…',
   read_file: 'Reading a file…',
   propose_changes: 'Preparing changes…',
+  propose_elsewhere: 'Preparing changes…',
 }
 
 /** Counts what a set of patches adds, changes and removes (objects and records). */
@@ -312,6 +351,13 @@ export class Assistant {
       return { content: `Shown to the person as a preview (${added} new, ${changed} changed, ${removed} removed). They will apply or discard it.` }
     }
     if (name === 'list_files' || name === 'read_file') return this.fileTool(name, input)
+    if (name === 'propose_elsewhere') {
+      const p = await this.proposeElsewhere(input)
+      if (typeof p === 'string') return { content: p, is_error: true }
+      on.proposal(p)
+      const { added, changed, removed } = p.counts
+      return { content: `Shown to the person to apply (${added} new, ${changed} changed, ${removed} removed in ${p.target!.kind === 'wiki' ? 'the wiki' : 'the board'} "${p.target!.title}"). Nothing has changed until they do.` }
+    }
     if (!READ_TOOLS.includes(name)) return { content: `Unknown tool "${name}"`, is_error: true }
     if (!input || typeof input !== 'object') return { content: 'Tool input must be an object', is_error: true }
     const others = this.host.others?.()
@@ -362,6 +408,39 @@ export class Assistant {
     }
   }
 
+  /** Checks changes for another board or wiki (or a new one); returns the proposal, or what's wrong. */
+  private async proposeElsewhere(input: unknown): Promise<Proposal | string> {
+    const x = (input ?? {}) as { summary?: unknown; board?: unknown; create?: { kind?: unknown; title?: unknown }; ops?: unknown }
+    if (typeof x.summary !== 'string' || !Array.isArray(x.ops) || !x.ops.length || !x.ops.every((o) => o && typeof o === 'object' && typeof (o as Op).op === 'string'))
+      return 'propose_elsewhere needs "summary" (text) and "ops" (a non-empty list of operations, each with an "op" field)'
+    const others = this.host.others?.()
+    if (!others) return 'Other boards can’t be changed from here.'
+    let base: Board | null
+    let target: Elsewhere
+    if (x.create !== undefined) {
+      const kind = x.create?.kind
+      if (kind !== 'wiki' && kind !== 'board') return '"create" needs "kind": "wiki" or "board", and a "title"'
+      if (typeof x.create.title !== 'string' || !x.create.title.trim()) return '"create" needs a "title"'
+      base = blankBoard(kind, x.create.title)
+      target = { create: { kind, title: base.title }, title: base.title, kind }
+    } else {
+      if (typeof x.board !== 'string') return 'Say which board with "board" (a key from list_boards), or make a new one with "create".'
+      if (others.selfKeys.includes(x.board)) return 'That is the open board: use propose_changes for it.'
+      base = await others.read(x.board)
+      if (!base) return `No board with the key "${x.board}". Call list_boards for the keys.`
+      target = { board: x.board, title: base.title, kind: isWiki(base) ? 'wiki' : 'board' }
+    }
+    try {
+      const after = layoutAll(applyOps(base, x.ops as Op[], { measure: this.host.measure, protect: maskedIds(maskFor(base, others.me)) }).board, this.host.measure)
+      const patches = diff(base, after)
+      if (!patches.length) return 'Those operations change nothing there.'
+      return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches: [], counts: countChanges(base, patches), status: 'pending', target }
+    } catch (err) {
+      if (err instanceof OpError) return err.message
+      return `Those operations couldn't be applied: ${(err as Error)?.message ?? String(err)}. Check each field's type.`
+    }
+  }
+
   /** list_files and read_file: the open board's files. */
   private async fileTool(name: string, input: unknown): Promise<{ content: string; is_error?: boolean }> {
     const files = (this.host.board().files ?? []).filter((f) => !f.trashed)
@@ -388,9 +467,11 @@ export class Assistant {
   /** Sends a message and runs the conversation until the model has answered. */
   async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = []): Promise<void> {
     const sel = this.host.selection()
-    const context = sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'
-    // What the message links to (objects, pages, other boards), read and sent along.
     const others = this.host.others?.()
+    const open = this.host.board()
+    const where = `[Open: ${isWiki(open) ? 'the wiki' : 'the canvas board'} ${JSON.stringify(open.title)}${others?.link ? `, key ${others.link}` : ''}]`
+    const context = `${where} ${sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'}`
+    // What the message links to (objects, pages, other boards), read and sent along.
     on.status('Reading what you linked…')
     const linked = await referenceContext(text, {
       board: () => this.host.readable?.() ?? this.host.board(),
