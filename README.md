@@ -163,6 +163,13 @@ These become interactive once selected; drag them by their title strip.
 
 ### Comments and search
 
+- **Link any object to a wiki page:** select text, a note, a shape or a frame
+  and press **🔗 Link** on its toolbar, then pick a page from your wikis (or a
+  board, an object, or paste a page's link or any web address). The object
+  gets a link badge on its corner, and linked text is underlined; click the
+  badge and a wiki page opens beside the board, the same way a wiki page jumps
+  to the board objects it shows. The page lists the objects linking to it.
+
 - **Every object has a description**: free text at the top of its comments
   panel for context, links or decisions. It's searchable, and AI assistants
   can read and set it.
@@ -350,6 +357,9 @@ shares live exactly like a board.
   drops off the list once you've opened it.
 - **Search across wikis:** Ctrl+K in any board or wiki also finds pages in
   your other wikis.
+- **Page width:** the **↔** picker on a page's toolbar reads pages narrow,
+  normal, wide (good for tables and boards shown on the page) or across the
+  whole window; this browser remembers it for every wiki.
 - **Out as a web page or PDF:** **⋯ → Download wiki as a web page (.html)**
   gives every page in one file, with a contents list, links between pages that
   work, macros worked out and pictures of the boards it shows; **Print or save

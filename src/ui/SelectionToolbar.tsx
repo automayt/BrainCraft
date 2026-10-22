@@ -10,6 +10,11 @@ import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, is
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useButtonMenu } from './menuKeys'
+import { canLink, describeLink, type ItemLink } from '../model/itemLink'
+import { mentionCandidates, objectLabel } from '../model/notes'
+import { targetFromUrl } from '../store/deepLink'
+import { useWorkspace } from './useWorkspace'
+import { followLink } from './followLink'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 
@@ -292,6 +297,7 @@ export function SelectionToolbar() {
           </button>
         ))}
       {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
+      {!editor.readOnly && items.length > 0 && items.every((i) => canLink(i.kind)) && <LinkMenu />}
       {items.length > 0 && <ReactMenu />}
       {items.length === 1 && isDrawing(items[0]) && (
         <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
@@ -409,6 +415,112 @@ export function StatusDot({ status, size = 16 }: { status: string | undefined; s
         <circle cx="10" cy="10" r="8.5" className="status-none" />
       )}
     </svg>
+  )
+}
+
+/** What a link can lead to, found by name (or pasted as an address). */
+interface LinkChoice {
+  link: ItemLink
+  label: string
+  hint: string
+}
+
+/** Make the selection lead somewhere: a wiki page, a board, an object, or a web address. */
+function LinkMenu() {
+  const editor = useEditor()
+  const ws = useWorkspace()
+  const { at, close, toggle, menuProps } = useButtonMenu()
+  const [query, setQuery] = useState('')
+  const items = editor.selectedItems
+  const current = items.length === 1 ? items[0].linkTo : undefined
+  const q = query.trim().toLowerCase()
+
+  const choices: LinkChoice[] = []
+  // A pasted address: a BrainCraft link becomes a place in BrainCraft, anything else stays a web address.
+  const pasted = query.trim()
+  const place = pasted ? targetFromUrl(pasted) : null
+  if (place) {
+    const board = place.board ? ws.findBoard(place.board) : undefined
+    const page = place.page !== undefined ? board?.outline?.find((p) => p.id === place.page) : undefined
+    const label = page?.title ?? board?.title ?? 'That place'
+    choices.push({ link: { ...place, label }, label, hint: page ? `📘 ${board!.title}` : 'From the link' })
+  } else if (/^https?:\/\/\S+$/i.test(pasted)) choices.push({ link: { url: pasted }, label: pasted, hint: 'Web address' })
+  // Pages of every wiki here first: what links from a board usually lead to.
+  for (const r of ws.otherBoards) {
+    for (const p of r.pages ?? []) {
+      if (choices.length >= 10) break
+      if (!q || p.title.toLowerCase().includes(q)) choices.push({ link: { board: r.key, page: p.id, label: p.title || 'Untitled' }, label: p.title || 'Untitled', hint: `${p.icon ?? '📄'} ${r.title}` })
+    }
+  }
+  for (const r of ws.otherBoards) {
+    if (choices.length >= 14) break
+    if (!q || r.title.toLowerCase().includes(q)) choices.push({ link: { board: r.key, label: r.title }, label: r.title || 'Untitled', hint: r.kind === 'wiki' ? '📘 Wiki' : '📋 Board' })
+  }
+  if (q)
+    for (const i of mentionCandidates(editor.board, q, items[0]?.id, 4))
+      if (!items.some((s) => s.id === i.id)) choices.push({ link: { item: i.id, label: objectLabel(i) }, label: objectLabel(i), hint: 'On this board' })
+
+  const pick = (l: ItemLink | null) => {
+    editor.setLink(l)
+    setQuery('')
+    close()
+  }
+  return (
+    <span className="align-anchor">
+      <button title="Link: make this lead to a wiki page, a board, an object or a web address" aria-label="Link" aria-expanded={!!at} className={`${current ? 'linked-button ' : ''}${at ? 'on' : ''}`} aria-haspopup="menu" onClick={toggle}>
+        🔗 {current ? 'Linked' : 'Link'}
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu link-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
+            {current && (
+              <div className="link-current">
+                <span>
+                  <small className="muted">Leads to</small> {describeLink(current)}
+                </span>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    followLink(ws, editor, current)
+                    close()
+                  }}
+                >
+                  Open
+                </button>
+                <button role="menuitem" className="danger-quiet" onClick={() => pick(null)}>
+                  Remove
+                </button>
+              </div>
+            )}
+            <input
+              autoFocus
+              className="link-search"
+              placeholder="Find a page or board, or paste a link"
+              aria-label="Find a page or board, or paste a link"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Typing stays here; Enter takes the first choice.
+                e.stopPropagation()
+                if (e.key === 'Enter' && choices[0]) pick(choices[0].link)
+                if (e.key === 'Escape') close()
+                if (e.key === 'ArrowDown') (e.currentTarget.parentElement?.querySelector('.link-choice') as HTMLElement | null)?.focus()
+              }}
+            />
+            {choices.length ? (
+              choices.map((c, k) => (
+                <button key={k} role="menuitem" className="link-choice" onClick={() => pick(c.link)}>
+                  <span>{c.label}</span>
+                  <small className="muted">{c.hint}</small>
+                </button>
+              ))
+            ) : (
+              <p className="muted link-none">{q ? `Nothing called “${query.trim()}” here. Paste a page’s link (Copy link on the page) or a web address.` : 'No wikis or boards here yet.'}</p>
+            )}
+          </div>,
+          document.body,
+        )}
+    </span>
   )
 }
 

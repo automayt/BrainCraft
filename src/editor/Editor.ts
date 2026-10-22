@@ -7,6 +7,7 @@
 import * as B from '../model/board'
 import { isDrawing, sceneText } from '../model/excalidraw'
 import { canSketch, flowComponent, setBoardSketch, setSketch, sketchNew } from '../model/sketch'
+import { type ItemLink, setItemLink } from '../model/itemLink'
 import type { BoardFile, ExcalidrawScene } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
@@ -2334,6 +2335,14 @@ export class Editor {
     const before = this.board
     this.edit((b) => setBoardSketch(b, on))
     if (this.board !== before) this.setStatus(on ? 'Hand-drawn board: everything here, and everything you add, is drawn by hand' : 'Clean lines again')
+  }
+
+  /** Makes the selection (or `ids`) lead somewhere when clicked, or not (null). One undo step. */
+  setLink(link: ItemLink | null, ids: Iterable<Id> = this.selection) {
+    if (this.readOnly) return
+    const before = this.board
+    this.edit((b) => setItemLink(b, ids, link))
+    if (this.board !== before) this.setStatus(link ? 'Linked: click the badge on its corner to follow it' : 'Link removed')
   }
 
   /** Whether everything selected that can be drawn by hand is. */

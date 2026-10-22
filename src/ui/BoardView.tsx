@@ -17,6 +17,7 @@ import { WheelFace } from './WheelFace'
 import { CodeBlockView } from './CodeBlockView'
 import { Rough } from './roughShapes'
 import { withoutBackground } from '../model/excalidraw'
+import { describeLink } from '../model/itemLink'
 
 export function darken(hex: string, k = 0.72): string {
   const n = parseInt(hex.slice(1), 16)
@@ -27,7 +28,7 @@ export function darken(hex: string, k = 0.72): string {
 function Text({ item, className, color }: { item: Item; className: string; color?: string }) {
   return (
     <foreignObject x={item.x} y={item.y} width={Math.max(item.w, 1)} height={Math.max(item.h, 1)}>
-      <div className={`item-text ${className}${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color }}>
+      <div className={`item-text ${className}${item.sketch ? ' hand' : ''}${item.linkTo ? ' linked' : ''}`} style={{ fontSize: item.fontSize, color }}>
         {item.text}
       </div>
     </foreignObject>
@@ -532,6 +533,23 @@ export const BoardView = memo(function BoardView({
         if (!from || !to || !pairInView(from, to)) return null
         return <ConnectorView key={c.id} c={c} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
       })}
+      {/* Objects that lead somewhere: a badge on their corner to follow it. */}
+      {!coarse &&
+        visible.map((i) =>
+          i.linkTo ? (
+            <g key={`link-${i.id}`} data-handle="followLink" data-id={i.id} className="item-link-badge" transform={`translate(${i.x + i.w} ${i.y})`}>
+              <title>{describeLink(i.linkTo)}</title>
+              <circle r={12} />
+              {i.linkTo.url ? (
+                <path d="M-3.5 3.5L4 -4M-0.5 -4H4V-0.5" />
+              ) : i.linkTo.page !== undefined ? (
+                <path d="M-4 -5.5h5.5l2.5 2.5v8.5h-8zM1.5 -5.5v2.5h2.5" />
+              ) : (
+                <path d="M-1.5 2.5l-1.6 1.6a2.5 2.5 0 0 1-3.5-3.5l2.4-2.4a2.5 2.5 0 0 1 3.5 0M1.5 -2.5l1.6-1.6a2.5 2.5 0 0 1 3.5 3.5l-2.4 2.4a2.5 2.5 0 0 1-3.5 0" />
+              )}
+            </g>
+          ) : null,
+        )}
     </g>
   )
 })

@@ -1,3 +1,4 @@
+import type { ItemLink } from './itemLink'
 import type { Rect, Vec } from './geom'
 
 export type Id = number
@@ -324,6 +325,8 @@ export interface Item extends Rect {
   link?: LinkCard
   /** A link card for a wiki page (its title and opening words), opened beside the board. */
   page?: { board: string; page: string }
+  /** Where the object leads: a wiki page, a board, an object or a web address (see itemLink.ts). */
+  linkTo?: ItemLink
   /** A code block's language (an id from model/code; guessed when missing). */
   lang?: string
   /** Emoji reactions: who put each one on. */

@@ -31,6 +31,8 @@ import { Moments } from './Moments'
 import { ShapePicker } from './ShapePicker'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { useWorkspace } from './useWorkspace'
+import { followLink } from './followLink'
 
 
 function readHandle(target: EventTarget | null): Handle | undefined {
@@ -63,6 +65,7 @@ function readHandle(target: EventTarget | null): Handle | undefined {
 
 export function Canvas() {
   const editor = useEditor()
+  const ws = useWorkspace()
   const ui = useUi()
   const ref = useRef<HTMLDivElement>(null)
   const touches = useRef(new Map<number, { x: number; y: number }>())
@@ -115,6 +118,14 @@ export function Canvas() {
         pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
         return
       }
+    }
+    // An object's link badge: follow the link (a wiki page opens beside the board).
+    const badge = (e.target as Element).closest?.('[data-handle="followLink"]')
+    if (badge && e.button === 0) {
+      const linked = B.getItem(editor.board, Number(badge.getAttribute('data-id')))
+      if (linked?.linkTo) followLink(ws, editor, linked.linkTo)
+      e.preventDefault()
+      return
     }
     ref.current!.setPointerCapture(e.pointerId)
     // Keep focus off any text box so canvas shortcuts work.

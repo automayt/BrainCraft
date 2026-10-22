@@ -33,6 +33,7 @@ import type {
 import { defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { cleanFile, isFileId } from './files'
+import { canLink, cleanItemLink } from './itemLink'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
 import { canSketch } from './sketch'
@@ -291,6 +292,9 @@ export function cleanItem(raw: unknown): Item | null {
     const page = raw.page
     if (isObj(page) && typeof page.board === 'string' && /^[\w-]{1,64}$/.test(page.board) && isPageId(page.page)) out.page = { board: page.board, page: page.page }
   }
+  // Where the object leads when clicked (a link card is a link already).
+  const linkTo = canLink(kind) ? cleanItemLink(raw.linkTo) : null
+  if (linkTo) out.linkTo = linkTo
   const reactions = cleanReactions(raw.reactions)
   if (reactions) out.reactions = reactions
   const votes = cleanVotes(raw.votes)

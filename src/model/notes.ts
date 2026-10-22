@@ -231,6 +231,9 @@ export function boardLinks(b: Board, boards: readonly BoardRef[] = []): LinkRef[
   for (const item of b.items) {
     if (item.description) scan(item, item.description)
     for (const note of item.notes ?? []) scan(item, note.text, note)
+    // An object that leads somewhere links there too.
+    const l = item.linkTo
+    if (l && !l.url) out.push({ item, to: { ...(l.board ? { board: l.board } : {}), ...(l.page ? { page: l.page } : {}), ...(l.heading ? { heading: l.heading } : {}), ...(l.item !== undefined ? { item: l.item } : {}) } })
   }
   // A wiki's pages link too.
   const bodies = new Map((b.bodies ?? []).map((x) => [x.id, x.text]))

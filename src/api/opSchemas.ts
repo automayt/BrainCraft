@@ -102,6 +102,10 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       locked: bool(),
       status: { enum: ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped', 'none'], description: '"none" clears it' },
       sketch: bool('Drawn by hand: wobbly outlines and handwriting (shapes, flowchart shapes, notes, text, frames, mind maps)'),
+      linkTo: {
+        description: 'Where the object leads when clicked: a web address, a wiki page {"board": key, "page": id, "heading"?: anchor}, a board {"board": key}, or an object {"item": id, "board"?: key}; null removes it',
+        anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'null' }],
+      },
     },
     required: ['id'],
   },

@@ -7459,7 +7459,8 @@ button.on,
 }
 
 .wiki-page {
-  max-width: 860px;
+  /* The reader's choice (Narrow, Normal, Wide, Full width), set from the page's ↔ picker. */
+  max-width: var(--wiki-width, 860px);
   margin: 0 auto;
   padding: 18px 40px 80px;
 }
@@ -10148,4 +10149,109 @@ button.on,
   font-size: 12.5px;
   font-weight: 600;
   color: var(--accent);
+}
+
+/* ----- links on objects ----- */
+
+.item-link-badge {
+  cursor: pointer;
+}
+
+.item-link-badge circle {
+  fill: var(--accent-strong);
+  stroke: var(--canvas);
+  stroke-width: 2.5;
+}
+
+.item-link-badge path {
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.item-link-badge:hover circle {
+  fill: var(--accent);
+}
+
+/* Text that leads somewhere reads as a link. */
+.item-text.linked {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.link-menu {
+  width: 320px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.link-menu .link-search {
+  width: 100%;
+  margin: 2px 0 6px;
+}
+
+.link-menu .link-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+}
+
+.link-menu .link-choice span {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.link-current span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-none {
+  margin: 6px 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.linked-button {
+  color: var(--accent);
+}
+
+/* The page width picker, among the page's buttons. */
+.page-width {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.page-width select {
+  padding: 4px 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }

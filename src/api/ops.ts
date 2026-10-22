@@ -7,6 +7,7 @@
  * See docs/API.md for the full reference.
  */
 
+import { cleanItemLink, setItemLink } from '../model/itemLink'
 import * as B from '../model/board'
 import { startPoll, toggleReaction } from '../model/reactions'
 import { type Rect, type Vec, unionAll } from '../model/geom'
@@ -91,7 +92,7 @@ export type Op =
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
-  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null; sketch?: boolean }
+  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null; sketch?: boolean; linkTo?: string | Record<string, unknown> | null }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
   /** Wiki pages (in a wiki only). `page`, `parent` and `before` take a page id, a `ref` or an exact title. */
@@ -475,6 +476,13 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         if (op.sketch !== undefined) {
           if (typeof op.sketch !== 'boolean') fail(index, op, '"sketch" should be true or false')
           b = setSketch(b, [id], op.sketch)
+        }
+        if (op.linkTo !== undefined) {
+          // A web address as text, a place in BrainCraft as {board?, page?, heading?, item?}, or null to remove it.
+          const raw = typeof op.linkTo === 'string' ? { url: op.linkTo } : op.linkTo
+          const link = raw === null ? null : cleanItemLink(raw)
+          if (raw !== null && !link) fail(index, op, '"linkTo" should be a web address, {"board": KEY, "page": ID, "heading"?: slug} or {"item": ID}, or null')
+          b = setItemLink(b, [id], link)
         }
         done({ id })
         break

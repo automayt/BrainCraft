@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { applyPageWidth, loadPageWidth, PAGE_WIDTHS, type PageWidth } from './pageWidth'
 import { isProtected } from '../../model/protection'
 import { MovePage } from './MovePage'
 import { ChangesSince, PageHistory } from './PageHistory'
@@ -56,6 +57,9 @@ function linksOf(body: PageBody) {
   }
   return hit
 }
+// Pages read at the width this browser last chose.
+if (typeof document !== 'undefined') applyPageWidth(loadPageWidth(), false)
+
 export function WikiView() {
   const editor = useEditor()
   const ws = useWorkspace()
@@ -149,6 +153,31 @@ export function WikiView() {
 }
 
 /** One page: where it sits, its title, its words (or the editor), sub-pages and what links here. */
+/** How wide pages read: narrow to the whole window, remembered in this browser. */
+function PageWidthPicker() {
+  const [width, setWidth] = useState(loadPageWidth)
+  return (
+    <label className="page-width" title="How wide pages read (in this browser, for every wiki)">
+      <span aria-hidden="true">↔</span>
+      <select
+        aria-label="Page width"
+        value={width}
+        onChange={(e) => {
+          const w = e.target.value as PageWidth
+          setWidth(w)
+          applyPageWidth(w)
+        }}
+      >
+        {PAGE_WIDTHS.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function PageView({ page, editing, setEditing }: { page: Page; editing: boolean; setEditing: (v: boolean) => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
@@ -332,6 +361,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               </button>
             </>
           )}
+          <PageWidthPicker />
           <PageMenu
             label="More for this page"
             items={[
