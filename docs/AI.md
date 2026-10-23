@@ -60,12 +60,38 @@ on it as you go on: "add a budget under the party", "no, make that a
 flowchart", "move the press release first".
 
 - Talking changes the board straight away, without a preview, so it can
-  keep up. Every change is still listed under **History**, to undo.
+  keep up. Every change is still listed under **History**, to undo. Each
+  turn is a single request to the model: it says in a few words what it's
+  doing, makes the change, and is done.
 - What you said while it was working waits, and goes as one turn when it's
   done. **Go now** sends it without waiting for the pause.
 - **Stop talking** ends it (what you were saying still goes).
 - The microphone needs the page on https or on this computer (localhost); see
   [HTTPS.md](HTTPS.md).
+
+### Flowstate
+
+**Flowstate** (Ctrl Shift F, **Flowstate** in the panel, **Or talk it
+through** on a blank board, or Ctrl K → Flowstate) is talking with nothing
+else on screen: the app's bars, tools and panels go away and the board fills
+the screen (full screen where the browser allows). Just talk.
+
+- The assistant's few words float at the top middle as it writes them ("Mind
+  map of the launch, three branches.") and fade once they've been read; the
+  last couple stay, smaller, for context. Dots there mean it's working.
+- What you're saying shows faintly at the bottom, above a small orb in the
+  brand colours that swells with your voice: the only sign it's listening.
+- The board changes as you go: it makes a mind map when you describe one,
+  then adds, replaces, removes and rearranges as you carry on ("actually,
+  replace the party with a launch dinner"). The camera keeps the whole board
+  in view while it's readable, below the words at the top, and goes to what
+  changed once the board outgrows the screen.
+- The board still works by hand: drag, type and delete as usual, and the
+  next turn builds on your version. Ctrl Z undoes the last change.
+- **Esc** (or leaving full screen) ends it, and **Ctrl J** goes from it
+  straight to the assistant panel, where the whole conversation is, with an
+  **Undo** on every change. Moving the mouse shows a **Leave Flowstate**
+  button at the top right.
 
 **Which browser.** Firefox has no speech recognition of its own (only behind
 a setting), so for it, and for the best results everywhere, the BrainCraft

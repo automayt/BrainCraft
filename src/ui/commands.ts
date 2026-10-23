@@ -89,6 +89,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'download', label: 'Download a copy (.braincraft file)', group: 'Board', aliases: 'save export json file', run: ui.download },
     { id: 'share', label: 'Share…', group: 'Board', aliases: 'link url send view publish live collaborate together invite team realtime', run: ui.openShare },
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude vllm codex model chat ai summarise cluster', run: ui.toggleAssistant },
+    { id: 'flowstate', label: 'Flowstate: build the board by talking', group: 'Board', keys: 'Ctrl Shift F', aliases: 'voice talk speak dictate microphone live immersive focus full screen', run: () => ui.flow(true) },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
     editor.board.sketch
@@ -212,8 +213,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
 
 const LOOK_GROUPS = new Set(['Board', 'View', 'Help'])
 /** Board commands that only mean something on a canvas. */
-const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export'])
-const EDIT_IDS = new Set(['versions', 'import'])
+const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export', 'flowstate'])
+const EDIT_IDS = new Set(['versions', 'import', 'flowstate'])
 const LOOK_IDS = new Set(['emote', 'chat', 'select-all', 'comments', 'run-history'])
 /** Runs work on boards that can't be changed (nothing is recorded); not while one is under way. */
 const RUN_IDS = new Set(['run', 'run-here'])

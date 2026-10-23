@@ -296,7 +296,7 @@ export function Canvas() {
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
       </svg>
-      {board.items.length === 0 && editor.tool === 'select' && <EmptyBoard />}
+      {board.items.length === 0 && editor.tool === 'select' && !editor.flow && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <PeerLayer />
@@ -825,6 +825,10 @@ function EmptyBoard() {
       </div>
       <button className="link" onClick={() => ui.openImport()}>
         Import Mermaid, an outline or AI-generated JSON…
+      </button>
+      <button className="flow-start" onClick={() => ui.flow(true)} title="Ctrl Shift F">
+        <strong>Or talk it through</strong>
+        <small>Flowstate: just the board, built by the assistant as you speak</small>
       </button>
     </div>
   )

@@ -5,12 +5,14 @@ import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, descri
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
+import { isWiki } from '../model/wiki'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
+import { type FlowLine, Flowstate, plainLine } from './Flowstate'
 
 interface Turn {
   role: 'user' | 'assistant' | 'error'
@@ -182,7 +184,11 @@ const usageTitle = (u: Usage) => `This chat so far: ${u.input} input, ${u.cacheR
 /** One assistant (and its conversation) per board, for this visit. */
 const assistants = new Map<string, { assistant: Assistant; turns: Turn[] }>()
 
-export function AiPanel({ onClose }: { onClose: () => void }) {
+/**
+ * The assistant: a side panel, or, in Flowstate (`flow`), nothing but the board, its words
+ * floating over it while you talk. Both share the board's conversation.
+ */
+export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean) => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
@@ -370,6 +376,42 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) p.status = 'applied'
     else editor.setStatus('Nothing left to change')
     refresh()
+  }
+
+  // Flowstate starts listening at once, and stops when it ends; its words are this session's replies.
+  const flowFrom = useRef(0)
+  const wasFlow = useRef(false)
+  if (flow && !wasFlow.current) flowFrom.current = turns.length
+  wasFlow.current = flow
+  const canTalk = !!connection && !editor.readOnly && !!talk.how
+  useEffect(() => {
+    if (flow) {
+      if (checked && canTalk && !talk.on) void talk.start()
+    } else if (talk.on) talk.stop()
+    // Only when Flowstate starts or ends, or once it's known whether it can listen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow, checked, canTalk])
+
+  if (flow) {
+    const lines: FlowLine[] = turns.slice(flowFrom.current).flatMap((t, i): FlowLine[] => {
+      if (t.role === 'user') return []
+      const key = String(flowFrom.current + i)
+      if (t.role === 'error') return [{ key, text: plainLine(t.text), state: 'error' }]
+      const last = flowFrom.current + i === turns.length - 1
+      // Said in words, or else what it changed.
+      const text = plainLine(t.text) || (last && running ? '' : t.proposals.map((p) => p.summary).join('; '))
+      return text || (last && running) ? [{ key, text, state: last && running ? 'working' : 'done' }] : []
+    })
+    const problem = !checked
+      ? null
+      : !connection
+        ? 'The assistant isn’t connected yet. Leave Flowstate (Esc) and open Ask AI to set it up.'
+        : editor.readOnly
+          ? 'This board is read-only, so it can’t be changed by talking.'
+          : !talk.how
+            ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.'
+            : talk.error
+    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} problem={problem} onLeave={() => onFlow?.(false)} />
   }
 
   const showSetup = setup || !connection
@@ -660,6 +702,17 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   New chat
+                </button>
+              )}
+              {!talk.on && onFlow && (
+                <button
+                  type="button"
+                  className="talk-btn"
+                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                  title="Flowstate: just the board, built as you talk (Ctrl Shift F)"
+                  onClick={() => onFlow(true)}
+                >
+                  Flowstate
                 </button>
               )}
               {!talk.on && (

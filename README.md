@@ -513,6 +513,9 @@ shares live exactly like a board.
   undone from History. Works in Firefox, Chrome, Edge and Safari with the
   server's speech to text (such as Whisper on vLLM); see
   [AI.md](docs/AI.md#talking-to-it).
+- **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
+  bars and panels go away, the assistant's few words float at the top as it
+  works, and the board grows and changes as you speak. Esc to leave.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
   **✦ To board**. Claude reads the picture and proposes real shapes, ideas or

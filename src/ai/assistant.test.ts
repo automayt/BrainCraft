@@ -510,8 +510,8 @@ describe('talking to the assistant', () => {
   it('sends the board with what was said, and its changes go on the board at once', async () => {
     const b = board()
     const { client, sent } = fakeClient([
-      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'propose_changes', input: { summary: 'A mind map of the ideas', ops: [{ op: 'createMindMap', outline: 'Checkout\n  Faster\n  Saved carts' }] } }] },
-      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Made a mind map.' }] },
+      { stop_reason: 'tool_use', content: [{ type: 'text', text: 'Mind map of the checkout ideas.' }, { type: 'tool_use', id: 't1', name: 'propose_changes', input: { summary: 'A mind map of the ideas', ops: [{ op: 'createMindMap', outline: 'Checkout\n  Faster\n  Saved carts' }] } }] },
+      { stop_reason: 'tool_use', content: [{ type: 'text', text: 'Swapped in guest checkout.' }, { type: 'tool_use', id: 't2', name: 'propose_changes', input: { summary: 'Guest checkout', ops: [{ op: 'createNote', text: 'Guest checkout' }] } }] },
     ])
     const applied: Proposal[] = []
     const shown: Proposal[] = []
@@ -525,8 +525,30 @@ describe('talking to the assistant', () => {
     expect(first).toContain('They said: \\"so the checkout ideas, faster and saved carts\\"')
     expect(applied).toHaveLength(1)
     expect(shown[0].status).toBe('applied')
-    // ...and is told it's on the board already.
-    expect(JSON.stringify((sent[1].messages as unknown[]).at(-1))).toContain('Applied to the board')
+    // Once it's on the board the turn is over: no second request just to say so.
+    expect(sent).toHaveLength(1)
+
+    // The next words go with the news that the last change was applied, in one message.
+    await a.send('actually replace saved carts with guest checkout', { text: () => {}, status: () => {}, proposal: (p) => shown.push(p), apply: (p) => (applied.push(p), true) }, undefined, [], true)
+    expect(sent).toHaveLength(2)
+    const msgs = sent[1].messages as { role: string; content: { type: string; content?: string; text?: string }[] }[]
+    expect(msgs.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
+    expect(msgs[2].content[0].type).toBe('tool_result')
+    expect(msgs[2].content[0].content).toMatch(/^Applied to the board/)
+    expect(msgs[2].content.at(-1)!.text).toContain('They said: "actually replace saved carts with guest checkout"')
+    expect(applied).toHaveLength(2)
+  })
+
+  it('carries on as usual when a change could not be applied', async () => {
+    const b = board()
+    const { client, sent } = fakeClient([
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'propose_changes', input: { summary: 'Notes', ops: [{ op: 'createNote', text: 'Hi' }] } }] },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Shown as a preview.' }] },
+    ])
+    const a = new Assistant(new AnthropicBackend(client, 'claude-opus-5-5', 'Opus'), { board: () => b, measure: fakeMeasure, selection: () => [] })
+    // A read-only board: nothing applied, so it's a preview and the model is told so.
+    await a.send('a note saying hi', { text: () => {}, status: () => {}, proposal: () => {}, apply: () => false }, undefined, [], true)
+    expect(sent).toHaveLength(2)
   })
 })
 

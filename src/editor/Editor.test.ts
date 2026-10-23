@@ -1238,3 +1238,37 @@ describe('rejoining a live session', () => {
     expect(e.board.items.some((i) => i.text === 'Theirs, from offline')).toBe(true)
   })
 })
+
+describe('Flowstate', () => {
+  it('keeps the whole board in view as the assistant adds to it, below its words at the top', () => {
+    const e = editor()
+    e.setViewport(1280, 800)
+    e.select([])
+    e.setFlow(true)
+    expect(e.flow).toBe(true)
+    expect(e.tool).toBe('select')
+    let b = applyOps(e.board, [{ op: 'createMindMap', outline: 'Launch\n  Website\n  Press\n  Party', at: { x: 0, y: 0 } }], { measure: fakeMeasure }).board
+    expect(e.applyAi('p1', 'Mind map', diff(e.board, b))).toBe(true)
+    b = applyOps(e.board, [{ op: 'createNote', text: 'Budget', at: { x: 700, y: 300 } }], { measure: fakeMeasure }).board
+    expect(e.applyAi('p2', 'Budget', diff(e.board, b))).toBe(true)
+    // Everything is on screen, not just the note that arrived last...
+    const all = B.bounds(e.board)!
+    const tl = toScreen(e.camera, { x: all.x, y: all.y })
+    const br = toScreen(e.camera, { x: all.x + all.w, y: all.y + all.h })
+    expect(tl.x).toBeGreaterThanOrEqual(0)
+    expect(br.x).toBeLessThanOrEqual(1280)
+    // ...and nothing sits under the words floating at the top or yours at the bottom.
+    expect(tl.y).toBeGreaterThanOrEqual(140)
+    expect(br.y).toBeLessThanOrEqual(800 - 72)
+    // Once the board is too big to read whole, the camera goes to what changed.
+    b = applyOps(e.board, [{ op: 'createNote', text: 'Venue', at: { x: 9000, y: 4000 } }], { measure: fakeMeasure }).board
+    expect(e.applyAi('p3', 'Venue', diff(e.board, b))).toBe(true)
+    const venue = e.board.items.find((i) => i.text === 'Venue')!
+    const v = toScreen(e.camera, { x: venue.x + venue.w / 2, y: venue.y + venue.h / 2 })
+    expect(v.x).toBeCloseTo(640, 0)
+    expect(v.y).toBeGreaterThan(140)
+    expect(v.y).toBeLessThan(800 - 72)
+    e.setFlow(false)
+    expect(e.flow).toBe(false)
+  })
+})

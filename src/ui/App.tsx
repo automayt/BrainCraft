@@ -70,7 +70,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -128,6 +128,16 @@ function App({ ws }: { ws: Workspace }) {
       // Full screen where allowed; leaving full screen (Esc in most browsers) ends the presentation.
       document.documentElement.requestFullscreen?.().catch(() => {})
     },
+    flow: (on) => {
+      if (on === editor.flow) return
+      if (on && (isWiki(editor.board) || editor.presenting || editor.running)) return
+      setDialog(null)
+      setMenu(null)
+      editor.setFlow(on)
+      // Full screen where allowed; leaving full screen (Esc in most browsers) ends it.
+      if (on) document.documentElement.requestFullscreen?.().catch(() => {})
+      else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    },
     ai: bridge,
     menu,
     openMenu: setMenu,
@@ -153,8 +163,13 @@ function App({ ws }: { ws: Workspace }) {
   }, [editor.notesOpen])
   useEffect(() => {
     const wide = editor.viewport.w > 720
-    editor.setRightInset(wide && (assistant || editor.notesOpen || !!editor.peek) ? 404 : 0)
-  }, [editor, assistant, editor.notesOpen, editor.peek, editor.viewport.w])
+    editor.setRightInset(!editor.flow && wide && (assistant || editor.notesOpen || !!editor.peek) ? 404 : 0)
+  }, [editor, assistant, editor.notesOpen, editor.peek, editor.viewport.w, editor.flow])
+
+  // Flowstate is for canvas boards: opening a wiki (or presenting) ends it.
+  useEffect(() => {
+    if (editor.flow && (wiki || editor.presenting)) uiRef.current.flow(false)
+  }, [editor.flow, wiki, editor.presenting])
 
   // The handwriting loads when something hand-drawn first appears; then hand-drawn mind maps are
   // measured again in it (until then they were measured in a stand-in).
@@ -199,6 +214,7 @@ function App({ ws }: { ws: Workspace }) {
     const onVisibility = () => document.visibilityState === 'hidden' && void ws.flush()
     const onFullscreen = () => {
       if (!document.fullscreenElement && editor.presenting) editor.stopPresenting()
+      if (!document.fullscreenElement && editor.flow) uiRef.current.flow(false)
     }
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.
@@ -222,6 +238,12 @@ function App({ ws }: { ws: Workspace }) {
         if (editor.presentKey(e.key)) e.preventDefault()
         return
       }
+      // Esc ends Flowstate (once any text being typed is put down).
+      if (editor.flow && e.key === 'Escape' && !editor.editing && !isTyping(e.target)) {
+        e.preventDefault()
+        uiRef.current.flow(false)
+        return
+      }
       // While running a flowchart, keys walk it (except in the step's note box).
       if (editor.running && !isTyping(e.target)) {
         if (editor.runKey(e.key)) {
@@ -243,7 +265,16 @@ function App({ ws }: { ws: Workspace }) {
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault()
-        uiRef.current.toggleAssistant()
+        // From Flowstate, back to the panel with the whole conversation.
+        if (editor.flow) {
+          uiRef.current.flow(false)
+          if (!uiRef.current.assistant) uiRef.current.toggleAssistant()
+        } else uiRef.current.toggleAssistant()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        uiRef.current.flow(!editor.flow)
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
@@ -379,7 +410,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen || editor.peek ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
+          className={`app${editor.notesOpen || editor.peek ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -406,10 +437,16 @@ function App({ ws }: { ws: Workspace }) {
               <PagePeek />
             </>
           )}
-          {assistant && !editor.presenting && (
-            <PartBoundary what="the assistant" onClose={() => setAssistant(false)}>
-              <Suspense fallback={<aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
-                <LazyAiPanel onClose={() => setAssistant(false)} />
+          {(assistant || editor.flow) && !editor.presenting && (
+            <PartBoundary
+              what="the assistant"
+              onClose={() => {
+                setAssistant(false)
+                ui.flow(false)
+              }}
+            >
+              <Suspense fallback={editor.flow ? null : <aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>
+                <LazyAiPanel onClose={() => setAssistant(false)} flow={editor.flow} onFlow={ui.flow} />
               </Suspense>
             </PartBoundary>
           )}

@@ -287,6 +287,38 @@ export class Editor {
     this.rightInset = px
     this.emit()
   }
+
+  /**
+   * Flowstate: the board alone on screen, built by talking to the assistant. What it changes is
+   * brought into view, clear of its words at the top and yours at the bottom.
+   */
+  flow = false
+
+  setFlow(on: boolean) {
+    if (on === this.flow) return
+    this.flow = on
+    if (on) {
+      this.finishEditing()
+      this.selection = new Set()
+      this.setTool('select')
+    }
+    this.emit()
+  }
+
+  /**
+   * Flowstate's camera after a change: the whole board while it's readable at that size (so a
+   * mind map is seen growing), otherwise what changed.
+   */
+  private frameFlow(changed: Rect | null) {
+    const top = this.viewport.h > 560 ? 140 : 96
+    const bottom = 72
+    const view = { w: this.viewport.w, h: Math.max(200, this.viewport.h - top - bottom) }
+    const all = B.bounds(this.board)
+    const target = all && fit(all, view, 72).zoom >= 0.55 ? all : (changed ?? all)
+    if (!target) return
+    const cam = fit(target, view, 72)
+    this.flyTo({ ...cam, y: cam.y + top })
+  }
   penColor = INKS[0][1]
   penWidth = 4
   /** The symbol the flowchart tool places. */
@@ -722,11 +754,10 @@ export class Editor {
     this.onAiHistory?.(this.aiHistory)
     // Show what arrived.
     const added = change.forward.flatMap((p) => (p.k === 'item' && p.v ? [p.id] : []))
-    if (added.length) {
-      this.selection = new Set(added.filter((x) => B.getItem(this.board, x)))
-      const box = B.bounds(this.board, this.selection)
-      if (box) this.flyTo(fit(box, this.openView, 120))
-    }
+    if (added.length) this.selection = new Set(added.filter((x) => B.getItem(this.board, x)))
+    const box = added.length ? B.bounds(this.board, this.selection) : null
+    if (this.flow) this.frameFlow(box)
+    else if (box) this.flyTo(fit(box, this.openView, 120))
     this.emit()
     return true
   }

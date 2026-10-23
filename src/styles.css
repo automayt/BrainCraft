@@ -10328,3 +10328,256 @@ button.on,
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
+
+/* ----- Flowstate: just the board, built as you talk ----- */
+
+.app.flowstate > .island,
+.app.flowstate .minimap,
+.app.flowstate .hint-bar,
+.app.flowstate .selection-toolbar,
+.app.flowstate .status-key,
+.app.flowstate .notes-panel,
+.app.flowstate .shape-picker,
+.app.flowstate .whats-new,
+.app.flowstate .catchup,
+.app.flowstate .toast {
+  display: none;
+}
+
+.flow {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.flow-replies {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(760px, calc(100% - 32px));
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.flow-line {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-wrap: balance;
+  /* Readable over whatever is drawn beneath. */
+  text-shadow:
+    0 0 14px var(--canvas),
+    0 0 4px var(--canvas),
+    0 0 2px var(--canvas);
+  animation: flow-in 0.28s var(--ease);
+}
+
+.flow-line.older {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* A finished line stays a while, then gives the space back to the board. */
+.flow-line.done {
+  animation:
+    flow-in 0.28s var(--ease),
+    flow-out 9s ease-in 0.28s forwards;
+}
+
+.flow-line.error {
+  color: var(--danger);
+  font-size: 17px;
+}
+
+.flow-line.hint {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+@keyframes flow-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes flow-out {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.flow-dots {
+  display: inline-flex;
+  gap: 7px;
+  padding: 10px 0;
+}
+
+.flow-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to));
+  animation: flow-dot 1.1s ease-in-out infinite;
+}
+
+.flow-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.flow-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes flow-dot {
+  50% {
+    opacity: 0.25;
+    transform: translateY(-3px);
+  }
+}
+
+.flow-voice {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(680px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+
+.flow-words {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  text-align: center;
+  text-shadow:
+    0 0 10px var(--canvas),
+    0 0 3px var(--canvas);
+}
+
+.flow-words span {
+  color: var(--muted);
+}
+
+/* The one sign it's listening: an orb in the brand's colours that swells with your voice. */
+.flow-orb {
+  --level: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to));
+  opacity: 0.35;
+  transform: scale(calc(1 + var(--level) * 0.9));
+  box-shadow: 0 0 calc(6px + var(--level) * 26px) var(--brand-glow);
+  transition:
+    transform 90ms linear,
+    box-shadow 90ms linear,
+    opacity 0.3s;
+}
+
+.flow-orb.on {
+  opacity: 1;
+}
+
+.flow-leave {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.flow-leave.awake,
+.flow-leave:focus-within {
+  opacity: 1;
+}
+
+.flow-leave button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+.flow-leave button:hover {
+  color: var(--text);
+}
+
+.flow-leave kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+@media (max-width: 640px) {
+  .flow-line {
+    font-size: 18px;
+  }
+  .flow-line.older {
+    font-size: 14px;
+  }
+  .flow-replies {
+    top: 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-line,
+  .flow-line.done {
+    animation: none;
+  }
+  .flow-line.done {
+    opacity: 0.6;
+  }
+  .flow-dots i {
+    animation: none;
+  }
+}
+
+/* The way in from a blank board. */
+.flow-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  margin: 18px auto 0;
+  padding: 12px 22px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(90deg, var(--brand-from), var(--brand-to)) border-box;
+}
+
+.flow-start:hover {
+  box-shadow: 0 0 22px -6px var(--brand-glow);
+}
+
+.flow-start small {
+  color: var(--muted);
+}

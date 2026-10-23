@@ -20,6 +20,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Ctrl K · Ctrl F', 'Search the board or run any command (type > for commands only)'],
       ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
+      ['Ctrl Shift F', 'Flowstate: just the board, full screen, built as you talk (Esc to leave)'],
       ['Ctrl Shift E', 'Export the board or selection as an image or PDF'],
       ['E', 'Send an emote from your cursor (nothing selected; 1–6 pick one)'],
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],
@@ -65,6 +66,15 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['1 – 9 · Home · End', 'Jump to a slide'],
       ['L · N · O', 'Laser pointer · speaker notes · overview'],
       ['Esc', 'Stop presenting'],
+    ],
+  ],
+  [
+    'Flowstate',
+    [
+      ['Just talk', 'The assistant builds and changes the board as you speak; its words float at the top'],
+      ['Esc', 'Leave Flowstate'],
+      ['Ctrl J', 'Leave it for the assistant panel, with the whole conversation'],
+      ['Ctrl Z', 'Undo the last change (each one is in the assistant’s History too)'],
     ],
   ],
   [

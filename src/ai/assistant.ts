@@ -142,7 +142,7 @@ export interface Callbacks {
 }
 
 /** What a live turn tells the model, besides what was said. */
-const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk: call propose_changes, which is applied at once (they can undo it). Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup or restructure it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. When they correct themselves ("no, I meant…"), change what you made. When they are only thinking aloud and there is nothing to add yet, change nothing. Reply in one short line.]`
+const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk, quickly. First say in a few words what you're doing (it appears on their screen as you write it, e.g. "Mind map of the launch, three branches."), then call propose_changes once with everything for this turn; it's applied at once (they can undo it), and that ends your turn, so write nothing after it. Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup, replace or remove parts of it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. When they correct themselves ("actually, replace X with Y"), change what you made. When they are only thinking aloud and there is nothing to add yet, just say a few words and change nothing.]`
 
 const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards']
 
@@ -494,7 +494,11 @@ export class Assistant {
       read: (key) => others?.read(key) ?? Promise.resolve(null),
       me: others?.me ?? '',
     }).catch(() => '')
-    this.messages.push({
+    const last = this.messages.at(-1)
+    // After a live turn ended on its applied change, its tool results are the last message:
+    // the next words go in the same message, after them.
+    const into = last?.role === 'user' && Array.isArray(last.content) ? last.content : null
+    const message: Anthropic.Beta.BetaMessageParam = {
       role: 'user',
       content: [
         // Pictures first, then the words about them.
@@ -507,7 +511,9 @@ export class Assistant {
             : `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}`,
         },
       ],
-    })
+    }
+    if (into) into.push(...(message.content as typeof into))
+    else this.messages.push(message)
     let jsonRetries = 0
     // This step's tool results so far, kept if the request stops partway.
     let done: Anthropic.Beta.BetaToolResultBlockParam[] = []
@@ -560,6 +566,9 @@ export class Assistant {
         // Every result for one turn goes back in a single message.
         this.messages.push({ role: 'user', content: results })
         done = []
+        // Talking: once its change is on the board the turn is done, without another round trip
+        // to the model just to say so.
+        if (live && uses.every((u) => u.name === 'propose_changes') && results.every((r) => !r.is_error && String(r.content).startsWith('Applied'))) return
       }
       on.text('\n\n_Stopped after too many steps._')
     } finally {
