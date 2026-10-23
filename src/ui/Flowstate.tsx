@@ -5,6 +5,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { PushToMute } from './pushToMute'
+import { useEditor } from './useEditor'
+
+/** Typing somewhere (a sticky being edited, a field), where Space is a space. */
+const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')
 
 export interface FlowLine {
   key: string
@@ -29,11 +34,44 @@ export function Flowstate(props: {
   interim: string
   level: number
   listening: boolean
+  muted: boolean
+  onMute: (quiet: boolean) => void
   /** Why it can't work right now, if it can't. */
   problem: string | null
   onLeave: () => void
 }) {
-  const { lines, waiting, interim, level, listening, problem, onLeave } = props
+  const { lines, waiting, interim, level, listening, muted, onMute, problem, onLeave } = props
+  const editor = useEditor()
+
+  // Space mutes: a tap mutes or unmutes, holding mutes while held. It takes Space before the
+  // canvas does (Space-drag pans elsewhere; here pan with the middle button or a scroll).
+  const latest = useRef({ muted, onMute })
+  latest.current = { muted, onMute }
+  useEffect(() => {
+    const ptm = new PushToMute({ get: () => latest.current.muted, set: (m) => latest.current.onMute(m) })
+    const mine = (e: KeyboardEvent) => e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey && !editor.editing && !typing(e.target)
+    const down = (e: KeyboardEvent) => {
+      if (!mine(e)) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (!e.repeat) ptm.down()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      ptm.up()
+    }
+    const away = () => ptm.cancel()
+    window.addEventListener('keydown', down, true)
+    window.addEventListener('keyup', up, true)
+    window.addEventListener('blur', away)
+    return () => {
+      window.removeEventListener('keydown', down, true)
+      window.removeEventListener('keyup', up, true)
+      window.removeEventListener('blur', away)
+    }
+  }, [editor])
   // How to leave shows at first, and again whenever the pointer moves.
   const [awake, setAwake] = useState(true)
   useEffect(() => {
@@ -61,6 +99,7 @@ export function Flowstate(props: {
     const tick = () => {
       const t = target.current
       v += (t - v) * (t > v ? 0.14 : 0.025)
+      if (v < 0.001) v = 0
       glow.current?.style.setProperty('--level', v.toFixed(3))
       raf = requestAnimationFrame(tick)
     }
@@ -93,11 +132,17 @@ export function Flowstate(props: {
             {waiting} <span>{interim}</span>
           </p>
         )}
+        {listening && muted && <p className="flow-muted">Muted. Tap Space to listen again.</p>}
       </div>
       {/* The sign it's hearing you: a soft light along the bottom that breathes, and rises as you speak. */}
-      <div ref={glow} className={`flow-glow${listening ? ' on' : ''}`} aria-hidden="true" />
+      <div ref={glow} className={`flow-glow${listening && !muted ? ' on' : ''}`} aria-hidden="true" />
 
       <div className={`flow-leave${awake ? ' awake' : ''}`}>
+        {listening && (
+          <button type="button" onClick={() => onMute(!muted)} aria-pressed={muted}>
+            {muted ? 'Unmute' : 'Mute'} <kbd>Space</kbd>
+          </button>
+        )}
         <button type="button" onClick={onLeave}>
           Leave Flowstate <kbd>Esc</kbd>
         </button>

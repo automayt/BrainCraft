@@ -72,6 +72,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Flowstate',
     [
       ['Just talk', 'The assistant builds and changes the board as you speak; its words float at the top'],
+      ['Space (tap)', 'Mute, or listen again'],
+      ['Space (hold)', 'Mute while held (pan with the middle button or a scroll instead)'],
       ['Esc', 'Leave Flowstate'],
       ['Ctrl J', 'Leave it for the assistant panel, with the whole conversation'],
       ['Ctrl Z', 'Undo the last change (each one is in the assistant’s History too)'],

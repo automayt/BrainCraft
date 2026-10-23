@@ -105,6 +105,12 @@ the screen (full screen where the browser allows). Just talk.
   changed once the board outgrows the screen.
 - The board still works by hand: drag, type and delete as usual, and the
   next turn builds on your version. Ctrl Z undoes the last change.
+- **Space** mutes: tap it to mute and tap again to listen, or hold it to
+  mute just while it's held (to say something to someone in the room).
+  Muting starts the moment you press, and what you'd said before it still
+  goes. While muted, the light goes down and a quiet line says so. (In
+  Flowstate, pan with the middle button or a scroll; Space is for muting.)
+  When talking in the panel, **Mute** is in the talking bar.
 - **Esc** (or leaving full screen) ends it, and **Ctrl J** goes from it
   straight to the assistant panel, where the whole conversation is, with an
   **Undo** on every change. Moving the mouse shows a **Leave Flowstate**

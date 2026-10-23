@@ -30,6 +30,7 @@ export function useTalk(o: TalkOptions) {
   const [interim, setInterim] = useState('')
   const [state, setState] = useState<'listening' | 'transcribing'>('listening')
   const [error, setError] = useState<string | null>(null)
+  const [muted, setMuted] = useState(false)
   const [, setTick] = useState(0)
   const ear = useRef<Ear | null>(null)
   const turns = useRef<Utterances | null>(null)
@@ -43,6 +44,7 @@ export function useTalk(o: TalkOptions) {
     ear.current = null
     turns.current = null
     setOn(false)
+    setMuted(false)
     setInterim('')
     setLevel(0)
     if (!send) u?.stop()
@@ -51,6 +53,7 @@ export function useTalk(o: TalkOptions) {
 
   const start = async () => {
     setError(null)
+    setMuted(false)
     const how = hearingFor(latest.current)
     if (!how) {
       setError('This browser can’t hear you without the server’s speech to text (ask whoever runs it to set BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.')
@@ -131,6 +134,17 @@ export function useTalk(o: TalkOptions) {
     stop,
     /** Sends what's waiting now, without waiting for a pause. */
     flush: () => turns.current?.flush(),
+    muted,
+    /** Stops hearing for now (what was said up to then still goes), or starts again. */
+    mute: (quiet: boolean) => {
+      if (!ear.current) return
+      ear.current.mute(quiet)
+      setMuted(quiet)
+      if (quiet) {
+        setInterim('')
+        setLevel(0)
+      }
+    },
     how: hearingFor(o),
   }
 }

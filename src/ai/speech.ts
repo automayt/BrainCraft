@@ -30,6 +30,8 @@ export interface Ear {
   readonly kind: 'server' | 'browser'
   /** Stops listening; resolves once what was being said has been heard. */
   stop(): Promise<void>
+  /** Stops hearing for now (what was said up to then still counts), or starts again. */
+  mute(quiet: boolean): void
 }
 
 type Recognition = {
@@ -61,6 +63,7 @@ const words = (text: string) => /[\p{L}\p{N}]/u.test(text)
 export function browserEar(lang: string, on: Hearing): Ear {
   const Rec = recognitionClass()!
   let stopped = false
+  let muted = false
   let ended: (() => void) | null = null
   const r = new Rec()
   r.continuous = true
@@ -81,8 +84,8 @@ export function browserEar(lang: string, on: Hearing): Ear {
     on.error(e.error === 'not-allowed' ? 'The microphone isn’t allowed for this page' : `Speech recognition stopped (${e.error})`)
   }
   r.onend = () => {
-    if (!stopped) r.start()
-    else ended?.()
+    if (stopped) ended?.()
+    else if (!muted) r.start()
   }
   r.start()
   on.state?.('listening')
@@ -98,6 +101,19 @@ export function browserEar(lang: string, on: Hearing): Ear {
       r.stop()
       return done
     },
+    mute(quiet) {
+      if (quiet === muted || stopped) return
+      muted = quiet
+      if (quiet) r.stop()
+      else tryStart()
+    },
+  }
+  function tryStart() {
+    try {
+      r.start()
+    } catch {
+      // Still ending: it starts again from onend.
+    }
   }
 }
 
@@ -154,6 +170,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
 
   const down = new Downsampler(ctx.sampleRate)
   let stopped = false
+  let muted = false
   /** Phrases begun and not yet heard (or dropped). */
   let open = 0
   const opened = () => {
@@ -206,7 +223,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     },
   )
   node.port.onmessage = (e: MessageEvent<Float32Array>) => {
-    if (!stopped) phrases.feed(down.push(e.data))
+    if (!stopped && !muted) phrases.feed(down.push(e.data))
   }
   on.state?.('listening')
 
@@ -221,6 +238,13 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       for (const t of stream.getTracks()) t.stop()
       void ctx.close()
       return delivered
+    },
+    mute(quiet) {
+      if (quiet === muted || stopped) return
+      // What was said before muting still goes.
+      if (quiet) phrases.end()
+      muted = quiet
+      on.level?.(0)
     },
   }
 }

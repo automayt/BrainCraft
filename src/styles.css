@@ -10621,3 +10621,27 @@ button.on,
   height: 1px;
   background: var(--border);
 }
+
+/* Muted: the light goes down, and a quiet line says how to carry on. */
+.flow-muted {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  text-shadow: 0 0 10px var(--canvas);
+  animation: flow-in 0.28s var(--ease);
+}
+
+.flow-leave {
+  display: flex;
+  gap: 8px;
+}
+
+.flow-leave button[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.talk-dot.muted {
+  background: var(--faint);
+  animation: none;
+}

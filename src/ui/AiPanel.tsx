@@ -482,7 +482,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           : !talk.how
             ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.'
             : talk.error
-    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} problem={problem} onLeave={() => onFlow?.(false)} />
+    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} muted={talk.muted} onMute={talk.mute} problem={problem} onLeave={() => onFlow?.(false)} />
   }
 
   const showSetup = setup || !connection
@@ -833,7 +833,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           </form>
           {talk.on && (
             <div className="talk-bar" role="status" aria-live="polite">
-              <span className="talk-dot" aria-hidden="true" />
+              <span className={`talk-dot${talk.muted ? ' muted' : ''}`} aria-hidden="true" />
               <span className="talk-level" aria-hidden="true">
                 <i style={{ transform: `scaleX(${Math.max(0.04, talk.level)})` }} />
               </span>
@@ -843,7 +843,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                     {talk.waiting} <span className="muted">{talk.interim}</span>
                   </>
                 ) : (
-                  <span className="muted">{running ? 'Working on what you said… keep talking' : talk.state === 'transcribing' ? 'Hearing that…' : 'Listening: just talk'}</span>
+                  <span className="muted">{talk.muted ? 'Muted: not listening until you unmute' : running ? 'Working on what you said… keep talking' : talk.state === 'transcribing' ? 'Hearing that…' : 'Listening: just talk'}</span>
                 )}
               </span>
               {talk.waiting && (
@@ -851,6 +851,9 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   Go now
                 </button>
               )}
+              <button type="button" className="link" aria-pressed={talk.muted} onClick={() => talk.mute(!talk.muted)}>
+                {talk.muted ? 'Unmute' : 'Mute'}
+              </button>
               <button type="button" className="primary" onClick={() => talk.stop()}>
                 Stop talking
               </button>
