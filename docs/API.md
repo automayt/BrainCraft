@@ -82,16 +82,22 @@ timeline.
 | `createShape` | `shape?` (`rect` \| `ellipse`), `text?`, `color?`, `w?`, `h?` | Shape |
 | `createComment` | `text` | Comment block, timestamped |
 | `createFrame` | `title`, `around?` (ids/refs to enclose) or `w?`, `h?` | Frame (sent behind its contents) |
-| `createMindMap` | `outline` (indented list, Markdown bullets OK) or `tree` (`{"text", "children": [...]}`) | Mind map, laid out automatically |
+| `createMindMap` | `outline` (indented list, Markdown bullets OK; one line is just the central idea) or `tree` (`{"text", "children": [...]}`) | Mind map, laid out automatically |
+| `addIdeas` | `parent` (an idea), `ideas` (one per line, indented lines go under the line above; or a list of texts and `{"text", "children"}`) | Grows a mind map: ideas under `parent`, laid out and coloured by branch |
+| `moveIdea` | `id`, `parent` | Moves an idea and its branch under another idea |
+| `setMindMap` | `id` (any idea in it), `outline` or `tree` | Replaces the whole mind map, where it was |
 | `createFlowchart` | `mermaid` (a Mermaid `flowchart`/`graph`) | Flowchart, laid out automatically |
+| `addSteps` | `after` (a step), `steps` (texts or `{"text", "shape?", "label?"}`; shapes `process`, `decision`, `start`, `end`, `io`, `database`, `document`, `subprocess`), `direction?` | Grows a flowchart: a chain of connected steps after `after`, each sized for its words. `label` goes on the line into the step ("Yes", "No"). |
+| `setFlowchart` | `id` (any step in it), `mermaid` | Replaces the whole flowchart, where it was |
 | `createTable` | `columns` (names), `rows?` (lists of cell values), `title?` | Table |
 | `createKanban` | `columns?` (`[{"title", "cards": [text \| {"title", "start?", "due?", "color?"}]}]`), `title?` | Kanban board (default: To do / In progress / Done) |
 | `createTimeline` | `lanes?` (`[{"name", "entries": [{"title", "start", "end?", "color?"}]}]`), `followKanban?` (Kanban ids/refs), `title?`, `w?`, `h?` | Timeline. An entry without `end` is a milestone. Followed Kanban boards show their dated cards live. |
+| `setKanban`, `setTable`, `setTimeline` | `id`, then the same fields as creating one (`columns`; `columns` and `rows`; `lanes`), `title?` | Replaces a widget's content. Cards, rows and entries already there keep their details (matched by title, a row by its first cell), so moving a card keeps its dates. |
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |
 | `createCode` | `code`, `lang?`, `w?`, `h?` | Code block with syntax colouring; the language is guessed when left out. |
 | `createSpinner` | `options` (two or more) | Spinner wheel card. Anyone can spin it; everyone sees the same answer. |
 | `createLink` | `url` (one `http(s)` address), `w?`, `h?` | Link card. Its title, description and picture fill in once the app (connected to a BrainCraft server) reads the page. YouTube, Vimeo and Spotify links play on the card. |
-| `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?` | Line between two objects. Lines to flowchart shapes default to `elbow`. |
+| `connect` | `from`, `to`, `label?`, `style?` (`straight` \| `elbow` \| `curved`), `arrows?` (`end` \| `both` \| `none`), `dashed?`, `freeform?` | Line between two objects. Lines to flowchart shapes default to `elbow`. (`freeform` only matters to the in-app assistant: loose boxes and lines on purpose.) |
 | `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?`, `locked?`, `status?`, `sketch?` | — (`description` is the free text above an object's comments; `status` is `todo`, `doing`, `waiting`, `undecided`, `done`, `dropped`, or `none` to clear it; `sketch: true` draws it by hand) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
 | `addComment` | `id`, `text`, `author?` | Timestamped comment on the object. Mention other objects with `@[Label](#id)`. |
@@ -183,7 +189,9 @@ object {"ops": [...]}, no prose. Available operations:
 - createShape {shape: rect|ellipse, text?, color?}
 - createComment {text}                 - createFrame {title, around: [refs]}
 - createMindMap {outline: "indented list, two spaces per level"}
+- addIdeas {parent: idea id, ideas: "one per line, indented under"}
 - createFlowchart {mermaid: "flowchart TD ..."}   (Mermaid flowchart syntax)
+- addSteps {after: step id, steps: [text or {text, shape?, label?}]}
 - createTable {title?, columns: [names], rows: [[cells]]}
 - createKanban {title?, columns: [{title, cards: [text or {title, due: "YYYY-MM-DD"}]}]}
 - createTimeline {title?, lanes: [{name, entries: [{title, start, end?}]}], followKanban?: [refs]}

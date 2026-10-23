@@ -306,6 +306,9 @@ export function toMermaid(b: Board, ids?: ReadonlySet<Id>): string {
 const RANK_GAP = 70
 const NODE_GAP = 50
 
+/** A flowchart step's size for its words. */
+export const stepSize = (shape: FlowShape, label: string) => nodeSize({ shape, label } as MermaidNode)
+
 function nodeSize(n: MermaidNode): { w: number; h: number } {
   const info = flowShapeInfo(n.shape)
   const longest = Math.max(...n.label.split('\n').map((l) => l.length))

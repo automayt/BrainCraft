@@ -80,6 +80,8 @@ function App({ ws }: { ws: Workspace }) {
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [assistant, setAssistant] = useState(false)
+  /** Flowstate has been seen in full screen (so leaving full screen ends it). */
+  const flowFull = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
 
@@ -135,6 +137,7 @@ function App({ ws }: { ws: Workspace }) {
       setMenu(null)
       editor.setFlow(on)
       // Full screen where allowed; leaving full screen (Esc in most browsers) ends it.
+      flowFull.current = false
       if (on) document.documentElement.requestFullscreen?.().catch(() => {})
       else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
     },
@@ -214,7 +217,10 @@ function App({ ws }: { ws: Workspace }) {
     const onVisibility = () => document.visibilityState === 'hidden' && void ws.flush()
     const onFullscreen = () => {
       if (!document.fullscreenElement && editor.presenting) editor.stopPresenting()
-      if (!document.fullscreenElement && editor.flow) uiRef.current.flow(false)
+      // Flowstate ends when full screen does, once it has really started (some browsers send a
+      // change before it takes hold, which mustn't end it at once).
+      if (document.fullscreenElement) flowFull.current = editor.flow
+      else if (editor.flow && flowFull.current) uiRef.current.flow(false)
     }
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.

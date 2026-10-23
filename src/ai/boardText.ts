@@ -15,6 +15,8 @@ export const FULL_LIST = 250
 const STRUCTURE = new Set<Kind>(['frame', 'table', 'kanban', 'timeline', 'data'])
 
 const quote = (s: string) => JSON.stringify(s)
+/** Long widget contents are cut short; the rest can be read with get_object. */
+const clip = (s: string, n = 600) => (s.length > n ? `${s.slice(0, n)}… (more with get_object)` : s)
 
 export function objectLine(i: Item): string {
   const parts = [`${i.id} ${i.kind}`, `(${Math.round(i.x)},${Math.round(i.y)} ${Math.round(i.w)}x${Math.round(i.h)})`, quote(objectLabel(i))]
@@ -28,6 +30,16 @@ export function objectLine(i: Item): string {
   if (i.description) parts.push('has-description')
   if (i.reactions) parts.push(`reactions:${Object.entries(i.reactions).map(([e, who]) => `${e}×${who.length}`).join(',')}`)
   if (i.poll) parts.push(`vote-card options:${i.poll.options.join(',')} ${i.poll.ended ? 'closed' : i.poll.revealed ? 'revealed' : 'counts-hidden'}`)
+  // What's in a widget, so a change to it can be made without reading it first.
+  if (i.kind === 'kanban' && i.kanban) parts.push(`columns:${quote(clip(i.kanban.columns.map((c) => `${c.title}[${c.cards.map((k) => k.title).join('; ')}]`).join(' | ')))}`)
+  if (i.kind === 'table' && i.table) {
+    const cols = i.table.columns
+    parts.push(`rows:${quote(clip([cols.map((c) => c.name).join('|'), ...i.table.rows.map((r) => cols.map((c) => r.cells[c.id] ?? '').join('|'))].join('; ')))}`)
+  }
+  if (i.kind === 'timeline' && i.timeline) {
+    const t = i.timeline
+    parts.push(`lanes:${quote(clip(t.lanes.map((l) => `${l.name}[${t.entries.filter((e) => e.lane === l.id).map((e) => `${e.title} ${e.start}${e.end ? `..${e.end}` : ''}`).join('; ')}]`).join(' | ')))}`)
+  }
   return parts.join(' ')
 }
 

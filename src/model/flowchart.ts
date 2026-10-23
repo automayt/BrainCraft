@@ -54,14 +54,14 @@ export function placeNext(b: Board, from: Item, dir: FlowDir, w: number, h: numb
   return r
 }
 
-/** Adds a connected next step beside `fromId`. Returns the new shape's id. */
-export function addStep(b: Board, fromId: Id, dir: FlowDir, shape?: FlowShape): [Board, Id | null] {
+/** Adds a connected next step beside `fromId` (sized `fit`, if given). Returns the new shape's id. */
+export function addStep(b: Board, fromId: Id, dir: FlowDir, shape?: FlowShape, fit?: { w: number; h: number }): [Board, Id | null] {
   const from = getItem(b, fromId)
   if (!from) return [b, null]
   const s = shape ?? nextShape(from.shape)
   const info = flowShapeInfo(s)
   // Keep the size of a matching neighbour so chains of steps line up.
-  const size = from.kind === 'flow' && from.shape === s ? { w: from.w, h: from.h } : { w: info.w, h: info.h }
+  const size = fit ?? (from.kind === 'flow' && from.shape === s ? { w: from.w, h: from.h } : { w: info.w, h: info.h })
   const r = placeNext(b, from, dir, size.w, size.h)
   let id: Id
   ;[b, id] = addItem(b, { ...flowItem(s, { x: r.x + r.w / 2, y: r.y + r.h / 2 }, size), ...(from.sketch ? { sketch: true as const } : {}) })

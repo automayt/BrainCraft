@@ -13,8 +13,9 @@ import { startPoll, toggleReaction } from '../model/reactions'
 import { type Rect, type Vec, unionAll } from '../model/geom'
 import * as D from '../model/dataset'
 import { newKanban } from '../model/kanban'
-import { insertMermaid, parseMermaid } from '../model/mermaid'
-import { type Measure, type OutlineNode, createMapFromOutline, layoutAll, parseOutline } from '../model/mindmap'
+import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
+import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
+import * as F from '../model/flowchart'
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
@@ -35,6 +36,7 @@ import {
   type DataViewType,
   type FieldType,
   FILLS,
+  type FlowShape,
   type Id,
   type Item,
   type KanbanData,
@@ -44,6 +46,30 @@ import {
 
 /** An object id, or the `ref` name of an object created earlier in the same batch. */
 export type Ref = number | string
+
+type IdeaIn = string | { text: string; children?: IdeaIn[] }
+type KanbanColumnIn = { title: string; cards?: (string | { title: string; start?: string; due?: string; color?: string })[] }
+type TimelineLaneIn = { name: string; entries?: { title: string; start: string; end?: string; color?: string }[] }
+
+/** Words for flowchart shapes, as the Mermaid shapes are often called. */
+const FLOW_SHAPE_WORDS: Record<string, FlowShape> = {
+  process: 'process',
+  step: 'process',
+  decision: 'decision',
+  terminator: 'terminator',
+  start: 'terminator',
+  end: 'terminator',
+  data: 'data',
+  io: 'data',
+  input: 'data',
+  output: 'data',
+  document: 'document',
+  database: 'database',
+  subroutine: 'subroutine',
+  subprocess: 'subroutine',
+}
+const DIRECTIONS: F.FlowDir[] = ['down', 'right', 'up', 'left']
+const same = (a: string, z: string) => a.trim().toLowerCase() === z.trim().toLowerCase()
 
 interface Placed {
   /** Name to refer to this object later in the batch. */
@@ -59,7 +85,16 @@ export type Op =
   | ({ op: 'createComment'; text: string } & Placed)
   | ({ op: 'createFrame'; title: string; around?: Ref[]; w?: number; h?: number } & Placed)
   | ({ op: 'createMindMap'; outline?: string; tree?: OutlineNode } & Placed)
+  /** Grows a mind map: ideas under `parent` (an outline indents deeper ones). */
+  | { op: 'addIdeas'; parent: Ref; ideas: string | IdeaIn[]; ref?: string }
+  | { op: 'moveIdea'; id: Ref; parent: Ref }
+  /** Replaces a whole mind map (the one `id` is in), where it is. */
+  | { op: 'setMindMap'; id: Ref; outline?: string; tree?: OutlineNode }
   | ({ op: 'createFlowchart'; mermaid: string } & Placed)
+  /** Grows a flowchart: a chain of steps after `after`. */
+  | { op: 'addSteps'; after: Ref; steps: (string | { text: string; shape?: string; label?: string })[]; direction?: F.FlowDir; ref?: string }
+  /** Replaces a whole flowchart (the one `id` is in), where it is. */
+  | { op: 'setFlowchart'; id: Ref; mermaid: string }
   | ({ op: 'createTable'; title?: string; columns: string[]; rows?: (string | number)[][] } & Placed)
   | ({
       op: 'createKanban'
@@ -74,6 +109,10 @@ export type Op =
       w?: number
       h?: number
     } & Placed)
+  /** Replace a widget's content (same shape as creating it); unchanged cards, rows and entries keep their details. */
+  | { op: 'setKanban'; id: Ref; title?: string; columns: KanbanColumnIn[] }
+  | { op: 'setTable'; id: Ref; title?: string; columns: string[]; rows?: (string | number)[][] }
+  | { op: 'setTimeline'; id: Ref; title?: string; lanes: TimelineLaneIn[] }
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
   | ({ op: 'createLink'; url: string; w?: number; h?: number } & Placed)
   | ({ op: 'createSpinner'; options: string[] } & Placed)
@@ -91,7 +130,7 @@ export type Op =
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
-  | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string }
+  | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string; freeform?: boolean }
   | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null; sketch?: boolean; linkTo?: string | Record<string, unknown> | null }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
@@ -260,6 +299,124 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       return v as NonNullable<T>
     }
 
+    /** A mind map from "outline" (one line is just its central idea) or "tree". */
+    const treeOf = (o: { outline?: unknown; tree?: unknown }): OutlineNode => {
+      const normalize = (n: OutlineNode): OutlineNode =>
+        n && typeof n === 'object' ? { text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] } : { text: String(n ?? ''), children: [] }
+      if (o.tree !== undefined) {
+        const t = normalize(o.tree as OutlineNode)
+        if (!t.text) fail(index, op, '"tree" needs {"text": …, "children": […]}')
+        return t
+      }
+      const t = o.outline === undefined ? '' : text(o.outline, 'outline')
+      const parsed = parseOutline(t) ?? (t.trim() && !t.trim().includes('\n') ? { text: t.trim(), children: [] } : null)
+      if (!parsed) fail(index, op, 'give "outline" (an indented list: the central idea, then its ideas indented under it) or "tree" ({"text": …, "children": […]})')
+      return parsed
+    }
+    /** Ideas to add: an indented outline (one idea per line) or a list of texts or {text, children}. */
+    const ideasOf = (v: unknown, field: string): OutlineNode[] => {
+      const node = (n: unknown, f: string): OutlineNode => {
+        if (typeof n === 'string' || typeof n === 'number') return { text: String(n).trim(), children: [] }
+        const o = obj(n, f) as { text?: unknown; children?: unknown[] }
+        return { text: text(o.text, `${f}.text`).trim(), children: list(o.children, `${f}.children`).map((c, k) => node(c, `${f}.children[${k}]`)) }
+      }
+      const out =
+        typeof v === 'string'
+          ? // Under a stand-in top line, every line becomes an idea (deeper ones by indentation).
+            (parseOutline(`root\n${v.split(/\r?\n/).map((l) => `  ${l}`).join('\n')}`)?.children ?? [])
+          : list(v as unknown[] | undefined, field).map((n, k) => node(n, `${field}[${k}]`))
+      const check = (n: OutlineNode) => {
+        if (!n.text) fail(index, op, `every idea in "${field}" needs words`)
+        if (n.text.includes('\n')) fail(index, op, `one idea per line in "${field}": "${n.text.split('\n')[0]}…" has several`)
+        n.children.forEach(check)
+      }
+      out.forEach(check)
+      return out
+    }
+    /** Kanban columns as given, keeping the details of columns and cards that are already there. */
+    const kanbanOf = (columns: KanbanColumnIn[] | undefined, prev?: KanbanData): KanbanData => {
+      const oldCards = prev?.columns.flatMap((c) => c.cards) ?? []
+      return {
+        columns: list(columns, 'columns').map((c, k) => {
+          const title = text(obj(c, `columns[${k}]`).title, `columns[${k}].title`)
+          return {
+            id: prev?.columns.find((x) => same(x.title, title))?.id ?? uid(),
+            title,
+            cards: list(c.cards, `columns[${k}].cards`).map((card, j) => {
+              const f = `columns[${k}].cards[${j}]`
+              const t = typeof card === 'string' ? card : text(obj(card, f).title, `${f}.title`)
+              const old = oldCards.find((x) => same(x.title, t))
+              if (typeof card === 'string') return old ? { ...old, title: t } : { id: uid(), title: t }
+              return {
+                ...(old ?? { id: uid() }),
+                title: t,
+                ...(date(card.start, `${f}.start`) ? { start: card.start } : {}),
+                ...(date(card.due, `${f}.due`) ? { due: card.due } : {}),
+                ...color(card.color, `${f}.color`),
+              }
+            }),
+          }
+        }),
+      }
+    }
+    /** A table as given, keeping the details of columns and rows already there (rows match by their first cell). */
+    const tableOf = (columnsIn: unknown, rowsIn: unknown, prev?: TableData): TableData => {
+      if (!Array.isArray(columnsIn) || !columnsIn.length) fail(index, op, '"columns" should be a list of column names')
+      const columns = columnsIn.map((name, k) => {
+        const n = text(name, `columns[${k}]`)
+        const old = prev?.columns.find((c) => same(c.name, n))
+        return old ? { ...old, name: n } : { id: uid(), name: n, width: 150 }
+      })
+      const firstOld = prev?.columns[0]?.id
+      const rows = list(rowsIn as unknown[] | undefined, 'rows').map((row, k) => {
+        if (!Array.isArray(row)) fail(index, op, `rows[${k}] should be a list of cell values`)
+        const old = firstOld !== undefined && row[0] !== undefined ? prev?.rows.find((r) => same(r.cells[firstOld] ?? '', String(row[0]))) : undefined
+        return { ...old, id: old?.id ?? uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
+      })
+      const ids = new Set(columns.map((c) => c.id))
+      return {
+        columns,
+        rows,
+        ...(prev?.sort && ids.has(prev.sort.column) ? { sort: prev.sort } : {}),
+        ...(prev?.filters ? { filters: Object.fromEntries(Object.entries(prev.filters).filter(([c]) => ids.has(c))) } : {}),
+      }
+    }
+    /** Timeline lanes as given, keeping the details of lanes and entries already there. */
+    const timelineOf = (lanesIn: TimelineLaneIn[] | undefined, prev?: TimelineData): Pick<TimelineData, 'lanes' | 'entries'> => {
+      const lanes: TimelineData['lanes'] = []
+      const entries: TimelineData['entries'] = []
+      list(lanesIn, 'lanes').forEach((lane, k) => {
+        const name = text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`)
+        const id = prev?.lanes.find((l) => same(l.name, name))?.id ?? uid()
+        lanes.push({ id, name })
+        list(lane.entries, `lanes[${k}].entries`).forEach((e, j) => {
+          const f = `lanes[${k}].entries[${j}]`
+          const start = date(obj(e, f).start, `${f}.start`)
+          if (!start) fail(index, op, `"${f}.start" is required`)
+          const end = date(e.end, `${f}.end`)
+          if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
+          const title = text(e.title, `${f}.title`)
+          const old = prev?.entries.find((x) => same(x.title, title))
+          const entry = { ...old, id: old?.id ?? uid(), lane: id, title, start, color: color(e.color, `${f}.color`).color ?? old?.color ?? BRANCHES[entries.length % BRANCHES.length][1] }
+          if (end) entries.push({ ...entry, end })
+          else {
+            const { end: _gone, ...milestone } = entry as typeof entry & { end?: string }
+            void _gone
+            entries.push(milestone)
+          }
+        })
+      })
+      // Waiting on an entry that's gone means nothing now.
+      const kept = new Set(entries.map((e) => e.id))
+      return { lanes, entries: entries.map((e) => (e.after ? { ...e, after: e.after.filter((a) => kept.has(a)) } : e)) }
+    }
+    /** An existing widget of `kind`, by "id". */
+    const widget = (r: Ref, kind: 'kanban' | 'table' | 'timeline'): Item => {
+      const it = B.getItem(b, resolve(r, 'id'))!
+      if (it.kind !== kind) fail(index, op, `"id" should be a ${kind === 'kanban' ? 'Kanban board' : kind} (that one is a ${it.kind})`)
+      return it
+    }
+
     switch (op.op) {
       case 'createNote': {
         const id = add(B.newItem('sticky', r0(size(op.w) ?? 200, size(op.h) ?? 200), { text: text(op.text, 'text'), ...color(op.color) }))
@@ -308,16 +465,146 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         break
       }
       case 'createMindMap': {
-        const tree = op.tree ?? (op.outline !== undefined ? parseOutline(text(op.outline, 'outline')) : null)
-        if (!tree || typeof tree.text !== 'string') fail(index, op, 'give "outline" (an indented list, 2+ lines) or "tree" ({"text": …, "children": […]})')
-        const normalize = (n: OutlineNode): OutlineNode =>
-          n && typeof n === 'object' ? { text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] } : { text: String(n ?? ''), children: [] }
+        const tree = treeOf(op)
         const before = new Set(b.items.map((i) => i.id))
         let root: Id
-        ;[b, root] = createMapFromOutline(b, normalize(tree), { x: 0, y: 0 })
+        ;[b, root] = createMapFromOutline(b, tree, { x: 0, y: 0 })
         const ids = b.items.filter((i) => !before.has(i.id)).map((i) => i.id)
         place(ids, op.at)
         done({ id: root, ids })
+        break
+      }
+      case 'addIdeas': {
+        const parent = resolve(op.parent, 'parent')
+        if (B.getItem(b, parent)?.kind !== 'mind') fail(index, op, '"parent" should be an idea in a mind map (kind mind). To start one, use createMindMap {"outline": "Central idea"}')
+        const ideas = ideasOf(op.ideas, 'ideas')
+        if (!ideas.length) fail(index, op, '"ideas" should list at least one idea')
+        const ids: Id[] = []
+        const grow = (under: Id, nodes: OutlineNode[]) => {
+          for (const n of nodes) {
+            let id: Id
+            ;[b, id] = addChild(b, under, undefined, n.text)
+            ids.push(id)
+            grow(id, n.children)
+          }
+        }
+        grow(parent, ideas)
+        b = layoutAll(b, ctx.measure)
+        done({ id: ids[0], ids })
+        break
+      }
+      case 'moveIdea': {
+        const id = resolve(op.id, 'id')
+        const parent = resolve(op.parent, 'parent')
+        if (B.getItem(b, id)?.kind !== 'mind' || B.getItem(b, parent)?.kind !== 'mind') fail(index, op, '"id" and "parent" should both be ideas in a mind map')
+        const next = reparent(b, id, parent)
+        if (next === b) fail(index, op, 'it can’t go there: a central idea doesn’t move, and an idea can’t go under its own branch')
+        b = layoutAll(next, ctx.measure)
+        done({ id })
+        break
+      }
+      case 'setMindMap': {
+        const it = B.getItem(b, resolve(op.id, 'id'))!
+        if (it.kind !== 'mind') fail(index, op, '"id" should be an idea in the mind map to replace')
+        let root = it
+        while (root.parent !== undefined) root = B.getItem(b, root.parent) ?? root
+        const tree = treeOf(op)
+        const centre = { x: root.x + root.w / 2, y: root.y + root.h / 2 }
+        b = B.remove(b, B.subtree(b, root.id))
+        const before = new Set(b.items.map((i) => i.id))
+        let id: Id
+        ;[b, id] = createMapFromOutline(b, tree, centre)
+        b = layoutAll(b, ctx.measure)
+        done({ id, ids: b.items.filter((i) => !before.has(i.id)).map((i) => i.id) })
+        break
+      }
+      case 'addSteps': {
+        const start = resolve(op.after, 'after')
+        if (B.getItem(b, start)?.kind !== 'flow') fail(index, op, '"after" should be a step in a flowchart (kind flow). To start one, use createFlowchart')
+        const steps = list(op.steps, 'steps')
+        if (!steps.length) fail(index, op, '"steps" should list at least one step')
+        if (op.direction !== undefined && !DIRECTIONS.includes(op.direction)) fail(index, op, '"direction" should be down, right, up or left')
+        let prev = start
+        const ids: Id[] = []
+        steps.forEach((s, k) => {
+          const f = `steps[${k}]`
+          const step = typeof s === 'string' ? { text: s } : (obj(s, f) as { text?: unknown; shape?: unknown; label?: unknown })
+          const words = text(step.text, `${f}.text`)
+          let shape: FlowShape | undefined
+          if (step.shape !== undefined) {
+            shape = FLOW_SHAPE_WORDS[String(step.shape).toLowerCase()]
+            if (!shape) fail(index, op, `"${f}.shape" should be one of ${Object.keys(FLOW_SHAPE_WORDS).join(', ')}`)
+          }
+          const s2 = shape ?? F.nextShape(B.getItem(b, prev)?.shape)
+          let id: Id | null
+          ;[b, id] = F.addStep(b, prev, op.direction ?? F.flowDirection(b, prev), s2, stepSize(s2, words))
+          if (id === null) fail(index, op, `couldn't add ${f}`)
+          const made = id
+          b = B.updateItem(b, made, (i) => ({ ...i, text: words }))
+          if (step.label !== undefined) {
+            const label = text(step.label, `${f}.label`)
+            const from = prev
+            b = { ...b, connectors: b.connectors.map((c) => (c.from === from && c.to === made ? { ...c, label } : c)) }
+          }
+          ids.push(made)
+          prev = made
+        })
+        done({ id: ids[ids.length - 1], ids })
+        break
+      }
+      case 'setFlowchart': {
+        const first = resolve(op.id, 'id')
+        if (B.getItem(b, first)?.kind !== 'flow') fail(index, op, '"id" should be a step in the flowchart to replace')
+        // The whole chart: every step joined to this one by lines.
+        const chart = new Set<Id>([first])
+        for (let grew = true; grew; ) {
+          grew = false
+          for (const c of b.connectors) {
+            const [x, z] = [B.getItem(b, c.from), B.getItem(b, c.to)]
+            if (x?.kind !== 'flow' || z?.kind !== 'flow') continue
+            if (chart.has(x.id) !== chart.has(z.id)) {
+              chart.add(x.id)
+              chart.add(z.id)
+              grew = true
+            }
+          }
+        }
+        const box = unionAll([...chart].map((id) => B.itemBounds(B.getItem(b, id)!)))!
+        let ids: Id[] = []
+        try {
+          const graph = parseMermaid(text(op.mermaid, 'mermaid'))
+          b = B.remove(b, chart)
+          ;[b, ids] = insertMermaid(b, graph, { x: 0, y: 0 })
+        } catch (err) {
+          if (err instanceof OpError) throw err
+          fail(index, op, (err as Error).message)
+        }
+        place(ids, { x: box.x, y: box.y })
+        done({ id: ids[0], ids })
+        break
+      }
+      case 'setKanban': {
+        const it = widget(op.id, 'kanban')
+        const kanban = kanbanOf(op.columns, it.kanban)
+        b = B.updateItem(b, it.id, (i) => ({ ...i, kanban, w: Math.max(i.w, kanban.columns.length * 272 + 200), ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
+        done({ id: it.id })
+        break
+      }
+      case 'setTable': {
+        const it = widget(op.id, 'table')
+        const table = tableOf(op.columns, op.rows, it.table)
+        const sz = tableSize(table)
+        b = B.updateItem(b, it.id, (i) => ({ ...i, table, w: sz.w, h: sz.h, ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
+        done({ id: it.id })
+        break
+      }
+      case 'setTimeline': {
+        const it = widget(op.id, 'timeline')
+        const prev = it.timeline
+        const t = timelineOf(op.lanes, prev)
+        const timeline: TimelineData = { ...t, ...(prev?.sources?.length ? { sources: prev.sources } : {}) }
+        b = B.updateItem(b, it.id, (i) => ({ ...i, timeline, h: Math.max(i.h, 120 + (t.lanes.length + (prev?.sources?.length ?? 0)) * 46), ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
+        done({ id: it.id })
         break
       }
       case 'createFlowchart': {
@@ -333,58 +620,21 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         break
       }
       case 'createTable': {
-        if (!Array.isArray(op.columns) || !op.columns.length) fail(index, op, '"columns" should be a list of column names')
-        const columns = op.columns.map((name, k) => ({ id: uid(), name: text(name, `columns[${k}]`), width: 150 }))
-        const rows = list(op.rows, 'rows').map((row, k) => {
-          if (!Array.isArray(row)) fail(index, op, `rows[${k}] should be a list of cell values`)
-          return { id: uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
-        })
-        const table: TableData = { columns, rows }
+        const table: TableData = tableOf(op.columns, op.rows)
         const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: text(op.title, 'title', false) || 'Table', table }))
         place([id], op.at)
         done({ id })
         break
       }
       case 'createKanban': {
-        const kanban: KanbanData = op.columns
-          ? {
-              columns: list(op.columns, 'columns').map((c, k) => ({
-                id: uid(),
-                title: text(obj(c, `columns[${k}]`).title, `columns[${k}].title`),
-                cards: list(c.cards, `columns[${k}].cards`).map((card, j) => {
-                  const f = `columns[${k}].cards[${j}]`
-                  if (typeof card === 'string') return { id: uid(), title: card }
-                  return {
-                    id: uid(),
-                    title: text(obj(card, f).title, `${f}.title`),
-                    ...(date(card.start, `${f}.start`) ? { start: card.start } : {}),
-                    ...(date(card.due, `${f}.due`) ? { due: card.due } : {}),
-                    ...color(card.color, `${f}.color`),
-                  }
-                }),
-              })),
-            }
-          : newKanban()
+        const kanban: KanbanData = op.columns ? kanbanOf(op.columns) : newKanban()
         const id = add(B.newItem('kanban', r0(Math.max(600, kanban.columns.length * 272 + 200), 460), { text: text(op.title, 'title', false) || 'Kanban board', kanban }))
         place([id], op.at)
         done({ id })
         break
       }
       case 'createTimeline': {
-        const lanes: TimelineData['lanes'] = []
-        const entries: TimelineData['entries'] = []
-        list(op.lanes, 'lanes').forEach((lane, k) => {
-          const id = uid()
-          lanes.push({ id, name: text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`) })
-          list(lane.entries, `lanes[${k}].entries`).forEach((e, j) => {
-            const f = `lanes[${k}].entries[${j}]`
-            const start = date(obj(e, f).start, `${f}.start`)
-            if (!start) fail(index, op, `"${f}.start" is required`)
-            const end = date(e.end, `${f}.end`)
-            if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
-            entries.push({ id: uid(), lane: id, title: text(e.title, `${f}.title`), start, ...(end ? { end } : {}), color: color(e.color, `${f}.color`).color ?? BRANCHES[entries.length % BRANCHES.length][1] })
-          })
-        })
+        const { lanes, entries } = timelineOf(op.lanes)
         const sources = list(op.followKanban, 'followKanban').map((r, k) => {
           const id = resolve(r, `followKanban[${k}]`)
           if (B.getItem(b, id)?.kind !== 'kanban') fail(index, op, `followKanban[${k}] isn't a Kanban board`)
@@ -679,7 +929,15 @@ export const OPS: Op['op'][] = [
   'createComment',
   'createFrame',
   'createMindMap',
+  'addIdeas',
+  'moveIdea',
+  'setMindMap',
   'createFlowchart',
+  'addSteps',
+  'setFlowchart',
+  'setKanban',
+  'setTable',
+  'setTimeline',
   'createTable',
   'createKanban',
   'createTimeline',

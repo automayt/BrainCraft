@@ -203,3 +203,112 @@ describe('placing new objects', () => {
     expect(getItem(board, before.id)).toMatchObject({ x: before.x, y: before.y })
   })
 })
+
+describe('growing what is already there', () => {
+  /** Pairs of objects (besides frames) whose boxes overlap. */
+  const overlaps = (b: ReturnType<typeof emptyBoard>) => {
+    const items = b.items.filter((i) => i.kind !== 'frame')
+    const out: string[] = []
+    for (let a = 0; a < items.length; a++)
+      for (let z = a + 1; z < items.length; z++) {
+        const [p, q] = [items[a], items[z]]
+        if (p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h) out.push(`${p.text} / ${q.text}`)
+      }
+    return out
+  }
+
+  it('grows a mind map idea by idea, as spoken: a real tree, coloured by branch, nothing on top of anything', () => {
+    // "Start a mind map called infrastructure" (one line is enough).
+    let b = run([{ op: 'createMindMap', outline: 'infrastructure' }]).board
+    const root = b.items[0]
+    expect(root).toMatchObject({ kind: 'mind', text: 'infrastructure' })
+    // "Add Jason and Brian off of that."
+    b = run([{ op: 'addIdeas', parent: root.id, ideas: 'Jason\nBrian' }], b).board
+    const jason = b.items.find((i) => i.text === 'Jason')!
+    const brian = b.items.find((i) => i.text === 'Brian')!
+    expect(jason).toMatchObject({ kind: 'mind', parent: root.id })
+    expect(brian).toMatchObject({ kind: 'mind', parent: root.id })
+    expect(jason.color).not.toBe(brian.color)
+    // "Under Jason, workstations and desktops, with what each involves; Brian has servers."
+    b = run(
+      [
+        { op: 'addIdeas', parent: jason.id, ideas: 'Workstations\n  Hardware upgrades & repairs\n  OS updates & patching\nDesktops\n  Refresh cycle\n  Peripherals' },
+        { op: 'addIdeas', parent: brian.id, ideas: ['Servers'] },
+      ],
+      b,
+    ).board
+    const servers = b.items.find((i) => i.text === 'Servers')!
+    b = run([{ op: 'addIdeas', parent: servers.id, ideas: [{ text: 'Patching' }, 'Backups', 'Monitoring'] }], b).board
+    expect(toOutline(b, root.id).replace(/- /g, '')).toBe(
+      ['infrastructure', '  Jason', '    Workstations', '      Hardware upgrades & repairs', '      OS updates & patching', '    Desktops', '      Refresh cycle', '      Peripherals', '  Brian', '    Servers', '      Patching', '      Backups', '      Monitoring'].join('\n'),
+    )
+    // Everything is a mind-map idea, joined by parent rather than drawn lines, and laid out clear.
+    expect(b.items.every((i) => i.kind === 'mind')).toBe(true)
+    expect(b.connectors).toHaveLength(0)
+    expect(b.items.find((i) => i.text === 'Patching')!.color).toBe(brian.color)
+    expect(overlaps(b)).toEqual([])
+  })
+
+  it('moves an idea, replaces a whole map where it is, and refuses what would make a mess', () => {
+    let b = run([{ op: 'createMindMap', outline: 'Launch\n  Website\n  Party\n    Budget' }]).board
+    const id = (t: string) => b.items.find((i) => i.text === t)!.id
+    b = run([{ op: 'moveIdea', id: id('Budget'), parent: id('Website') }], b).board
+    expect(getItem(b, id('Budget'))!.parent).toBe(id('Website'))
+    expect(() => run([{ op: 'moveIdea', id: id('Website'), parent: id('Budget') }], b)).toThrow(/own branch/)
+    expect(() => run([{ op: 'addIdeas', parent: id('Launch'), ideas: [{ text: 'Two\nideas' }] }], b)).toThrow(/one idea per line/)
+    const before = getItem(b, id('Launch'))!
+    b = run([{ op: 'setMindMap', id: id('Party'), outline: 'Launch plan\n  Press\n  Dinner' }], b).board
+    const root = b.items.find((i) => i.text === 'Launch plan')!
+    expect(b.items.map((i) => i.text).sort()).toEqual(['Dinner', 'Launch plan', 'Press'])
+    // Where the old map's centre was.
+    expect(root.x + root.w / 2).toBeCloseTo(before.x + before.w / 2, 0)
+    // A sticky can't take ideas: the error says how to start a map.
+    const withNote = run([{ op: 'createNote', ref: 'n', text: 'infrastructure' }]).board
+    expect(() => run([{ op: 'addIdeas', parent: withNote.items[0].id, ideas: 'Jason' }], withNote)).toThrow(/createMindMap/)
+  })
+
+  it('grows a flowchart step by step, with branches labelled, and replaces it where it is', () => {
+    let b = run([{ op: 'createFlowchart', mermaid: 'flowchart TD\n a([Start]) --> b[Get request]' }]).board
+    const id = (t: string) => b.items.find((i) => i.text === t)!.id
+    b = run([{ op: 'addSteps', after: id('Get request'), steps: [{ text: 'Approved?', shape: 'decision' }, { text: 'Order the laptop', label: 'Yes' }, { text: 'Done', shape: 'end' }] }], b).board
+    b = run([{ op: 'addSteps', after: id('Approved?'), steps: [{ text: 'Tell them why not', label: 'No' }] }], b).board
+    expect(getItem(b, id('Approved?'))).toMatchObject({ kind: 'flow', shape: 'decision' })
+    expect(getItem(b, id('Done'))).toMatchObject({ shape: 'terminator' })
+    const label = (from: string, to: string) => b.connectors.find((c) => c.from === id(from) && c.to === id(to))?.label
+    expect(label('Approved?', 'Order the laptop')).toBe('Yes')
+    expect(label('Approved?', 'Tell them why not')).toBe('No')
+    expect(overlaps(b)).toEqual([])
+    const top = Math.min(...b.items.map((i) => i.y))
+    b = run([{ op: 'setFlowchart', id: id('Done'), mermaid: 'flowchart TD\n s([Start]) --> r[Review] --> e([End])' }], b).board
+    expect(b.items.map((i) => i.text).sort()).toEqual(['End', 'Review', 'Start'])
+    expect(Math.min(...b.items.map((i) => i.y))).toBeCloseTo(top, 0)
+  })
+
+  it('replaces a Kanban board, table or timeline content, keeping what was already there', () => {
+    let b = run([
+      { op: 'createKanban', ref: 'k', columns: [{ title: 'To do', cards: [{ title: 'Book van', due: '2026-11-02', color: 'red' }, 'Flights'] }, { title: 'Done' }] },
+      { op: 'createTable', ref: 't', columns: ['Name', 'Status'], rows: [['Venue', 'booked']] },
+      { op: 'createTimeline', ref: 'l', lanes: [{ name: 'Trip', entries: [{ title: 'Fly out', start: '2026-11-03' }, { title: 'Stay', start: '2026-11-03', end: '2026-11-07' }] }] },
+    ]).board
+    const k = b.items.find((i) => i.kind === 'kanban')!
+    const van = k.kanban!.columns[0].cards[0]
+    b = run([{ op: 'setKanban', id: k.id, columns: [{ title: 'To do', cards: ['Flights'] }, { title: 'Doing', cards: ['Book van'] }, { title: 'Done' }] }], b).board
+    const k2 = getItem(b, k.id)!.kanban!
+    expect(k2.columns.map((c) => c.title)).toEqual(['To do', 'Doing', 'Done'])
+    // Moved, not made again: its id, date and colour stay.
+    expect(k2.columns[1].cards[0]).toEqual(van)
+    const t = b.items.find((i) => i.kind === 'table')!
+    b = run([{ op: 'setTable', id: t.id, columns: ['Name', 'Status', 'Owner'], rows: [['Venue', 'paid', 'Sam'], ['Food', 'open', 'Lee']] }], b).board
+    const t2 = getItem(b, t.id)!.table!
+    expect(t2.rows).toHaveLength(2)
+    expect(t2.rows[0].id).toBe(t.table!.rows[0].id)
+    expect(t2.columns.map((c) => t2.rows[1].cells[c.id])).toEqual(['Food', 'open', 'Lee'])
+    const l = b.items.find((i) => i.kind === 'timeline')!
+    b = run([{ op: 'setTimeline', id: l.id, lanes: [{ name: 'Trip', entries: [{ title: 'Stay', start: '2026-11-04', end: '2026-11-08' }] }, { name: 'Work', entries: [{ title: 'Off', start: '2026-11-04' }] }] }], b).board
+    const l2 = getItem(b, l.id)!.timeline!
+    expect(l2.lanes.map((x) => x.name)).toEqual(['Trip', 'Work'])
+    expect(l2.entries.find((e) => e.title === 'Stay')).toMatchObject({ id: l.timeline!.entries[1].id, start: '2026-11-04', end: '2026-11-08' })
+    expect(l2.entries.find((e) => e.title === 'Off')!.end).toBeUndefined()
+    expect(() => run([{ op: 'setKanban', id: t.id, columns: [] }], b)).toThrow(/Kanban board/)
+  })
+})

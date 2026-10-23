@@ -41,16 +41,20 @@ createText {text, fontSize?, w?} — free text
 createShape {shape?: rect|ellipse, text?, color?, w?, h?}
 createComment {text} — comment block on the board
 createFrame {title, around?: [ids/refs]} or {title, w, h} — a titled area
-createMindMap {outline: "Root\\n  Child\\n    Grandchild"} or {tree: {text, children: [...]}} — laid out automatically
+createMindMap {outline: "Root\\n  Child\\n    Grandchild"} or {tree: {text, children: [...]}} — laid out and coloured automatically; one line ("Topic") is a map with just its central idea
+addIdeas {parent: idea id, ideas: "Jason\\n  Workstations\\nBrian"} — adds ideas under an idea (each line one idea; indented lines go under the line above); laid out and coloured automatically. Also a list: ["Jason", {"text": "Brian", "children": ["Servers"]}]
+moveIdea {id, parent} — moves an idea and its branch under another idea · setMindMap {id: any idea in it, outline} — replaces the whole map where it is, for a big reorganisation
 createFlowchart {mermaid: "flowchart TD\\n  A([Start]) --> B{Ok?}\\n  B -->|Yes| C[Do it]"} — laid out automatically; shapes [ ] process, { } decision, ([ ]) start/end, [/ /] input/output, [( )] database, [[ ]] subprocess
+addSteps {after: step id, steps: [text | {text, shape?: process|decision|start|end|io|database|document|subprocess, label?}], direction?: down|right|up|left} — a chain of connected steps after a step, each sized for its words; for a decision, one addSteps per branch with label "Yes" / "No" · setFlowchart {id: any step in it, mermaid} — replaces the whole flowchart where it is
 createTable {columns: [names], rows?: [[cells]], title?}
 createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}]}
 createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}], followKanban?: [kanban ids/refs]} — an entry without end is a milestone; followed Kanban boards show their dated cards live
+setKanban {id, title?, columns} · setTable {id, title?, columns, rows?} · setTimeline {id, title?, lanes} — a widget's whole new content, the same fields as creating it (the board lists what's in each now); cards, rows and entries already there keep their details (matched by title, or a row by its first cell)
 createImage {src: https or data URL, w?, h?}
 createCode {code, lang?} — a code block with syntax colouring (javascript, typescript, python, rust, go, c, sql, shell, css, json; guessed when left out)
 createSpinner {options: [text, …]} — a spinner wheel card; anyone can spin it and everyone sees the same answer
 createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
-connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?}
+connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?, freeform?} — freeform: true when loose boxes and lines are really wanted (not for mind maps or flowcharts)
 update {id, text?, description?, color?, x?, y?, w?, h?, locked?, status?, sketch?, linkTo?} — linkTo makes the object lead somewhere when clicked: a wiki page {"board": WIKI_KEY, "page": PAGE_ID, "heading"?: anchor} (or {"page": ID} in this wiki), another board {"board": KEY}, an object {"item": ID} (with "board" for another board's), or a web address as a string; null removes it. sketch: true draws it by hand (wobbly outline, handwriting); description is free text shown above an object's comments; locked objects can't be moved or changed by accident; status marks where it stands: todo, doing, waiting, undecided, done, dropped, or none to clear (not on frames, drawings or data widgets)
 delete {ids: [...]} — deleting a mind-map idea deletes its branch
 addComment {id, text, author?} — a timestamped comment on an object; mention another object with @[Label](#id). In comments and descriptions, [[Name]] links to the board or object called Name (boards first)
@@ -58,6 +62,13 @@ createDatabase {title, fields?: [name | {name, type: text|number|date|select|per
 react {ids: [...], emoji: "👍", by?} — an emoji reaction on objects (by defaults to "AI")
 createVote {options: [ids/refs], question?, each?} — a dot vote: a card above the options; each person spreads "each" votes (default about a third of the options, 1–5), counts hidden until someone reveals them
 addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values: {FieldName: value or null}} · deleteRecords {id: view, records: [ids or titles]}
+
+Build things the way BrainCraft builds them, so they look right and lay themselves out:
+- Ideas around a topic are a mind map (createMindMap), never boxes joined by lines. Grow one with addIdeas under the right idea: "add Jason and Brian off infrastructure" is addIdeas {parent: <infrastructure's id>, ideas: "Jason\\nBrian"}. One idea per idea, never several lines in one; ideas hang off their parent, so draw no lines between them. Rename with update {id, text}; delete takes an idea's branch.
+- Steps and decisions are a flowchart (createFlowchart), grown with addSteps, never shapes and lines placed by hand.
+- To change a Kanban board, table or timeline, send its new content with setKanban, setTable or setTimeline.
+- Change what's there instead of making a second copy or starting again; restructure a whole map or chart with setMindMap or setFlowchart. Leave out "at" unless asked: new things go into free space.
+- A proposal that makes a mess (lines between ideas, several ideas in one, a tree of plain boxes and lines, something on top of something else) comes back once to be tidied.
 
 Wikis (boards of pages instead of a canvas; only these ops work on them). "page", "parent" and "before" take a page id, a "ref" from earlier in the batch, or an exact page title:
 createPage {title, parent?, before?, text?, icon?, ref?} — a page (under "parent", before "before" or last), its text in Markdown

@@ -39,12 +39,38 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   createMindMap: {
     summary: 'A mind map, laid out automatically',
     properties: {
-      outline: str('An indented list, two spaces per level (Markdown bullets are fine)'),
+      outline: str('An indented list, two spaces per level (Markdown bullets are fine); one line is just the central idea'),
       tree: { type: 'object', description: '{"text", "children": [...]}, instead of an outline' },
       ...placed,
     },
   },
+  addIdeas: {
+    summary: 'Adds ideas to a mind map under an idea; laid out automatically',
+    properties: {
+      parent: ref,
+      ideas: oneOf(str('One idea per line; indent two spaces for ideas under the line above'), list(oneOf(str(), { type: 'object', description: '{"text", "children": [...]}' }))),
+      ref: placed.ref,
+    },
+    required: ['parent', 'ideas'],
+  },
+  moveIdea: { summary: 'Moves a mind-map idea (with its branch) under another idea', properties: { id: ref, parent: ref }, required: ['id', 'parent'] },
+  setMindMap: {
+    summary: 'Replaces the whole mind map an idea belongs to, where it is',
+    properties: { id: ref, outline: str('The new map as an indented list'), tree: { type: 'object', description: '{"text", "children": [...]}' } },
+    required: ['id'],
+  },
   createFlowchart: { summary: 'A flowchart from Mermaid, laid out automatically', properties: { mermaid: str('A Mermaid flowchart (flowchart TD …)'), ...placed }, required: ['mermaid'] },
+  addSteps: {
+    summary: 'Adds a chain of connected steps after a flowchart step',
+    properties: {
+      after: ref,
+      steps: list(oneOf(str(), { type: 'object', properties: { text: str(), shape: { enum: ['process', 'decision', 'start', 'end', 'terminator', 'io', 'data', 'document', 'database', 'subprocess', 'subroutine'] }, label: str('Words on the line into it, like "Yes"') }, required: ['text'] })),
+      direction: { enum: ['down', 'right', 'up', 'left'] },
+      ref: placed.ref,
+    },
+    required: ['after', 'steps'],
+  },
+  setFlowchart: { summary: 'Replaces the whole flowchart a step belongs to, where it is', properties: { id: ref, mermaid: str('The new flowchart in Mermaid') }, required: ['id', 'mermaid'] },
   createTable: { summary: 'A table', properties: { title: str(), columns: list(str()), rows: list(list(oneOf(str(), num()))), ...placed }, required: ['columns'] },
   createKanban: {
     summary: 'A Kanban board (default columns: To do, In progress, Done)',
@@ -72,6 +98,33 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       ...placed,
     },
   },
+  setKanban: {
+    summary: 'Replaces a Kanban board’s columns and cards; cards already there keep their dates and colours',
+    properties: {
+      id: ref,
+      title: str(),
+      columns: list({
+        type: 'object',
+        properties: { title: str(), cards: list(oneOf(str(), { type: 'object', properties: { title: str(), start: day, due: day, color }, required: ['title'] })) },
+        required: ['title'],
+      }),
+    },
+    required: ['id', 'columns'],
+  },
+  setTable: { summary: 'Replaces a table’s columns and rows', properties: { id: ref, title: str(), columns: list(str()), rows: list(list(oneOf(str(), num()))) }, required: ['id', 'columns'] },
+  setTimeline: {
+    summary: 'Replaces a timeline’s lanes and entries; entries already there keep what waits on them',
+    properties: {
+      id: ref,
+      title: str(),
+      lanes: list({
+        type: 'object',
+        properties: { name: str(), entries: list({ type: 'object', properties: { title: str(), start: day, end: day, color }, required: ['title', 'start'] }) },
+        required: ['name'],
+      }),
+    },
+    required: ['id', 'lanes'],
+  },
   createImage: { summary: 'An image', properties: { src: str('A data:image/… or https:// address'), ...size, ...placed }, required: ['src'] },
   createLink: { summary: 'A link card; YouTube, Vimeo and Spotify play on it', properties: { url: str('One http(s) address'), ...size, ...placed }, required: ['url'] },
   createSpinner: { summary: 'A spinner wheel everyone sees land on the same answer', properties: { options: list(str(), 'Two or more'), ...placed }, required: ['options'] },
@@ -86,6 +139,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       arrows: { enum: ['end', 'both', 'none'] },
       dashed: bool(),
       ref: placed.ref,
+      freeform: bool('Loose boxes and lines on purpose (not a mind map or flowchart)'),
     },
     required: ['from', 'to'],
   },
