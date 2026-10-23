@@ -10477,24 +10477,45 @@ button.on,
   color: var(--muted);
 }
 
-/* The one sign it's listening: an orb in the brand's colours that swells with your voice. */
-.flow-orb {
+/*
+ * The sign it's hearing you: a soft aurora in the brand's colours along the bottom edge. It breathes
+ * slowly while listening and rises as you speak, eased so it never flickers.
+ */
+.flow-glow {
   --level: 0;
-  width: 14px;
-  height: 14px;
+  position: absolute;
+  left: 50%;
+  bottom: -140px;
+  z-index: -1;
+  width: min(1100px, 92vw);
+  height: 300px;
   border-radius: 50%;
   background: linear-gradient(90deg, var(--brand-from), var(--brand-to));
-  opacity: 0.35;
-  transform: scale(calc(1 + var(--level) * 0.9));
-  box-shadow: 0 0 calc(6px + var(--level) * 26px) var(--brand-glow);
-  transition:
-    transform 90ms linear,
-    box-shadow 90ms linear,
-    opacity 0.3s;
+  filter: blur(56px);
+  opacity: 0.05;
+  transform: translateX(-50%) scale(calc(0.85 + var(--level) * 0.2), calc(0.62 + var(--level) * 0.75));
+  transform-origin: 50% 100%;
+  transition: opacity 1.2s ease;
 }
 
-.flow-orb.on {
-  opacity: 1;
+.flow-glow.on {
+  opacity: calc(0.24 + var(--level) * 0.46);
+  animation: flow-breathe 8s ease-in-out infinite;
+  transition: none;
+}
+
+@keyframes flow-breathe {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -14px;
+  }
+}
+
+:root[data-theme$='light'] .flow-glow.on {
+  opacity: calc(0.16 + var(--level) * 0.36);
 }
 
 .flow-leave {
@@ -10553,7 +10574,8 @@ button.on,
   .flow-line.done {
     opacity: 0.6;
   }
-  .flow-dots i {
+  .flow-dots i,
+  .flow-glow.on {
     animation: none;
   }
 }
@@ -10580,4 +10602,22 @@ button.on,
 
 .flow-start small {
   color: var(--muted);
+}
+
+/* Where the conversation moved to another board or wiki. */
+.ai-where {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ai-where::before,
+.ai-where::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }

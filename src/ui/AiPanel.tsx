@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeBackend } from '../ai/assistant'
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
+import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loadThread, ownerOf, saveThread, toSaved } from '../ai/threadStore'
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
@@ -13,12 +14,6 @@ import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
 import { type FlowLine, Flowstate, plainLine } from './Flowstate'
-
-interface Turn {
-  role: 'user' | 'assistant' | 'error'
-  text: string
-  proposals: Proposal[]
-}
 
 const QUICK: { label: string; prompt: string; needs?: 'selection'; changes?: true }[] = [
   { label: 'Summarise', prompt: 'Summarise what is on the board (or in my selection) in a few bullets.' },
@@ -94,6 +89,8 @@ function RichText({ text, onObject, onLink }: { text: string; onObject: (id: num
 function ProposalCard({
   p,
   undone,
+  away,
+  onGo,
   onApply,
   onDiscard,
   onUndo,
@@ -102,6 +99,9 @@ function ProposalCard({
 }: {
   p: Proposal
   undone: boolean
+  /** Made on another board or wiki than the open one: applied or undone there. */
+  away?: Where | null
+  onGo?: () => void
   onApply: () => void
   onDiscard: () => void
   onUndo: () => void
@@ -142,6 +142,28 @@ function ProposalCard({
         )}
       </div>
     )
+  if (away) {
+    const there = `${away.kind === 'wiki' ? 'the wiki' : 'the board'} “${away.title}”`
+    return (
+      <div className={`ai-proposal away ${p.status}`}>
+        <div className="ai-proposal-head">
+          <span className="ai-proposal-kind">{p.status === 'applied' ? 'Applied' : p.status === 'discarded' ? 'Discarded' : 'Proposed change'}</span>
+          <small>{parts}</small>
+        </div>
+        <p>{p.summary}</p>
+        {p.status !== 'discarded' && (
+          <div className="ai-proposal-actions">
+            {onGo && (
+              <button className={p.status === 'pending' ? 'primary' : ''} onClick={onGo}>
+                Open {there}
+              </button>
+            )}
+            <small className="muted">{p.status === 'pending' ? 'Apply it there' : 'Undo it there'}</small>
+          </div>
+        )}
+      </div>
+    )
+  }
   return (
     <div className={`ai-proposal ${p.status}`} onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
       <div className="ai-proposal-head">
@@ -181,8 +203,29 @@ function usageLine(u: Usage) {
 
 const usageTitle = (u: Usage) => `This chat so far: ${u.input} input, ${u.cacheRead} read from cache (a tenth of the price or less), ${u.cacheWrite} written to cache, ${u.output} output tokens`
 
-/** One assistant (and its conversation) per board, for this visit. */
-const assistants = new Map<string, { assistant: Assistant; turns: Turn[] }>()
+/**
+ * One conversation per person, following them between boards and wikis (each message says where
+ * it was sent from), kept with their account or in this browser between visits (ai/threadStore).
+ */
+interface Thread {
+  owner: string
+  turns: Turn[]
+  assistant: Assistant | null
+  /** A kept conversation, until the assistant carries it on. */
+  kept: SavedThread | null
+}
+let thread: Thread | null = null
+let saving: ReturnType<typeof setTimeout> | undefined
+
+/** Keeps the conversation a moment after it changes (once, however many changes come together). */
+function keep(t: Thread, k: Keeper) {
+  clearTimeout(saving)
+  saving = setTimeout(() => {
+    if (thread !== t || !t.assistant) return
+    const saved = toSaved(t.assistant.messages, t.turns, t.assistant.usage)
+    if (saved) void saveThread(k, saved)
+  }, 800)
+}
 
 /**
  * The assistant: a side panel, or, in Flowstate (`flow`), nothing but the board, its words
@@ -219,7 +262,28 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   }, [ws.server])
 
   const connection = connectionFor(settings, ws.server, server)
-  const state = assistants.get(boardKey)
+  const keeper: Keeper = { server: ws.server, account: ws.account?.user?.id ?? null }
+  const owner = ownerOf(keeper)
+  const here: Where = { key: boardKey, title: editor.board.title || 'Untitled', kind: isWiki(editor.board) ? 'wiki' : 'board' }
+  // Flowstate's words are the replies since it started (see below).
+  const flowFrom = useRef(0)
+  const wasFlow = useRef(false)
+  // The conversation kept from before (or by another device), once per person.
+  useEffect(() => {
+    if (thread?.owner === owner) return
+    const mine: Thread = { owner, turns: [], assistant: null, kept: null }
+    thread = mine
+    void loadThread(keeper).then((kept) => {
+      if (thread !== mine || !kept || mine.turns.length) return
+      mine.turns = kept.turns
+      mine.kept = kept
+      // Arriving after Flowstate started: these are from before, not words to float up now.
+      if (wasFlow.current) flowFrom.current += kept.turns.length
+      setVersion((v) => v + 1)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+  const state = thread?.owner === owner ? thread : null
   const turns = state?.turns ?? []
   const refresh = () => setVersion((v) => v + 1)
   useEffect(() => {
@@ -237,11 +301,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
 
   const session = () => {
     if (!connection) return null
-    let s = assistants.get(boardKey)
+    if (thread?.owner !== owner) thread = { owner, turns: [], assistant: null, kept: null }
+    const s = thread
     const backend = makeBackend(connection, settings.model)
-    if (!s) {
-      s = {
-        assistant: new Assistant(backend, {
+    if (!s.assistant) {
+      s.assistant = new Assistant(backend, {
           board: () => editor.board,
           readable: () => editor.viewBoard,
           measure: editor.measure,
@@ -253,14 +317,15 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
             const f = editor.board.files?.find((x) => x.id === id)
             return f ? ws.fileText(f) : null
           },
-        }),
-        turns: [],
-      }
-      assistants.set(boardKey, s)
+        })
+      if (s.kept) s.assistant.restore(s.kept.messages, s.kept.usage)
+      s.kept = null
+      // A summary arriving later is kept too.
+      s.assistant.onChange = () => keep(s, keeper)
     }
     // Settings may have changed since the last message; the conversation carries over.
     s.assistant.backend = backend
-    return s
+    return s as Thread & { assistant: Assistant }
   }
   const provider = serverProvider(settings, server)
   /** The server's choices as one list: Claude models, its model server's models, its agent. */
@@ -285,8 +350,8 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     if (!s || !text.trim() || busy.current) return
     busy.current = true
     // A long built-in request shows as its short label in the chat.
-    s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [] })
-    const reply: Turn = { role: 'assistant', text: '', proposals: [] }
+    s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [], where: here })
+    const reply: Turn = { role: 'assistant', text: '', proposals: [], where: here }
     s.turns.push(reply)
     setInput('')
     setRunning(true)
@@ -323,6 +388,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       setRunning(false)
       setStatus(null)
       refresh()
+      keep(s, keeper)
     }
   }
 
@@ -354,8 +420,15 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     const shown = input.trim()
     if (shown) void send(picker.encode(input), [], shown)
   }
-  const pending = turns.flatMap((t) => t.proposals).filter((p) => p.status === 'pending')
-  const latestPending = pending.at(-1)
+  /** Made on another board or wiki than the open one. */
+  const awayOf = (t: Turn) => (t.where && t.where.key !== boardKey ? t.where : null)
+  /** Opens a board or wiki the conversation was on (a shared link opened without saving has nowhere to go back to). */
+  const goTo = (w: Where | null) => (w && w.key !== 'shared' ? () => void ws.switchTo(w.key) : undefined)
+  const latestPending = turns
+    .filter((t) => !awayOf(t))
+    .flatMap((t) => t.proposals)
+    .filter((p) => p.status === 'pending' && !p.target)
+    .at(-1)
   const history = [...editor.aiHistory].reverse()
 
   const apply = (p: Proposal) => {
@@ -379,8 +452,6 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   }
 
   // Flowstate starts listening at once, and stops when it ends; its words are this session's replies.
-  const flowFrom = useRef(0)
-  const wasFlow = useRef(false)
   if (flow && !wasFlow.current) flowFrom.current = turns.length
   wasFlow.current = flow
   const canTalk = !!connection && !editor.readOnly && !!talk.how
@@ -590,50 +661,59 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                     <button className="link" onClick={() => setTab('history')}>
                       History
                     </button>
-                    .
+                    . The conversation goes with you to your other boards and wikis.
                   </p>
                 )}
               </div>
             )}
-            {turns.map((t, k) =>
-              t.role === 'user' ? (
-                <div key={k} className="ai-msg user">
-                  {t.text}
-                </div>
-              ) : t.role === 'error' ? (
-                <div key={k} className="ai-msg error">
-                  {t.text}
-                  {/settings|key|password/i.test(t.text) && (
-                    <button className="link ai-fix" onClick={() => setSetup(true)}>
-                      Open AI settings
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div key={k} className="ai-msg assistant">
-                  {t.text && <RichText text={t.text} onObject={go} onLink={follow} />}
-                  {t.proposals.map((p) => (
-                    <ProposalCard
-                      key={p.id}
-                      p={p}
-                      undone={!!editor.aiHistory.find((c) => c.id === p.id)?.undone}
-                      onApply={() => apply(p)}
-                      onDiscard={() => {
-                        p.status = 'discarded'
-                        if (editor.aiPreview?.id === p.id) editor.previewAi(null)
-                        refresh()
-                      }}
-                      onUndo={() => editor.toggleAiChange(p.id)}
-                      onOpen={() => p.opened && void ws.switchTo(p.opened)}
-                      onHover={(on) => {
-                        if (p.status !== 'pending' || p.target) return
-                        editor.previewAi(on ? p : (latestPending ?? null))
-                      }}
-                    />
-                  ))}
-                </div>
-              ),
-            )}
+            {turns.map((t, k) => (
+              <Fragment key={k}>
+                {t.role === 'user' && t.where && t.where.key !== turns.slice(0, k).findLast((x) => x.role === 'user')?.where?.key && (
+                  <div className="ai-where">
+                    {t.where.kind === 'wiki' ? '📘' : '📋'} {t.where.title}
+                  </div>
+                )}
+                {t.role === 'user' ? (
+                  <div key={k} className="ai-msg user">
+                    {t.text}
+                  </div>
+                ) : t.role === 'error' ? (
+                  <div key={k} className="ai-msg error">
+                    {t.text}
+                    {/settings|key|password/i.test(t.text) && (
+                      <button className="link ai-fix" onClick={() => setSetup(true)}>
+                        Open AI settings
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div key={k} className="ai-msg assistant">
+                    {t.text && <RichText text={t.text} onObject={go} onLink={follow} />}
+                    {t.proposals.map((p) => (
+                      <ProposalCard
+                        key={p.id}
+                        p={p}
+                        away={p.target ? null : awayOf(t)}
+                        onGo={goTo(awayOf(t))}
+                        undone={!!editor.aiHistory.find((c) => c.id === p.id)?.undone}
+                        onApply={() => apply(p)}
+                        onDiscard={() => {
+                          p.status = 'discarded'
+                          if (editor.aiPreview?.id === p.id) editor.previewAi(null)
+                          refresh()
+                        }}
+                        onUndo={() => editor.toggleAiChange(p.id)}
+                        onOpen={() => p.opened && void ws.switchTo(p.opened)}
+                        onHover={(on) => {
+                          if (p.status !== 'pending' || p.target || awayOf(t)) return
+                          editor.previewAi(on ? p : (latestPending ?? null))
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </Fragment>
+            ))}
             {status && (
               <div className="ai-status">
                 <span className="ai-dots" aria-hidden="true">
@@ -687,16 +767,23 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
               }}
             />
             <div className="ai-compose-foot">
-              <small className="muted" title={state ? usageTitle(state.assistant.usage) : undefined}>
+              <small className="muted" title={state?.assistant ? usageTitle(state.assistant.usage) : undefined}>
                 {connection ? makeBackend(connection, settings.model).label : ''}
-                {state && usageLine(state.assistant.usage)}
+                {state?.assistant && usageLine(state.assistant.usage)}
               </small>
               {turns.length > 0 && !running && (
                 <button
                   type="button"
                   className="link"
                   onClick={() => {
-                    assistants.delete(boardKey)
+                    // Starts over everywhere (it's one conversation), and forgets the kept copy.
+                    clearTimeout(saving)
+                    if (thread) {
+                      thread.turns = []
+                      thread.kept = null
+                      thread.assistant?.reset()
+                    }
+                    void forgetThread(keeper)
                     editor.previewAi(null)
                     refresh()
                   }}

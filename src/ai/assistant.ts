@@ -12,6 +12,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { OpError, type Op, applyOps, maskedIds } from '../api/ops'
 import { OPS_GUIDE, TOOL_DEFS, type ToolHost, runTool } from '../api/tools'
+import { BUDGET, SUMMARY_SYSTEM, dropStale, sizeOf, summaryCut, transcript, withSummary } from './thread'
 import { type Patch, diff } from '../collab/patch'
 import { type Measure, layoutAll } from '../model/mindmap'
 import type { Rect } from '../model/geom'
@@ -483,8 +484,12 @@ export class Assistant {
     const sel = this.host.selection()
     const others = this.host.others?.()
     const open = this.host.board()
-    const where = `[Open: ${isWiki(open) ? 'the wiki' : 'the canvas board'} ${JSON.stringify(open.title)}${others?.link ? `, key ${others.link}` : ''}]`
-    const context = `${where} ${sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'}`
+    const here = `${isWiki(open) ? 'the wiki' : 'the canvas board'} ${JSON.stringify(open.title)}`
+    const where = `[Open: ${here}${others?.link ? `, key ${others.link}` : ''}]`
+    // One conversation follows the person around: say so when they've moved since the last message.
+    const moved = this.lastWhere && this.lastWhere !== here ? ` [They were on ${this.lastWhere} before, and moved here]` : ''
+    this.lastWhere = here
+    const context = `${where}${moved} ${sel.length ? `[Selected object ids: ${sel.join(', ')}]` : '[Nothing selected]'}`
     // What the message links to (objects, pages, other boards), read and sent along.
     on.status('Reading what you linked…')
     const linked = await referenceContext(text, {
@@ -574,6 +579,45 @@ export class Assistant {
     } finally {
       this.answerOpenToolCalls(done)
       on.status(null)
+      this.maintain()
+    }
+  }
+
+  /** Called when the conversation changes outside a turn (a summary arrived), to save it. */
+  onChange?: () => void
+  private summarising = false
+
+  /**
+   * After each turn, keeps the conversation light without holding up the next one: old copies of
+   * what was read are dropped (in batches, see ai/thread.ts), and if it's still long, the oldest
+   * part is summarised in the background.
+   */
+  maintain() {
+    if (!this.summarising && sizeOf(this.messages) > BUDGET.drop) this.messages = dropStale(this.messages, BUDGET.keepWhole)
+    if (!this.summarising && sizeOf(this.messages) > BUDGET.summarise) void this.summarise()
+  }
+
+  private async summarise() {
+    const cut = summaryCut(this.messages, BUDGET.keepWords)
+    if (cut === null) return
+    const firstKept = this.messages[cut]
+    this.summarising = true
+    try {
+      const reply = await this.backend.turn(
+        { system: SUMMARY_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text: `The earlier part of the conversation:\n\n${transcript(this.messages.slice(0, cut))}` }] }], tools: [] },
+        () => {},
+      )
+      this.tally(reply.usage)
+      const text = reply.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim()
+      // Turns taken meanwhile were only added after it, so it still fits.
+      if (text) {
+        this.messages = withSummary(this.messages, firstKept, text)
+        this.onChange?.()
+      }
+    } catch {
+      // No summary this time; the conversation carries on as it was.
+    } finally {
+      this.summarising = false
     }
   }
 
@@ -612,6 +656,18 @@ export class Assistant {
   reset() {
     this.messages = []
     this.usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+    this.lastWhere = ''
+  }
+
+  /** Where the last message was sent from, to notice a move. */
+  private lastWhere = ''
+
+  /** Carries on a kept conversation. */
+  restore(messages: Anthropic.Beta.BetaMessageParam[], usage?: Assistant['usage']) {
+    this.messages = messages
+    if (usage) this.usage = { ...usage }
+    // A conversation kept mid-step can't be left with calls that have no answer.
+    this.answerOpenToolCalls()
   }
 }
 

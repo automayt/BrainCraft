@@ -502,6 +502,10 @@ shares live exactly like a board.
   question, already read. It can also look through your other boards and
   wikis itself, and read the files kept with a wiki, and its answers link the
   pages and boards they mention.
+- **One conversation that follows you** between boards and wikis, kept with
+  your account (or in this browser) between visits. Long conversations stay
+  light: old copies of what it read are left out, and the oldest part is
+  summarised in the background when needed.
 - **Across boards and wikis:** "make a wiki article from this board", "add
   this to the Trip wiki" or "turn this page into a board": it proposes the
   change for that board or wiki (or a new one), and you apply it from the chat

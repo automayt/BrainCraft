@@ -35,6 +35,7 @@ import { Transcriber } from './transcribe'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
+import { AssistantThreads } from './accounts/threads'
 import { cleanAppName, DEFAULT_APP_NAME } from './accounts/store'
 import { BoardFiles } from './boardFiles'
 import { readBoard, sendRead } from './boardReads'
@@ -288,6 +289,8 @@ const appName = () => accounts?.appName() ?? ENV_APP_NAME ?? DEFAULT_APP_NAME
 /** The pretend sign-in provider, for trying single sign-on on this computer (BRAINCRAFT_DEV_IDP=1). */
 const devIdp = accounts?.sso && /^(1|true|yes)$/i.test(process.env.BRAINCRAFT_DEV_IDP ?? '') ? new DevIdp(`${PUBLIC_URL ?? `http://localhost:${PORT}`}/dev-idp`) : null
 const ALLOWED_ORIGINS = list(process.env.BRAINCRAFT_ALLOWED_ORIGINS).map((o) => o.replace(/\/+$/, ''))
+/** Each person's conversation with the assistant, so it follows them (accounts only). */
+const assistantThreads = accounts ? new AssistantThreads({ dir: join(DATA, 'accounts', 'threads'), accounts }) : null
 const accountBoards = accounts
   ? new AccountBoards(
       accounts,
@@ -416,6 +419,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const body = () => readBody(req)
     if (await accounts.handle(req, res, url, body)) return
     if (await accountBoards!.handle(req, res, url, body)) return
+    if (await assistantThreads!.handle(req, res, url, body)) return
   }
 
   // GET /api/unfurl?url=… → a link preview: title, description, picture and site name.

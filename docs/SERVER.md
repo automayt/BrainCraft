@@ -132,6 +132,7 @@ listed in `/api/docs`.
 | `PUT /api/boards/{id}/files/{file}` (and `…/text`) | edit | Keeps a file's bytes (the body, with its Content-Type) or its words. Files are stored under `BRAINCRAFT_DATA/files/`. |
 | `DELETE /api/boards/{id}/files/{file}` | edit | Deletes a file's bytes and words. |
 | `GET /api/boards/{id}/people` | edit or view (accounts) | Who can open the board, to @mention: names and ids (emails for people who may see everyone). |
+| `GET`, `PUT`, `DELETE /api/assistant/thread` | signed in, may use the AI (accounts) | Your own conversation with the assistant, kept so it follows you to any device (`DELETE` forgets it). Stored under `BRAINCRAFT_DATA/accounts/threads/`. |
 | `GET /api/mentions` | signed in (accounts) | Where you're @mentioned on the boards you can open: board, object or page, who wrote it, when, and the words around it. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |

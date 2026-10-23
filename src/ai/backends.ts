@@ -71,7 +71,7 @@ export class AnthropicBackend implements Backend {
         system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
         // The conversation grows each step; automatic caching re-reads all of it at a tenth of the price.
         cache_control: { type: 'ephemeral' },
-        tools: req.tools,
+        ...(req.tools.length ? { tools: req.tools } : {}),
         messages: req.messages,
         ...fallbacks,
       },
@@ -211,7 +211,7 @@ type ChatMessage =
 
 /** The conversation as chat-completions messages. */
 export function toChatMessages(system: string, messages: Message[], tools: Tool[], textTools: boolean): ChatMessage[] {
-  const out: ChatMessage[] = [{ role: 'system', content: textTools ? `${system}\n\n${textToolPrompt(tools)}` : system }]
+  const out: ChatMessage[] = [{ role: 'system', content: textTools && tools.length ? `${system}\n\n${textToolPrompt(tools)}` : system }]
   const names = toolNames(messages)
   for (const m of messages) {
     if (textTools || typeof m.content === 'string') {
@@ -287,7 +287,7 @@ export class OpenAiBackend implements Backend {
     const body = {
       model: this.o.model,
       messages: toChatMessages(req.system, req.messages, req.tools, textTools),
-      ...(textTools ? {} : { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) }),
+      ...(textTools || !req.tools.length ? {} : { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) }),
       stream: true,
       stream_options: { include_usage: true },
       max_tokens: 8192,
@@ -361,13 +361,18 @@ export class OpenAiBackend implements Backend {
 export function commandPrompt(req: TurnRequest): string {
   const names = toolNames(req.messages)
   const turns = req.messages.map((m) => `## ${m.role === 'assistant' ? 'You (the assistant)' : 'The person (and tool results)'}\n\n${asText(m, names)}`)
-  return `${req.system}
-
-${textToolPrompt(req.tools)}
+  const tools = req.tools.length
+    ? `${textToolPrompt(req.tools)}
 
 # Important
 
-You are answering inside BrainCraft's assistant panel. Use only the tools above (as tool blocks); you have no other way to see or change the board, and any tools of your own must not be used. Reply with your next message only.
+You are answering inside BrainCraft's assistant panel. Use only the tools above (as tool blocks); you have no other way to see or change the board, and any tools of your own must not be used. Reply with your next message only.`
+    : `# Important
+
+Answer in plain words only, without using any tools of your own. Reply with your next message only.`
+  return `${req.system}
+
+${tools}
 
 # The conversation so far
 

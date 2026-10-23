@@ -41,8 +41,23 @@ your BrainCraft server.
   beside it, as a preview.
 - Other parts of the app can ask the assistant too: the "Since you were
   here" banner's **Summarise with AI** opens the panel and asks.
-- **New chat** starts over. Each board has its own conversation while the
-  tab is open.
+- **One conversation, everywhere.** It follows you between boards and
+  wikis: plan on a board, open the wiki, say "now write that up", and it
+  knows what "that" is. Each message tells it where you are and when you've
+  moved; the chat marks each move with the board's or wiki's name. A change
+  made on another board shows **Open the board** instead of Apply or Undo,
+  which happen there. **History** (the undo list) stays per board.
+- **Kept between visits.** On a server with accounts it's kept with your
+  account, privately, so it follows you to another computer; otherwise in
+  this browser. Pictures aren't kept, and a change still waiting to be
+  applied comes back discarded. **New chat** starts over and forgets the
+  kept copy.
+- **Long conversations stay light,** without pauses. The boards and wikis
+  are the memory, so old copies of what it read (board snapshots, pages,
+  files, pictures) are left out first, in batches so most requests start the
+  same way and the model server can reuse its work. Only if that isn't
+  enough is the oldest part summarised, in the background, keeping the last
+  dozen exchanges word for word.
 
 This is separate from [connecting an outside AI assistant over MCP](MCP.md),
 which suits Claude Desktop, Claude Code or Cursor. Both use the same tools
@@ -79,8 +94,10 @@ the screen (full screen where the browser allows). Just talk.
 - The assistant's few words float at the top middle as it writes them ("Mind
   map of the launch, three branches.") and fade once they've been read; the
   last couple stay, smaller, for context. Dots there mean it's working.
-- What you're saying shows faintly at the bottom, above a small orb in the
-  brand colours that swells with your voice: the only sign it's listening.
+- What you're saying shows faintly at the bottom. Below it, a soft light in
+  the brand colours glows along the bottom edge: it breathes slowly while
+  it's listening and rises gently as your voice comes in, the only sign
+  it's hearing you.
 - The board changes as you go: it makes a mind map when you describe one,
   then adds, replaces, removes and rearranges as you carry on ("actually,
   replace the party with a launch dinner"). The camera keeps the whole board

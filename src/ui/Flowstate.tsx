@@ -4,7 +4,7 @@
  * Esc (or leaving full screen) ends it.
  */
 
-import { type CSSProperties, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export interface FlowLine {
   key: string
@@ -50,6 +50,24 @@ export function Flowstate(props: {
     }
   }, [])
 
+  // The light follows your voice like breath: it rises quickly as you speak and settles slowly,
+  // smoothed every frame (straight onto the element, without re-rendering).
+  const glow = useRef<HTMLDivElement>(null)
+  const target = useRef(0)
+  target.current = Math.min(1, level * 1.4)
+  useEffect(() => {
+    let v = 0
+    let raf = 0
+    const tick = () => {
+      const t = target.current
+      v += (t - v) * (t > v ? 0.14 : 0.025)
+      glow.current?.style.setProperty('--level', v.toFixed(3))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
   const shown = lines.slice(-3)
   return (
     <div className="flow no-canvas" role="region" aria-label="Flowstate">
@@ -75,8 +93,9 @@ export function Flowstate(props: {
             {waiting} <span>{interim}</span>
           </p>
         )}
-        <span className={`flow-orb${listening ? ' on' : ''}`} style={{ '--level': Math.min(1, level * 1.6) } as CSSProperties} aria-hidden="true" />
       </div>
+      {/* The sign it's hearing you: a soft light along the bottom that breathes, and rises as you speak. */}
+      <div ref={glow} className={`flow-glow${listening ? ' on' : ''}`} aria-hidden="true" />
 
       <div className={`flow-leave${awake ? ' awake' : ''}`}>
         <button type="button" onClick={onLeave}>
