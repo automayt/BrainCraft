@@ -32,6 +32,10 @@ your BrainCraft server.
 - **History** lists every applied change. Each has its own **Undo** and
   **Redo**, which take back just that change even after you've made other
   edits. The history is saved with the board (the latest 50 changes).
+- **It builds things the way you would by hand.** It grows a mind map idea
+  by idea under the idea you name, adds steps to a flowchart, and changes a
+  Kanban board, table or timeline in place, so everything stays laid out,
+  coloured by branch and tidy (see [Building things properly](#building-things-properly)).
 - One-click actions sit above the message box: Summarise, Find gaps and
   Decision log always, plus Cluster into themes, Make a mind map and Make a
   flowchart when something is selected.
@@ -114,7 +118,61 @@ the screen (full screen where the browser allows). Just talk.
 - **Esc** (or leaving full screen) ends it, and **Ctrl J** goes from it
   straight to the assistant panel, where the whole conversation is, with an
   **Undo** on every change. Moving the mouse shows a **Leave Flowstate**
-  button at the top right.
+  button at the top right. Flowstate only ends with full screen once full
+  screen has really started, since some browsers report a change first.
+- Say it the way you'd say it to a person: "a mind map called
+  infrastructure", "add Jason and Brian off that", "under Jason, workstations
+  and desktops", "rename monitoring to monitoring and alerts". Each line
+  becomes its own idea in the right place, never more words crammed into one
+  box (see [Building things properly](#building-things-properly)).
+
+### Building things properly
+
+Spoken turns change the board straight away, so what the assistant makes has
+to be right the first time. It builds with the same pieces you use by hand:
+
+| To change | It uses | So that |
+| --- | --- | --- |
+| A mind map | `createMindMap` (even with just the topic), then `addIdeas` under the idea you name, `moveIdea`, or `setMindMap` to reorganise the whole map | Every idea is its own node, hanging off its parent, coloured by branch and laid out automatically |
+| A flowchart | `createFlowchart`, then `addSteps` after a step (one call per branch of a decision, labelled Yes / No), or `setFlowchart` to restructure | Steps are real flowchart shapes, sized for their words and joined in order |
+| A Kanban board, table or timeline | `setKanban`, `setTable`, `setTimeline` with the new content | Cards, rows and entries already there keep their dates, colours and links |
+
+It sees what's in each Kanban board, table and timeline as it reads the
+board, so it can change one in the same turn.
+
+**Checks before anything is applied.** A change that would make a mess goes
+back to the assistant once, with a note on how to do it properly, before you
+see it:
+
+- lines drawn to or between mind-map ideas (ideas hang off their parent);
+- several ideas crammed into one;
+- a mind map or flowchart faked out of plain boxes and lines (loose boxes
+  and lines on purpose are still possible);
+- something dropped on top of what's already there.
+
+It's sent back at most once per turn, so it can never get stuck: a second
+attempt goes ahead as it is. This applies to typed requests too.
+
+**Trying your own model on spoken turns.** `src/ai/spoken.eval.test.ts`
+plays whole conversations through the assistant as Flowstate does: a mind
+map built and renamed over six turns, a flowchart with a decision, and a
+Kanban board whose card moves. It then checks the board for real structure,
+no lines between ideas, one idea per node and nothing piled up. It prints
+what was said and answered, and how often a change was sent back to tidy. It
+uses the model for real, so it's skipped in `npm run check`. Run it against
+a BrainCraft server whose agent command is the model to try:
+
+```bash
+# A scratch server whose agent is the model under test (here Claude Code's small model)
+PORT=4193 BRAINCRAFT_DATA=./scratch-data BRAINCRAFT_AI_AGENTS=off \
+BRAINCRAFT_AI_COMMAND='claude -p --tools "" --no-session-persistence --model haiku' node dist/braincraft-server.mjs
+# Then, in another terminal
+BRAINCRAFT_EVAL_SERVER=http://localhost:4193 BRAINCRAFT_EVAL_AGENT=custom npx vitest run src/ai/spoken.eval.test.ts --silent=false
+```
+
+To try a model on an OpenAI-compatible server, point
+`BRAINCRAFT_AI_COMMAND` at a small script that sends the prompt it's given
+(on standard input) to that server and prints the answer.
 
 **Which browser.** Firefox has no speech recognition of its own (only behind
 a setting), so for it, and for the best results everywhere, the BrainCraft

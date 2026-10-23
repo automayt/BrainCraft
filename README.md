@@ -517,6 +517,12 @@ shares live exactly like a board.
   undone from History. Works in Firefox, Chrome, Edge and Safari with the
   server's speech to text (such as Whisper on vLLM); see
   [AI.md](docs/AI.md#talking-to-it).
+- **Builds things properly:** it grows a mind map idea by idea under the
+  idea you name, adds steps to a flowchart, and changes Kanban boards, tables
+  and timelines in place, and a change that would make a mess (lines between
+  ideas, several ideas in one, boxes standing in for a mind map, things piled
+  up) goes back to it once to tidy. See
+  [AI.md](docs/AI.md#building-things-properly).
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels go away, the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.
