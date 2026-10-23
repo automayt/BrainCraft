@@ -125,19 +125,16 @@ maker), and Firefox can't talk.
 **Words as you speak.** With `BRAINCRAFT_TRANSCRIBE_PREVIEW=1`, the phrase
 you're saying is also transcribed about once a second, so your words appear
 while you talk, as they do with a browser's own recognition. That's several
-times the transcription work, so turn it on when the model runs on your own
-GPU, not with a service that charges by the minute.
+times the transcription work, so turn it on when you run the speech-to-text
+server yourself, not with a service that charges by the minute.
 
-**Where to run it.** Whisper is small: `whisper-large-v3-turbo` needs about
-6 GB of GPU memory and turns a phrase into words in a fraction of a second.
-Running it on the BrainCraft machine (if it has a GPU) keeps the audio there
-and the delay lowest, while the chat model can stay on a bigger inference
-server. vLLM takes most of a GPU's memory by default, so cap it when it
-shares the GPU.
+**Where to run it.** Whisper is small and turns a phrase into words in a
+fraction of a second. Running it close to BrainCraft keeps the audio there
+and the delay lowest.
 
 ```bash
-# Whisper on vLLM, on the first GPU of the BrainCraft machine
-CUDA_VISIBLE_DEVICES=0 vllm serve openai/whisper-large-v3-turbo --port 8001 --gpu-memory-utilization 0.2
+# Whisper on vLLM
+vllm serve openai/whisper-large-v3-turbo --port 8001
 BRAINCRAFT_TRANSCRIBE_URL=http://localhost:8001/v1 BRAINCRAFT_TRANSCRIBE_MODEL=openai/whisper-large-v3-turbo BRAINCRAFT_TRANSCRIBE_PREVIEW=1 node dist/braincraft-server.mjs
 ```
 

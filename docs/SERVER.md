@@ -40,7 +40,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | A command-line agent of your own, run per step (timeout in seconds, default 300); same rule about other machines. |
 | `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
 | `BRAINCRAFT_TRANSCRIBE_URL`, `BRAINCRAFT_TRANSCRIBE_MODEL`, `BRAINCRAFT_TRANSCRIBE_KEY` | — | Speech to text for talking to the assistant in any browser (Firefox needs it): an OpenAI-compatible `/v1` address such as Whisper on vLLM, the model (default `whisper-1`) and its key. See [AI.md](AI.md#talking-to-it). |
-| `BRAINCRAFT_TRANSCRIBE_PREVIEW` | off | `1`: words appear while you speak (the phrase so far is transcribed about once a second; best with a model on your own GPU). |
+| `BRAINCRAFT_TRANSCRIBE_PREVIEW` | off | `1`: words appear while you speak (the phrase so far is transcribed about once a second; best when you run the speech-to-text server yourself). |
 | `BRAINCRAFT_ACCOUNTS` | off | `1`: people sign in, groups carry permissions, boards have owners and access lists, and share links stop working. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_ADMINS` | — | Emails that are always admins (with accounts on). |
 | `BRAINCRAFT_PUBLIC_URL` | — | The server's public address, for sign-in links, secure cookies and the single sign-on redirect URI. |

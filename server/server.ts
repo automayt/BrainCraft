@@ -349,7 +349,7 @@ const openAiProxy = OPENAI_BASE
   : null
 /** Speech to text for talking to the assistant (any OpenAI-compatible transcription endpoint). */
 const TRANSCRIBE_URL = process.env.BRAINCRAFT_TRANSCRIBE_URL?.trim() || ''
-/** Words shown while they're said: the phrase so far is transcribed about once a second (best with a model on your own GPU). */
+/** Words shown while they're said: the phrase so far is transcribed about once a second (best when you run the speech-to-text server yourself). */
 const TRANSCRIBE_PREVIEW = /^(1|true|on|yes)$/i.test(process.env.BRAINCRAFT_TRANSCRIBE_PREVIEW?.trim() ?? '')
 const transcriber = TRANSCRIBE_URL
   ? new Transcriber({
