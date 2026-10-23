@@ -44,6 +44,10 @@ your BrainCraft server.
 - **New chat** starts over. Each board has its own conversation while the
   tab is open.
 
+This is separate from [connecting an outside AI assistant over MCP](MCP.md),
+which suits Claude Desktop, Claude Code or Cursor. Both use the same tools
+and [operations](API.md).
+
 ## Talking to it
 
 Press **🎙 Talk** and just talk, as you would to a person at the whiteboard.
@@ -63,19 +67,35 @@ flowchart", "move the press release first".
 - The microphone needs the page on https or on this computer (localhost); see
   [HTTPS.md](HTTPS.md).
 
-**Which browser.** Firefox has no speech recognition of its own, so for it
-(and for the best results everywhere) the BrainCraft server turns speech into
-words with a speech-to-text model: set `BRAINCRAFT_TRANSCRIBE_URL` to any
-OpenAI-compatible transcription endpoint, such as Whisper served by vLLM.
-Then the app records each phrase, ends it at a pause, and the server
-transcribes it, in Firefox, Chrome, Edge and Safari alike. Without it, Chrome,
-Edge and Safari use their own recognition (which may send audio to the
-browser maker), and Firefox can't talk.
+**Which browser.** Firefox has no speech recognition of its own (only behind
+a setting), so for it, and for the best results everywhere, the BrainCraft
+server turns speech into words with a speech-to-text model: set
+`BRAINCRAFT_TRANSCRIBE_URL` to any OpenAI-compatible transcription endpoint,
+such as Whisper served by vLLM. The app then cuts what you say into phrases at
+your pauses and sends each as 16 kHz WAV (what Whisper listens at, and a
+format every transcription server reads), the same in Firefox, Chrome, Edge
+and Safari. Phrases are transcribed side by side and heard in order, and a
+turn waits for a phrase that's still being heard. Without it, Chrome, Edge
+and Safari use their own recognition (which may send audio to the browser
+maker), and Firefox can't talk.
+
+**Words as you speak.** With `BRAINCRAFT_TRANSCRIBE_PREVIEW=1`, the phrase
+you're saying is also transcribed about once a second, so your words appear
+while you talk, as they do with a browser's own recognition. That's several
+times the transcription work, so turn it on when the model runs on your own
+GPU, not with a service that charges by the minute.
+
+**Where to run it.** Whisper is small: `whisper-large-v3-turbo` needs about
+6 GB of GPU memory and turns a phrase into words in a fraction of a second.
+Running it on the BrainCraft machine (if it has a GPU) keeps the audio there
+and the delay lowest, while the chat model can stay on a bigger inference
+server. vLLM takes most of a GPU's memory by default, so cap it when it
+shares the GPU.
 
 ```bash
-# Whisper on vLLM, beside your chat model
-vllm serve openai/whisper-large-v3-turbo --port 8001
-BRAINCRAFT_TRANSCRIBE_URL=http://localhost:8001/v1 BRAINCRAFT_TRANSCRIBE_MODEL=openai/whisper-large-v3-turbo node dist/braincraft-server.mjs
+# Whisper on vLLM, on the first GPU of the BrainCraft machine
+CUDA_VISIBLE_DEVICES=0 vllm serve openai/whisper-large-v3-turbo --port 8001 --gpu-memory-utilization 0.2
+BRAINCRAFT_TRANSCRIBE_URL=http://localhost:8001/v1 BRAINCRAFT_TRANSCRIBE_MODEL=openai/whisper-large-v3-turbo BRAINCRAFT_TRANSCRIBE_PREVIEW=1 node dist/braincraft-server.mjs
 ```
 
 | Variable | Meaning |
@@ -83,14 +103,11 @@ BRAINCRAFT_TRANSCRIBE_URL=http://localhost:8001/v1 BRAINCRAFT_TRANSCRIBE_MODEL=o
 | `BRAINCRAFT_TRANSCRIBE_URL` | An OpenAI-compatible server's address ending in `/v1`, with `/audio/transcriptions` (vLLM with a Whisper model, or a hosted one). |
 | `BRAINCRAFT_TRANSCRIBE_MODEL` | Optional. The model to ask (default `whisper-1`). |
 | `BRAINCRAFT_TRANSCRIBE_KEY` | Optional. The key that server needs. |
+| `BRAINCRAFT_TRANSCRIBE_PREVIEW` | Optional. `1` shows your words while you speak, by transcribing the phrase so far about once a second. |
 
 Who may use it is decided like the rest of the assistant (the AI password, or
 signed in with "Use the AI"), with a higher hourly limit since every phrase is
-one request.
-
-This is separate from [connecting an outside AI assistant over MCP](MCP.md),
-which suits Claude Desktop, Claude Code or Cursor. Both use the same tools
-and [operations](API.md).
+one request (higher still with previews).
 
 ## Connecting it
 

@@ -334,7 +334,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
   // Talking: each pause sends what was said, and the assistant shapes the board as it goes.
-  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
+  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, serverPreviews: !!server.transcribePreview, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
   const follow = (to: LinkTarget | null, label: string) => {
     const target = to ?? resolveName(label, editor.board, ws.otherBoards)
     if (target) void ws.openLink(target)

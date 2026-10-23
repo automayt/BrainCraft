@@ -346,13 +346,15 @@ const openAiProxy = OPENAI_BASE
   : null
 /** Speech to text for talking to the assistant (any OpenAI-compatible transcription endpoint). */
 const TRANSCRIBE_URL = process.env.BRAINCRAFT_TRANSCRIBE_URL?.trim() || ''
+/** Words shown while they're said: the phrase so far is transcribed about once a second (best with a model on your own GPU). */
+const TRANSCRIBE_PREVIEW = /^(1|true|on|yes)$/i.test(process.env.BRAINCRAFT_TRANSCRIBE_PREVIEW?.trim() ?? '')
 const transcriber = TRANSCRIBE_URL
   ? new Transcriber({
       baseUrl: TRANSCRIBE_URL,
       model: process.env.BRAINCRAFT_TRANSCRIBE_MODEL?.trim() || 'whisper-1',
       apiKey: process.env.BRAINCRAFT_TRANSCRIBE_KEY?.trim() || undefined,
-      // Its own budget: talking sends a phrase every few seconds.
-      gate: new AiGate({ password: AI_PASSWORD, equal: safeEqual, visitor, limit: 2000, accounts: accounts && ((req) => {
+      // Its own budget: talking sends a phrase every few seconds (and with previews, one a second).
+      gate: new AiGate({ password: AI_PASSWORD, equal: safeEqual, visitor, limit: TRANSCRIBE_PREVIEW ? 20_000 : 2000, accounts: accounts && ((req) => {
         const u = accounts.userOf(req)
         return !u ? 'signin' : accounts.can(u, 'ai.use') ? 'yes' : 'no'
       }) }),
@@ -396,6 +398,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       previews: true,
       accounts: !!accounts,
       transcribe: !!transcriber,
+      transcribePreview: !!transcriber && TRANSCRIBE_PREVIEW,
       appName: appName(),
     })
 

@@ -11,6 +11,8 @@ export interface TalkOptions {
   /** The BrainCraft server, when it turns speech into words. */
   server: string | null
   serverTranscribes: boolean
+  /** The server also transcribes while you speak (words appear as they're said). */
+  serverPreviews?: boolean
   /** The server's AI password, if it asks for one. */
   password?: string
   say(text: string): Promise<void>
@@ -34,14 +36,17 @@ export function useTalk(o: TalkOptions) {
   const latest = useRef(o)
   latest.current = o
 
-  const stop = () => {
-    ear.current?.stop()
+  /** Stops listening; what was being said still goes, once it's been heard (unless `send` is false). */
+  const stop = (send = true) => {
+    const e = ear.current
+    const u = turns.current
     ear.current = null
-    turns.current?.stop(true)
     turns.current = null
     setOn(false)
     setInterim('')
     setLevel(0)
+    if (!send) u?.stop()
+    void (e?.stop() ?? Promise.resolve()).finally(() => send && u?.stop(true))
   }
 
   const start = async () => {
@@ -51,11 +56,16 @@ export function useTalk(o: TalkOptions) {
       setError('This browser can’t hear you without the server’s speech to text (ask whoever runs it to set BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.')
       return
     }
-    const u = new Utterances(async (text) => {
-      setTick((t) => t + 1)
-      await latest.current.say(text)
-      setTick((t) => t + 1)
-    })
+    const u = new Utterances(
+      async (text) => {
+        setTick((t) => t + 1)
+        await latest.current.say(text)
+        setTick((t) => t + 1)
+      },
+      // The server's phrases already end at a pause, and the turn holds while one is heard, so a
+      // short wait is enough; the browser's own recognition gives less warning.
+      { pauseMs: how === 'server' ? 300 : 1200 },
+    )
     turns.current = u
     const lang = navigator.language || 'en-US'
     const hearing = {
@@ -70,23 +80,24 @@ export function useTalk(o: TalkOptions) {
       },
       level: setLevel,
       state: setState,
+      holding: (on: boolean) => u.hold(on),
       error: (message: string) => {
         setError(message)
-        stop()
+        stop(false)
       },
     }
     try {
       if (how === 'server') {
-        const { server, password } = latest.current
+        const { server, password, serverPreviews } = latest.current
         ear.current = await serverEar(
           {
-            lang,
+            preview: !!serverPreviews,
             transcribe: async (audio) => {
               const res = await fetch(new URL(`api/ai/transcribe?lang=${encodeURIComponent(lang)}`, server!.endsWith('/') ? server! : `${server}/`), {
                 method: 'POST',
                 body: audio,
                 credentials: 'include',
-                headers: { 'content-type': audio.type || 'audio/webm', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
+                headers: { 'content-type': audio.type || 'audio/wav', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
               })
               const out = (await res.json().catch(() => ({}))) as { text?: string; error?: string }
               if (!res.ok) throw new Error(out.error ?? `Speech to text failed (${res.status})`)
@@ -100,12 +111,12 @@ export function useTalk(o: TalkOptions) {
     } catch (err) {
       const e = err as Error
       setError(e.name === 'NotAllowedError' ? 'The microphone isn’t allowed for this page (it needs https, or localhost)' : `Couldn’t start listening: ${e.message}`)
-      stop()
+      stop(false)
     }
   }
 
-  // Closing the panel stops listening.
-  useEffect(() => () => stop(), [])
+  // Closing the panel stops listening (what was being said is dropped).
+  useEffect(() => () => stop(false), [])
 
   return {
     on,

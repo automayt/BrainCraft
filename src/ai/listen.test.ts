@@ -56,23 +56,23 @@ describe('talking to the assistant', () => {
       },
       { ...c, pauseMs: 1000, maxWaitMs: 3000 },
     )
-    // Phrase after phrase, never pausing a whole second: once three seconds have gone by, the next phrase sends it all.
+    // Phrase after phrase, never pausing a whole second: three seconds after the first, it all goes.
     for (let k = 0; k < 5; k++) {
       u.heard(`point ${k}`)
       await c.tick(800)
     }
-    expect(sent).toEqual(['point 0 point 1 point 2 point 3 point 4'])
+    expect(sent).toEqual(['point 0 point 1 point 2 point 3'])
     expect(u.sending).toBe(true)
     // Said while the assistant is busy: it waits, then goes after a pause.
     u.heard('and another')
     await c.tick(5000)
     expect(sent).toHaveLength(1)
-    expect(u.waiting).toBe('and another')
+    expect(u.waiting).toBe('point 4 and another')
     finish()
     await Promise.resolve()
     await Promise.resolve()
     await c.tick(1000)
-    expect(sent[1]).toBe('and another')
+    expect(sent[1]).toBe('point 4 and another')
   })
 
   it('sends at once when asked, and nothing after stopping', async () => {
@@ -89,5 +89,37 @@ describe('talking to the assistant', () => {
     u.heard('after stopping')
     await c.tick(5000)
     expect(sent).toEqual(['make it a flowchart'])
+  })
+})
+
+describe('waiting for a phrase still being heard', () => {
+  it('holds what was said while the next phrase is said and transcribed, then goes a short pause after', async () => {
+    const c = clock()
+    const sent: string[] = []
+    const u = new Utterances(async (t) => void sent.push(t), { ...c, pauseMs: 300, maxWaitMs: 10_000 })
+    u.heard('a flowchart for onboarding')
+    // They carry on talking before the pause is up: the next phrase is being said, then transcribed.
+    await c.tick(200)
+    u.hold(true)
+    await c.tick(2000)
+    expect(sent).toEqual([])
+    u.heard('starting with the signup form')
+    u.hold(false)
+    await c.tick(299)
+    expect(sent).toEqual([])
+    await c.tick(1)
+    expect(sent).toEqual(['a flowchart for onboarding starting with the signup form'])
+  })
+
+  it('still sends after the longest wait if a phrase never ends', async () => {
+    const c = clock()
+    const sent: string[] = []
+    const u = new Utterances(async (t) => void sent.push(t), { ...c, pauseMs: 300, maxWaitMs: 5000 })
+    u.heard('a timeline')
+    u.hold(true)
+    await c.tick(4999)
+    expect(sent).toEqual([])
+    await c.tick(1)
+    expect(sent).toEqual(['a timeline'])
   })
 })

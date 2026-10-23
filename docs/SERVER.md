@@ -40,6 +40,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_AI_COMMAND`, `BRAINCRAFT_AI_TIMEOUT` | — | A command-line agent of your own, run per step (timeout in seconds, default 300); same rule about other machines. |
 | `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
 | `BRAINCRAFT_TRANSCRIBE_URL`, `BRAINCRAFT_TRANSCRIBE_MODEL`, `BRAINCRAFT_TRANSCRIBE_KEY` | — | Speech to text for talking to the assistant in any browser (Firefox needs it): an OpenAI-compatible `/v1` address such as Whisper on vLLM, the model (default `whisper-1`) and its key. See [AI.md](AI.md#talking-to-it). |
+| `BRAINCRAFT_TRANSCRIBE_PREVIEW` | off | `1`: words appear while you speak (the phrase so far is transcribed about once a second; best with a model on your own GPU). |
 | `BRAINCRAFT_ACCOUNTS` | off | `1`: people sign in, groups carry permissions, boards have owners and access lists, and share links stop working. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_ADMINS` | — | Emails that are always admins (with accounts on). |
 | `BRAINCRAFT_PUBLIC_URL` | — | The server's public address, for sign-in links, secure cookies and the single sign-on redirect URI. |
@@ -135,7 +136,7 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |
 | `POST /api/ai/openai/chat/completions` | AI password, if set | The assistant's proxy to an OpenAI-compatible server (only with `OPENAI_BASE_URL`). |
-| `POST /api/ai/transcribe?lang=` | AI password, if set | Turns a recording (the body: `audio/webm`, `audio/ogg`, `audio/mp4`…) into words: `{"text"}` (only with `BRAINCRAFT_TRANSCRIBE_URL`). |
+| `POST /api/ai/transcribe?lang=` | AI password, if set | Turns a recording (the body: `audio/wav`, as the app sends, or `audio/webm`, `audio/ogg`, `audio/mp4`…) into words: `{"text"}` (only with `BRAINCRAFT_TRANSCRIBE_URL`). |
 | `POST /api/ai/command?agent=` | AI password, or this machine | Runs one of the server's agents once (`claude`, `codex` or `custom`, as `/api/health` lists in `aiAgents`) with `{"prompt"}` on its input; answers `{"text"}`. |
 
 Example: post a status update onto a team board from a CI job.

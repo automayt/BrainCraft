@@ -21,6 +21,7 @@ export class Utterances {
   private first: number | null = null
   private timer: unknown = null
   private busy = false
+  private held = false
   private stopped = false
   private readonly o: Required<UtteranceOptions>
   private readonly send: (text: string) => Promise<void>
@@ -60,6 +61,15 @@ export class Utterances {
     if (this.pending.length && !this.busy) this.schedule()
   }
 
+  /**
+   * A phrase is being said, or turned into words: what's waiting holds for it (up to the longest
+   * wait), and goes a short pause after it's heard.
+   */
+  hold(on: boolean) {
+    this.held = on
+    if (this.pending.length && !this.busy) this.schedule()
+  }
+
   /** Sends what's waiting now (a "go" from the person). */
   flush() {
     this.clear()
@@ -82,7 +92,8 @@ export class Utterances {
     this.clear()
     if (this.busy) return
     const waited = this.first === null ? 0 : this.o.now() - this.first
-    this.timer = this.o.setTimer(() => void this.go(), waited >= this.o.maxWaitMs ? 0 : this.o.pauseMs)
+    const left = Math.max(0, this.o.maxWaitMs - waited)
+    this.timer = this.o.setTimer(() => void this.go(), this.held ? left : Math.min(left, this.o.pauseMs))
   }
 
   private async go() {
