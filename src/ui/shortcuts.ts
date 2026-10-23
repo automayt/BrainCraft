@@ -20,7 +20,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     [
       ['Ctrl K · Ctrl F', 'Search the board or run any command (type > for commands only)'],
       ['Ctrl J', 'Ask AI about the board (changes are previewed first)'],
-      ['Ctrl Shift F', 'Flowstate: just the board, full screen, built as you talk (Esc to leave)'],
+      ['Ctrl Shift F', 'Flowstate: just the board (full screen where it can), built as you talk (Esc to leave)'],
       ['Ctrl Shift E', 'Export the board or selection as an image or PDF'],
       ['E', 'Send an emote from your cursor (nothing selected; 1–6 pick one)'],
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],

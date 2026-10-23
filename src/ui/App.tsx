@@ -80,8 +80,6 @@ function App({ ws }: { ws: Workspace }) {
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [assistant, setAssistant] = useState(false)
-  /** Flowstate has been seen in full screen (so leaving full screen ends it). */
-  const flowFull = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
 
@@ -136,10 +134,19 @@ function App({ ws }: { ws: Workspace }) {
       setDialog(null)
       setMenu(null)
       editor.setFlow(on)
-      // Full screen where allowed; leaving full screen (Esc in most browsers) ends it.
-      flowFull.current = false
-      if (on) document.documentElement.requestFullscreen?.().catch(() => {})
-      else if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+      // Full screen where the browser allows it, but Flowstate doesn't depend on it: windowed, it
+      // hides the same, and Esc ends it either way. In full screen, browsers keep Esc for leaving
+      // full screen; where a page may ask for it (Chrome, Edge), one Esc ends Flowstate too.
+      const keys = (navigator as Navigator & { keyboard?: { lock?: (k: string[]) => Promise<void>; unlock?: () => void } }).keyboard
+      if (on)
+        document.documentElement
+          .requestFullscreen?.()
+          .then(() => keys?.lock?.(['Escape']))
+          .catch(() => {})
+      else {
+        keys?.unlock?.()
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+      }
     },
     ai: bridge,
     menu,
@@ -217,10 +224,7 @@ function App({ ws }: { ws: Workspace }) {
     const onVisibility = () => document.visibilityState === 'hidden' && void ws.flush()
     const onFullscreen = () => {
       if (!document.fullscreenElement && editor.presenting) editor.stopPresenting()
-      // Flowstate ends when full screen does, once it has really started (some browsers send a
-      // change before it takes hold, which mustn't end it at once).
-      if (document.fullscreenElement) flowFull.current = editor.flow
-      else if (editor.flow && flowFull.current) uiRef.current.flow(false)
+      // Leaving full screen leaves Flowstate as it is, in the window; Esc ends it.
     }
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.
