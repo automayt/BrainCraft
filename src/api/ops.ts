@@ -17,6 +17,7 @@ import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
 import * as F from '../model/flowchart'
 import { applyOutline } from '../model/outlineSync'
+import { runAutomations } from '../model/automations'
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
@@ -35,8 +36,10 @@ import {
   type Board,
   type ConnectorStyle,
   type DataViewType,
+  type Automation,
   type Dataset,
   type Field,
+  type FieldValue,
   type FieldType,
   FILLS,
   type FlowShape,
@@ -148,6 +151,8 @@ export type Op =
   | { op: 'addRecords'; id: Ref; records: Record<string, unknown>[] }
   /** Adds a field to an existing database (any of its views). */
   | { op: 'addField'; id: Ref; field: FieldSpec }
+  /** "When this happens, set that" on a database: fields by name, values as people write them. */
+  | { op: 'addAutomation'; id: Ref; when: { added: true } | { field: string; to?: unknown }; then: { field: string; value: unknown }[] }
   | { op: 'updateRecord'; id: Ref; record: string; values?: Record<string, unknown>; body?: string }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
@@ -883,6 +888,40 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'addAutomation': {
+        const id = resolve(op.id, 'id')
+        const ds = D.getDataset(b, B.getItem(b, id)?.view?.dataset)
+        if (!ds) fail(index, op, '"id" should be a database view')
+        const field = (name: unknown, at: string) => {
+          const f = typeof name === 'string' ? D.fieldByName(ds!, name) : undefined
+          if (!f) fail(index, op, `"${at}" should name a field (${ds!.fields.map((x) => x.name).join(', ')})`)
+          if (D.isComputed(f)) fail(index, op, `"${at}" is worked out (a formula or rollup), so it can't be set or watched`)
+          return f
+        }
+        const w = obj(op.when, 'when') as { added?: unknown; field?: unknown; to?: unknown }
+        let when: Automation['when']
+        if (w.added === true) when = { added: true }
+        else {
+          const f = field(w.field, 'when.field')
+          const to = w.to === undefined ? undefined : D.coerce(f, w.to as FieldValue)
+          if (w.to !== undefined && to === undefined) fail(index, op, `"when.to" isn't a value "${f.name}" can have`)
+          when = { field: f.id, ...(to !== undefined ? { to } : {}) }
+        }
+        const steps = list(op.then, 'then')
+        if (!steps.length) fail(index, op, '"then" should list at least one {"field", "value"} to set')
+        const then = steps.map((s, k) => {
+          const f = field(obj(s, `then[${k}]`).field, `then[${k}].field`)
+          const raw = (s as { value?: unknown }).value
+          if (raw === 'today' || raw === null || raw === '') return { field: f.id, value: raw === 'today' ? ('today' as const) : null }
+          const v = D.coerce(f, raw as FieldValue)
+          if (v === undefined) fail(index, op, `"then[${k}].value" isn't a value "${f.name}" can have`)
+          return { field: f.id, value: v }
+        })
+        const rule: Automation = { id: uid(), when, then }
+        b = D.updateDataset(b, ds!.id, (d) => ({ ...d, automations: [...(d.automations ?? []), rule] }))
+        done({ id })
+        break
+      }
       case 'addRecords':
       case 'updateRecord':
       case 'deleteRecords': {
@@ -926,7 +965,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           if (!Array.isArray(op.records)) fail(index, op, '"records" should be a list of record ids or titles')
           op.records.forEach((q, k) => (ds = D.deleteRecord(ds!, findRecord(String(q), `records[${k}]`).id)))
         }
-        const final = ds!
+        // The database's automations follow, as when someone changes it by hand.
+        const final = runAutomations(D.getDataset(b, ds!.id), ds!)
         b = D.updateDataset(b, final.id, () => final)
         done({ id })
         break
@@ -1044,6 +1084,7 @@ export const OPS: Op['op'][] = [
   'addComment',
   'createDatabase',
   'addField',
+  'addAutomation',
   'addRecords',
   'updateRecord',
   'deleteRecords',

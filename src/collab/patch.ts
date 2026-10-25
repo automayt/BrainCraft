@@ -4,7 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
+import type { Automation, Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -12,6 +12,7 @@ export interface DatasetMeta {
   fields: Field[]
   /** Record ids in order. */
   order: string[]
+  automations?: Automation[]
 }
 
 export type Patch =
@@ -97,7 +98,7 @@ function landsInOrder<T>(a: T[], z: T[]): boolean {
   return landed.every((x, k) => x === z[k])
 }
 
-const metaOf = (d: Dataset): DatasetMeta => ({ id: d.id, name: d.name, fields: d.fields, order: d.records.map((r) => r.id) })
+const metaOf = (d: Dataset): DatasetMeta => ({ id: d.id, name: d.name, fields: d.fields, order: d.records.map((r) => r.id), ...(d.automations?.length ? { automations: d.automations } : {}) })
 
 /** The patches that turn board `a` into board `z`. */
 export function diff(a: Board, z: Board): Patch[] {
@@ -162,7 +163,7 @@ export function diff(a: Board, z: Board): Patch[] {
         if (was !== r && !same(was, r)) out.push({ k: 'rec', ds: d.id, id: r.id, v: r })
       }
       for (const r of old?.records ?? []) if (!kept.has(r.id)) out.push({ k: 'rec', ds: d.id, id: r.id, v: null })
-      if (old && (old.name !== d.name || !same(old.fields, d.fields) || !landsInOrder(old.records.map((r) => r.id), d.records.map((r) => r.id))))
+      if (old && (old.name !== d.name || !same(old.fields, d.fields) || !same(old.automations ?? [], d.automations ?? []) || !landsInOrder(old.records.map((r) => r.id), d.records.map((r) => r.id))))
         out.push({ k: 'ds', id: d.id, v: metaOf(d) })
     }
     for (const d of a.datasets ?? []) if (!after.has(d.id)) out.push({ k: 'ds', id: d.id, v: null })
@@ -298,7 +299,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
       case 'ds': {
         const meta = p.v
         setDataset(p.id, (old) =>
-          meta === null ? null : { id: meta.id, name: meta.name, fields: meta.fields, records: reorder(old?.records ?? [], (r) => r.id, meta.order) },
+          meta === null ? null : { id: meta.id, name: meta.name, fields: meta.fields, records: reorder(old?.records ?? [], (r) => r.id, meta.order), ...(meta.automations?.length ? { automations: meta.automations } : {}) },
         )
         break
       }

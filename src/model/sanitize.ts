@@ -30,7 +30,7 @@ import type {
   TableData,
   TimelineData,
 } from './types'
-import { defaultColor, defaultFontSize } from './types'
+import { type Automation, defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { cleanFile, isFileId } from './files'
 import { canLink, cleanItemLink } from './itemLink'
@@ -365,7 +365,28 @@ export function cleanDataset(v: unknown): Dataset | null {
   if (!isObj(v) || typeof v.id !== 'string') return null
   const fields = arr(v.fields).map(cleanField).filter((f): f is Field => !!f)
   if (!fields.length) return null
-  return { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', fields, records: arr(v.records).map(cleanRecord).filter((r): r is DataRecord => !!r) }
+  const automations = cleanAutomations(v.automations, fields)
+  return { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', fields, records: arr(v.records).map(cleanRecord).filter((r): r is DataRecord => !!r), ...(automations.length ? { automations } : {}) }
+}
+
+/** A database's rules, kept only where they name fields it has (at most 50, 10 steps each). */
+function cleanAutomations(v: unknown, fields: Field[]): Automation[] {
+  const has = new Set(fields.map((f) => f.id))
+  const value = (x: unknown): FieldValue | undefined => (typeof x === 'string' ? x.slice(0, TEXT_MAX) : typeof x === 'boolean' || (typeof x === 'number' && Number.isFinite(x)) ? x : undefined)
+  return arr(v)
+    .slice(0, 50)
+    .flatMap((a): Automation[] => {
+      if (!isObj(a) || typeof a.id !== 'string' || !isObj(a.when)) return []
+      const w = a.when
+      let when: Automation['when']
+      if (w.added === true) when = { added: true }
+      else if (typeof w.field === 'string' && has.has(w.field)) when = { field: w.field, ...(value(w.to) !== undefined ? { to: value(w.to) } : {}) }
+      else return []
+      const then = arr(a.then)
+        .slice(0, 10)
+        .flatMap((s) => (isObj(s) && typeof s.field === 'string' && has.has(s.field) ? [{ field: s.field, value: s.value === 'today' ? ('today' as const) : s.value === null ? null : (value(s.value) ?? null) }] : []))
+      return [{ id: a.id.slice(0, 64), when, then, ...(a.off === true ? { off: true } : {}) }]
+    })
 }
 
 export function cleanConnector(v: unknown): Connector | null {
@@ -511,7 +532,8 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         const m = p.v
         if (!isObj(m) || m.id !== p.id || !Array.isArray(m.order) || !m.order.every((x) => typeof x === 'string')) break
         const fields = arr(m.fields).map(cleanField).filter((f): f is Field => !!f)
-        if (fields.length) out.push({ k: 'ds', id: p.id, v: { id: p.id, name: str(m.name, NAME_MAX) ?? '', fields, order: m.order as string[] } })
+        const automations = cleanAutomations(m.automations, fields)
+        if (fields.length) out.push({ k: 'ds', id: p.id, v: { id: p.id, name: str(m.name, NAME_MAX) ?? '', fields, order: m.order as string[], ...(automations.length ? { automations } : {}) } })
         break
       }
       case 'rec': {

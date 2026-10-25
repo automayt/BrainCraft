@@ -17,6 +17,7 @@ import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import { applyOutline, rootOf as mapRoot } from '../model/outlineSync'
 import { type Problem, fixAll, fixProblem } from '../model/boardCheck'
+import { runAutomations } from '../model/automations'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
@@ -2097,7 +2098,8 @@ export class Editor {
 
   /** Changes a dataset (one undo step); every view of it updates. */
   updateDataset(datasetId: string, f: (d: Dataset) => Dataset) {
-    this.edit((b) => D.updateDataset(b, datasetId, f))
+    // The database's automations follow the change, in the same undo step.
+    this.edit((b) => D.updateDataset(b, datasetId, (d) => runAutomations(d, f(d))))
   }
 
   /** Changes how one view shows its dataset. */

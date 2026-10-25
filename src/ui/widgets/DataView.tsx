@@ -8,9 +8,11 @@ import { createPortal } from 'react-dom'
 import * as D from '../../model/dataset'
 import { parseMarkdown, toggleTask } from '../../model/markdown'
 import { Markdown, type MarkdownActions } from '../wiki/Markdown'
+import { describe as ruleWords } from '../../model/automations'
+import { uid } from '../../model/uid'
 import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
-import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item, RollupFn } from '../../model/types'
+import type { Automation, DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item, RollupFn } from '../../model/types'
 import { textOn } from '../paint'
 import { EditorContext } from '../useEditor'
 import { useEscape } from '../useEscape'
@@ -292,6 +294,131 @@ function FieldSettings({ c, f, onClose }: { c: Ctx; f: Field; onClose: () => voi
         </div>
       </div>
     </>
+  )
+}
+
+/** A value picker for a field in a rule: its choices, ticked or not, today (dates), or typed. */
+function RuleValue({ f, value, onChange, anything }: { f: Field; value: FieldValue | 'today' | null | undefined; onChange: (v: FieldValue | 'today' | null | undefined) => void; anything?: boolean }) {
+  const key = (v: typeof value) => (v === undefined ? '*' : v === null ? '' : v === 'today' ? 'today' : `=${String(v)}`)
+  if (f.type === 'select' || f.type === 'checkbox' || f.type === 'date') {
+    const opts: [string, typeof value][] = [
+      ...(anything ? [['anything', undefined] as [string, typeof value]] : []),
+      ...(f.type === 'select' ? (f.options ?? []).map((o) => [o.name, o.id] as [string, typeof value]) : []),
+      ...(f.type === 'checkbox' ? ([['ticked', true], ['unticked', false]] as [string, typeof value][]) : []),
+      ...(f.type === 'date' && !anything ? ([['today', 'today']] as [string, typeof value][]) : []),
+      ...(!anything ? ([['empty', null]] as [string, typeof value][]) : []),
+    ]
+    return (
+      <select aria-label="Value" value={key(value)} onChange={(e) => onChange(opts.find(([, v]) => key(v) === e.target.value)?.[1])}>
+        {opts.map(([label, v]) => (
+          <option key={key(v)} value={key(v)}>
+            {label}
+          </option>
+        ))}
+      </select>
+    )
+  }
+  return <input aria-label="Value" placeholder={anything ? 'anything' : 'empty'} defaultValue={value === undefined || value === null || value === 'today' ? '' : String(value)} onBlur={(e) => onChange(e.target.value === '' ? (anything ? undefined : null) : f.type === 'number' ? Number(e.target.value) : e.target.value)} />
+}
+
+/** A database's automations, each as a sentence to edit: when this happens, set that. */
+function AutomationsDialog({ c, onClose }: { c: Ctx; onClose: () => void }) {
+  useEscape(onClose)
+  const rules = c.ds.automations ?? []
+  const settable = c.ds.fields.filter((f) => !D.isComputed(f) && f.type !== 'relation')
+  const watchable = c.ds.fields.filter((f) => !D.isComputed(f))
+  const save = (next: Automation[]) => c.edit((d) => ({ ...d, automations: next }))
+  const change = (id: string, f: (a: Automation) => Automation) => save(rules.map((a) => (a.id === id ? f(a) : a)))
+  const add = () => {
+    const status = settable.find((f) => f.type === 'select') ?? settable[0]
+    const date = settable.find((f) => f.type === 'date') ?? settable[settable.length - 1]
+    if (!status) return
+    save([...rules, { id: uid(), when: { field: status.id }, then: date ? [{ field: date.id, value: date.type === 'date' ? 'today' : null }] : [] }])
+  }
+  return createPortal(
+    <div
+      className="modal-backdrop no-canvas"
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="modal automations" role="dialog" aria-modal="true" aria-label={`Automations for ${c.ds.name}`} onKeyDown={(e) => e.stopPropagation()}>
+        <header>
+          <h2>Automations · {c.ds.name}</h2>
+          <button className="icon-close" aria-label="Close" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="automations-body">
+          <p className="muted">When something happens to a record, set its fields automatically. Rules run on every change, by hand or by the assistant, and are undone with it.</p>
+          {rules.map((a) => {
+            const wf = 'field' in a.when ? D.fieldById(c.ds, a.when.field) : undefined
+            return (
+              <section key={a.id} className={`rule${a.off ? ' off' : ''}`}>
+                <div className="rule-line">
+                  <span>When</span>
+                  <select
+                    aria-label="When"
+                    value={'added' in a.when ? '+' : a.when.field}
+                    onChange={(e) => change(a.id, (x) => ({ ...x, when: e.target.value === '+' ? { added: true } : { field: e.target.value } }))}
+                  >
+                    <option value="+">a record is added</option>
+                    {watchable.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} changes
+                      </option>
+                    ))}
+                  </select>
+                  {wf && 'field' in a.when && (
+                    <>
+                      <span>to</span>
+                      <RuleValue f={wf} anything value={a.when.to} onChange={(v) => change(a.id, (x) => ({ ...x, when: { field: wf.id, ...(v !== undefined && v !== null && v !== 'today' ? { to: v } : {}) } }))} />
+                    </>
+                  )}
+                </div>
+                {a.then.map((s, k) => {
+                  const sf = D.fieldById(c.ds, s.field)
+                  return (
+                    <div key={k} className="rule-line then">
+                      <span>{k ? 'and set' : 'set'}</span>
+                      <select aria-label="Field to set" value={s.field} onChange={(e) => change(a.id, (x) => ({ ...x, then: x.then.map((y, j) => (j === k ? { field: e.target.value, value: null } : y)) }))}>
+                        {settable.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span>to</span>
+                      {sf && <RuleValue f={sf} value={s.value} onChange={(v) => change(a.id, (x) => ({ ...x, then: x.then.map((y, j) => (j === k ? { ...y, value: v === undefined ? null : v } : y)) }))} />}
+                      <button className="icon-close" aria-label="Remove this step" onClick={() => change(a.id, (x) => ({ ...x, then: x.then.filter((_y, j) => j !== k) }))}>
+                        ×
+                      </button>
+                    </div>
+                  )
+                })}
+                <div className="rule-foot">
+                  <button className="link" onClick={() => change(a.id, (x) => ({ ...x, then: [...x.then, { field: settable[0].id, value: null }] }))}>
+                    + set another field
+                  </button>
+                  <label>
+                    <input type="checkbox" checked={!a.off} onChange={(e) => change(a.id, (x) => (e.target.checked ? { ...x, off: undefined } : { ...x, off: true }))} /> On
+                  </label>
+                  <button className="link danger" onClick={() => save(rules.filter((x) => x.id !== a.id))}>
+                    Delete
+                  </button>
+                </div>
+                <p className="rule-words muted">{ruleWords(c.ds, a)}</p>
+              </section>
+            )
+          })}
+          <button onClick={add} disabled={!settable.length}>
+            + New automation
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -1177,6 +1304,7 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
   const datasets = editor.board.datasets
   const ds = useMemo(() => raw && D.withComputed(editor.board, raw), [raw, datasets])
   const [open, setOpen] = useState<string | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(false)
   const [menu, setMenu] = useState<'views' | 'fields' | null>(null)
   if (!ds) return null
   const c: Ctx = {
@@ -1230,6 +1358,11 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
             ['Show all', () => c.setView((v) => ({ ...v, hidden: [] }))],
           ]}
         />
+      )}
+      {c.live && (
+        <button title="When something happens in this database, set fields automatically" onClick={() => setRulesOpen(true)}>
+          ⚡ Automations{ds.automations?.length ? ` (${ds.automations.length})` : ''}
+        </button>
       )}
       <button
         title="Copy as CSV (what's shown)"
@@ -1340,6 +1473,7 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
         {view.type === 'gallery' && <GalleryBody c={c} />}
       </div>
       {open && <RecordPage c={c} id={open} onClose={() => setOpen(null)} />}
+      {rulesOpen && <AutomationsDialog c={c} onClose={() => setRulesOpen(false)} />}
     </Widget>
   )
 }

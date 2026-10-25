@@ -82,12 +82,24 @@ export interface DataRecord {
   body?: string
 }
 
+/** "When this happens, set that" on a database (see model/automations.ts). */
+export interface Automation {
+  id: string
+  /** What starts it: a record added, or a field changing (to a value, or to anything). */
+  when: { added: true } | { field: string; to?: FieldValue }
+  /** What it sets on that record: a value, today (a date field), or null for empty. */
+  then: { field: string; value: FieldValue | 'today' | null }[]
+  /** Switched off for now. */
+  off?: boolean
+}
+
 /** Records shared by every view that shows them. */
 export interface Dataset {
   id: string
   name: string
   fields: Field[]
   records: DataRecord[]
+  automations?: Automation[]
 }
 
 /**

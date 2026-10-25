@@ -197,6 +197,15 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     },
     required: ['id', 'field'],
   },
+  addAutomation: {
+    summary: 'A rule on a database: when a record is added, or a field changes (to a value), set fields of that record',
+    properties: {
+      id: ref,
+      when: { type: 'object', description: '{"added": true}, or {"field": name, "to"?: value} (left out: any change)' },
+      then: list({ type: 'object', properties: { field: str(), value: { description: 'A value, "today" (a date field), or null for empty' } }, required: ['field'] }),
+    },
+    required: ['id', 'when', 'then'],
+  },
   addRecords: { summary: 'Adds records to a database', properties: { id: ref, records: list({ type: 'object' }) }, required: ['id', 'records'] },
   updateRecord: { summary: 'Sets fields of one record by name (null or "" clears one), and/or its page', properties: { id: ref, record: str('A record id or title'), values: { type: 'object' }, body: str('The record’s page, in Markdown: notes, a checklist, a spec ("" removes it)') }, required: ['id', 'record'] },
   deleteRecords: { summary: 'Deletes records', properties: { id: ref, records: list(str('A record id or title')) }, required: ['id', 'records'] },
