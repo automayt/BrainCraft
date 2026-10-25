@@ -64,6 +64,7 @@ export const VIEW_TYPES: { type: DataViewType; label: string }[] = [
   { type: 'timeline', label: 'Timeline' },
   { type: 'calendar', label: 'Calendar' },
   { type: 'gallery', label: 'Gallery' },
+  { type: 'form', label: 'Form' },
 ]
 
 /** Colours handed to new choices, in order. */
@@ -699,6 +700,7 @@ export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: numbe
   }
   if (type === 'board') return { w: Math.max(620, Math.min(1400, groups(ds, { dataset: ds.id, type }).length * 248 + 40)), h: 440 }
   if (type === 'calendar') return { w: 860, h: 640 }
+  if (type === 'form') return { w: 520, h: Math.min(820, 190 + ds.fields.filter((f) => !isComputed(f) && f.type !== 'relation').length * 78) }
   if (type === 'gallery') return { w: Math.max(560, Math.min(1100, Math.ceil(Math.sqrt(ds.records.length + 1)) * 236 + 40)), h: Math.min(720, Math.max(360, Math.ceil((ds.records.length + 1) / 4) * 250 + 110)) }
   const w = 36 + 40 + ds.fields.reduce((sum, f) => sum + FIELD_W[f.type], 0)
   return { w: Math.max(560, Math.min(1200, w + 2)), h: Math.min(560, Math.max(260, 120 + ds.records.length * 34)) }

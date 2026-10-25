@@ -39,6 +39,7 @@ import { AssistantThreads } from './accounts/threads'
 import { cleanAppName, DEFAULT_APP_NAME } from './accounts/store'
 import { BoardFiles } from './boardFiles'
 import { readBoard, sendRead } from './boardReads'
+import { answerForm, readForm } from './forms'
 import { boardWrite } from './boardWrites'
 import { docsPage, openApiSpec } from './openapi'
 import { Accounts } from './accounts/service'
@@ -185,6 +186,8 @@ function limiter(limit: number, windowMs: number) {
 
 /** Starting live sessions: plenty for friends, not enough for a script to fill the disk. */
 const boardCreateAllowed = limiter(30, 60 * 60_000)
+/** Answers to shared forms: a whole class can answer from one address, a script can't flood a board. */
+const formAnswerAllowed = limiter(200, 60 * 60_000)
 
 function send(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -412,6 +415,17 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (parts[1] === 'openapi.json') return send(res, 200, spec)
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
     return res.end(docsPage(spec))
+  }
+
+  // GET/POST /api/forms/:board/:item → a shared form, for people who never open the board (see forms.ts).
+  if (parts[1] === 'forms' && parts.length === 4) {
+    if (accounts && !accounts.userOf(req)) return send(res, 401, { error: 'Sign in first' })
+    const room = getRoom(parts[2])
+    if (req.method === 'GET') return sendRead(res, readForm(room, parts[3]))
+    if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' })
+    if (accounts && !accounts.fromApp(req)) return send(res, 403, { error: 'Missing the X-BrainCraft header' })
+    if (!formAnswerAllowed(visitor(req))) return send(res, 429, { error: 'Too many answers from here. Try again in an hour.' })
+    return sendRead(res, answerForm(room, parts[3], await readBody(req)))
   }
 
   // Accounts: sign-in, admin, people, and boards by access instead of keys.

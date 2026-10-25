@@ -162,7 +162,20 @@ export interface PageRev {
   quick?: boolean
 }
 
-export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery'
+export type DataViewType = 'table' | 'board' | 'timeline' | 'calendar' | 'gallery' | 'form'
+
+/** A form view: its fields as questions, each answer a new record. */
+export interface FormSettings {
+  /** Above the questions; the database's name when missing. */
+  title?: string
+  intro?: string
+  /** Fields that must be answered. */
+  required?: string[]
+  /** Said once someone has answered. */
+  thanks?: string
+  /** Anyone with the link can answer (with accounts: anyone signed in), without opening the board. */
+  shared?: boolean
+}
 
 /** How a `data` item shows its dataset. Sorting, filtering and hiding change the view, never the data. */
 export interface DataView {
@@ -180,6 +193,8 @@ export interface DataView {
   end?: string
   /** The month a calendar view shows (YYYY-MM); this month when missing. */
   month?: string
+  /** A form view's title, words and settings. */
+  form?: FormSettings
 }
 
 /** One step of a flowchart run (runbook mode). */

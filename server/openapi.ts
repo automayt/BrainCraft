@@ -282,6 +282,30 @@ export function openApiSpec(o: SpecOptions) {
     },
   })
 
+  const formPath = [
+    { name: 'board', in: 'path', required: true, description: 'The board', schema: { type: 'string' } },
+    { name: 'item', in: 'path', required: true, description: 'The form view on it', schema: { type: 'integer' } },
+  ] as Operation['parameters']
+  add('/api/forms/{board}/{item}', 'get', {
+    tags: ['Forms'],
+    summary: 'A shared form: its title, words and questions',
+    description: 'Only a form view whose editors let anyone with the link answer. No records are shown.',
+    operationId: 'readForm',
+    parameters: formPath,
+    security: o.accounts ? boardAuth : [],
+    responses: { '200': ok('The form', { type: 'object', properties: { title: { type: 'string' }, intro: { type: 'string' }, questions: { type: 'array', items: { type: 'object' } } } }), '404': error('No such form, or it isn’t shared') },
+  })
+  add('/api/forms/{board}/{item}', 'post', {
+    tags: ['Forms'],
+    summary: 'Answer a shared form (adds a record)',
+    description: 'Answers are keyed by question id; a choice is answered with its id. Anything that isn’t a question is ignored, and the database’s automations run.',
+    operationId: 'answerForm',
+    parameters: formPath,
+    security: o.accounts ? boardAuth : [],
+    requestBody: { required: true, ...json({ type: 'object', properties: { answers: { type: 'object' } }, required: ['answers'] }, { answers: { f1: 'A standing desk' } }) },
+    responses: { '201': ok('Added', { type: 'object', properties: { thanks: { type: 'string' } } }), '404': error('No such form, or it isn’t shared'), '422': error('An answer is missing or wrong; the message says which'), '429': error('Too many answers from this address') },
+  })
+
   // ----- accounts -------------------------------------------------------------------------------
   if (o.accounts) {
     const me = (summary: string, operationId: string, extra: Partial<Operation> = {}) => ({ tags: ['Accounts'], summary, operationId, security: boardAuth, responses: { '200': ok('Done'), '401': error('Not signed in') }, ...extra })

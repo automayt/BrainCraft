@@ -23,6 +23,7 @@ import type { BoardFile } from '../model/types'
 import { type FileStore, browserFiles, serverFiles } from './files'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
 import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type ServerMention } from './account'
+import { takeReturn } from './formLink'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
 import { appName, fetchAppName, setAppName } from './brand'
@@ -998,6 +999,9 @@ export class Workspace {
 
   /** Someone signed in (or was already): their name on everything, and the server's boards listed. */
   async signedIn(info: AccountInfo) {
+    // Signed in from a shared form's link: back to the form.
+    const back = info.user ? takeReturn() : null
+    if (back) return void location.assign(back)
     this.account = info
     if (info.user) {
       this.editor.setAuthor(info.user.name, info.user.id)

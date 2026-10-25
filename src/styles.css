@@ -11154,3 +11154,242 @@ button.on,
 .md-synced-edit .outline-text {
   margin: 0;
 }
+
+/* ----- forms: a database's fields as questions ----- */
+
+.form-fill {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-title {
+  margin: 0;
+  font-family: var(--font-read);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.form-intro {
+  margin: -4px 0 4px;
+  font-family: var(--font-read);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+.form-q {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.form-q > label,
+.form-q > legend {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.form-q textarea {
+  resize: vertical;
+  min-height: 44px;
+}
+
+.form-req {
+  color: var(--danger);
+}
+
+.form-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+
+.form-choice,
+.form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.form-check {
+  font-weight: 600;
+}
+
+.form-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-thanks {
+  align-items: flex-start;
+  padding: 24px 0;
+  font-family: var(--font-read);
+  font-size: 17px;
+}
+
+.form-thanks p {
+  margin: 0;
+}
+
+.dv-form {
+  max-width: 560px;
+  padding: 14px 18px 18px;
+}
+
+.dv-form-admin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.dv-form-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dv-form-edit {
+  margin-left: auto;
+}
+
+.dv-form-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dv-form-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dv-form-questions {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dv-form-questions th,
+.dv-form-questions td {
+  padding: 3px 10px 3px 0;
+  text-align: left;
+  font-weight: normal;
+}
+
+.dv-form-questions thead th {
+  color: var(--muted);
+}
+
+.dv-form-questions td {
+  text-align: center;
+}
+
+.dv-form-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+.form-page {
+  /* The app's body doesn't scroll; the form page does. */
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 16px 32px;
+  background: var(--canvas);
+  color: var(--text);
+}
+
+.form-page-card {
+  width: min(600px, 100%);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-top: 4px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+
+.form-page-card p {
+  margin: 0;
+}
+
+.form-page-card .primary {
+  align-self: flex-start;
+}
+
+.form-page-foot {
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .form-page {
+    padding-top: 16px;
+  }
+  .form-page-card {
+    padding: 20px;
+  }
+}
+
+.form-q input:not([type='checkbox']):not([type='radio']),
+.form-q textarea,
+.form-q select,
+.dv-form-settings input:not([type='checkbox']),
+.dv-form-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.form-q input[type='checkbox'],
+.form-q input[type='radio'],
+.dv-form input[type='checkbox'] {
+  accent-color: var(--accent-strong);
+}
+
+.form-q.form-check {
+  flex-direction: row;
+  align-items: center;
+  align-self: flex-start;
+}

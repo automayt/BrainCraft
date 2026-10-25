@@ -41,7 +41,7 @@ import { canSketch } from './sketch'
 export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code']
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
 const FLOW_SHAPES = ['process', 'decision', 'terminator', 'data', 'document', 'database', 'subroutine']
-const VIEW_TYPES = ['table', 'board', 'timeline', 'calendar', 'gallery']
+const VIEW_TYPES = ['table', 'board', 'timeline', 'calendar', 'gallery', 'form']
 const FIELD_TYPES = ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula']
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
@@ -162,6 +162,20 @@ function cleanView(v: unknown): DataView | undefined {
   if (hidden.length) out.hidden = hidden
   for (const k of ['groupBy', 'start', 'end'] as const) if (typeof v[k] === 'string') out[k] = v[k] as string
   if (typeof v.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v.month)) out.month = v.month
+  if (isObj(v.form)) {
+    const f = v.form
+    const form: NonNullable<DataView['form']> = {}
+    for (const k of ['title', 'thanks'] as const) {
+      const s = str(f[k], NAME_MAX)
+      if (s) form[k] = s
+    }
+    const intro = str(f.intro, TEXT_MAX)
+    if (intro) form.intro = intro
+    const required = arr(f.required).filter((h): h is string => typeof h === 'string')
+    if (required.length) form.required = required
+    if (f.shared === true) form.shared = true
+    out.form = form
+  }
   return out
 }
 

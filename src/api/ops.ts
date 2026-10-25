@@ -12,6 +12,7 @@ import * as B from '../model/board'
 import { startPoll, toggleReaction } from '../model/reactions'
 import { type Rect, type Vec, unionAll } from '../model/geom'
 import * as D from '../model/dataset'
+import { askable } from '../model/forms'
 import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
@@ -37,6 +38,7 @@ import {
   type ConnectorStyle,
   type DataViewType,
   type Automation,
+  type FormSettings,
   type Dataset,
   type Field,
   type FieldValue,
@@ -154,6 +156,8 @@ export type Op =
   /** "When this happens, set that" on a database: fields by name, values as people write them. */
   | { op: 'addAutomation'; id: Ref; when: { added: true } | { field: string; to?: unknown }; set: { field: string; value: unknown }[] }
   | { op: 'updateRecord'; id: Ref; record: string; values?: Record<string, unknown>; body?: string }
+  /** Makes a view a form and sets it up: its words, which fields it asks and which need an answer, and sharing. */
+  | { op: 'setForm'; id: Ref; title?: string; intro?: string; thanks?: string; ask?: string[]; required?: string[]; shared?: boolean }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
@@ -922,6 +926,28 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'setForm': {
+        const id = resolve(op.id, 'id')
+        const view = B.getItem(b, id)?.view
+        const ds = D.getDataset(b, view?.dataset)
+        if (!view || !ds) fail(index, op, '"id" should be a database view')
+        const fields = (names: unknown, at: string) =>
+          list(names as string[] | undefined, at).map((n, k) => {
+            const f = typeof n === 'string' ? askable(ds!).find((x) => x.name.toLowerCase() === n.trim().toLowerCase()) : undefined
+            if (!f) fail(index, op, `"${at}[${k}]" should name a field a form can ask (${askable(ds!).map((x) => x.name).join(', ')})`)
+            return f.id
+          })
+        const form: FormSettings = { ...view!.form }
+        for (const k of ['title', 'intro', 'thanks'] as const) if (op[k] !== undefined) form[k] = text(op[k], k).trim() || undefined
+        if (op.required !== undefined) form.required = fields(op.required, 'required')
+        if (op.shared !== undefined) form.shared = op.shared === true || undefined
+        const ask = op.ask === undefined ? null : new Set(fields(op.ask, 'ask'))
+        // Fields not asked are hidden in this view; every view keeps its own.
+        const hidden = ask ? ds!.fields.filter((f) => !ask.has(f.id)).map((f) => f.id) : view!.hidden
+        b = B.updateItem(b, id, (i) => ({ ...i, view: { ...i.view!, type: 'form', form, ...(hidden?.length ? { hidden } : { hidden: undefined }) } }))
+        done({ id })
+        break
+      }
       case 'addRecords':
       case 'updateRecord':
       case 'deleteRecords': {
@@ -1085,6 +1111,7 @@ export const OPS: Op['op'][] = [
   'createDatabase',
   'addField',
   'addAutomation',
+  'setForm',
   'addRecords',
   'updateRecord',
   'deleteRecords',

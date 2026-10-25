@@ -1,5 +1,6 @@
 /**
- * A view of a dataset: a table, a board grouped by a field, or a timeline of date fields.
+ * A view of a dataset: a table, a board grouped by a field, a timeline of date fields, a calendar,
+ * a gallery, or a form that asks the fields as questions.
  * Every view of the same dataset edits the same records, so changes show up everywhere.
  */
 
@@ -12,7 +13,12 @@ import { describe as ruleWords } from '../../model/automations'
 import { uid } from '../../model/uid'
 import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
-import type { Automation, DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item, RollupFn } from '../../model/types'
+import type { Automation, DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, FormSettings, Item, RollupFn } from '../../model/types'
+import { answersToValues, askable, definitionOf } from '../../model/forms'
+import { call } from '../../store/account'
+import { formLink } from '../../store/formLink'
+import { FormFill } from '../FormFill'
+import { WorkspaceContext } from '../useWorkspace'
 import { textOn } from '../paint'
 import { EditorContext } from '../useEditor'
 import { useEscape } from '../useEscape'
@@ -1197,6 +1203,103 @@ function GalleryCover({ src, color, name }: { src?: string; color?: string; name
   )
 }
 
+// ----- form: the fields as questions, each answer a record --------------------------------
+
+function FormBody({ c, selected }: { c: Ctx; selected: boolean }) {
+  const ws = useContext(WorkspaceContext)
+  const [settings, setSettings] = useState(false)
+  const form = definitionOf(c.ds, c.view)
+  const live = ws?.liveInfo
+  const shared = !!c.view.form?.shared
+  const link = live && shared ? formLink(live.server, live.id, c.item.id) : null
+  const setForm = (patch: Partial<FormSettings>) => c.setView((v) => ({ ...v, form: { ...v.form, ...patch } }))
+  // Editors add the record themselves; someone who can only view answers through the server.
+  const answer = async (answers: Record<string, string | boolean>) => {
+    if (c.editable) {
+      const r = answersToValues(c.ds, c.view, answers)
+      if ('error' in r) throw new Error(r.error)
+      c.edit((d) => D.addRecord(d, r.values)[0])
+      return form.thanks ?? 'Added to ' + c.ds.name + '.'
+    }
+    if (!live || !link) throw new Error('This form isn’t taking answers')
+    return (await call<{ thanks: string }>(live.server, `api/forms/${encodeURIComponent(live.id)}/${c.item.id}`, 'POST', { answers }, !!live.account)).thanks
+  }
+  const canAnswer = c.editable || !!link
+  const copy = () =>
+    link &&
+    navigator.clipboard?.writeText(link).then(
+      () => ws?.editor.setStatus('Copied the form’s link'),
+      () => ws?.editor.setStatus('Clipboard unavailable'),
+    )
+
+  return (
+    <div className="dv-form" onPointerDown={(e) => selected && e.stopPropagation()}>
+      {c.live && (
+        <div className="dv-form-admin">
+          <label className="dv-form-share" title={live ? undefined : 'Share the board live first: the link goes to its server'}>
+            <input type="checkbox" checked={shared} onChange={(e) => setForm({ shared: e.target.checked || undefined })} />
+            {ws?.account ? 'Anyone signed in with the link can answer' : 'Anyone with the link can answer'}
+          </label>
+          {link && (
+            <button className="link" onClick={copy} title={link}>
+              Copy link
+            </button>
+          )}
+          {shared && !live && <small className="muted">Share the board live to get the link</small>}
+          <button className="link dv-form-edit" aria-expanded={settings} onClick={() => setSettings((s) => !s)}>
+            {settings ? 'Done' : 'Edit the form'}
+          </button>
+        </div>
+      )}
+      {c.live && settings && (
+        <div className="dv-form-settings" onKeyDown={(e) => e.stopPropagation()}>
+          <label>
+            Title
+            <input value={c.view.form?.title ?? ''} placeholder={c.ds.name} maxLength={120} onChange={(e) => setForm({ title: e.target.value || undefined })} />
+          </label>
+          <label>
+            Words above the questions
+            <textarea rows={2} value={c.view.form?.intro ?? ''} placeholder="What it’s for, and who reads the answers" onChange={(e) => setForm({ intro: e.target.value || undefined })} />
+          </label>
+          <label>
+            After answering
+            <input value={c.view.form?.thanks ?? ''} placeholder="Thanks, your answer is in." maxLength={120} onChange={(e) => setForm({ thanks: e.target.value || undefined })} />
+          </label>
+          <table className="dv-form-questions">
+            <thead>
+              <tr>
+                <th scope="col">Question</th>
+                <th scope="col">Ask</th>
+                <th scope="col">Needs an answer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {askable(c.ds).map((f) => {
+                const asked = !c.view.hidden?.includes(f.id)
+                const required = !!c.view.form?.required?.includes(f.id)
+                return (
+                  <tr key={f.id}>
+                    <th scope="row">{f.name}</th>
+                    <td>
+                      <input type="checkbox" aria-label={`Ask “${f.name}”`} checked={asked} onChange={(e) => c.setView((v) => ({ ...v, hidden: e.target.checked ? v.hidden?.filter((h) => h !== f.id) : [...(v.hidden ?? []), f.id] }))} />
+                    </td>
+                    <td>
+                      <input type="checkbox" aria-label={`“${f.name}” needs an answer`} disabled={!asked} checked={asked && required} onChange={(e) => setForm({ required: [...(c.view.form?.required ?? []).filter((id) => id !== f.id), ...(e.target.checked ? [f.id] : [])] })} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <small className="muted">Links to other records and worked-out fields (formulas, rollups) are never asked.</small>
+        </div>
+      )}
+      <FormFill form={form} answer={answer} disabled={!selected || !canAnswer} />
+      {!selected && <p className="dv-form-hint muted">Select the view to fill it in</p>}
+    </div>
+  )
+}
+
 function GalleryBody({ c }: { c: Ctx }) {
   const records = D.viewRecords(c.ds, c.view)
   const group = D.groupField(c.ds, c.view)
@@ -1292,6 +1395,11 @@ const VIEW_ICON: Record<DataViewType, ReactNode> = {
   gallery: (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2 2.5h5v5H2zM9 2.5h5v5H9zM2 9h5v5H2zM9 9h5v5H9z" />
+    </svg>
+  ),
+  form: (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 2h10v12H3zM5.5 5h5M5.5 8h5M5.5 11h3" />
     </svg>
   ),
 }
@@ -1471,6 +1579,7 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
         {view.type === 'timeline' && <TimelineBody c={c} width={item.w} />}
         {view.type === 'calendar' && <CalendarBody c={c} />}
         {view.type === 'gallery' && <GalleryBody c={c} />}
+        {view.type === 'form' && <FormBody c={c} selected={live} />}
       </div>
       {open && <RecordPage c={c} id={open} onClose={() => setOpen(null)} />}
       {rulesOpen && <AutomationsDialog c={c} onClose={() => setRulesOpen(false)} />}

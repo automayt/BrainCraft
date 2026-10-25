@@ -6,6 +6,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { Root } from './ui/App'
+import { FormPage } from './ui/FormPage'
+import { formOfSearch } from './store/formLink'
 import { applyTheme, storedTheme } from './ui/theme'
 import { installHandFont } from './ui/handFont'
 
@@ -14,8 +16,7 @@ applyTheme(storedTheme())
 // The handwriting of hand-drawn objects (fetched only when one is on screen).
 installHandFont()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Root />
-  </StrictMode>,
-)
+// A shared form's link opens just the form.
+const form = formOfSearch(location.search)
+
+createRoot(document.getElementById('root')!).render(<StrictMode>{form ? <FormPage board={form.board} item={form.item} /> : <Root />}</StrictMode>)
