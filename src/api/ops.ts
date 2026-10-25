@@ -152,7 +152,7 @@ export type Op =
   /** Adds a field to an existing database (any of its views). */
   | { op: 'addField'; id: Ref; field: FieldSpec }
   /** "When this happens, set that" on a database: fields by name, values as people write them. */
-  | { op: 'addAutomation'; id: Ref; when: { added: true } | { field: string; to?: unknown }; then: { field: string; value: unknown }[] }
+  | { op: 'addAutomation'; id: Ref; when: { added: true } | { field: string; to?: unknown }; set: { field: string; value: unknown }[] }
   | { op: 'updateRecord'; id: Ref; record: string; values?: Record<string, unknown>; body?: string }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
@@ -907,17 +907,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           if (w.to !== undefined && to === undefined) fail(index, op, `"when.to" isn't a value "${f.name}" can have`)
           when = { field: f.id, ...(to !== undefined ? { to } : {}) }
         }
-        const steps = list(op.then, 'then')
-        if (!steps.length) fail(index, op, '"then" should list at least one {"field", "value"} to set')
-        const then = steps.map((s, k) => {
-          const f = field(obj(s, `then[${k}]`).field, `then[${k}].field`)
+        const steps = list(op.set, 'set')
+        if (!steps.length) fail(index, op, '"set" should list at least one {"field", "value"} to set')
+        const set = steps.map((s, k) => {
+          const f = field(obj(s, `set[${k}]`).field, `set[${k}].field`)
           const raw = (s as { value?: unknown }).value
           if (raw === 'today' || raw === null || raw === '') return { field: f.id, value: raw === 'today' ? ('today' as const) : null }
           const v = D.coerce(f, raw as FieldValue)
-          if (v === undefined) fail(index, op, `"then[${k}].value" isn't a value "${f.name}" can have`)
+          if (v === undefined) fail(index, op, `"set[${k}].value" isn't a value "${f.name}" can have`)
           return { field: f.id, value: v }
         })
-        const rule: Automation = { id: uid(), when, then }
+        const rule: Automation = { id: uid(), when, set }
         b = D.updateDataset(b, ds!.id, (d) => ({ ...d, automations: [...(d.automations ?? []), rule] }))
         done({ id })
         break

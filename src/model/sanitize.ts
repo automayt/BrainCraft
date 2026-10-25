@@ -382,10 +382,10 @@ function cleanAutomations(v: unknown, fields: Field[]): Automation[] {
       if (w.added === true) when = { added: true }
       else if (typeof w.field === 'string' && has.has(w.field)) when = { field: w.field, ...(value(w.to) !== undefined ? { to: value(w.to) } : {}) }
       else return []
-      const then = arr(a.then)
+      const set = arr(a.set)
         .slice(0, 10)
         .flatMap((s) => (isObj(s) && typeof s.field === 'string' && has.has(s.field) ? [{ field: s.field, value: s.value === 'today' ? ('today' as const) : s.value === null ? null : (value(s.value) ?? null) }] : []))
-      return [{ id: a.id.slice(0, 64), when, then, ...(a.off === true ? { off: true } : {}) }]
+      return [{ id: a.id.slice(0, 64), when, set, ...(a.off === true ? { off: true } : {}) }]
     })
 }
 

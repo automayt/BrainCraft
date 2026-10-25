@@ -32,7 +32,7 @@ export function runAutomations(before: Dataset | undefined, after: Dataset, now 
     let values = r.values
     for (const rule of rules) {
       if (!startsOn(rule, was, r)) continue
-      for (const step of rule.then) {
+      for (const step of rule.set) {
         const f = fieldById(after, step.field)
         if (!f) continue
         const v = step.value === 'today' ? (f.type === 'date' ? fromDay(today(now)) : undefined) : step.value === null ? undefined : coerce(f, step.value)
@@ -64,6 +64,6 @@ function valueWords(ds: Dataset, fieldId: string, v: FieldValue | 'today' | null
 export function describe(ds: Dataset, rule: Automation): string {
   const name = (id: string) => fieldById(ds, id)?.name ?? 'a field that’s gone'
   const when = 'added' in rule.when ? 'When a record is added' : rule.when.to === undefined ? `When ${name(rule.when.field)} changes` : `When ${name(rule.when.field)} becomes ${valueWords(ds, rule.when.field, rule.when.to)}`
-  const then = rule.then.map((s) => `set ${name(s.field)} to ${valueWords(ds, s.field, s.value)}`).join(' and ')
+  const then = rule.set.map((s) => `set ${name(s.field)} to ${valueWords(ds, s.field, s.value)}`).join(' and ')
   return `${when}, ${then || 'do nothing yet'}`
 }

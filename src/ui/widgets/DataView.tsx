@@ -333,7 +333,7 @@ function AutomationsDialog({ c, onClose }: { c: Ctx; onClose: () => void }) {
     const status = settable.find((f) => f.type === 'select') ?? settable[0]
     const date = settable.find((f) => f.type === 'date') ?? settable[settable.length - 1]
     if (!status) return
-    save([...rules, { id: uid(), when: { field: status.id }, then: date ? [{ field: date.id, value: date.type === 'date' ? 'today' : null }] : [] }])
+    save([...rules, { id: uid(), when: { field: status.id }, set: date ? [{ field: date.id, value: date.type === 'date' ? 'today' : null }] : [] }])
   }
   return createPortal(
     <div
@@ -377,12 +377,12 @@ function AutomationsDialog({ c, onClose }: { c: Ctx; onClose: () => void }) {
                     </>
                   )}
                 </div>
-                {a.then.map((s, k) => {
+                {a.set.map((s, k) => {
                   const sf = D.fieldById(c.ds, s.field)
                   return (
                     <div key={k} className="rule-line then">
                       <span>{k ? 'and set' : 'set'}</span>
-                      <select aria-label="Field to set" value={s.field} onChange={(e) => change(a.id, (x) => ({ ...x, then: x.then.map((y, j) => (j === k ? { field: e.target.value, value: null } : y)) }))}>
+                      <select aria-label="Field to set" value={s.field} onChange={(e) => change(a.id, (x) => ({ ...x, set: x.set.map((y, j) => (j === k ? { field: e.target.value, value: null } : y)) }))}>
                         {settable.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.name}
@@ -390,15 +390,15 @@ function AutomationsDialog({ c, onClose }: { c: Ctx; onClose: () => void }) {
                         ))}
                       </select>
                       <span>to</span>
-                      {sf && <RuleValue f={sf} value={s.value} onChange={(v) => change(a.id, (x) => ({ ...x, then: x.then.map((y, j) => (j === k ? { ...y, value: v === undefined ? null : v } : y)) }))} />}
-                      <button className="icon-close" aria-label="Remove this step" onClick={() => change(a.id, (x) => ({ ...x, then: x.then.filter((_y, j) => j !== k) }))}>
+                      {sf && <RuleValue f={sf} value={s.value} onChange={(v) => change(a.id, (x) => ({ ...x, set: x.set.map((y, j) => (j === k ? { ...y, value: v === undefined ? null : v } : y)) }))} />}
+                      <button className="icon-close" aria-label="Remove this step" onClick={() => change(a.id, (x) => ({ ...x, set: x.set.filter((_y, j) => j !== k) }))}>
                         ×
                       </button>
                     </div>
                   )
                 })}
                 <div className="rule-foot">
-                  <button className="link" onClick={() => change(a.id, (x) => ({ ...x, then: [...x.then, { field: settable[0].id, value: null }] }))}>
+                  <button className="link" onClick={() => change(a.id, (x) => ({ ...x, set: [...x.set, { field: settable[0].id, value: null }] }))}>
                     + set another field
                   </button>
                   <label>

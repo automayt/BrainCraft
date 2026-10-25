@@ -22,8 +22,8 @@ function requests(): Board {
   ])
   b = make(
     [
-      { op: 'addAutomation', id: viewOf(b), when: { field: 'Status', to: 'Done' }, then: [{ field: 'Completed', value: 'today' }] },
-      { op: 'addAutomation', id: viewOf(b), when: { added: true }, then: [{ field: 'Status', value: 'New' }, { field: 'Owner', value: 'Front desk' }] },
+      { op: 'addAutomation', id: viewOf(b), when: { field: 'Status', to: 'Done' }, set: [{ field: 'Completed', value: 'today' }] },
+      { op: 'addAutomation', id: viewOf(b), when: { added: true }, set: [{ field: 'Status', value: 'New' }, { field: 'Owner', value: 'Front desk' }] },
     ],
     b,
   )
@@ -66,13 +66,13 @@ describe('automations', () => {
     expect(fromJson(toJson(b)).datasets![0].automations).toEqual(b.datasets![0].automations)
     // A friend's screen gets the rules with the change that made them.
     const before = make([{ op: 'createDatabase', title: 'Requests', fields: ['Request'] }])
-    const withRule = make([{ op: 'addAutomation', id: viewOf(before), when: { added: true }, then: [{ field: 'Request', value: 'Untitled request' }] }], before)
+    const withRule = make([{ op: 'addAutomation', id: viewOf(before), when: { added: true }, set: [{ field: 'Request', value: 'Untitled request' }] }], before)
     expect(applyPatches(before, diff(before, withRule)).datasets![0].automations).toEqual(withRule.datasets![0].automations)
   })
 
   it('says what is wrong with a rule', () => {
     const b = requests()
-    expect(() => make([{ op: 'addAutomation', id: viewOf(b), when: { field: 'Nope' }, then: [{ field: 'Owner', value: 'x' }] }], b)).toThrow(/should name a field/)
-    expect(() => make([{ op: 'addAutomation', id: viewOf(b), when: { field: 'Status', to: 'Lost' }, then: [{ field: 'Owner', value: 'x' }] }], b)).toThrow(/isn't a value "Status" can have/)
+    expect(() => make([{ op: 'addAutomation', id: viewOf(b), when: { field: 'Nope' }, set: [{ field: 'Owner', value: 'x' }] }], b)).toThrow(/should name a field/)
+    expect(() => make([{ op: 'addAutomation', id: viewOf(b), when: { field: 'Status', to: 'Lost' }, set: [{ field: 'Owner', value: 'x' }] }], b)).toThrow(/isn't a value "Status" can have/)
   })
 })

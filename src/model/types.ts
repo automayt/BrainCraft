@@ -88,7 +88,7 @@ export interface Automation {
   /** What starts it: a record added, or a field changing (to a value, or to anything). */
   when: { added: true } | { field: string; to?: FieldValue }
   /** What it sets on that record: a value, today (a date field), or null for empty. */
-  then: { field: string; value: FieldValue | 'today' | null }[]
+  set: { field: string; value: FieldValue | 'today' | null }[]
   /** Switched off for now. */
   off?: boolean
 }
