@@ -11110,3 +11110,11 @@ button.on,
   margin: 0;
   font-size: 12.5px;
 }
+
+/* A template button in a page. */
+.md-button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}

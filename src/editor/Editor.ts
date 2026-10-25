@@ -18,6 +18,7 @@ import * as M from '../model/mindmap'
 import { applyOutline, rootOf as mapRoot } from '../model/outlineSync'
 import { type Problem, fixAll, fixProblem } from '../model/boardCheck'
 import { runAutomations } from '../model/automations'
+import { type ButtonPlan, newTitle, stamp } from '../model/pageButtons'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
@@ -1668,6 +1669,32 @@ export class Editor {
   }
 
   /** Adds a page (under `parent`, before `before` or last) and opens it. */
+  /**
+   * A template button pressed on page `from` (its macro on line `line`): a new page from the
+   * template, or the template's words added below the button. Says so when it can't.
+   */
+  pressTemplateButton(from: string, line: number, plan: ButtonPlan) {
+    if (this.readOnly) return
+    const tpl = plan.template ? W.pageByTitle(this.board, plan.template) : undefined
+    if (!tpl) return this.setStatus(plan.template ? `There's no page called “${plan.template}” to use as the template` : 'This button names no template page: add template="Page title"')
+    const now = new Date()
+    const me = this.author.trim()
+    const words = stamp(W.pageText(this.board, tpl.id), now, me)
+    if (plan.here) {
+      const lines = W.pageText(this.board, from).replace(/\r\n?/g, '\n').split('\n')
+      lines.splice(line + 1, 0, '', ...words.replace(/^#\s+.*\n+/, '').split('\n'))
+      this.saveVersions([from])
+      this.setPageText(from, lines.join('\n'))
+      this.saveVersions([from], { at: Date.now(), by: me || undefined, quick: true, note: `Added “${tpl.title}”` })
+      return
+    }
+    const parent = plan.under ? W.pageByTitle(this.board, plan.under)?.id : from
+    const title = newTitle(plan, tpl.title, now, me)
+    // A template that starts with its own title as a heading gets the new one.
+    const body = words.replace(/^#\s+.*(\n|$)/, `# ${title}$1`)
+    this.addWikiPage({ title, parent, text: body })
+  }
+
   addWikiPage(opts: { title?: string; parent?: string; before?: string; text?: string } = {}): string {
     let id = ''
     this.edit((b) => {

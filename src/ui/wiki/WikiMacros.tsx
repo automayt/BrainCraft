@@ -1,5 +1,6 @@
 /** The macros that look at the rest of the wiki: a page tree, open tasks, recent changes, another page shown here. */
 
+import { buttonPlan } from '../../model/pageButtons'
 import { type ReactNode, useMemo, useState } from 'react'
 import { type Block, headings, inlineText, parseMarkdown, taskIsFor, taskItems, tasksFor } from '../../model/markdown'
 import { argText } from '../../model/macros'
@@ -32,11 +33,29 @@ export function WikiMacro({ block, page, actions, inside = false }: { block: Mac
       )
     case 'recent':
       return <RecentMacro count={Number(block.args.pos[0]) || 5} />
+    case 'button':
+      return <TemplateButton block={block} page={page} />
     case 'include':
       return inside ? <p className="md-macro-note muted">(A page shown inside another isn’t shown again here.)</p> : <IncludeMacro name={argText(block.args) || block.args.named.page || ''} page={page} actions={actions} />
     default:
       return null
   }
+}
+
+/** A template button: a new page from a template page, or its words added below. */
+function TemplateButton({ block, page }: { block: MacroBlock; page: Page }) {
+  const editor = useEditor()
+  const plan = buttonPlan(block.args)
+  const tpl = plan.template ? W.pageByTitle(editor.board, plan.template) : undefined
+  const tip = !plan.template ? 'Name a template page: template="Page title"' : !tpl ? `There's no page called “${plan.template}”` : plan.here ? `Adds “${tpl.title}” below this button` : `Makes a new page from “${tpl.title}”${plan.under ? ` under “${plan.under}”` : ''}`
+  return (
+    <p className="md-button">
+      <button className="primary" disabled={editor.readOnly || !tpl} title={tip} onClick={() => editor.pressTemplateButton(page.id, block.line, plan)}>
+        {plan.label}
+      </button>
+      {!tpl && <small className="muted">{tip}</small>}
+    </p>
+  )
 }
 
 function PageTreeMacro({ under }: { under?: string }) {
