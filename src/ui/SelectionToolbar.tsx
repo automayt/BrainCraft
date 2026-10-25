@@ -235,18 +235,8 @@ export function SelectionToolbar() {
               {mind.collapsed ? 'Expand' : 'Collapse'}
             </button>
           )}
-          <button
-            title="Copy the whole map as an indented list"
-            onClick={() => {
-              const outline = editor.outlineOfSelection()
-              if (outline)
-                navigator.clipboard
-                  ?.writeText(outline)
-                  .then(() => editor.setStatus('Copied map as outline'))
-                  .catch(() => editor.setStatus('Clipboard unavailable'))
-            }}
-          >
-            Copy outline
+          <button title="Edit the whole map as an outline beside the board, or copy it as Markdown" onClick={() => editor.openOutline(mind.id)}>
+            Outline
           </button>
         </>
       )}

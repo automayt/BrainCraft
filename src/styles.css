@@ -10645,3 +10645,39 @@ button.on,
   background: var(--faint);
   animation: none;
 }
+
+/* ----- a mind map as an outline, beside the board ----- */
+
+.outline-text {
+  flex: 1;
+  min-height: 0;
+  margin: 4px 14px 0;
+  padding: 12px 14px;
+  font: 13.5px/1.7 var(--mono);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  resize: none;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.outline-text:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.outline-help {
+  margin: 8px 16px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.outline-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}

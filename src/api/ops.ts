@@ -16,6 +16,7 @@ import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
 import * as F from '../model/flowchart'
+import { applyOutline } from '../model/outlineSync'
 import { linkItem, urlIn } from '../model/linkCard'
 import { parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
@@ -508,14 +509,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         if (it.kind !== 'mind') fail(index, op, '"id" should be an idea in the mind map to replace')
         let root = it
         while (root.parent !== undefined) root = B.getItem(b, root.parent) ?? root
+        // Changed in place: ideas whose words stay keep their identity, colour and comments.
         const tree = treeOf(op)
-        const centre = { x: root.x + root.w / 2, y: root.y + root.h / 2 }
-        b = B.remove(b, B.subtree(b, root.id))
+        const lines: string[] = []
+        const walk = (n: OutlineNode, depth: number) => {
+          lines.push(`${'  '.repeat(depth)}${n.text.replace(/\s*\n\s*/g, ' ')}`)
+          n.children.forEach((c) => walk(c, depth + 1))
+        }
+        walk(tree, 0)
         const before = new Set(b.items.map((i) => i.id))
-        let id: Id
-        ;[b, id] = createMapFromOutline(b, tree, centre)
-        b = layoutAll(b, ctx.measure)
-        done({ id, ids: b.items.filter((i) => !before.has(i.id)).map((i) => i.id) })
+        b = applyOutline(b, root.id, lines.join('\n'), ctx.measure)
+        done({ id: root.id, ids: b.items.filter((i) => !before.has(i.id)).map((i) => i.id) })
         break
       }
       case 'addSteps': {

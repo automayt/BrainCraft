@@ -43,7 +43,7 @@ createComment {text} — comment block on the board
 createFrame {title, around?: [ids/refs]} or {title, w, h} — a titled area
 createMindMap {outline: "Root\\n  Child\\n    Grandchild"} or {tree: {text, children: [...]}} — laid out and coloured automatically; one line ("Topic") is a map with just its central idea
 addIdeas {parent: idea id, ideas: "Jason\\n  Workstations\\nBrian"} — adds ideas under an idea (each line one idea; indented lines go under the line above); laid out and coloured automatically. Also a list: ["Jason", {"text": "Brian", "children": ["Servers"]}]
-moveIdea {id, parent} — moves an idea and its branch under another idea · setMindMap {id: any idea in it, outline} — replaces the whole map where it is, for a big reorganisation
+moveIdea {id, parent} — moves an idea and its branch under another idea · setMindMap {id: any idea in it, outline} — rewrites the whole map to this outline in place, for a big reorganisation (ideas whose words stay keep their identity and colour)
 createFlowchart {mermaid: "flowchart TD\\n  A([Start]) --> B{Ok?}\\n  B -->|Yes| C[Do it]"} — laid out automatically; shapes [ ] process, { } decision, ([ ]) start/end, [/ /] input/output, [( )] database, [[ ]] subprocess
 addSteps {after: step id, steps: [text | {text, shape?: process|decision|start|end|io|database|document|subprocess, label?}], direction?: down|right|up|left} — a chain of connected steps after a step, each sized for its words; for a decision, one addSteps per branch with label "Yes" / "No" · setFlowchart {id: any step in it, mermaid} — replaces the whole flowchart where it is
 createTable {columns: [names], rows?: [[cells]], title?}

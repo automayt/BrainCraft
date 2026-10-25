@@ -15,6 +15,7 @@ import { History } from '../model/history'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
+import { applyOutline, rootOf as mapRoot } from '../model/outlineSync'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
@@ -1330,8 +1331,35 @@ export class Editor {
 
   toggleNotes(open = !this.notesOpen) {
     this.notesOpen = open
-    if (open) this.peek = null
+    if (open) {
+      this.peek = null
+      this.outlineOf = null
+    }
     this.emit()
+  }
+
+  /** The mind map (by its central idea) shown as an outline beside the board, or null. */
+  outlineOf: Id | null = null
+
+  /** Shows the map `id` belongs to as an outline beside the board (null closes it). */
+  openOutline(id: Id | null) {
+    const root = id === null ? undefined : mapRoot(this.board, id)
+    this.outlineOf = root?.id ?? null
+    // One panel on the right at a time.
+    if (root) {
+      this.notesOpen = false
+      this.peek = null
+    }
+    this.emit()
+  }
+
+  /** Changes the map `id` belongs to so it matches an outline (one undo step). */
+  setOutline(id: Id, text: string): boolean {
+    if (this.readOnly) return false
+    const next = applyOutline(this.board, id, text, this.measure)
+    if (next === this.board) return false
+    this.edit(() => next)
+    return true
   }
 
   setAuthor(name: string, userId = this.userId) {
@@ -1591,7 +1619,10 @@ export class Editor {
   peekPage(to: { board: string; page: string; heading?: string } | null) {
     this.peek = to
     // One panel on the right at a time.
-    if (to) this.notesOpen = false
+    if (to) {
+      this.notesOpen = false
+      this.outlineOf = null
+    }
     this.emit()
   }
 

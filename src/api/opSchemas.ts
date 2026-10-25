@@ -55,7 +55,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   },
   moveIdea: { summary: 'Moves a mind-map idea (with its branch) under another idea', properties: { id: ref, parent: ref }, required: ['id', 'parent'] },
   setMindMap: {
-    summary: 'Replaces the whole mind map an idea belongs to, where it is',
+    summary: 'Rewrites the whole mind map an idea belongs to, in place (ideas whose words stay are kept)',
     properties: { id: ref, outline: str('The new map as an indented list'), tree: { type: 'object', description: '{"text", "children": [...]}' } },
     required: ['id'],
   },

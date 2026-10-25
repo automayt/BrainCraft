@@ -28,6 +28,7 @@ import { WikiView } from './wiki/WikiView'
 import { PagePeek } from './wiki/PagePeek'
 import { targetFromUrl } from '../store/deepLink'
 import { NotesPanel } from './NotesPanel'
+import { OutlinePanel } from './OutlinePanel'
 import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
@@ -70,7 +71,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.outlineOf ?? ''}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -118,6 +119,7 @@ function App({ ws }: { ws: Workspace }) {
     assistant,
     toggleAssistant: () => {
       if (!assistant && editor.notesOpen) editor.toggleNotes()
+      if (!assistant && editor.outlineOf !== null) editor.openOutline(null)
       setAssistant(!assistant)
     },
     openRuns: (id) => setRunsFor(id),
@@ -169,12 +171,12 @@ function App({ ws }: { ws: Workspace }) {
 
   // The comments panel and the assistant share the right edge; framing keeps clear of them.
   useEffect(() => {
-    if (editor.notesOpen) setAssistant(false)
-  }, [editor.notesOpen])
+    if (editor.notesOpen || editor.outlineOf !== null) setAssistant(false)
+  }, [editor.notesOpen, editor.outlineOf])
   useEffect(() => {
     const wide = editor.viewport.w > 720
-    editor.setRightInset(!editor.flow && wide && (assistant || editor.notesOpen || !!editor.peek) ? 404 : 0)
-  }, [editor, assistant, editor.notesOpen, editor.peek, editor.viewport.w, editor.flow])
+    editor.setRightInset(!editor.flow && wide && (assistant || editor.notesOpen || !!editor.peek || editor.outlineOf !== null) ? 404 : 0)
+  }, [editor, assistant, editor.notesOpen, editor.peek, editor.outlineOf, editor.viewport.w, editor.flow])
 
   // Flowstate is for canvas boards: opening a wiki (or presenting) ends it.
   useEffect(() => {
@@ -420,7 +422,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen || editor.peek ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
+          className={`app${editor.notesOpen || editor.peek || editor.outlineOf !== null ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -445,6 +447,7 @@ function App({ ws }: { ws: Workspace }) {
               <BottomLeft />
               <NotesPanel />
               <PagePeek />
+              <OutlinePanel />
             </>
           )}
           {(assistant || editor.flow) && !editor.presenting && (

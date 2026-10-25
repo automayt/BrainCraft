@@ -85,7 +85,7 @@ timeline.
 | `createMindMap` | `outline` (indented list, Markdown bullets OK; one line is just the central idea) or `tree` (`{"text", "children": [...]}`) | Mind map, laid out automatically |
 | `addIdeas` | `parent` (an idea), `ideas` (one per line, indented lines go under the line above; or a list of texts and `{"text", "children"}`) | Grows a mind map: ideas under `parent`, laid out and coloured by branch |
 | `moveIdea` | `id`, `parent` | Moves an idea and its branch under another idea |
-| `setMindMap` | `id` (any idea in it), `outline` or `tree` | Replaces the whole mind map, where it was |
+| `setMindMap` | `id` (any idea in it), `outline` or `tree` | Rewrites the whole mind map to match, in place: ideas whose words stay keep their identity, colour and comments; moved lines move their branch |
 | `createFlowchart` | `mermaid` (a Mermaid `flowchart`/`graph`) | Flowchart, laid out automatically |
 | `addSteps` | `after` (a step), `steps` (texts or `{"text", "shape?", "label?"}`; shapes `process`, `decision`, `start`, `end`, `io`, `database`, `document`, `subprocess`), `direction?` | Grows a flowchart: a chain of connected steps after `after`, each sized for its words. `label` goes on the line into the step ("Yes", "No"). |
 | `setFlowchart` | `id` (any step in it), `mermaid` | Replaces the whole flowchart, where it was |
