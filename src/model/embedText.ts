@@ -106,7 +106,8 @@ export function embedMarkdown(b: Board, item: Item | undefined): string {
         .join('\n\n')
     }
     case 'data': {
-      const ds = item.view ? D.getDataset(b, item.view.dataset) : undefined
+      const stored = item.view ? D.getDataset(b, item.view.dataset) : undefined
+      const ds = stored && D.withComputed(b, stored)
       if (!ds || !item.view) return ''
       const fields = D.shownFields(ds, item.view)
       return [`| ${fields.map((f) => cell(f.name)).join(' | ')} |`, `| ${fields.map(() => '---').join(' | ')} |`, ...D.viewRecords(ds, item.view).map((r) => `| ${fields.map((f) => cell(D.display(ds, f, r.values[f.id]))).join(' | ')} |`)].join('\n')

@@ -47,7 +47,10 @@ export interface Note {
 
 // ----- linked data: one dataset, many views ------------------------------------------
 
-export type FieldType = 'text' | 'number' | 'date' | 'select' | 'person' | 'checkbox'
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'person' | 'checkbox' | 'relation' | 'rollup' | 'formula'
+
+/** How a rollup sums up the records a relation links to. */
+export type RollupFn = 'count' | 'filled' | 'sum' | 'average' | 'min' | 'max' | 'earliest' | 'latest' | 'percentDone' | 'list'
 
 export interface SelectOption {
   id: string
@@ -61,9 +64,15 @@ export interface Field {
   type: FieldType
   /** The choices of a `select` field, in order. */
   options?: SelectOption[]
+  /** A `formula` field's expression (see model/formula.ts). */
+  formula?: string
+  /** A `relation` field links to records of this dataset (on the same board). */
+  relation?: { dataset: string }
+  /** A `rollup` field sums up a field (or just the number) of the records a relation links to. */
+  rollup?: { relation: string; field?: string; fn: RollupFn }
 }
 
-/** A field value: text, a number, an ISO date, a select option's id, or a checkbox. */
+/** A field value: text, a number, an ISO date, a select option's id, a checkbox, or (a relation) linked record ids joined by commas. */
 export type FieldValue = string | number | boolean
 
 export interface DataRecord {

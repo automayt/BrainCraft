@@ -320,7 +320,8 @@ function DataEmbed({ board, item }: { board: Board; item: Item }) {
       </div>
     )
   }
-  const ds = item.view ? D.getDataset(board, item.view.dataset) : undefined
+  const stored = item.view ? D.getDataset(board, item.view.dataset) : undefined
+  const ds = stored && D.withComputed(board, stored)
   if (!ds || !item.view) return <div className="embed-missing muted">That database isn’t there any more.</div>
   const fields = D.shownFields(ds, item.view)
   return (

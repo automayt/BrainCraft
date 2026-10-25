@@ -10,13 +10,13 @@ import { parseMarkdown, toggleTask } from '../../model/markdown'
 import { Markdown, type MarkdownActions } from '../wiki/Markdown'
 import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
-import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item } from '../../model/types'
+import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item, RollupFn } from '../../model/types'
 import { textOn } from '../paint'
 import { EditorContext } from '../useEditor'
 import { useEscape } from '../useEscape'
 import { Menu, Widget } from './Widget'
 
-const WIDTH: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76 }
+const WIDTH: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140 }
 const ROWNUM = 36
 
 const typeIcon = (t: FieldType) => D.FIELD_TYPES.find((x) => x.type === t)!.icon
@@ -66,6 +66,15 @@ function Cell({ c, f, r, autoFocus }: { c: Ctx; f: Field; r: DataRecord; autoFoc
   const v = r.values[f.id]
   const set = (value: FieldValue | null) => c.edit((d) => D.setValue(d, r.id, f.id, value))
   const [adding, setAdding] = useState(false)
+  if (D.isComputed(f)) {
+    const problem = (f as D.ShownField).problem
+    return (
+      <span className={`dv-computed${problem ? ' bad' : ''}`} title={problem ? `The formula can't be worked out: ${problem}` : 'Worked out from other fields'}>
+        <Show ds={c.ds} f={f} v={v} />
+      </span>
+    )
+  }
+  if (f.type === 'relation') return <RelationCell c={c} f={f} r={r} />
   if (!c.live) return <Show ds={c.ds} f={f} v={v} />
   const label = `${f.name} of ${D.recordTitle(c.ds, r)}`
   switch (f.type) {
@@ -144,6 +153,146 @@ function Cell({ c, f, r, autoFocus }: { c: Ctx; f: Field; r: DataRecord; autoFoc
         />
       )
   }
+}
+
+/** The records a relation links to, as chips, with a picker to link or unlink them. */
+function RelationCell({ c, f, r }: { c: Ctx; f: Field; r: DataRecord }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const titles = (f as D.ShownField).titles ?? {}
+  const ids = D.relIds(r.values[f.id])
+  const set = (next: string[]) => c.edit((d) => D.setValue(d, r.id, f.id, D.relValue(next) || null))
+  const choices = Object.entries(titles)
+    .filter(([id, t]) => id !== r.id && t.toLowerCase().includes(q.trim().toLowerCase()))
+    .slice(0, 60)
+  return (
+    <span className="dv-rel">
+      {ids.map((id) => (
+        <span key={id} className="dv-rel-chip">
+          {titles[id] ?? '?'}
+        </span>
+      ))}
+      {c.live && (
+        <button className="dv-rel-add" aria-label={`Link ${f.name}`} title={f.relation ? 'Link records' : 'Choose what this links to first (⋯ → Settings)'} disabled={!f.relation} onClick={() => setOpen(!open)}>
+          +
+        </button>
+      )}
+      {open && (
+        <>
+          <div className="menu-scrim" onPointerDown={() => setOpen(false)} />
+          <div className="widget-menu dv-rel-menu" role="dialog" aria-label={`Link ${f.name}`} onPointerDown={(e) => e.stopPropagation()}>
+            <input autoFocus placeholder="Find a record" aria-label="Find a record" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)} />
+            {choices.length ? (
+              choices.map(([id, t]) => (
+                <label key={id}>
+                  <input type="checkbox" checked={ids.includes(id)} onChange={(e) => set(e.target.checked ? [...ids, id] : ids.filter((x) => x !== id))} />
+                  {t || 'Untitled'}
+                </label>
+              ))
+            ) : (
+              <p className="muted">No records to link{q ? ' match' : ' yet'}.</p>
+            )}
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
+const FORMULA_HELP = 'Fields in braces: {Price} * {Qty}. Also + - / %, = != < > <= >=, and, or, not, if(test, then, else), round(x, 2), min, max, empty(x), daysUntil({Due}), days(from, to), addDays(date, n), today().'
+
+/** A formula, relation or rollup field's settings. */
+function FieldSettings({ c, f, onClose }: { c: Ctx; f: Field; onClose: () => void }) {
+  const editor = useContext(EditorContext)!
+  const datasets = editor.board.datasets ?? []
+  const [formula, setFormula] = useState(f.formula ?? '')
+  const [target, setTarget] = useState(f.relation?.dataset ?? datasets.find((d) => d.id !== c.ds.id)?.id ?? c.ds.id)
+  const relations = c.ds.fields.filter((x) => x.type === 'relation')
+  const [rel, setRel] = useState(f.rollup?.relation || relations[0]?.id || '')
+  const [field, setField] = useState(f.rollup?.field ?? '')
+  const [fn, setFn] = useState<RollupFn>(f.rollup?.fn ?? 'count')
+  const relField = relations.find((x) => x.id === rel)
+  const linked = datasets.find((d) => d.id === relField?.relation?.dataset)
+  // A first record's result, to see the formula work as it's written.
+  const preview = (() => {
+    if (f.type !== 'formula' || !c.ds.records.length) return null
+    const trial = D.withComputed(editor.board, D.setFieldConfig(D.getDataset(editor.board, c.ds.id) ?? c.ds, f.id, { formula }))
+    const tf = trial.fields.find((x) => x.id === f.id) as D.ShownField
+    if (tf.problem) return { bad: true, text: tf.problem }
+    return { bad: false, text: `${D.recordTitle(trial, trial.records[0])}: ${D.display(trial, tf, trial.records[0].values[f.id]) || '(empty)'}` }
+  })()
+  const save = () => {
+    if (f.type === 'formula') c.edit((d) => D.setFieldConfig(d, f.id, { formula }))
+    if (f.type === 'relation') c.edit((d) => D.setFieldConfig(d, f.id, { relation: { dataset: target } }))
+    if (f.type === 'rollup' && rel) c.edit((d) => D.setFieldConfig(d, f.id, { rollup: { relation: rel, fn, ...(field ? { field } : {}) } }))
+    onClose()
+  }
+  return (
+    <>
+      <div className="menu-scrim" onPointerDown={onClose} />
+      <div className="widget-menu dv-settings" role="dialog" aria-label={`${f.name} settings`} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        {f.type === 'formula' && (
+          <>
+            <label htmlFor={`fx-${f.id}`}>Formula</label>
+            <textarea id={`fx-${f.id}`} autoFocus rows={3} value={formula} placeholder="{Price} * {Qty}" onChange={(e) => setFormula(e.target.value)} />
+            {preview && <p className={preview.bad ? 'dv-settings-bad' : 'muted'}>{preview.text}</p>}
+            <p className="muted dv-settings-help">{FORMULA_HELP}</p>
+          </>
+        )}
+        {f.type === 'relation' && (
+          <>
+            <label htmlFor={`rel-${f.id}`}>Links to records of</label>
+            <select id={`rel-${f.id}`} value={target} onChange={(e) => setTarget(e.target.value)}>
+              {datasets.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                  {d.id === c.ds.id ? ' (this one)' : ''}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {f.type === 'rollup' &&
+          (relations.length ? (
+            <>
+              <label htmlFor={`ru-${f.id}`}>Sum up the records linked by</label>
+              <select id={`ru-${f.id}`} value={rel} onChange={(e) => (setRel(e.target.value), setField(''))}>
+                {relations.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor={`ruf-${f.id}`}>Their field</label>
+              <select id={`ruf-${f.id}`} value={field} onChange={(e) => setField(e.target.value)}>
+                <option value="">(just the records)</option>
+                {linked?.fields.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor={`rufn-${f.id}`}>How</label>
+              <select id={`rufn-${f.id}`} value={fn} onChange={(e) => setFn(e.target.value as RollupFn)}>
+                {D.ROLLUP_FNS.map((x) => (
+                  <option key={x.fn} value={x.fn}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <p className="muted">A rollup sums up a relation: add a relation field first.</p>
+          ))}
+        <div className="dv-settings-actions">
+          <button className="primary" onClick={save}>
+            Done
+          </button>
+          <button onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </>
+  )
 }
 
 /** A record that has a page (notes, a checklist, a spec). */
@@ -311,15 +460,25 @@ function RecordPage({ c, id, onClose }: { c: Ctx; id: string; onClose: () => voi
 
 // ----- table ------------------------------------------------------------------------------
 
-function FieldMenu({ c, f, onClose }: { c: Ctx; f: Field; onClose: () => void }) {
+function FieldMenu({ c, f, onClose, onSettings }: { c: Ctx; f: Field; onClose: () => void; onSettings: () => void }) {
   const isTitle = f.id === D.titleField(c.ds).id
+  const configurable = f.type === 'formula' || f.type === 'relation' || f.type === 'rollup'
   const items: ([string, () => void] | null)[] = [
+    ...(configurable ? [[f.type === 'formula' ? 'Edit the formula…' : 'Settings…', onSettings] as [string, () => void], null] : []),
     ['Sort ascending', () => c.setView((v) => ({ ...v, sort: { field: f.id, dir: 'asc' } }))],
     ['Sort descending', () => c.setView((v) => ({ ...v, sort: { field: f.id, dir: 'desc' } }))],
     null,
   ]
   if (!isTitle) {
-    for (const t of D.FIELD_TYPES) if (t.type !== f.type) items.push([`Make it ${t.label.toLowerCase()}`, () => c.edit((d) => D.changeFieldType(d, f.id, t.type))])
+    for (const t of D.FIELD_TYPES)
+      if (t.type !== f.type)
+        items.push([
+          `Make it ${t.label.toLowerCase()}`,
+          () => {
+            c.edit((d) => D.changeFieldType(d, f.id, t.type))
+            if (t.type === 'formula' || t.type === 'relation' || t.type === 'rollup') onSettings()
+          },
+        ])
     items.push(null, ['Hide in this view', () => c.setView((v) => ({ ...v, hidden: [...(v.hidden ?? []), f.id] }))], ['Delete field', () => c.edit((d) => D.deleteField(d, f.id))])
   }
   return <Menu items={items} onClose={onClose} />
@@ -362,7 +521,8 @@ function TableBody({ c }: { c: Ctx }) {
               ⋯
             </button>
           )}
-          {menu === f.id && <FieldMenu c={c} f={f} onClose={() => setMenu(null)} />}
+          {menu === f.id && <FieldMenu c={c} f={f} onClose={() => setMenu(null)} onSettings={() => queueMicrotask(() => setMenu(`s:${f.id}`))} />}
+          {menu === `s:${f.id}` && <FieldSettings c={c} f={f} onClose={() => setMenu(null)} />}
         </div>
       ))}
       {c.live && (
@@ -373,7 +533,19 @@ function TableBody({ c }: { c: Ctx }) {
           {menu === '+' && (
             <Menu
               onClose={() => setMenu(null)}
-              items={D.FIELD_TYPES.map((t) => [`${t.icon}  ${t.label}`, () => c.edit((d) => D.addField(d, t.label, t.type)[0])] as [string, () => void])}
+              items={D.FIELD_TYPES.map(
+                (t) =>
+                  [
+                    `${t.icon}  ${t.label}`,
+                    () =>
+                      c.edit((d) => {
+                        const [next, id] = D.addField(d, t.label, t.type)
+                        // A formula, relation or rollup needs setting up: its settings open.
+                        if (t.type === 'formula' || t.type === 'relation' || t.type === 'rollup') queueMicrotask(() => setMenu(`s:${id}`))
+                        return next
+                      }),
+                  ] as [string, () => void],
+              )}
             />
           )}
         </div>
@@ -1000,7 +1172,10 @@ const VIEW_ICON: Record<DataViewType, ReactNode> = {
 export function DataViewWidget({ item, live, editingTitle }: { item: Item; live: boolean; editingTitle: boolean }) {
   const editor = useContext(EditorContext)!
   const view = item.view!
-  const ds = D.getDataset(editor.board, view.dataset)
+  // Shown with links' titles, rollups and formulas worked out; changes go to the dataset itself.
+  const raw = D.getDataset(editor.board, view.dataset)
+  const datasets = editor.board.datasets
+  const ds = useMemo(() => raw && D.withComputed(editor.board, raw), [raw, datasets])
   const [open, setOpen] = useState<string | null>(null)
   const [menu, setMenu] = useState<'views' | 'fields' | null>(null)
   if (!ds) return null

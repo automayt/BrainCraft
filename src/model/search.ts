@@ -1,7 +1,7 @@
 /** Board-wide search across every object and the content inside them. */
 
 import { getItem } from './board'
-import { display, getDataset, recordTitle } from './dataset'
+import { display, getDataset, recordTitle, withComputed } from './dataset'
 import { objectLabel, plainNote } from './notes'
 import { statusInfo } from './status'
 import { type Board, type Id, type Item, type Kind, KIND_LABELS } from './types'
@@ -43,7 +43,8 @@ function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
     for (const card of col.cards) out.push({ where: `Card in ${col.title}`, text: card.title })
   }
   // A dataset's records are found once, through its first view.
-  const ds = getDataset(b, i.view?.dataset)
+  const stored = getDataset(b, i.view?.dataset)
+  const ds = stored && withComputed(b, stored)
   if (ds && !seenDatasets.has(ds.id)) {
     seenDatasets.add(ds.id)
     for (const f of ds.fields) out.push({ where: 'Field', text: f.name })

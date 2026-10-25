@@ -42,7 +42,7 @@ export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'fra
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
 const FLOW_SHAPES = ['process', 'decision', 'terminator', 'data', 'document', 'database', 'subroutine']
 const VIEW_TYPES = ['table', 'board', 'timeline', 'calendar', 'gallery']
-const FIELD_TYPES = ['text', 'number', 'date', 'select', 'person', 'checkbox']
+const FIELD_TYPES = ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula']
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -332,10 +332,16 @@ function cleanOption(v: unknown): SelectOption | null {
   return isObj(v) && typeof v.id === 'string' ? { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', color: str(v.color, 32) ?? '#888888' } : null
 }
 
+const ROLLUP_FNS = ['count', 'filled', 'sum', 'average', 'min', 'max', 'earliest', 'latest', 'percentDone', 'list']
+
 function cleanField(v: unknown): Field | null {
   if (!isObj(v) || typeof v.id !== 'string' || !FIELD_TYPES.includes(v.type as string)) return null
   const f: Field = { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', type: v.type as Field['type'] }
   if (f.type === 'select') f.options = arr(v.options).map(cleanOption).filter((o): o is SelectOption => !!o)
+  if (f.type === 'formula') f.formula = str(v.formula, 2000) ?? ''
+  if (f.type === 'relation' && isObj(v.relation) && typeof v.relation.dataset === 'string') f.relation = { dataset: v.relation.dataset.slice(0, 64) }
+  if (f.type === 'rollup' && isObj(v.rollup) && typeof v.rollup.relation === 'string' && ROLLUP_FNS.includes(v.rollup.fn as string))
+    f.rollup = { relation: v.rollup.relation.slice(0, 64), fn: v.rollup.fn as NonNullable<Field['rollup']>['fn'], ...(typeof v.rollup.field === 'string' ? { field: v.rollup.field.slice(0, 64) } : {}) }
   return f
 }
 

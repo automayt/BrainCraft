@@ -36,7 +36,8 @@ export function recordsCsv(records: Record<string, unknown>[], fields: string[])
 export function itemCsv(b: Board, i: Item): string | null {
   if (i.kind === 'table' && i.table) return toCsv(i.table)
   if (i.kind === 'data' && i.view) {
-    const ds = D.getDataset(b, i.view.dataset)
+    const stored = D.getDataset(b, i.view.dataset)
+    const ds = stored && D.withComputed(b, stored)
     return ds ? recordsCsv(D.plainRecords(ds), ds.fields.map((f) => f.name)) : null
   }
   return null
@@ -92,7 +93,8 @@ function itemMarkdown(b: Board, i: Item): string {
           ].join('\n')
         : ''
     case 'data': {
-      const ds = i.view ? D.getDataset(b, i.view.dataset) : undefined
+      const stored = i.view ? D.getDataset(b, i.view.dataset) : undefined
+      const ds = stored && D.withComputed(b, stored)
       if (!ds) return ''
       // Each dataset once, however many views show it.
       if (D.viewsOf(b, ds.id)[0]?.id !== i.id) return ''

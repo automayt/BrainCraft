@@ -10904,3 +10904,129 @@ button.on,
   font-weight: 400;
   color: var(--muted);
 }
+
+/* ----- relations, rollups and formulas ----- */
+
+.dv-computed {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dv-computed.bad {
+  color: var(--danger);
+}
+
+.dv-rel {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dv-rel-chip {
+  max-width: 160px;
+  padding: 1px 8px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+
+.dv-rel-add {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+}
+
+.dv-rel-add:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.widget-menu.dv-rel-menu,
+.widget-menu.dv-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 260px;
+  max-height: 340px;
+  padding: 10px;
+  overflow: auto;
+}
+
+.dv-rel-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 2px;
+  font-size: 13px;
+}
+
+.dv-settings {
+  width: 300px;
+}
+
+.dv-settings label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dv-settings textarea,
+.dv-settings select,
+.dv-rel-menu input[type='text'],
+.dv-rel-menu input:not([type]) {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dv-settings textarea {
+  font-family: var(--mono);
+  resize: vertical;
+}
+
+.dv-settings-help {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.dv-settings-bad {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.dv-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* In a table row, links stay on one line (the record page shows them all). */
+.dv-td .dv-rel {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.dv-td .dv-rel-add {
+  flex: none;
+}
+
+.record-fields .dv-rel {
+  flex-wrap: wrap;
+}

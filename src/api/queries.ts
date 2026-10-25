@@ -75,14 +75,23 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
 
 /** A database view: its settings and every record of its dataset by field name. */
 function dataOf(b: Board, i: Item) {
-  const ds = D.getDataset(b, i.view!.dataset)
-  if (!ds) return undefined
+  const stored = D.getDataset(b, i.view!.dataset)
+  if (!stored) return undefined
+  // Links as titles, rollups and formulas worked out.
+  const ds = D.withComputed(b, stored)
   const v = i.view!
   const name = (id?: string) => D.fieldById(ds, id)?.name
   return {
     dataset: ds.name,
     view: { type: v.type, ...(v.groupBy ? { groupBy: name(v.groupBy) } : {}), ...(v.sort ? { sort: `${name(v.sort.field)} ${v.sort.dir}` } : {}), ...(v.query ? { search: v.query } : {}) },
-    fields: ds.fields.map((f) => ({ name: f.name, type: f.type, ...(f.options ? { options: f.options.map((o) => o.name) } : {}) })),
+    fields: ds.fields.map((f) => ({
+      name: f.name,
+      type: f.type,
+      ...(f.options ? { options: f.options.map((o) => o.name) } : {}),
+      ...(f.formula !== undefined ? { formula: f.formula } : {}),
+      ...(f.relation ? { linksTo: D.getDataset(b, f.relation.dataset)?.name ?? '?' } : {}),
+      ...(f.rollup ? { rollup: `${f.rollup.fn} of ${D.fieldById(ds, f.rollup.relation)?.name ?? '?'}${f.rollup.field ? ` → ${f.rollup.field}` : ''}` } : {}),
+    })),
     records: D.plainRecords(ds),
     otherViews: D.viewsOf(b, ds.id).filter((x) => x.id !== i.id).map((x) => ({ id: x.id, type: x.view!.type })),
   }

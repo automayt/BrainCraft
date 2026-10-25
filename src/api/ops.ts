@@ -35,9 +35,12 @@ import {
   type Board,
   type ConnectorStyle,
   type DataViewType,
+  type Dataset,
+  type Field,
   type FieldType,
   FILLS,
   type FlowShape,
+  type RollupFn,
   type Id,
   type Item,
   type KanbanData,
@@ -49,6 +52,22 @@ import {
 export type Ref = number | string
 
 type IdeaIn = string | { text: string; children?: IdeaIn[] }
+/** A database field: a name and type, plus a formula, what a relation links to, or how a rollup sums up. */
+type FieldSpec = {
+  name: string
+  type?: FieldType
+  options?: string[]
+  /** A formula's expression, fields in braces: "{Price} * {Qty}". */
+  formula?: string
+  /** A relation: the database it links to, by name (or a view's id). */
+  to?: string | number
+  /** A rollup: the relation field (by name) whose linked records it sums up… */
+  relation?: string
+  /** …which of their fields (by name; left out for just how many)… */
+  field?: string
+  /** …and how. */
+  fn?: RollupFn
+}
 type KanbanColumnIn = { title: string; cards?: (string | { title: string; start?: string; due?: string; color?: string })[] }
 type TimelineLaneIn = { name: string; entries?: { title: string; start: string; end?: string; color?: string }[] }
 
@@ -121,12 +140,14 @@ export type Op =
   | ({
       op: 'createDatabase'
       title?: string
-      fields?: (string | { name: string; type?: FieldType; options?: string[] })[]
+      fields?: (string | FieldSpec)[]
       records?: Record<string, unknown>[]
       views?: DataViewType[]
       groupBy?: string
     } & Placed)
   | { op: 'addRecords'; id: Ref; records: Record<string, unknown>[] }
+  /** Adds a field to an existing database (any of its views). */
+  | { op: 'addField'; id: Ref; field: FieldSpec }
   | { op: 'updateRecord'; id: Ref; record: string; values?: Record<string, unknown>; body?: string }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
@@ -411,6 +432,48 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       const kept = new Set(entries.map((e) => e.id))
       return { lanes, entries: entries.map((e) => (e.after ? { ...e, after: e.after.filter((a) => kept.has(a)) } : e)) }
     }
+    /** A database to link to: by name (on this board) or one of its views. */
+    const datasetNamed = (to: unknown, self: Dataset, field: string): Dataset => {
+      if (typeof to === 'number' || (typeof to === 'string' && refs.has(to))) {
+        const ds = D.getDataset(b, B.getItem(b, resolve(to as Ref, field))?.view?.dataset)
+        if (ds) return ds
+      }
+      const name = String(to ?? '').trim().toLowerCase()
+      if (name === self.name.toLowerCase() || name === 'self') return self
+      const ds = (b.datasets ?? []).find((d) => d.name.toLowerCase() === name)
+      if (!ds) fail(index, op, `"${field}" should name a database on this board (${(b.datasets ?? []).map((d) => d.name).join(', ') || 'none yet'})`)
+      return ds
+    }
+    /** A new field's settings, from its spec. */
+    const configure = (ds: Dataset, fid: string, spec: FieldSpec, at: string): Dataset => {
+      const f = D.fieldById(ds, fid)!
+      if (f.type === 'formula') return D.setFieldConfig(ds, fid, { formula: text(spec.formula ?? '', `${at}.formula`, false) })
+      if (f.type === 'relation') return D.setFieldConfig(ds, fid, { relation: { dataset: datasetNamed(spec.to, ds, `${at}.to`).id } })
+      if (f.type === 'rollup') {
+        const rel = spec.relation ? D.fieldByName(ds, spec.relation) : undefined
+        if (rel?.type !== 'relation') fail(index, op, `"${at}.relation" should name a relation field of this database, made before it`)
+        const target = rel.relation?.dataset === ds.id ? ds : D.getDataset(b, rel.relation?.dataset)
+        const tf = spec.field ? target && D.fieldByName(target, spec.field) : undefined
+        if (spec.field && !tf) fail(index, op, `"${at}.field" names no field of the linked database (${target?.fields.map((x) => x.name).join(', ')})`)
+        const fn = spec.fn ?? (tf ? 'sum' : 'count')
+        if (!D.ROLLUP_FNS.some((x) => x.fn === fn)) fail(index, op, `"${at}.fn" should be one of ${D.ROLLUP_FNS.map((x) => x.fn).join(', ')}`)
+        return D.setFieldConfig(ds, fid, { rollup: { relation: rel.id, fn, ...(tf ? { field: tf.id } : {}) } })
+      }
+      return ds
+    }
+    /** A relation's value from the titles (or ids) of the records it links to. */
+    const linkFor =
+      (ds: Dataset, lenient = false) =>
+      (f: Field, raw: unknown): string | undefined => {
+        const target = f.relation?.dataset === ds.id ? ds : D.getDataset(b, f.relation?.dataset)
+        if (!target) return undefined
+        const wanted = (Array.isArray(raw) ? raw : String(raw).split(',')).map((x) => String(x).trim()).filter(Boolean)
+        const ids = wanted.map((w) => target.records.find((r) => r.id === w || D.recordTitle(target, r).toLowerCase() === w.toLowerCase())?.id)
+        // Lenient only for links within the database being made (found once its records are all in).
+        if (!(lenient && target === ds) && ids.some((x) => !x)) fail(index, op, `"${f.name}" links to records of "${target.name}" by title; no record is called ${wanted.filter((_w, k) => !ids[k]).map((w) => `"${w}"`).join(', ')}`)
+        return D.relValue(ids.filter((x): x is string => !!x)) || undefined
+      }
+
     /** An existing widget of `kind`, by "id". */
     const widget = (r: Ref, kind: 'kanban' | 'table' | 'timeline'): Item => {
       const it = B.getItem(b, resolve(r, 'id'))!
@@ -775,10 +838,16 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
             let fid: string
             ;[ds, fid] = D.addField(ds, n, type)
             for (const o of list(spec?.options, `fields[${k}].options`)) ds = D.addOption(ds, fid, String(o))[0]
+            if (spec) ds = configure(ds, fid, spec, `fields[${k}]`)
           })
           for (const r of records) {
-            const { values, ds: withOpts } = D.valuesByName(ds, r)
+            const { values, ds: withOpts } = D.valuesByName(ds, r, linkFor(ds, true))
             ds = D.addRecord(withOpts, values)[0]
+          }
+          // Links within this same database can only be found once its records are all in.
+          if (ds.fields.some((f) => f.type === 'relation' && f.relation?.dataset === ds.id)) {
+            const all = ds
+            ds = { ...ds, records: ds.records.map((rec, j) => ({ ...rec, values: { ...rec.values, ...D.valuesByName(all, records[j], linkFor(all)).values } })) }
           }
         }
         b = D.addDataset(b, ds)
@@ -799,6 +868,21 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id: ids[0], ids })
         break
       }
+      case 'addField': {
+        const id = resolve(op.id, 'id')
+        let ds = D.getDataset(b, B.getItem(b, id)?.view?.dataset)
+        if (!ds) fail(index, op, '"id" should be a database view')
+        const spec = obj(op.field, 'field') as FieldSpec
+        const type = spec.type ?? 'text'
+        if (!D.FIELD_TYPES.some((t) => t.type === type)) fail(index, op, `"field.type" should be one of ${D.FIELD_TYPES.map((t) => t.type).join(', ')}`)
+        let fid: string
+        ;[ds, fid] = D.addField(ds!, text(spec.name, 'field.name'), type)
+        for (const o of list(spec.options, 'field.options')) ds = D.addOption(ds, fid, String(o))[0]
+        const final = configure(ds, fid, spec, 'field')
+        b = D.updateDataset(b, final.id, () => final)
+        done({ id })
+        break
+      }
       case 'addRecords':
       case 'updateRecord':
       case 'deleteRecords': {
@@ -813,7 +897,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         }
         const valuesOf = (named: unknown, field: string) => {
           if (!named || typeof named !== 'object') fail(index, op, `"${field}" should be an object keyed by field name`)
-          const out = D.valuesByName(ds!, named as Record<string, unknown>)
+          const out = D.valuesByName(ds!, named as Record<string, unknown>, linkFor(ds!))
           if (out.unknown.length) fail(index, op, `unknown field ${out.unknown.map((u) => `"${u}"`).join(', ')}. Fields: ${ds!.fields.map((f) => f.name).join(', ')}`)
           ds = out.ds
           return out.values
@@ -959,6 +1043,7 @@ export const OPS: Op['op'][] = [
   'delete',
   'addComment',
   'createDatabase',
+  'addField',
   'addRecords',
   'updateRecord',
   'deleteRecords',

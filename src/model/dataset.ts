@@ -4,10 +4,12 @@
  * Edit a record anywhere and every view shows the change.
  */
 
+import { FormulaError, type FormulaValue, compile } from './formula'
 import { fromDay, isIsoDay, toDay, today } from './timeline'
 import { uid } from './uid'
 import {
   BRANCHES,
+  type RollupFn,
   type Board,
   type DataRecord,
   type DataView,
@@ -30,6 +32,29 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string }[] = [
   { type: 'select', label: 'Choice', icon: '◉' },
   { type: 'person', label: 'Person', icon: '☺' },
   { type: 'checkbox', label: 'Checkbox', icon: '☑' },
+  { type: 'relation', label: 'Relation', icon: '↗' },
+  { type: 'rollup', label: 'Rollup', icon: 'Σ' },
+  { type: 'formula', label: 'Formula', icon: 'ƒ' },
+]
+
+/** Fields worked out from others, never typed into (or stored). */
+export const isComputed = (f: Field) => f.type === 'rollup' || f.type === 'formula'
+
+/** The record ids a relation value links to. */
+export const relIds = (v: FieldValue | undefined): string[] => (typeof v === 'string' && v ? v.split(',').filter(Boolean) : [])
+export const relValue = (ids: readonly string[]) => [...new Set(ids)].join(',')
+
+export const ROLLUP_FNS: { fn: RollupFn; label: string }[] = [
+  { fn: 'count', label: 'Count' },
+  { fn: 'filled', label: 'Count filled in' },
+  { fn: 'sum', label: 'Sum' },
+  { fn: 'average', label: 'Average' },
+  { fn: 'min', label: 'Smallest' },
+  { fn: 'max', label: 'Largest' },
+  { fn: 'earliest', label: 'Earliest date' },
+  { fn: 'latest', label: 'Latest date' },
+  { fn: 'percentDone', label: 'Percent ticked' },
+  { fn: 'list', label: 'List them' },
 ]
 
 export const VIEW_TYPES: { type: DataViewType; label: string }[] = [
@@ -93,6 +118,11 @@ export function addField(ds: Dataset, name: string, type: FieldType): [Dataset, 
   return [{ ...ds, fields: [...ds.fields, f] }, f.id]
 }
 
+/** Changes a field's settings (a formula, what a relation links to, how a rollup sums up). */
+export function setFieldConfig(ds: Dataset, id: string, patch: Pick<Field, 'formula' | 'relation' | 'rollup'>): Dataset {
+  return { ...ds, fields: ds.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) }
+}
+
 export function renameField(ds: Dataset, id: string, name: string): Dataset {
   const n = name.trim()
   if (!n || ds.fields.some((f) => f.id !== id && f.name.toLowerCase() === n.toLowerCase())) return ds
@@ -132,6 +162,13 @@ export function coerce(f: Field, v: FieldValue | null | undefined): FieldValue |
     }
     case 'checkbox':
       return typeof v === 'boolean' ? v : TRUE.test(String(v).trim())
+    case 'rollup':
+    case 'formula':
+      return undefined
+    case 'relation': {
+      const ids = relValue(String(v).split(',').map((s) => s.trim()).filter(Boolean))
+      return ids || undefined
+    }
     case 'select': {
       // Option ids pass through; names are looked up.
       const s = String(v).trim()
@@ -147,6 +184,20 @@ export function coerce(f: Field, v: FieldValue | null | undefined): FieldValue |
 export function changeFieldType(ds: Dataset, id: string, type: FieldType): Dataset {
   const old = fieldById(ds, id)
   if (!old || old.type === type) return ds
+  // Links, formulas and rollups start afresh: nothing typed converts into them.
+  if (type === 'relation' || isComputed({ ...old, type })) {
+    const next: Field = { id: old.id, name: old.name, type, ...(type === 'formula' ? { formula: '' } : {}), ...(type === 'rollup' ? { rollup: { relation: '', fn: 'count' as const } } : {}) }
+    return {
+      ...ds,
+      fields: ds.fields.map((f) => (f.id === id ? next : f)),
+      records: ds.records.map((r) => {
+        if (!(id in r.values)) return r
+        const values = { ...r.values }
+        delete values[id]
+        return { ...r, values }
+      }),
+    }
+  }
   const texts = ds.records.map((r) => display(ds, old, r.values[id]))
   let next: Field = { ...old, type }
   delete next.options
@@ -254,7 +305,7 @@ export function moveRecord(ds: Dataset, recordId: string, before: string | null)
 }
 
 /** Values keyed by field name (as people and AI assistants write them) → keyed by field id. */
-export function valuesByName(ds: Dataset, named: Record<string, unknown>): { values: Record<string, FieldValue>; unknown: string[]; ds: Dataset } {
+export function valuesByName(ds: Dataset, named: Record<string, unknown>, link?: (f: Field, raw: unknown) => string | undefined): { values: Record<string, FieldValue>; unknown: string[]; ds: Dataset } {
   const values: Record<string, FieldValue> = {}
   const unknown: string[] = []
   let next = ds
@@ -265,6 +316,13 @@ export function valuesByName(ds: Dataset, named: Record<string, unknown>): { val
       continue
     }
     if (raw === null || raw === undefined || raw === '') continue
+    // Worked out, never set.
+    if (isComputed(f)) continue
+    if (f.type === 'relation') {
+      const v = link ? link(f, raw) : coerce(f, raw as FieldValue)
+      if (v) values[f.id] = v
+      continue
+    }
     if (f.type === 'select') {
       // New choices are added as they're used.
       const [withOpt, opt] = addOption(next, f.id, String(raw))
@@ -289,6 +347,17 @@ export function display(_ds: Dataset, f: Field, v: FieldValue | undefined): stri
       return optionOf(f, v)?.name ?? ''
     case 'checkbox':
       return v ? 'Yes' : ''
+    case 'relation': {
+      // Titles come with a dataset made ready to show (withComputed); otherwise how many.
+      const titles = (f as ShownField).titles
+      const ids = relIds(v)
+      return titles ? ids.map((x) => titles[x] ?? '').filter(Boolean).join(', ') : `${ids.length} linked`
+    }
+    case 'rollup':
+    case 'formula':
+      if (typeof v === 'boolean') return v ? '✓' : ''
+      if (typeof v === 'number') return f.rollup?.fn === 'percentDone' ? `${Math.round(v)}%` : v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      return String(v)
     case 'number':
       return typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 6 }) : String(v)
     default:
@@ -614,13 +683,13 @@ export function plainRecords(ds: Dataset): Record<string, string | number | bool
     for (const f of ds.fields) {
       const v = r.values[f.id]
       if (v === undefined) continue
-      out[f.name] = f.type === 'select' ? display(ds, f, v) : v
+      out[f.name] = f.type === 'select' || f.type === 'relation' ? display(ds, f, v) : v
     }
     return out
   })
 }
 
-const FIELD_W: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76 }
+const FIELD_W: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140 }
 
 /** A good size for a new view of `ds`. */
 export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: number } {
@@ -638,3 +707,106 @@ export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: numbe
 /** A data item's dataset id, for quick lookups. */
 export const datasetOf = (i: Item | undefined): string | undefined => i?.view?.dataset
 
+
+// ----- worked-out values: relations, rollups and formulas -------------------------------
+
+/** A field as shown: a relation carries the titles of the records it can link to. */
+export type ShownField = Field & { titles?: Record<string, string>; problem?: string }
+
+/** What a formula sees for a field's value: words for choices and links, true or false for a tick. */
+function plain(ds: Dataset, f: Field, v: FieldValue | undefined): FormulaValue {
+  if (v === undefined || v === '') return null
+  if (f.type === 'select' || f.type === 'relation') return display(ds, f, v) || null
+  return v
+}
+
+function rollUp(fn: RollupFn, values: (FieldValue | undefined)[], target: Field | undefined, ds: Dataset | undefined): FieldValue | undefined {
+  const filled = values.filter((v) => v !== undefined && v !== '')
+  const nums = filled.map((v) => (typeof v === 'number' ? v : typeof v === 'boolean' ? Number(v) : Number(String(v).replace(/[,\s]/g, '')))).filter((n) => Number.isFinite(n))
+  const days = filled.filter((v): v is string => typeof v === 'string' && isIsoDay(v)).sort()
+  switch (fn) {
+    case 'count':
+      return values.length
+    case 'filled':
+      return filled.length
+    case 'sum':
+      return nums.reduce((a, z) => a + z, 0)
+    case 'average':
+      return nums.length ? nums.reduce((a, z) => a + z, 0) / nums.length : undefined
+    case 'min':
+      return nums.length ? Math.min(...nums) : undefined
+    case 'max':
+      return nums.length ? Math.max(...nums) : undefined
+    case 'earliest':
+      return days[0]
+    case 'latest':
+      return days[days.length - 1]
+    case 'percentDone':
+      return values.length ? (100 * values.filter((v) => v === true).length) / values.length : undefined
+    case 'list':
+      return target && ds ? filled.map((v) => display(ds, target, v)).filter(Boolean).join(', ') : filled.join(', ')
+  }
+}
+
+/**
+ * The dataset ready to show: relations carry the titles they link to, and every rollup and formula
+ * is worked out for each record (in field order, so a formula can use a rollup or an earlier
+ * formula). Only for showing, sorting, searching and copying out; changes go to the dataset itself.
+ */
+export function withComputed(b: Board, ds: Dataset, now = new Date()): Dataset {
+  if (!ds.fields.some((f) => f.type === 'relation' || isComputed(f))) return ds
+  const others = new Map<string, Dataset>()
+  const other = (id: string | undefined) => {
+    if (!id) return undefined
+    if (id === ds.id) return ds
+    if (!others.has(id)) {
+      const raw = getDataset(b, id)
+      // Rollups of a linked dataset's own formulas: worked out one level deep.
+      others.set(id, raw ? withComputed({ ...b, datasets: b.datasets?.filter((d) => d.id !== ds.id) }, raw, now) : (undefined as unknown as Dataset))
+    }
+    return others.get(id)
+  }
+  const fields: ShownField[] = ds.fields.map((f) => {
+    if (f.type !== 'relation') return f
+    const target = other(f.relation?.dataset)
+    return { ...f, titles: Object.fromEntries((target?.records ?? []).map((r) => [r.id, recordTitle(target!, r)])) }
+  })
+  const shown: Dataset = { ...ds, fields }
+  const records = ds.records.map((r) => {
+    const values: Record<string, FieldValue> = { ...r.values }
+    for (const f of fields) {
+      if (f.type === 'rollup') {
+        const rel = fields.find((x) => x.id === f.rollup?.relation)
+        const target = other(rel?.relation?.dataset)
+        if (!rel || !target || !f.rollup) continue
+        const linked = relIds(r.values[rel.id])
+          .map((id) => target.records.find((x) => x.id === id))
+          .filter((x): x is DataRecord => !!x)
+        const tf = f.rollup.field ? target.fields.find((x) => x.id === f.rollup!.field) : undefined
+        const v = rollUp(f.rollup.fn, linked.map((x) => (tf ? x.values[tf.id] : x.id)), tf, target)
+        if (v === undefined) delete values[f.id]
+        else values[f.id] = v
+      } else if (f.type === 'formula') {
+        const compiled = compile(f.formula ?? '')
+        if (compiled instanceof FormulaError) {
+          f.problem = compiled.message
+          continue
+        }
+        try {
+          const out = compiled.run((name) => {
+            const g = fieldByName(shown, name)
+            if (!g) throw new FormulaError(`There's no field called {${name}}`)
+            return plain(shown, g, values[g.id])
+          }, now)
+          if (out === null || out === '' || (typeof out === 'number' && !Number.isFinite(out))) delete values[f.id]
+          else values[f.id] = out
+        } catch (err) {
+          f.problem = (err as Error).message
+          values[f.id] = '⚠'
+        }
+      }
+    }
+    return { ...r, values }
+  })
+  return { ...shown, records }
+}

@@ -176,6 +176,27 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       ...placed,
     },
   },
+  addField: {
+    summary: 'Adds a field to a database: plain, a formula, a relation to another database, or a rollup of a relation',
+    properties: {
+      id: ref,
+      field: {
+        type: 'object',
+        properties: {
+          name: str(),
+          type: { enum: ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula'] },
+          options: list(str()),
+          formula: str('For a formula: fields in braces, e.g. {Price} * {Qty}'),
+          to: oneOf(str('For a relation: the database it links to, by name'), num('or one of its views')),
+          relation: str('For a rollup: the relation field it sums up'),
+          field: str('For a rollup: the linked records’ field (left out to count them)'),
+          fn: { enum: ['count', 'filled', 'sum', 'average', 'min', 'max', 'earliest', 'latest', 'percentDone', 'list'] },
+        },
+        required: ['name'],
+      },
+    },
+    required: ['id', 'field'],
+  },
   addRecords: { summary: 'Adds records to a database', properties: { id: ref, records: list({ type: 'object' }) }, required: ['id', 'records'] },
   updateRecord: { summary: 'Sets fields of one record by name (null or "" clears one), and/or its page', properties: { id: ref, record: str('A record id or title'), values: { type: 'object' }, body: str('The record’s page, in Markdown: notes, a checklist, a spec ("" removes it)') }, required: ['id', 'record'] },
   deleteRecords: { summary: 'Deletes records', properties: { id: ref, records: list(str('A record id or title')) }, required: ['id', 'records'] },
