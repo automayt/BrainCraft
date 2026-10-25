@@ -10,6 +10,7 @@ import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions } from './Markdown'
 import { EmbedPicker } from './EmbedPicker'
 import { embedToken, makeSnap } from '../../model/embed'
+import { saveMissingCopies } from './embedCopies'
 import { caretPoint } from '../caretPoint'
 import { MACROS } from '../../model/macros'
 
@@ -90,6 +91,8 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     if (!W.getPage(editor.board, page.id)) return
     base.current = value
     editor.setPageText(page.id, value)
+    // An embed pasted or typed in is shared like one picked: the wiki keeps a copy of it.
+    saveMissingCopies(ws, editor, value)
   }
 
   // A friend's (or another tab's) change: taken as is when nothing of ours is waiting, else merged
@@ -439,7 +442,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
               const cur = draftRef.current
               // On a line of its own.
               const lead = at > 0 && cur[at - 1] !== '\n' ? '\n' : ''
-              const text = `${lead}${embedToken(c.label, c.board, c.item)}\n`
+              const text = `${lead}${embedToken(c.label, c.board, c.item, !!c.asText)}\n`
               const next = cur.slice(0, at) + text + cur.slice(at)
               change(next, at + text.length)
               // Choosing to embed is choosing to share: save the wiki's copy now (after the text,

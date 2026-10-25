@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { type Op, applyOps } from '../../api/ops'
 import { useDialog } from '../useDialog'
 import { Editor } from '../../editor/Editor'
 import * as B from '../../model/board'
 import { maskFor } from '../../model/brainstorm'
 import * as D from '../../model/dataset'
-import { embedBoard, getSnap, makeSnap, snapBoard, snapKey } from '../../model/embed'
-import type { Block } from '../../model/markdown'
+import { embedBoard, embedToken, getSnap, makeSnap, snapBoard, snapKey } from '../../model/embed'
+import { editOps, editText, editable, embedMarkdown, kanbanTick } from '../../model/embedText'
+import { type Block, parseMarkdown } from '../../model/markdown'
+import { layoutAll } from '../../model/mindmap'
+import { Markdown, type MarkdownActions } from './Markdown'
 import { type Board, type Id, type Item, itemKindLabel } from '../../model/types'
 import { BoardView, formatTime } from '../BoardView'
 import { measureText } from '../measure'
@@ -26,7 +30,7 @@ const MAX_ZOOM = 1.25
  * the board as this browser has it; without the board, the copy the wiki keeps (saved when someone
  * embeds it or clicks "Update the copy", and kept fresh by whoever saved it).
  */
-export function ObjectEmbed({ block }: { block: EmbedBlock }) {
+export function ObjectEmbed({ block, page }: { block: EmbedBlock; page?: string }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const meta = ws.findBoard(block.board)
@@ -77,10 +81,49 @@ export function ObjectEmbed({ block }: { block: EmbedBlock }) {
   const name = `${target ? itemKindLabel(target) : 'Board'}: ${label}${meta ? `, from ${meta.title}` : ''}`
 
   const open = () => void ws.openLink({ board: block.board, ...(block.item !== undefined ? { item: block.item } : {}) })
-  const view = board ? <EmbedView board={board} target={target} maxHeight={block.height} name={name} /> : null
+
+  // As text: made from the board each time it's shown, so it can't drift from it. Changing it here
+  // changes the board (shown at once, then saved to the board, which tells everyone in it).
+  const asText = !!block.asText
+  const canChange = !!source && !!meta && meta.live?.role !== 'view' && !gone && (block.item === undefined || !!target)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+  const write = async (ops: Op[]) => {
+    if (!source) return false
+    const before = source
+    try {
+      // Shown straight away, as it will be on the board.
+      setSource(layoutAll(applyOps(source, ops, { measure: measureText }).board, measureText))
+      await ws.applyElsewhere({ board: block.board }, ops)
+      setProblem(null)
+      return true
+    } catch (err) {
+      setSource(before)
+      setProblem((err as Error).message)
+      return false
+    }
+  }
+  const tick = target?.kind === 'kanban' && canChange ? (line: number) => { const ops = kanbanTick(target, line); if (ops) void write(ops) } : undefined
+  const saveEdit = async () => {
+    if (editing === null || !target) return
+    const ops = editOps(target, editing)
+    if (typeof ops === 'string') return setProblem(ops)
+    if (await write(ops)) setEditing(null)
+  }
+  const switchTo = (text: boolean) => page && editor.setPageLine(page, block.line, embedToken(block.label || label, block.board, block.item, text), text ? 'Showed an embed as text' : 'Showed an embed as a picture')
+
+  const view = !board ? null : asText ? (
+    editing !== null ? (
+      <EditAsText value={editing} kind={editable(target)} onChange={setEditing} onSave={() => void saveEdit()} onCancel={() => { setEditing(null); setProblem(null) }} />
+    ) : (
+      <TextView board={board} target={target} onTick={tick} />
+    )
+  ) : (
+    <EmbedView board={board} target={target} maxHeight={block.height} name={name} />
+  )
 
   return (
-    <figure className="embed">
+    <figure className={`embed${asText ? ' embed-as-text' : ''}`}>
       {view ?? (
         <div className="embed-missing muted">
           {meta ? (gone ? 'That object was deleted from the board.' : 'Opening…') : 'That board isn’t in this browser, and the wiki has no copy of it yet. Ask whoever added it to save a copy for friends.'}
@@ -94,6 +137,16 @@ export function ObjectEmbed({ block }: { block: EmbedBlock }) {
           {gone && snap ? ' · deleted from the board since' : ''}
         </span>
         <span className="embed-actions">
+          {asText && canChange && editable(target) && editing === null && livePart && (
+            <button className="link" onClick={() => target && setEditing(editText(livePart, target))} title="Change it here as text; the board changes too">
+              Edit as text
+            </button>
+          )}
+          {page && !gone && editing === null && (
+            <button className="link" onClick={() => switchTo(!asText)} title={asText ? 'Draw it as on the board instead' : 'Show it as text that stays in step with the board'}>
+              {asText ? 'Show as picture' : 'Show as text'}
+            </button>
+          )}
           {meta && !gone && (
             <button className="link" onClick={open}>
               Open on board
@@ -104,15 +157,84 @@ export function ObjectEmbed({ block }: { block: EmbedBlock }) {
               {snap ? 'Update the copy' : 'Save a copy for friends'}
             </button>
           )}
-          {view && (
+          {view && !asText && (
             <button className="link" onClick={() => setExpanded(true)}>
               Expand
             </button>
           )}
         </span>
       </figcaption>
+      {problem && <p className="embed-problem">{problem}</p>}
       {expanded && board && <EmbedExpanded label={label} name={name} board={board} target={target} onClose={() => setExpanded(false)} onOpen={meta && !gone ? open : undefined} />}
     </figure>
+  )
+}
+
+/** Links and mentions inside embedded text are plain words; only checklists do anything. */
+const TEXT_ACTIONS: Omit<MarkdownActions, 'toggle'> = {
+  link: (_to, label, key) => <span key={key}>{label}</span>,
+  mention: (_id, label, key) => <span key={key}>{label}</span>,
+  children: () => null,
+  headings: [],
+}
+
+/** The object as text, from the board as it is: ticking a Kanban card moves it to the last column. */
+function TextView({ board, target, onTick }: { board: Board; target: Item | undefined; onTick?: (line: number) => void }) {
+  const text = embedMarkdown(board, target)
+  const blocks = useMemo(() => parseMarkdown(text), [text])
+  if (!text.trim()) return <div className="embed-missing muted">Nothing to show yet.</div>
+  return (
+    <div className="embed-text md">
+      <Markdown blocks={blocks} actions={{ ...TEXT_ACTIONS, toggle: onTick }} />
+    </div>
+  )
+}
+
+const EDIT_HELP: Record<string, string> = {
+  outline: 'One idea per line; indent two spaces to put an idea under the line above.',
+  columns: 'A "## Column" line for each column, its cards under it as "- " lines.',
+  table: 'The first line is the column names: | Name | Status |, then a line per row.',
+  lanes: 'A "## Lane" line for each lane, its entries as "- Title 2026-11-03" or "- Title 2026-11-03..2026-11-07".',
+  mermaid: 'A Mermaid flowchart: A[Step] --> B{Decision?}, B -->|Yes| C[Next].',
+}
+
+/** Editing the object as text, saved to the board. */
+function EditAsText({ value, kind, onChange, onSave, onCancel }: { value: string; kind: string | null; onChange: (v: string) => void; onSave: () => void; onCancel: () => void }) {
+  return (
+    <div className="embed-edit">
+      <textarea
+        className="outline-text"
+        aria-label="Edit as text"
+        autoFocus
+        spellCheck
+        value={value}
+        rows={Math.min(24, Math.max(6, value.split('\n').length + 1))}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Escape') onCancel()
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onSave()
+          if (e.key === 'Tab' && kind === 'outline') {
+            e.preventDefault()
+            const el = e.currentTarget
+            const start = el.value.lastIndexOf('\n', el.selectionStart - 1) + 1
+            const line = el.value.slice(start)
+            const next = e.shiftKey ? el.value.slice(0, start) + line.replace(/^ {1,2}/, '') : `${el.value.slice(0, start)}  ${line}`
+            const caret = el.selectionStart + (next.length - el.value.length)
+            onChange(next)
+            requestAnimationFrame(() => el.setSelectionRange(caret, caret))
+          }
+        }}
+      />
+      {kind && <p className="muted embed-edit-help">{EDIT_HELP[kind]}</p>}
+      <div className="embed-edit-actions">
+        <button className="primary" onClick={onSave}>
+          Save to the board
+        </button>
+        <button onClick={onCancel}>Cancel</button>
+        <small className="muted">Ctrl Enter saves · the board changes for everyone in it</small>
+      </div>
+    </div>
   )
 }
 

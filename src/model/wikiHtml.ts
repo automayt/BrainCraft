@@ -6,6 +6,7 @@
  * escaped; the page runs no scripts.
  */
 
+import { expandTextEmbeds } from './embedText'
 import { type Block, type Inline, headings, macroText, parseMarkdown, taskIsFor, taskItems, tasksFor } from './markdown'
 import { argText, countdown, parseDay, statusLook } from './macros'
 import type { LinkTarget } from './notes'
@@ -159,7 +160,7 @@ function macroBlock(b: Extract<Block, { t: 'macro' }>, x: Ctx): string {
       const name = argText(b.args) || b.args.named.page || ''
       const p = pageByTitle(x.b, name) ?? getPage(x.b, name)
       if (!p || x.including.includes(p.id) || x.including.length > 3) return ''
-      return `<div class="include"><p class="muted">From ${pageLink(p.id, x)}</p>${blocks(parseMarkdown(getBody(x.b, p.id)?.text ?? ''), { ...x, page: p.id, including: [...x.including, x.page] })}</div>`
+      return `<div class="include"><p class="muted">From ${pageLink(p.id, x)}</p>${blocks(parseMarkdown(expandTextEmbeds(x.b, getBody(x.b, p.id)?.text ?? '')), { ...x, page: p.id, including: [...x.including, x.page] })}</div>`
     }
     default:
       return ''
@@ -283,7 +284,7 @@ export function wikiHtml(b: Board, o: WikiHtmlOptions = {}): string {
       return `<section class="page" id="${pageAnchor(p.id)}">
 ${path.length ? `<p class="page-path">${path.map((q) => pageLink(q.id, x(p.id))).join(' › ')}</p>` : ''}
 <h1>${esc(`${p.icon ? `${p.icon} ` : ''}${p.title || 'Untitled'}`)}</h1>
-${blocks(dropTitle(parseMarkdown(getBody(b, p.id)?.text ?? ''), p.title), x(p.id))}
+${blocks(dropTitle(parseMarkdown(expandTextEmbeds(b, getBody(b, p.id)?.text ?? '')), p.title), x(p.id))}
 </section>`
     })
     .join('\n')

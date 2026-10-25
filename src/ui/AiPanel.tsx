@@ -13,6 +13,7 @@ import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
+import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, plainLine } from './Flowstate'
 
 const QUICK: { label: string; prompt: string; needs?: 'selection'; changes?: true }[] = [
@@ -446,8 +447,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       return
     }
     if (editor.readOnly) return editor.setStatus('This board is read-only')
-    if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) p.status = 'applied'
-    else editor.setStatus('Nothing left to change')
+    if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) {
+      p.status = 'applied'
+      // Embeds it wrote into pages get the wiki's copy, as if picked.
+      saveMissingCopies(ws, editor)
+    } else editor.setStatus('Nothing left to change')
     refresh()
   }
 

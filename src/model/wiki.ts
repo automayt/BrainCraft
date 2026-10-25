@@ -5,6 +5,7 @@
  */
 
 import { emptyBoard } from './board'
+import { expandTextEmbeds } from './embedText'
 import { plainMarkdown } from './markdown'
 import type { Board, Page, PageBody } from './types'
 import { uid } from './uid'
@@ -359,13 +360,16 @@ export interface PageHit {
 }
 
 /** A page's words as plain text, worked out once per version of them. */
-const plainBodies = new WeakMap<PageBody, string>()
+/** A page's words, with what its text embeds show (cached until the page or the wiki's copies change). */
+const plainBodies = new WeakMap<PageBody, { snaps: Board['snaps']; text: string }>()
 export function plainText(b: Board, id: string): string {
   const body = getBody(b, id)
   if (!body) return ''
-  let hit = plainBodies.get(body)
-  if (hit === undefined) plainBodies.set(body, (hit = plainMarkdown(body.text)))
-  return hit
+  const hit = plainBodies.get(body)
+  if (hit && hit.snaps === b.snaps) return hit.text
+  const text = plainMarkdown(expandTextEmbeds(b, body.text))
+  plainBodies.set(body, { snaps: b.snaps, text })
+  return text
 }
 
 /** Pages whose title or words contain every word of `query`: titles first, then the best matches. */

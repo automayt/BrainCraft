@@ -271,7 +271,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     ),
     toggle: ro ? undefined : (line) => editor.tickTask(page.id, line),
     children: () => <SubPages pages={kids} />,
-    embed: (block) => <ObjectEmbed block={block} />,
+    embed: (block) => <ObjectEmbed block={block} page={ro ? undefined : page.id} />,
     macro: (block) => <WikiMacro block={block} page={page} actions={actions} />,
     headings: heads,
     copyHeading: (slug, words) => copyPlace(ws, editor, `${page.title || 'Untitled'} › ${words}`, { page: page.id, heading: slug }),

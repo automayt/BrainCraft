@@ -24,18 +24,28 @@ interface Node {
 
 const kids = (b: Board, id: Id): Item[] => b.items.filter((i) => i.kind === 'mind' && i.parent === id)
 
-/** The central idea of the map `id` belongs to. */
+/** The central idea of the map `id` belongs to (or the highest idea there is, in part of a board). */
 export function rootOf(b: Board, id: Id): Item | undefined {
   let n = getItem(b, id)
-  for (let k = 0; n && n.parent !== undefined && k < 10_000; k++) n = getItem(b, n.parent)
+  for (let k = 0; n && n.parent !== undefined && k < 10_000; k++) {
+    const up = getItem(b, n.parent)
+    if (!up) break
+    n = up
+  }
+  return n?.kind === 'mind' ? n : undefined
+}
+
+/** Where an outline starts: the whole map `id` is in, or just its branch. */
+const topOf = (b: Board, id: Id, branch: boolean) => {
+  const n = branch ? getItem(b, id) : rootOf(b, id)
   return n?.kind === 'mind' ? n : undefined
 }
 
 const words = (n: Item, depth: number) => (n.text || placeholderFor(depth)).replace(/\s*\n\s*/g, ' ')
 
-/** The map `id` is in, as an outline: the central idea, then each idea indented under its parent. */
-export function outlineOf(b: Board, id: Id): string {
-  const root = rootOf(b, id)
+/** The map `id` is in (or with `branch`, just `id`'s branch), as an outline: the top idea, then each idea indented under its parent. */
+export function outlineOf(b: Board, id: Id, branch = false): string {
+  const root = topOf(b, id, branch)
   if (!root) return ''
   const lines: string[] = []
   const walk = (n: Item, depth: number) => {
@@ -47,8 +57,8 @@ export function outlineOf(b: Board, id: Id): string {
 }
 
 /** The map as simple Markdown: the central idea as a heading, its ideas as nested bullets. */
-export function markdownOf(b: Board, id: Id): string {
-  const root = rootOf(b, id)
+export function markdownOf(b: Board, id: Id, branch = false): string {
+  const root = topOf(b, id, branch)
   if (!root) return ''
   const lines = [`# ${words(root, 0)}`, '']
   const walk = (n: Item, depth: number) => {
@@ -111,8 +121,8 @@ function treeOf(lines: OutlineLine[]): Node {
  * left in the same place in the same order counts as renamed. Returns the board unchanged when
  * the outline is empty.
  */
-export function applyOutline(b: Board, id: Id, text: string, measure: Measure): Board {
-  const root = rootOf(b, id)
+export function applyOutline(b: Board, id: Id, text: string, measure: Measure, branch = false): Board {
+  const root = topOf(b, id, branch)
   const lines = parseLines(text)
   if (!root || !lines.length || !lines[0].text) return b
   const tree = treeOf(lines)

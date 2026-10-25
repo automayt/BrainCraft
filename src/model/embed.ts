@@ -19,8 +19,8 @@ export const SNAP_MAX_TOTAL = 1_000_000
 export const SNAP_MAX_RECORDS = 500
 
 /** The Markdown line that embeds `item` of `board` (or the whole board) in a page. */
-export const embedToken = (label: string, board: string, item?: Id) =>
-  `![[${label.replace(/[[\]|\n]/g, ' ').replace(/\s+/g, ' ').trim()}]](board:${board}${item !== undefined ? `#${item}` : ''})`
+export const embedToken = (label: string, board: string, item?: Id, asText = false) =>
+  `![[${label.replace(/[[\]|\n]/g, ' ').replace(/\s+/g, ' ').trim()}${asText ? '|text' : ''}]](board:${board}${item !== undefined ? `#${item}` : ''})`
 
 export const snapKey =(board: string, item?: Id) => (item === undefined ? board : `${board}#${item}`)
 export const isSnapKey = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,64}(#\d{1,16})?$/.test(v)

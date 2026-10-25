@@ -56,7 +56,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   moveIdea: { summary: 'Moves a mind-map idea (with its branch) under another idea', properties: { id: ref, parent: ref }, required: ['id', 'parent'] },
   setMindMap: {
     summary: 'Rewrites the whole mind map an idea belongs to, in place (ideas whose words stay are kept)',
-    properties: { id: ref, outline: str('The new map as an indented list'), tree: { type: 'object', description: '{"text", "children": [...]}' } },
+    properties: { id: ref, outline: str('The new map as an indented list'), tree: { type: 'object', description: '{"text", "children": [...]}' }, branch: bool('Just this idea’s branch, not the whole map') },
     required: ['id'],
   },
   createFlowchart: { summary: 'A flowchart from Mermaid, laid out automatically', properties: { mermaid: str('A Mermaid flowchart (flowchart TD …)'), ...placed }, required: ['mermaid'] },

@@ -90,7 +90,7 @@ export type Op =
   | { op: 'addIdeas'; parent: Ref; ideas: string | IdeaIn[]; ref?: string }
   | { op: 'moveIdea'; id: Ref; parent: Ref }
   /** Replaces a whole mind map (the one `id` is in), where it is. */
-  | { op: 'setMindMap'; id: Ref; outline?: string; tree?: OutlineNode }
+  | { op: 'setMindMap'; id: Ref; outline?: string; tree?: OutlineNode; branch?: boolean }
   | ({ op: 'createFlowchart'; mermaid: string } & Placed)
   /** Grows a flowchart: a chain of steps after `after`. */
   | { op: 'addSteps'; after: Ref; steps: (string | { text: string; shape?: string; label?: string })[]; direction?: F.FlowDir; ref?: string }
@@ -518,7 +518,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         }
         walk(tree, 0)
         const before = new Set(b.items.map((i) => i.id))
-        b = applyOutline(b, root.id, lines.join('\n'), ctx.measure)
+        // With "branch", just that idea's branch; otherwise the whole map.
+        b = op.branch === true ? applyOutline(b, it.id, lines.join('\n'), ctx.measure, true) : applyOutline(b, root.id, lines.join('\n'), ctx.measure)
         done({ id: root.id, ids: b.items.filter((i) => !before.has(i.id)).map((i) => i.id) })
         break
       }

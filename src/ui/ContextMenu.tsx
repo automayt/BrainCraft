@@ -14,6 +14,7 @@ import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { copyText } from './copyText'
 import { embedToken } from '../model/embed'
+import { TEXT_FIRST } from '../model/embedText'
 import { objectLabel } from '../model/notes'
 import { useEscape } from './useEscape'
 import { focusFirst, moveFocus } from './menuKeys'
@@ -135,7 +136,7 @@ export function ContextMenu() {
             {
               label: 'Copy embed for a wiki page',
               run: () =>
-                void copyText(embedToken(objectLabel(single), ws.linkKey!, single.id)).then((ok) =>
+                void copyText(embedToken(objectLabel(single), ws.linkKey!, single.id, TEXT_FIRST.has(single.kind))).then((ok) =>
                   editor.setStatus(ok ? 'Copied — paste it on a line of its own in a wiki page to show this there' : 'Couldn’t copy it'),
                 ),
             },

@@ -55,7 +55,7 @@ export type Block =
    */
   | { t: 'macro'; name: string; args: MacroArgs; children?: Block[]; columns?: Block[][]; line: number }
   /** `![[Label|height]](board:KEY#ID)`: a canvas object (or a whole board) shown in the page. */
-  | { t: 'embed'; label: string; board: string; item?: Id; height?: number; line: number }
+  | { t: 'embed'; label: string; board: string; item?: Id; height?: number; line: number; asText?: true }
 
 export type CalloutKind = 'note' | 'tip' | 'warning' | 'danger'
 const CALLOUTS: readonly CalloutKind[] = ['note', 'tip', 'warning', 'danger']
@@ -320,7 +320,15 @@ function macroEnds(lines: string[]): Map<number, number> {
   })
   return out
 }
-const EMBED = /^\s*!\[\[([^[\]\n|]*)(?:\|(\d{2,4}))?\]\]\(board:([\w-]{1,64})(?:#(\d{1,16}))?\)\s*$/
+const EMBED = /^\s*!\[\[([^[\]\n|]*)(?:\|(\d{2,4}|text))?\]\]\(board:([\w-]{1,64})(?:#(\d{1,16}))?\)\s*$/
+
+/** An embed line's parts: its label, board, object, height, and whether it's shown as text. */
+export function embedLine(line: string): { label: string; board: string; item?: Id; height?: number; asText?: true } | null {
+  const m = EMBED.exec(line)
+  if (!m) return null
+  const height = m[2] && m[2] !== 'text' ? Math.max(120, Math.min(1200, Number(m[2]))) : undefined
+  return { label: m[1].trim(), board: m[3], ...(m[4] ? { item: Number(m[4]) } : {}), ...(height ? { height } : {}), ...(m[2] === 'text' ? { asText: true as const } : {}) }
+}
 
 /** The snapshot keys (`board` or `board#item`) of every embed in some page text. */
 export function embedKeys(text: string): string[] {
@@ -388,10 +396,9 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
       i++
       continue
     }
-    const embed = EMBED.exec(line)
+    const embed = embedLine(line)
     if (embed) {
-      const height = embed[2] ? Math.max(120, Math.min(1200, Number(embed[2]))) : undefined
-      out.push({ t: 'embed', label: embed[1].trim(), board: embed[3], ...(embed[4] ? { item: Number(embed[4]) } : {}), ...(height ? { height } : {}), line: at })
+      out.push({ t: 'embed', ...embed, line: at })
       i++
       continue
     }

@@ -1,3 +1,4 @@
+import { TEXT_FIRST } from '../../model/embedText'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { objectLabel } from '../../model/notes'
 import { type Board, type Id, type Item, type Kind, itemKindLabel } from '../../model/types'
@@ -14,6 +15,8 @@ export interface EmbedChoice {
   board: string
   item?: Id
   label: string
+  /** Shown as text, kept in step with the board (otherwise drawn). */
+  asText?: boolean
 }
 
 /** Picks something to show in a page: a board, then one of its objects (or the whole board). */
@@ -56,7 +59,8 @@ export function EmbedPicker({ onPick, onClose }: { onPick: (c: EmbedChoice) => v
   }, [at])
 
   const title = boards.find((b) => b.key === key)?.title ?? 'Board'
-  const pick = (i?: Item) => onPick({ board: key!, ...(i ? { item: i.id } : {}), label: i ? objectLabel(i) : title })
+  // Mind maps, Kanban boards, tables, timelines and databases go in as text that stays in step with the board.
+  const pick = (i?: Item) => onPick({ board: key!, ...(i ? { item: i.id } : {}), label: i ? objectLabel(i) : title, ...(i && TEXT_FIRST.has(i.kind) ? { asText: true } : {}) })
 
   return (
     <div className="modal-backdrop no-canvas" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>

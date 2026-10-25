@@ -832,6 +832,17 @@ export class Editor {
     )
   }
 
+  /** Replaces one line of a page while reading (switching an embed between picture and text), as a small version. */
+  setPageLine(id: string, line: number, text: string, note: string) {
+    if (this.readOnly) return
+    const lines = W.pageText(this.board, id).replace(/\r\n?/g, '\n').split('\n')
+    if (line < 0 || line >= lines.length || lines[line] === text) return
+    this.saveVersions([id])
+    lines[line] = text
+    this.setPageText(id, lines.join('\n'))
+    this.saveVersions([id], { at: Date.now(), by: this.author.trim() || undefined, quick: true, note })
+  }
+
   /** Ticks or unticks a checklist item while reading: saved as a small version, credited to whoever ticked. */
   tickTask(id: string, line: number) {
     if (this.readOnly) return

@@ -1,5 +1,6 @@
 /** Read-only questions about a board, shared by `window.BrainCraft` and the MCP server. */
 
+import { expandTextEmbeds } from '../model/embedText'
 import * as B from '../model/board'
 import * as D from '../model/dataset'
 import { toMermaid } from '../model/mermaid'
@@ -135,6 +136,8 @@ export function getPage(b: Board, ref: string) {
     title: page.title,
     path: W.pagePath(b, page.id).slice(0, -1).map((p) => p.title),
     text: body?.text ?? '',
+    // Text embeds (![[Label|text]](board:…)) as what they show now; edit the board, not this.
+    ...(body && expandTextEmbeds(b, body.text) !== body.text ? { textEmbedsShow: expandTextEmbeds(b, body.text) } : {}),
     ...(body?.at ? { edited: new Date(body.at).toISOString(), ...(body.by ? { by: body.by } : {}) } : {}),
     children: W.childrenOf(b, page.id).map((p) => ({ page: p.id, title: p.title })),
     linkedFrom: W.pageOrder(b)
