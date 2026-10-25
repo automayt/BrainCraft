@@ -103,7 +103,7 @@ timeline.
 | `addComment` | `id`, `text`, `author?` | Timestamped comment on the object. Mention other objects with `@[Label](#id)`. |
 | `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline` \| `calendar` \| `gallery`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
 | `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
-| `updateRecord` | `id` (any view), `record` (record id or title), `values` | Sets fields by name; `null` or `""` clears one. |
+| `updateRecord` | `id` (any view), `record` (record id or title), `values?`, `body?` | Sets fields by name (`null` or `""` clears one); `body` is the record's page in Markdown (notes, a checklist, a spec), shown under its fields when it's opened (`""` removes it). |
 | `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
 | `react` | `ids`, `emoji`, `by?` | Puts an emoji reaction on the objects (`by` defaults to "AI"). |
 | `createVote` | `options` (ids/refs), `question?`, `each?` | A dot vote: a card above the options. Each person spreads `each` votes; counts stay hidden until someone reveals them. |
@@ -119,6 +119,8 @@ Results carry the page's id as `page`.
 | `updatePage` | `page`, `title?`, `text?`, `append?`, `icon?`, `note?`, `protected?` | `text` replaces the page's Markdown; `append` adds a line at the end; `note` says what changed. The page's history keeps a version from before and after. `protected: true` lets only the wiki's managers change it and the pages under it (with accounts, only they may set it). |
 | `movePage` | `page`, `parent?` (`null` for the top), `before?` | Moves it with its sub-pages. A page can't go inside its own sub-pages. |
 | `deletePage` | `page` | Moves it and its sub-pages to the trash. |
+
+A line `![[Label|text]](board:KEY#ID)` shows the object as text kept in step with the board (a mind map as bullets, a Kanban board as checklists, a table or database as a table, a timeline as dated lists, a flowchart as numbered steps); prefer it for those when writing a page from a board.
 
 A line `![[Label|height]](board:KEY#ID)` on its own embeds a canvas object
 (a frame with what's in it, a mind map, a table…) in the page, and

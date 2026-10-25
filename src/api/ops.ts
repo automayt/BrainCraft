@@ -127,7 +127,7 @@ export type Op =
       groupBy?: string
     } & Placed)
   | { op: 'addRecords'; id: Ref; records: Record<string, unknown>[] }
-  | { op: 'updateRecord'; id: Ref; record: string; values: Record<string, unknown> }
+  | { op: 'updateRecord'; id: Ref; record: string; values?: Record<string, unknown>; body?: string }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
@@ -827,13 +827,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           })
         } else if (op.op === 'updateRecord') {
           const r = findRecord(op.record, 'record')
-          const values = valuesOf(op.values, 'values')
-          for (const [f, v] of Object.entries(values)) ds = D.setValue(ds!, r.id, f, v)
-          // Fields set to null or "" are cleared.
-          for (const [name, v] of Object.entries(op.values)) {
-            const f = D.fieldByName(ds!, name)
-            if (f && (v === null || v === '')) ds = D.setValue(ds!, r.id, f.id, null)
+          if (op.values === undefined && op.body === undefined) fail(index, op, 'give "values" (fields to set) or "body" (the record’s page)')
+          if (op.values !== undefined) {
+            const values = valuesOf(op.values, 'values')
+            for (const [f, v] of Object.entries(values)) ds = D.setValue(ds!, r.id, f, v)
+            // Fields set to null or "" are cleared.
+            for (const [name, v] of Object.entries(op.values)) {
+              const f = D.fieldByName(ds!, name)
+              if (f && (v === null || v === '')) ds = D.setValue(ds!, r.id, f.id, null)
+            }
           }
+          if (op.body !== undefined) ds = D.setBody(ds!, r.id, text(op.body, 'body', false))
         } else {
           if (!Array.isArray(op.records)) fail(index, op, '"records" should be a list of record ids or titles')
           op.records.forEach((q, k) => (ds = D.deleteRecord(ds!, findRecord(String(q), `records[${k}]`).id)))

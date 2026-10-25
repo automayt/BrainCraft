@@ -177,7 +177,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     },
   },
   addRecords: { summary: 'Adds records to a database', properties: { id: ref, records: list({ type: 'object' }) }, required: ['id', 'records'] },
-  updateRecord: { summary: 'Sets fields of one record by name (null or "" clears one)', properties: { id: ref, record: str('A record id or title'), values: { type: 'object' } }, required: ['id', 'record', 'values'] },
+  updateRecord: { summary: 'Sets fields of one record by name (null or "" clears one), and/or its page', properties: { id: ref, record: str('A record id or title'), values: { type: 'object' }, body: str('The record’s page, in Markdown: notes, a checklist, a spec ("" removes it)') }, required: ['id', 'record'] },
   deleteRecords: { summary: 'Deletes records', properties: { id: ref, records: list(str('A record id or title')) }, required: ['id', 'records'] },
   react: { summary: 'An emoji reaction on objects', properties: { ids: list(ref), emoji: str(), by: str('Default "AI"') }, required: ['ids', 'emoji'] },
   createVote: { summary: 'A dot vote over objects; counts stay hidden until revealed', properties: { options: list(ref), question: str(), each: num('Votes per person'), ref: placed.ref }, required: ['options'] },

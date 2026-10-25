@@ -312,3 +312,19 @@ describe('growing what is already there', () => {
     expect(() => run([{ op: 'setKanban', id: t.id, columns: [] }], b)).toThrow(/Kanban board/)
   })
 })
+
+describe('a database record as a page', () => {
+  it('writes, keeps through a save and clears a record page', () => {
+    let b = run([{ op: 'createDatabase', ref: 'db', title: 'Requests', fields: ['Request', 'Owner'], records: [{ Request: 'Laptop for Sam', Owner: 'Ana' }] }]).board
+    const view = b.items.find((i) => i.kind === 'data')!.id
+    b = run([{ op: 'updateRecord', id: view, record: 'Laptop for Sam', body: '## Spec\n- [ ] Order it' }], b).board
+    const rec = () => b.datasets![0].records[0]
+    expect(rec().body).toBe('## Spec\n- [ ] Order it')
+    expect(rec().values).toEqual(expect.objectContaining({}))
+    // Kept as a save and reload keeps it.
+    expect(fromJson(toJson(b)).datasets![0].records[0].body).toBe('## Spec\n- [ ] Order it')
+    b = run([{ op: 'updateRecord', id: view, record: 'Laptop for Sam', body: '' }], b).board
+    expect(rec().body).toBeUndefined()
+    expect(() => run([{ op: 'updateRecord', id: view, record: 'Laptop for Sam' }], b)).toThrow(/"values".*"body"/)
+  })
+})

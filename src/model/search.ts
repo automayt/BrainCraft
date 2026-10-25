@@ -53,6 +53,7 @@ function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
         const text = display(ds, f, r.values[f.id])
         if (text && f.type !== 'checkbox') out.push({ where: k === 0 ? 'Record' : `${name} · ${f.name}`, text })
       })
+      if (r.body) out.push({ where: `${name} · page`, text: r.body })
     }
   }
   if (i.timeline) {

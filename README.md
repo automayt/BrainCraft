@@ -58,8 +58,17 @@ The board fills the window and the controls float above it:
   put), or press **Ctrl+G** to group sibling ideas under a new one.
 - **Collapse** a branch with **/** or with the toggle next to it.
 - **Paste an indented list** (Markdown bullets, numbered lists, headings or
-  plain indentation) to turn it into a map. **Copy outline** does the reverse.
-  A flat list with no indents becomes sticky notes instead (see below).
+  plain indentation) to turn it into a map. A flat list with no indents
+  becomes sticky notes instead (see below).
+- **Outline** (on a selected idea's toolbar, or Ctrl K) opens the whole map
+  as an indented list beside the board, kept in step both ways: type in the
+  list and the map follows a moment after you stop; change the map and the
+  list follows. Enter adds an idea at the same depth, Tab moves a line under
+  the one above, Shift Tab moves it back out, and cutting a block and pasting
+  it under another line moves that branch. Ideas that keep their words keep
+  their colour, comments and place wherever they move. **Copy as Markdown**
+  or **Download .md** gives the map as a heading with nested bullets (paste
+  it back in for the same map).
 
 ### Flowcharts
 
@@ -293,14 +302,26 @@ shares live exactly like a board.
 - **Canvas objects inside pages:** type `/` at the start of a line and pick
   **Embed from a board…**, or right-click an object on a board → **Copy embed
   for a wiki page** and paste it on a line of its own. Frames (with what's in
-  them), mind maps, flowcharts, timelines and whole boards are drawn just as
-  on the canvas; tables, Kanban boards and databases show as real tables.
-  Each embed has **Open on board** and **Expand**. Embedding saves a copy of
-  what it shows in the wiki, so friends who don't have that board still see
-  it: the object itself, without its comments, notes or votes, and with every
-  hidden brainstorm note left blank. Whoever saved the copy keeps it up to
-  date as they read the page; anyone else who has the board gets an **Update
-  the copy** button. Just reading a page never copies a board into it.
+  them), flowcharts and whole boards are drawn just as on the canvas.
+- **As text, in step with the board:** mind maps, Kanban boards, tables,
+  timelines and databases go into pages as text by default: a mind map as
+  nested bullets, a Kanban board as a checklist per column, a table as a
+  table, a timeline as dated lists (`![[Label|text]](board:KEY#ID)`). The text
+  is made from the board each time, so the page and the board can't drift
+  apart, and changing it in the page changes the board: tick a card to move
+  it to the last column (untick to move it back), or **Edit as text** to
+  change the map, cards, rows or dates (what keeps its words keeps its
+  details). **Show as picture** / **Show as text** switches any embed. What
+  text embeds show is part of the page for search, Markdown and HTML or PDF
+  exports, and the assistant.
+- Each embed has **Open on board** (and a drawn one **Expand**). Adding an
+  embed to a page (picked, pasted, typed or written by the assistant) saves a
+  copy of what it shows in the wiki, so friends who don't have that board
+  still see it: the object itself, without its comments, notes or votes, and
+  with every hidden brainstorm note left blank. Whoever saved the copy keeps
+  it up to date as they read the page; anyone else who has the board gets an
+  **Update the copy** button. Just reading a page never copies a board into
+  it.
 - **`/` menu:** headings, checklists, lists, tables, code, quotes, tips and
   warnings, dividers, links to pages, a new sub-page, embeds and every macro.
 - **Macros:** write `{{name}}` on a line of its own, or pick one from the `/`
@@ -398,8 +419,11 @@ shares live exactly like a board.
   board; drag a bar on the timeline and the dates change in the table.
 - Each view has its own search, sort, hidden fields, grouping and date
   fields. Those never change the data itself.
-- Click a card or bar to open the record and edit every field. Choices get
-  colours; new ones are added as you type them.
+- Click a card or bar to open the record as a page: its title, every field
+  to edit, and below them its own page for notes, a checklist or a spec,
+  written in the same Markdown as wiki pages (read as formatted text; tick
+  checklist items as you read, **Edit the page** to change it). Cards with a
+  page show ≡. Choices get colours; new ones are added as you type them.
 - **Convert to linked data** (right-click) turns an existing table, Kanban
   board or timeline into a dataset, guessing each column's type.
 - AI assistants can create and update databases by field name (see the
@@ -570,6 +594,17 @@ shares live exactly like a board.
   operations and reads them (objects, search, Mermaid, wiki pages and their
   history). It documents itself at `/api/docs`, with an OpenAPI description
   at `/api/openapi.json` for tools and client generators.
+
+### Check board
+
+- **Check board** (Ctrl K) lists what makes a board look messy or hard to
+  follow: objects on top of each other, empty notes, ideas and steps, a stray
+  far from everything else (which also makes Fit zoom right out), a flowchart
+  decision with only one way out or a step nothing leads to, and an idea
+  holding several lines. Each has **Go to**, and a fix where one is safe:
+  move it clear (a whole mind map moves as one), delete the empty one, bring
+  the stray back, or make a crammed idea's other lines ideas under it.
+  **Fix all** does them all as one undo step.
 
 ### Whiteboard
 

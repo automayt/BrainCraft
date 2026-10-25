@@ -69,6 +69,8 @@ export type FieldValue = string | number | boolean
 export interface DataRecord {
   id: string
   values: Record<string, FieldValue>
+  /** The record's page: notes, a checklist, a spec, in Markdown (as wiki pages are written). */
+  body?: string
 }
 
 /** Records shared by every view that shows them. */

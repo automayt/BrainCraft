@@ -347,8 +347,12 @@ function cleanRecord(v: unknown): DataRecord | null {
       if (typeof val === 'string') values[k] = val.slice(0, TEXT_MAX)
       else if ((typeof val === 'number' && Number.isFinite(val)) || typeof val === 'boolean') values[k] = val
     }
-  return { id: v.id.slice(0, 64), values }
+  const body = typeof v.body === 'string' && v.body.trim() ? v.body.slice(0, RECORD_BODY_MAX) : undefined
+  return { id: v.id.slice(0, 64), values, ...(body ? { body } : {}) }
 }
+
+/** The longest page a record keeps (as long as a wiki page). */
+const RECORD_BODY_MAX = 200_000
 
 /** A dataset with typed fields and plain values, or null if it has no usable fields. */
 export function cleanDataset(v: unknown): Dataset | null {

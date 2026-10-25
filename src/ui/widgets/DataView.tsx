@@ -3,8 +3,11 @@
  * Every view of the same dataset edits the same records, so changes show up everywhere.
  */
 
-import { type PointerEvent, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
+import { type PointerEvent, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as D from '../../model/dataset'
+import { parseMarkdown, toggleTask } from '../../model/markdown'
+import { Markdown, type MarkdownActions } from '../wiki/Markdown'
 import * as TL from '../../model/timeline'
 import { fromDay, isIsoDay, today } from '../../model/timeline'
 import type { DataRecord, DataView as View, DataViewType, Dataset, Field, FieldType, FieldValue, Item } from '../../model/types'
@@ -143,55 +146,166 @@ function Cell({ c, f, r, autoFocus }: { c: Ctx; f: Field; r: DataRecord; autoFoc
   }
 }
 
-/** Every field of one record, for boards and timelines (and anywhere a record is opened). */
-function RecordSheet({ c, id, onClose }: { c: Ctx; id: string; onClose: () => void }) {
-  useEscape(onClose)
+/** A record that has a page (notes, a checklist, a spec). */
+const HasPage = () => (
+  <span className="dv-has-page" title="Has a page: open it to read" aria-label="has a page">
+    ≡
+  </span>
+)
+
+/** Links inside a record's page read as plain words (it has no wiki around it). */
+const PAGE_ACTIONS: Omit<MarkdownActions, 'toggle'> = {
+  link: (_to, label, key) => <span key={key}>{label}</span>,
+  mention: (_id, label, key) => <span key={key}>@{label}</span>,
+  children: () => null,
+  headings: [],
+}
+
+/**
+ * A record as a page, over the board: its title large, its fields, then its page (notes, a
+ * checklist, a spec) in Markdown, read as formatted text and edited with a click. Wherever a record
+ * is opened: a table row, a card, a bar, a calendar chip, a gallery card.
+ */
+function RecordPage({ c, id, onClose }: { c: Ctx; id: string; onClose: () => void }) {
+  const r = c.ds.records.find((x) => x.id === id)
+  const [draft, setDraft] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const sheet = useRef<HTMLDivElement>(null)
-  // The keyboard (and a screen reader) goes to the sheet that just opened, and back after.
+  const blocks = useMemo(() => parseMarkdown(r?.body ?? ''), [r?.body])
+  // Writing settles into the record a moment after it stops, and at once on leaving.
+  const save = (text: string) => {
+    clearTimeout(timer.current)
+    timer.current = undefined
+    c.edit((d) => D.setBody(d, id, text))
+  }
+  const close = () => {
+    if (draft !== null && timer.current) save(draft)
+    onClose()
+  }
+  useEscape(close)
+  // The keyboard (and a screen reader) goes to the page that just opened, and back after.
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
     sheet.current?.querySelector<HTMLElement>('input, textarea, select, button:not(.icon-close)')?.focus({ preventScroll: true })
     return () => {
+      clearTimeout(timer.current)
       if (before?.isConnected) before.focus({ preventScroll: true })
     }
   }, [id])
-  const r = c.ds.records.find((x) => x.id === id)
   if (!r) return null
-  return (
-    <div ref={sheet} className="dv-sheet" role="dialog" aria-label={`Record: ${D.recordTitle(c.ds, r)}`}>
-      <header>
-        <span className="muted">{c.ds.name}</span>
-        <button className="icon-close" aria-label="Close" onClick={onClose}>
-          ×
-        </button>
-      </header>
-      <dl>
-        {c.ds.fields.map((f, k) => (
-          <div key={f.id} className={k === 0 ? 'dv-sheet-title' : ''}>
-            <dt>
-              <span className="dv-type">{typeIcon(f.type)}</span>
-              {f.name}
-            </dt>
-            <dd>
-              <Cell c={c} f={f} r={r} />
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {c.live && (
-        <footer>
-          <button
-            className="danger"
-            onClick={() => {
-              onClose()
-              c.edit((d) => D.deleteRecord(d, id))
-            }}
-          >
-            Delete record
+  const [titleField, ...rest] = c.ds.fields
+  const title = D.recordTitle(c.ds, r)
+  const write = () => setDraft(r.body ?? '')
+
+  return createPortal(
+    <div
+      className="modal-backdrop no-canvas"
+      onPointerDown={(e) => {
+        // Clicks here are the page's, not the widget's on the board behind it.
+        e.stopPropagation()
+        if (e.target === e.currentTarget) close()
+      }}
+    >
+      <div ref={sheet} className="modal record-page" role="dialog" aria-modal="true" aria-label={`Record: ${title}`}>
+        <header>
+          <span className="muted">{c.ds.name}</span>
+          <button className="icon-close" aria-label="Close" onClick={close}>
+            ×
           </button>
-        </footer>
-      )}
-    </div>
+        </header>
+        <div className="record-body">
+          {titleField && (
+            <div className="record-title">
+              <Cell c={c} f={titleField} r={r} />
+            </div>
+          )}
+          {rest.length > 0 && (
+            <dl className="record-fields">
+              {rest.map((f) => (
+                <div key={f.id}>
+                  <dt>
+                    <span className="dv-type">{typeIcon(f.type)}</span>
+                    {f.name}
+                  </dt>
+                  <dd>
+                    <Cell c={c} f={f} r={r} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <section className="record-notes" aria-label="Page">
+            {draft !== null ? (
+              <>
+                <textarea
+                  className="record-text"
+                  aria-label={`Page for ${title}`}
+                  autoFocus
+                  spellCheck
+                  value={draft}
+                  placeholder={'Notes, a checklist or a spec, in Markdown:\n\n## Heading\n- [ ] Something to do\n- A point'}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDraft(v)
+                    clearTimeout(timer.current)
+                    timer.current = setTimeout(() => save(v), 600)
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      save(e.currentTarget.value)
+                      setDraft(null)
+                    }
+                  }}
+                />
+                <div className="record-notes-foot">
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      save(draft)
+                      setDraft(null)
+                    }}
+                  >
+                    Done
+                  </button>
+                  <small className="muted">Markdown: ## headings, - lists, - [ ] checklists, | tables |. Saved as you write.</small>
+                </div>
+              </>
+            ) : r.body ? (
+              <>
+                <div className="md record-md" onDoubleClick={c.live ? write : undefined}>
+                  <Markdown blocks={blocks} actions={{ ...PAGE_ACTIONS, toggle: c.live ? (line) => c.edit((d) => D.setBody(d, id, toggleTask(r.body ?? '', line))) : undefined }} />
+                </div>
+                {c.live && (
+                  <button className="link record-edit" onClick={write}>
+                    Edit the page
+                  </button>
+                )}
+              </>
+            ) : c.live ? (
+              <button className="record-empty" onClick={write}>
+                Write notes, a checklist or a spec for this record…
+              </button>
+            ) : null}
+          </section>
+        </div>
+        {c.live && (
+          <footer>
+            <button
+              className="danger"
+              onClick={() => {
+                onClose()
+                c.edit((d) => D.deleteRecord(d, id))
+              }}
+            >
+              Delete record
+            </button>
+          </footer>
+        )}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -397,7 +511,10 @@ function BoardBody({ c }: { c: Ctx }) {
                 onPointerUp={up}
                 onPointerCancel={() => ((dragRef.current = null), setDrag(null))}
               >
-                <strong>{D.recordTitle(c.ds, r)}</strong>
+                <strong>
+                  {D.recordTitle(c.ds, r)}
+                  {r.body && <HasPage />}
+                </strong>
                 <div className="dv-meta">
                   {meta.map((f) =>
                     r.values[f.id] === undefined ? null : (
@@ -824,7 +941,10 @@ function GalleryBody({ c }: { c: Ctx }) {
             onClick={() => c.live && c.openRecord(r.id)}
           >
             <GalleryCover src={cover} color={color} name={name} />
-            <strong>{name}</strong>
+            <strong>
+              {name}
+              {r.body && <HasPage />}
+            </strong>
             <div className="dv-meta">
               {meta.map((f) =>
                 r.values[f.id] === undefined || r.values[f.id] === '' ? null : (
@@ -1044,7 +1164,7 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
         {view.type === 'calendar' && <CalendarBody c={c} />}
         {view.type === 'gallery' && <GalleryBody c={c} />}
       </div>
-      {open && <RecordSheet c={c} id={open} onClose={() => setOpen(null)} />}
+      {open && <RecordPage c={c} id={open} onClose={() => setOpen(null)} />}
     </Widget>
   )
 }

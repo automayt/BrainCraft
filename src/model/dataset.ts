@@ -225,6 +225,20 @@ export function setValue(ds: Dataset, recordId: string, fieldId: string, value: 
   }
 }
 
+/** Sets a record's page (empty removes it). */
+export function setBody(ds: Dataset, recordId: string, text: string): Dataset {
+  return {
+    ...ds,
+    records: ds.records.map((r) => {
+      if (r.id !== recordId || (r.body ?? '') === text) return r
+      const next = { ...r }
+      if (text.trim()) next.body = text
+      else delete next.body
+      return next
+    }),
+  }
+}
+
 export function deleteRecord(ds: Dataset, recordId: string): Dataset {
   return { ...ds, records: ds.records.filter((r) => r.id !== recordId) }
 }

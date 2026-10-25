@@ -10781,3 +10781,126 @@ button.on,
   justify-content: flex-end;
   padding: 12px 20px 18px;
 }
+
+/* ----- a database record as a page ----- */
+
+.modal.record-page {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100% - 32px));
+  max-height: calc(100vh - 64px);
+}
+
+.record-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 28px 8px;
+  overflow: auto;
+}
+
+.record-title input,
+.record-title .dv-show {
+  width: 100%;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.record-title input {
+  padding: 4px 6px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.record-title input:hover,
+.record-title input:focus {
+  border-color: var(--border-strong);
+}
+
+.record-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 12px 0 18px;
+}
+
+.record-fields > div {
+  display: contents;
+}
+
+.record-fields dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.record-fields dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.record-notes {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.record-md {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.record-text {
+  width: 100%;
+  min-height: 240px;
+  padding: 12px 14px;
+  font: 14px/1.6 var(--mono);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  resize: vertical;
+}
+
+.record-notes-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.record-empty {
+  width: 100%;
+  padding: 22px;
+  color: var(--muted);
+  text-align: left;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+}
+
+.record-empty:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.record-edit {
+  margin-top: 6px;
+}
+
+.record-page footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dv-has-page {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
