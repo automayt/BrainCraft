@@ -16,6 +16,7 @@ import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import { applyOutline, rootOf as mapRoot } from '../model/outlineSync'
+import { type Problem, fixAll, fixProblem } from '../model/boardCheck'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
@@ -1362,6 +1363,20 @@ export class Editor {
       this.peek = null
     }
     this.emit()
+  }
+
+  /** Fixes one problem Check board found (one undo step). */
+  fixProblem(p: Problem) {
+    if (this.readOnly) return
+    const next = fixProblem(this.board, p, this.measure)
+    if (next !== this.board) this.edit(() => next)
+  }
+
+  /** Fixes everything Check board found that has a fix (one undo step). */
+  fixAllProblems() {
+    if (this.readOnly) return
+    const next = fixAll(this.board, this.measure)
+    if (next !== this.board) this.edit(() => next)
   }
 
   /** Changes the map `id` belongs to so it matches an outline (one undo step). */

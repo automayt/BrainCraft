@@ -10731,3 +10731,53 @@ button.on,
   color: var(--danger);
   background: var(--surface);
 }
+
+/* ----- Check board ----- */
+
+.modal.check-board {
+  width: min(560px, calc(100% - 32px));
+}
+
+.check-body {
+  max-height: min(60vh, 520px);
+  padding: 0 20px 4px;
+  overflow: auto;
+}
+
+.check-clear {
+  padding: 18px 0 22px;
+  line-height: 1.5;
+}
+
+.check-list {
+  margin: 8px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.check-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.check-text {
+  flex: 1 1 220px;
+  line-height: 1.4;
+}
+
+.check-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px 18px;
+}

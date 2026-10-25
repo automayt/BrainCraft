@@ -35,6 +35,8 @@ export interface Ui {
   openAi: () => void
   /** PNG, SVG, clipboard and PDF export. */
   openExport: () => void
+  /** Check board: what looks messy, with fixes. */
+  openCheck: () => void
   /** The in-app AI assistant panel (Ctrl+J). */
   assistant: boolean
   toggleAssistant: () => void

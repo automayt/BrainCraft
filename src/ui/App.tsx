@@ -29,6 +29,7 @@ import { PagePeek } from './wiki/PagePeek'
 import { targetFromUrl } from '../store/deepLink'
 import { NotesPanel } from './NotesPanel'
 import { OutlinePanel } from './OutlinePanel'
+import { CheckDialog } from './CheckDialog'
 import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
@@ -47,7 +48,7 @@ const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 /** Excalidraw, loaded only when a drawing is opened. */
 const DrawingEditor = lazy(() => import('./excalidraw/DrawingEditor'))
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | 'check' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -116,6 +117,7 @@ function App({ ws }: { ws: Workspace }) {
     openAdmin: () => setDialog('admin'),
     openAi: () => setDialog('ai'),
     openExport: () => setDialog('export'),
+    openCheck: () => setDialog('check'),
     assistant,
     toggleAssistant: () => {
       if (!assistant && editor.notesOpen) editor.toggleNotes()
@@ -490,6 +492,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'admin' && <AdminDialog onClose={close} />}
           {dialog === 'ai' && <AiDialog bridge={bridge} onClose={close} />}
           {dialog === 'export' && <ExportDialog onClose={close} />}
+          {dialog === 'check' && <CheckDialog onClose={close} />}
           <input
             ref={fileInput}
             type="file"
