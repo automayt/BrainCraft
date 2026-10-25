@@ -40,6 +40,7 @@ import { cleanAppName, DEFAULT_APP_NAME } from './accounts/store'
 import { BoardFiles } from './boardFiles'
 import { readBoard, sendRead } from './boardReads'
 import { answerForm, readForm } from './forms'
+import { type BoardStats, boardStats, eventOf, Usage, usageCsv } from './usage'
 import { boardWrite } from './boardWrites'
 import { docsPage, openApiSpec } from './openapi'
 import { Accounts } from './accounts/service'
@@ -65,6 +66,10 @@ const SAVE_DELAY = 1000
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a)
 
 mkdirSync(join(DATA, 'boards'), { recursive: true })
+
+/** Day-by-day counts for the admin's usage page (usage.ts). */
+const usage = new Usage(join(DATA, 'usage.json'))
+let statsCache: { at: number; stats: BoardStats } | null = null
 
 /** The bytes of boards' files (PDFs, documents…), beside the boards. */
 const files = new BoardFiles(join(DATA, 'files'), {
@@ -113,7 +118,10 @@ function scheduleSave(room: Room) {
 
 function makeRoom(data: RoomData): Room {
   const room = new Room(data, approxMeasure)
-  room.onChange = () => scheduleSave(room)
+  room.onChange = (edited) => {
+    if (edited) usage.edited(data.id)
+    scheduleSave(room)
+  }
   rooms.set(data.id, room)
   return room
 }
@@ -384,6 +392,12 @@ const aiProviders = [...(aiProxy ? ['anthropic'] : []), ...(openAiProxy ? ['open
 
 async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'boards', id, action]
+  res.once('finish', () => {
+    const e = eventOf(req.method ?? 'GET', parts, res.statusCode, String(res.getHeader('location') ?? ''))
+    if (e) usage.count(e)
+  })
+  const someone = accounts?.userOf(req)
+  if (someone) usage.seen(someone.id)
   if (parts[1] === 'health')
     return send(res, 200, {
       ok: true,
@@ -426,6 +440,27 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (accounts && !accounts.fromApp(req)) return send(res, 403, { error: 'Missing the X-BrainCraft header' })
     if (!formAnswerAllowed(visitor(req))) return send(res, 429, { error: 'Too many answers from here. Try again in an hour.' })
     return sendRead(res, answerForm(room, parts[3], await readBody(req)))
+  }
+
+  // GET /api/admin/usage[.csv]?days= → admins: activity day by day, features in use, storage.
+  if (accounts && parts[1] === 'admin' && (parts[2] === 'usage' || parts[2] === 'usage.csv') && parts.length === 3) {
+    if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
+    if (someone?.role !== 'admin') return send(res, someone ? 403 : 401, { error: 'Only admins can see usage' })
+    const days = Math.min(365, Math.max(7, Number(url.searchParams.get('days')) || 30))
+    const report = usage.report(days)
+    if (parts[2] === 'usage.csv') {
+      res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="usage.csv"', 'cache-control': 'no-store' })
+      return res.end(usageCsv(report))
+    }
+    // Reading every board is a bit of work: once a minute is plenty.
+    if (!statsCache || Date.now() - statsCache.at > 60_000)
+      statsCache = { at: Date.now(), stats: boardStats({ boardsDir: join(DATA, 'boards'), filesDir: join(DATA, 'files'), loaded: (id) => rooms.get(id)?.data.board ?? null, read: fromJson }) }
+    // The busiest boards by name, for the boards still here.
+    const busiest = report.busiest.flatMap((b) => {
+      const e = accounts.store.boards[b.id]
+      return e ? [{ ...b, title: e.title || 'Untitled', kind: e.kind === 'wiki' ? 'wiki' : 'board' }] : []
+    })
+    return send(res, 200, { ...report, busiest, ...statsCache.stats, people: accounts.store.users.filter((u) => !u.disabled).length })
   }
 
   // Accounts: sign-in, admin, people, and boards by access instead of keys.
@@ -651,6 +686,8 @@ server.on('upgrade', (req, socket, head) => {
     const id = randomBytes(6).toString('base64url')
     const sendTo = (msg: ServerMessage) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg))
     room.join({ id, role, send: sendTo, ...(user ? { user } : {}), ...(manages !== undefined ? { manages } : {}) })
+    usage.count('board.open')
+    if (user) usage.seen(user.id)
     log('joined', room.data.id, id, role, `(${room.members.size} here)`)
     ws.on('message', (data) => {
       let msg: ClientMessage | undefined
@@ -700,6 +737,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     }
     accounts?.store.flush()
     accounts?.store.saveBoards()
+    usage.save()
     process.exit(0)
   })
 }

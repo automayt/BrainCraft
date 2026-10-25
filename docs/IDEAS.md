@@ -189,6 +189,51 @@ Ideas from the wiki review, roughly by value for a small group against effort:
 - [ ] An MCP tool that reads the server's OpenAPI description, so assistants
   can use a remote server without the browser.
 
+## Databases, pages and admin (October 2026)
+
+Built:
+
+- [x] **Formulas, relations and rollups** on databases.
+- [x] **Automations:** when a record is added, or a field changes, set fields.
+- [x] **Forms:** a form view, and a link for people who never open the board.
+- [x] **Template buttons** and **synced sections** in wiki pages.
+- [x] **Usage** for admins: people active, changes, the assistant, speech to
+  text, form answers and exports day by day; features in use; storage; the
+  busiest and biggest boards.
+- [x] **Announcement** for everyone signed in, set by admins.
+
+Admin, next:
+
+- **Webhooks.** Post to an address when a form is answered, a record is added,
+  a page changes or someone new signs in, so a team's chat or tracker hears
+  about it. Signed with a secret, retried with back-off, with a delivery log on
+  the admin screen.
+- **Assistant usage by model.** Requests are already counted; the proxies could
+  also note the tokens each answer used (the model servers report them), per
+  model and per day. That lets admins compare models on speed and size of
+  answers, and spot one person or board using most of it.
+- **Limits per group.** Assistant requests a day, speech-to-text minutes, and
+  storage per board, set on a group, with a clear message when someone reaches
+  one.
+- **Hand over someone's boards.** Removing a person offers to give everything
+  they own to someone else in one step, instead of leaving it in "Boards
+  without an owner".
+- **Invite links with groups.** A link that makes an account already in the
+  right groups, valid for a week or a number of uses. Also add people in bulk
+  from a CSV of names and emails.
+- **Sessions.** See each person's signed-in devices (browser, last used) and
+  sign out one or all of them.
+- **Server health.** Version, uptime, memory, free disk space, the size of each
+  data folder, and a warning on the admin screen when disk space runs low.
+- **Backups.** Download everything (boards, files, accounts) as one archive, and
+  optionally keep a nightly copy in a folder, with the last few kept.
+- **Features per group.** Turn the assistant, voice, forms shared by link or
+  exports off for some groups.
+- **Templates for everyone.** Admins publish boards and wikis as templates that
+  show in everyone's "New" row.
+- **Clean-up rules.** Empty wiki trash after a number of days, and list boards
+  nobody has opened in six months so their owners can archive them.
+
 ## Next up
 
 - [x] **Status marks.** Mark any object (a mind-map idea, a sticky, a card) as

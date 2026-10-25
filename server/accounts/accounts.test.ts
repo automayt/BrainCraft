@@ -144,7 +144,7 @@ describe('admins', () => {
     const a = new Accounts({ dir })
     const cookie = cookieOf(await call(a, 'POST', '/api/auth/setup', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
     expect(a.appName()).toBe('BrainCraft')
-    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body).toEqual({ appName: '', defaultName: 'BrainCraft' })
+    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body).toEqual({ appName: '', defaultName: 'BrainCraft', notice: '' })
     // Tidied: one line, no markup characters, at most 40 long.
     const put = await call(a, 'PUT', '/api/admin/settings', { appName: '  Acme <b>Notes</b>\n  ' }, { cookie })
     expect(put.body).toMatchObject({ appName: 'Acme bNotes/b' })
@@ -167,6 +167,26 @@ describe('admins', () => {
     expect(b.appName()).toBe('Acme Notes')
     await call(b, 'PUT', '/api/admin/settings', { appName: '' }, { cookie })
     expect(b.appName()).toBe('Team Wiki')
+  })
+
+  it('show an announcement to everyone signed in, set by admins', async () => {
+    const dir = tempDir()
+    const a = new Accounts({ dir })
+    const cookie = cookieOf(await call(a, 'POST', '/api/auth/setup', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.notice).toBeUndefined()
+    // One line of plain text; the app's name stays as it was.
+    await call(a, 'PUT', '/api/admin/settings', { appName: 'Acme' }, { cookie })
+    const put = await call(a, 'PUT', '/api/admin/settings', { notice: '  Server restarts\n at 6pm  ' }, { cookie })
+    expect(put.body).toMatchObject({ appName: 'Acme', notice: 'Server restarts at 6pm' })
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.notice).toBe('Server restarts at 6pm')
+    // Only signed-in people see it, and it's kept across a restart.
+    expect((await call(a, 'GET', '/api/auth/me')).body.notice).toBeUndefined()
+    expect(new Accounts({ dir }).store.settings.notice).toBe('Server restarts at 6pm')
+    expect((await call(a, 'PUT', '/api/admin/settings', { notice: 3 }, { cookie })).status).toBe(400)
+    await call(a, 'PUT', '/api/admin/settings', { notice: '' }, { cookie })
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.notice).toBeUndefined()
+    const log = (await call(a, 'GET', '/api/admin/audit', undefined, { cookie })).body.entries as { text: string }[]
+    expect(log.map((e) => e.text)).toEqual(expect.arrayContaining([expect.stringMatching(/set the announcement/), expect.stringMatching(/took the announcement down/)]))
   })
 
   it('let people find others only by exact email without “See everyone”', async () => {

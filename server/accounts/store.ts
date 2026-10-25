@@ -80,10 +80,21 @@ export const SESSION_MS = 30 * 86_400_000
 export interface ServerSettings {
   /** What the app is called on this server (the tab, the top of the app, the sign-in screen). */
   appName?: string
+  /** A line every signed-in person sees at the top of the app (maintenance, a new feature, a deadline). */
+  notice?: string
 }
 
 /** At most this long. */
 export const APP_NAME_MAX = 40
+export const NOTICE_MAX = 300
+
+/** An announcement as kept: one line of plain text, or nothing. */
+export function cleanNotice(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined
+  // eslint-disable-next-line no-control-regex
+  const text = v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NOTICE_MAX).trim()
+  return text || undefined
+}
 /** The app's name when nobody has chosen another. */
 export const DEFAULT_APP_NAME = 'BrainCraft'
 
@@ -119,7 +130,7 @@ export class AccountStore {
     this.groups = readJson<Group[]>(this.file('groups'), []).filter((g) => g && typeof g.id === 'string')
     this.boards = readJson<Record<string, BoardEntry>>(this.file('boards'), {})
     const settings = readJson<ServerSettings>(this.file('settings'), {})
-    this.settings = { ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}) }
+    this.settings = { ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}), ...(cleanNotice(settings.notice) ? { notice: cleanNotice(settings.notice) } : {}) }
     this.tokens = readJson<Token[]>(this.file('sessions'), []).filter((t) => t && t.expires > now())
     // Everyone is in this group; out of the box it may make boards and use the AI.
     if (!this.groups.some((g) => g.everyone)) {

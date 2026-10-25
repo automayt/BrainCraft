@@ -95,6 +95,31 @@ next time they open the app; leave it empty for the usual name. Without
 accounts, set `BRAINCRAFT_APP_NAME` on the server instead (it's also the name
 admins go back to). Renaming is noted in the activity log.
 
+## Announcements
+
+**Admin… → Announcement** puts one line at the top of the app for everyone
+signed in: planned maintenance, a new feature, a deadline. Each person sees it
+until they close it, and a changed announcement shows again. **Take it down**
+removes it for everyone. Setting and removing it are noted in the activity log.
+
+## Usage
+
+**Admin… → Usage** shows how the server is used, for the last 7, 30 or 90 days
+or a year:
+
+- people active today, this week and this month, out of how many accounts;
+- day by day: people active, changes, boards opened and made, API changes,
+  assistant requests (by provider), speech-to-text clips, form answers,
+  exports, link previews and sign-ins, as a chart and as **Download as CSV**;
+- the busiest boards (most changes) and the biggest ones on disk;
+- which features the boards use: how many boards use each one and how much
+  of it there is. This is counted from what's on the boards, so it includes
+  everything made before counting started.
+
+The counts are kept in `BRAINCRAFT_DATA/usage.json` for 400 days. They are
+numbers only, plus which accounts were active on each day, so each person is
+counted once. Nothing anyone wrote or asked the assistant is kept there.
+
 ## The activity log
 
 **Admin… → Activity** lists what happened on the server, newest

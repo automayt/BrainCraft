@@ -133,6 +133,9 @@ listed in `/api/docs`.
 | `DELETE /api/boards/{id}/files/{file}` | edit | Deletes a file's bytes and words. |
 | `GET /api/boards/{id}/people` | edit or view (accounts) | Who can open the board, to @mention: names and ids (emails for people who may see everyone). |
 | `GET`, `PUT`, `DELETE /api/assistant/thread` | signed in, may use the AI (accounts) | Your own conversation with the assistant, kept so it follows you to any device (`DELETE` forgets it). Stored under `BRAINCRAFT_DATA/accounts/threads/`. |
+| `GET /api/forms/{board}/{item}` | anyone with the link (accounts: signed in) | A form view shared by its editors: title, words and questions, never the records. 404 when it isn't shared. |
+| `POST /api/forms/{board}/{item}` with `{"answers": {questionId: answer}}` | anyone with the link (accounts: signed in) | Adds one answer as a record; the database's automations run. Only asked fields, only existing choices; 200 answers an hour per address. |
+| `GET /api/admin/usage?days=` · `GET /api/admin/usage.csv?days=` | admins (accounts) | Day-by-day counts for 7 to 365 days (people active, changes, boards opened, assistant and speech-to-text requests, form answers, exports, sign-ins), features in use across all boards, and storage. Counts are kept in `BRAINCRAFT_DATA/usage.json`: numbers only, plus which accounts were active each day. |
 | `GET /api/mentions` | signed in (accounts) | Where you're @mentioned on the boards you can open: board, object or page, who wrote it, when, and the words around it. |
 | `GET /api/boards/{id}/live` (WebSocket) | edit or view | The live session the app uses. |
 | `POST /api/ai/v1/messages` | AI password, if set | The assistant's proxy to the Anthropic Messages API (only with `ANTHROPIC_API_KEY`; see [AI.md](AI.md)). |

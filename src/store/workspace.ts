@@ -1111,6 +1111,13 @@ export class Workspace {
     this.emit()
   }
 
+  /** An admin changed the announcement: shown here at once, everywhere else on the next visit. */
+  setNotice(notice: string) {
+    if (!this.account) return
+    this.account = { ...this.account, notice: notice || undefined }
+    this.emit()
+  }
+
   /** The boards the signed-in person can reach on the server. */
   async loadServerBoards() {
     if (!this.server || !this.account?.user) return

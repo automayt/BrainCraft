@@ -101,7 +101,10 @@ timeline.
 | `update` | `id`, `text?`, `description?`, `color?`, `x?`, `y?`, `w?`, `h?`, `locked?`, `status?`, `sketch?` | — (`description` is the free text above an object's comments; `status` is `todo`, `doing`, `waiting`, `undecided`, `done`, `dropped`, or `none` to clear it; `sketch: true` draws it by hand) |
 | `delete` | `ids` | — (deleting a mind-map idea deletes its branch) |
 | `addComment` | `id`, `text`, `author?` | Timestamped comment on the object. Mention other objects with `@[Label](#id)`. |
-| `createDatabase` | `title?`, `fields?` (names or `{"name", "type", "options?"}`), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline` \| `calendar` \| `gallery`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
+| `createDatabase` | `title?`, `fields?` (names or field specs, as `addField` takes them), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline` \| `calendar` \| `gallery` \| `form`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`, and the worked-out ones `addField` describes; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
+| `addField` | `id` (any view), `field`: `{"name", "type", "options?"}`, or `{"name", "type": "formula", "formula"}`, `{"name", "type": "relation", "to": "Other database"}`, `{"name", "type": "rollup", "relation": "Relation field", "field?", "fn"}` | A field for an existing database. Formulas name fields in braces: `{Price} * {Qty}`, with `+ - * / %`, comparisons, `and`/`or`/`not`, `if(test, a, b)`, `round`, `floor`, `ceil`, `abs`, `min`, `max`, `len`, `upper`, `lower`, `contains`, `empty`, `today()`, `daysUntil`, `days`, `addDays`, `year`, `month`. A relation's values are the linked records' titles (a list, or `"A, B"`). A rollup's `fn` is `count`, `filled`, `sum`, `average`, `min`, `max`, `earliest`, `latest`, `percentDone` or `list`. Formulas and rollups are worked out, never set. |
+| `addAutomation` | `id` (any view), `when`: `{"added": true}` or `{"field", "to?"}`, `set`: `[{"field", "value"}]` | A rule that runs on every change from then on: when a record is added, or a field changes (to a value), set fields of that record. `value` can be `"today"` for a date, or `null` to empty it. |
+| `setForm` | `id` (any view), `title?`, `intro?`, `thanks?`, `ask?` (field names), `required?` (field names), `shared?` | Makes the view a form: each answer becomes a record, and automations run on it. `shared: true` lets anyone with the link answer (with accounts, anyone signed in) through `/api/forms/{board}/{item}`, without seeing the records. Formulas, rollups and relations are never asked. |
 | `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
 | `updateRecord` | `id` (any view), `record` (record id or title), `values?`, `body?` | Sets fields by name (`null` or `""` clears one); `body` is the record's page in Markdown (notes, a checklist, a spec), shown under its fields when it's opened (`""` removes it). |
 | `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
@@ -197,7 +200,10 @@ object {"ops": [...]}, no prose. Available operations:
 - createTable {title?, columns: [names], rows: [[cells]]}
 - createKanban {title?, columns: [{title, cards: [text or {title, due: "YYYY-MM-DD"}]}]}
 - createTimeline {title?, lanes: [{name, entries: [{title, start, end?}]}], followKanban?: [refs]}
-- createDatabase {title?, fields?, records?: [{field: value}], views?: [table|board|timeline|calendar|gallery]}
+- createDatabase {title?, fields?, records?: [{field: value}], views?: [table|board|timeline|calendar|gallery|form]}
+- addField {id, field: {name, type, formula? | to? | relation?, field?, fn?}}
+- addAutomation {id, when: {added: true} | {field, to?}, set: [{field, value}]}
+- setForm {id, title?, intro?, ask?: [fields], required?: [fields], shared?}
 - createSpinner {options: [text]}      - createVote {options: [refs], question?}
 - connect {from, to, label?}           - addComment {id, text}
 - update {id, status?: todo|doing|waiting|undecided|done|dropped}

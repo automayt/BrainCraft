@@ -284,7 +284,7 @@ export class AccountBoards {
             })
           room.data.owner = b.owner
         }
-        room.onChange?.()
+        room.onChange?.(false)
         this.index(room)
         return json(res, 200, this.describe(room, this.level(me, room.data))), true
       }

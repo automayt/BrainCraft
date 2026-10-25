@@ -345,6 +345,16 @@ shares live exactly like a board.
     from the words, "Not booked" red and "Booked" green; or name one of grey,
     blue, green, yellow, orange, red, purple: `{{status Ideas purple}}`),
     `{{countdown 2026-12-20}}` "63 days to go", `{{today}}` today's date.
+  - `{{button "New meeting note" template="Meeting template"}}` a template
+    button: a new page from the template page, under this one (`under="Page"`
+    puts it elsewhere; `title="Notes [today]"` names it, with `[today]` and
+    `[me]` filled in). `into="here"` adds the template's words below the
+    button instead. In the template, `{{today}}`, `{{date}}` and `{{me}}`
+    become the day and your name.
+  - `{{synced "Help desk"}}` … `{{/synced}}` a synced section: words kept on
+    one page and shown on every page that has the line `{{synced "Help
+    desk"}}`. **Edit** it on any of them and **Save everywhere** changes it
+    on all of them. Search and exports include it on each page.
   - The trip, move and party templates use them: open tasks on the home page,
     a countdown to fill in, a status column for bookings.
 - **Templates:** Your boards has a row of wikis to start from: blank, a trip,
@@ -424,6 +434,27 @@ shares live exactly like a board.
   written in the same Markdown as wiki pages (read as formatted text; tick
   checklist items as you read, **Edit the page** to change it). Cards with a
   page show ≡. Choices get colours; new ones are added as you type them.
+- **Fields that work things out.** Add a field (the **+** at the end of a
+  table's header) of one of these types:
+  - **Formula:** worked out from the record's other fields, for example
+    `{Price} * {Qty}`, `if({Done}, "✓", daysUntil({Due}) + " days")` or
+    `round({Hours} / 8, 1)`. The settings show the result for the first
+    record as you type, and say what's wrong with a formula that won't work.
+  - **Relation:** links each record to records of another database on the
+    board (or the same one): pick them from a list in the cell.
+  - **Rollup:** sums up what a relation links to: how many, the sum,
+    average, earliest or latest of one of their fields, or how much is done.
+  Formulas and rollups are read-only and update as their sources change.
+- **⚡ Automations:** "when a record is added", or "when Status becomes Done",
+  set fields of that record: a status, a person, today's date. Written as
+  sentences, and run on every change from then on, by anyone.
+- **Forms:** a **Form** view asks the database's fields as questions, and
+  each answer becomes a record (automations run on it). **Edit the form**
+  sets its title, the words above the questions, which fields it asks and
+  which need an answer. On a live board, tick **Anyone with the link can
+  answer** and **Copy link** for a page with just the form, for people who
+  never open the board. They see the questions, never the records. With
+  accounts on, they sign in first.
 - **Convert to linked data** (right-click) turns an existing table, Kanban
   board or timeline into a dataset, guessing each column's type.
 - AI assistants can create and update databases by field name (see the
@@ -575,6 +606,11 @@ shares live exactly like a board.
   from the provider. A built-in pretend provider lets you try it all locally.
 - An **activity log** shows admins what changed, who signed in, and who opened
   what, and notices if its file was edited by hand.
+- **Usage** (Admin…): people active today, this week and this month, changes,
+  assistant and speech-to-text requests, form answers and exports, day by
+  day for a week up to a year (and as CSV). It also shows which features
+  boards use, counted from what's on them, and what the boards and their
+  files take up on disk. Only numbers are kept, never what anyone wrote.
 - **Your own name for the app:** **Admin… → Branding** renames it for
   everyone on the server: the browser tab, the top of the app, the sign-in
   screen. (Without accounts, `BRAINCRAFT_APP_NAME`.)

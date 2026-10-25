@@ -19,7 +19,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { can, permissionsOf } from './access'
 import { type Actor, AUDIT_KINDS, type AuditInput, type AuditKind, AuditLog, type AuditTarget, changesOf, changeText } from './audit'
-import { AccountStore, checkPassword, cleanAppName, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
+import { AccountStore, checkPassword, cleanAppName, cleanNotice, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
 import { type AccountRole, type Group, PERMISSIONS, type Permission, publicUser, type User } from './types'
 
 export const COOKIE = 'braincraft_session'
@@ -205,6 +205,7 @@ export class Accounts {
       ...(this.sso ? { sso: { label: this.sso.label } } : {}),
       user: u ? publicUser(u) : null,
       permissions: [...this.permissions(u)],
+      ...(u && this.store.settings.notice ? { notice: this.store.settings.notice } : {}),
     }
   }
 
@@ -216,7 +217,7 @@ export class Accounts {
   }
 
   private meFor(u: User) {
-    return { accounts: true, setup: this.needsSetup, ...(this.sso ? { sso: { label: this.sso.label } } : {}), user: publicUser(u), permissions: [...this.permissions(u)] }
+    return { accounts: true, setup: this.needsSetup, ...(this.sso ? { sso: { label: this.sso.label } } : {}), user: publicUser(u), permissions: [...this.permissions(u)], ...(this.store.settings.notice ? { notice: this.store.settings.notice } : {}) }
   }
 
   // ----- single sign-on --------------------------------------------------------------------------------
@@ -426,15 +427,30 @@ export class Accounts {
     const admins = () => s.users.filter((u) => u.role === 'admin' && !u.disabled)
 
     if (p[0] === 'settings' && !p[1]) {
-      const shown = () => ({ appName: s.settings.appName ?? '', defaultName: this.o.appName ?? DEFAULT_APP_NAME })
+      const shown = () => ({ appName: s.settings.appName ?? '', defaultName: this.o.appName ?? DEFAULT_APP_NAME, notice: s.settings.notice ?? '' })
       if (m === 'GET') return json(res, 200, shown())
       if (m === 'PUT') {
         const b = await read()
         if (b.appName !== undefined && typeof b.appName !== 'string') return json(res, 400, { error: 'The name must be text' })
+        if (b.notice !== undefined && typeof b.notice !== 'string') return json(res, 400, { error: 'The announcement must be text' })
         const before = this.appName()
-        const name = cleanAppName(b.appName)
-        if (name) s.settings.appName = name
-        else delete s.settings.appName
+        if ('appName' in b) {
+          const name = cleanAppName(b.appName)
+          if (name) s.settings.appName = name
+          else delete s.settings.appName
+        }
+        if ('notice' in b) {
+          const was = s.settings.notice
+          const notice = cleanNotice(b.notice)
+          if (notice) s.settings.notice = notice
+          else delete s.settings.notice
+          if (notice !== was)
+            this.log(req, me, {
+              action: 'settings.change',
+              changes: { notice: [was ?? '', notice ?? ''] },
+              text: notice ? `${me.name} set the announcement: “${notice}”` : `${me.name} took the announcement down`,
+            })
+        }
         s.saveSettings()
         const after = this.appName()
         if (after !== before)

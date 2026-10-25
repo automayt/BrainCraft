@@ -4,8 +4,9 @@ import { Dialog, timeAgo } from '../Boards'
 import { copyText } from '../copyText'
 import { useWorkspace } from '../useWorkspace'
 import { appName } from '../../store/brand'
+import { UsagePanel } from './UsagePanel'
 
-type Tab = 'people' | 'groups' | 'boards' | 'activity' | 'signin' | 'branding'
+type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'notice' | 'signin' | 'branding'
 
 /**
  * Admins: people (add, role, groups, turn off, password links), groups (what their members may
@@ -35,7 +36,9 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
     ['people', 'People'],
     ['groups', 'Groups'],
     ['boards', 'Boards without an owner'],
+    ['usage', 'Usage'],
     ['activity', 'Activity'],
+    ['notice', 'Announcement'],
     ['signin', 'Sign-in'],
     ['branding', 'Branding'],
   ]
@@ -75,8 +78,12 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
           <Groups data={data} run={run} api={api} />
         ) : tab === 'boards' ? (
           <Unowned data={data} />
+        ) : tab === 'usage' ? (
+          <UsagePanel />
         ) : tab === 'activity' ? (
           <Activity />
+        ) : tab === 'notice' ? (
+          <Announcement />
         ) : tab === 'branding' ? (
           <Branding />
         ) : (
@@ -84,6 +91,62 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Dialog>
+  )
+}
+
+/** A line every signed-in person sees at the top of the app, until they close it. */
+function Announcement() {
+  const ws = useWorkspace()
+  const [saved, setSaved] = useState<string | null>(null)
+  const [text, setText] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void call<{ notice: string }>(ws.server!, 'api/admin/settings').then(
+      (r) => {
+        setSaved(r.notice)
+        setText(r.notice)
+      },
+      (e: Error) => setMsg(e.message),
+    )
+  }, [ws.server])
+  const save = async (e?: FormEvent, value = text) => {
+    e?.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = await call<{ notice: string }>(ws.server!, 'api/admin/settings', 'PUT', { notice: value })
+      setSaved(r.notice)
+      setText(r.notice)
+      ws.setNotice(r.notice)
+      ws.editor.setStatus(r.notice ? 'Announcement shown to everyone' : 'Announcement taken down')
+    } catch (err) {
+      setMsg((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (saved === null) return msg ? <p className="signin-error">{msg}</p> : <p className="muted">Loading…</p>
+  return (
+    <form className="admin-branding" onSubmit={save}>
+      <p className="muted">One line at the top of the app for everyone signed in: planned maintenance, a new feature, a deadline. Each person sees it until they close it; a changed announcement shows again.</p>
+      <label>
+        Announcement
+        <textarea rows={2} maxLength={300} value={text} placeholder="The server restarts at 6pm on Friday for an update." onChange={(e) => setText(e.target.value)} />
+      </label>
+      {msg && <p className="signin-error">{msg}</p>}
+      <div className="account-actions">
+        {saved && (
+          <button type="button" disabled={busy} onClick={() => void save(undefined, '')}>
+            Take it down
+          </button>
+        )}
+        <span className="spacer" />
+        <button className="primary" disabled={busy || text.trim() === saved}>
+          {busy ? 'Saving…' : saved ? 'Change it' : 'Show it'}
+        </button>
+      </div>
+    </form>
   )
 }
 

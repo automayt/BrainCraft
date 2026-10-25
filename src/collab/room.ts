@@ -77,7 +77,8 @@ export class Room {
   data: RoomData
   readonly members = new Map<string, Member>()
   /** Called after every change, for saving. */
-  onChange: (() => void) | null = null
+  /** After every change; `edited` when the board itself changed (not just who's here). */
+  onChange: ((edited: boolean) => void) | null = null
   private measure: Measure
 
   constructor(data: RoomData, measure: Measure) {
@@ -232,7 +233,7 @@ export class Room {
 
   private changed(touch = true) {
     if (touch) this.data.updated = Date.now()
-    this.onChange?.()
+    this.onChange?.(touch)
   }
 }
 

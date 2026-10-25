@@ -29,6 +29,8 @@ export interface AccountInfo {
   sso?: { label: string }
   user: AccountUser | null
   permissions: Permission[]
+  /** An admin's announcement for everyone signed in. */
+  notice?: string
 }
 
 export interface ServerBoard {
