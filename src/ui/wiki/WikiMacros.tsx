@@ -1,5 +1,6 @@
 /** The macros that look at the rest of the wiki: a page tree, open tasks, recent changes, another page shown here. */
 
+import { findSynced, syncedPages } from '../../model/synced'
 import { buttonPlan } from '../../model/pageButtons'
 import { type ReactNode, useMemo, useState } from 'react'
 import { type Block, headings, inlineText, parseMarkdown, taskIsFor, taskItems, tasksFor } from '../../model/markdown'
@@ -35,11 +36,100 @@ export function WikiMacro({ block, page, actions, inside = false }: { block: Mac
       return <RecentMacro count={Number(block.args.pos[0]) || 5} />
     case 'button':
       return <TemplateButton block={block} page={page} />
+    case 'synced':
+      return <SyncedSection block={block} page={page} actions={actions} />
     case 'include':
       return inside ? <p className="md-macro-note muted">(A page shown inside another isn’t shown again here.)</p> : <IncludeMacro name={argText(block.args) || block.args.named.page || ''} page={page} actions={actions} />
     default:
       return null
   }
+}
+
+/**
+ * A synced section: its words, from the page that holds it, with Edit (the change goes to that
+ * page, so every page showing it follows) and a way to show it on another page.
+ */
+function SyncedSection({ block, page, actions }: { block: MacroBlock; page: Page; actions: MarkdownActions }) {
+  const editor = useEditor()
+  const [draft, setDraft] = useState<string | null>(null)
+  const name = argText(block.args) || block.args.named.name || ''
+  const src = findSynced(editor.board, name)
+  const holder = src ? W.getPage(editor.board, src.page) : undefined
+  // Line numbers as they are in the holding page, so ticking a box ticks it there.
+  const blocks = useMemo(() => (src ? parseMarkdown(src.text, src.open + 1) : []), [src?.text, src?.open])
+  if (!name) return <p className="md-macro-bad">{'{{synced "Name"}}'}: which section?</p>
+  if (!src || !holder)
+    return (
+      <p className="md-macro-bad">
+        No synced section called “{name}” yet: write its words between {`{{synced "${name}"}}`} and {'{{/synced}}'} on the page that should hold it.
+      </p>
+    )
+  const pages = syncedPages(editor.board, name).length
+  const here = holder.id === page.id
+  const inner: MarkdownActions = {
+    ...actions,
+    headings: headings(blocks),
+    copyHeading: undefined,
+    toggle: actions.toggle && ((line) => editor.tickTask(holder.id, line)),
+    macro: (b) => <WikiMacro block={b} page={holder} actions={actions} inside />,
+  }
+  return (
+    <section className="md-synced" aria-label={`Synced section ${name}`}>
+      <header className="md-synced-head">
+        <span title="The same words on every page that shows this section">⇄ Synced · {name}</span>
+        <span className="muted">
+          {pages > 1 ? `on ${pages} pages` : 'on this page only so far'}
+          {!here && (
+            <>
+              {' · held on '}
+              <button className="link" onClick={() => editor.openPage(holder.id)}>
+                {holder.title || 'Untitled'}
+              </button>
+            </>
+          )}
+        </span>
+        <span className="md-synced-actions">
+          {!editor.readOnly && draft === null && (
+            <button className="link" onClick={() => setDraft(src.text)}>
+              Edit
+            </button>
+          )}
+          <button
+            className="link"
+            title="Copies the line that shows this section, to paste on another page"
+            onClick={() =>
+              navigator.clipboard
+                ?.writeText(`{{synced "${name}"}}`)
+                .then(() => editor.setStatus('Copied: paste it on a line of its own in another page to show this section there'))
+                .catch(() => editor.setStatus('Clipboard unavailable'))
+            }
+          >
+            Show on another page
+          </button>
+        </span>
+      </header>
+      {draft !== null ? (
+        <div className="md-synced-edit">
+          <textarea className="outline-text" aria-label={`Words of the synced section ${name}`} autoFocus value={draft} rows={Math.min(20, Math.max(5, draft.split('\n').length + 1))} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+          <div className="embed-edit-actions">
+            <button
+              className="primary"
+              onClick={() => {
+                editor.setSyncedSection(name, draft)
+                setDraft(null)
+              }}
+            >
+              Save everywhere
+            </button>
+            <button onClick={() => setDraft(null)}>Cancel</button>
+            <small className="muted">Changes it on {pages > 1 ? `all ${pages} pages` : 'every page that shows it'}</small>
+          </div>
+        </div>
+      ) : (
+        <Markdown blocks={blocks} actions={inner} />
+      )}
+    </section>
+  )
 }
 
 /** A template button: a new page from a template page, or its words added below. */

@@ -6,6 +6,7 @@
 
 import { emptyBoard } from './board'
 import { expandTextEmbeds } from './embedText'
+import { expandSynced } from './synced'
 import { plainMarkdown } from './markdown'
 import type { Board, Page, PageBody } from './types'
 import { uid } from './uid'
@@ -367,7 +368,7 @@ export function plainText(b: Board, id: string): string {
   if (!body) return ''
   const hit = plainBodies.get(body)
   if (hit && hit.snaps === b.snaps) return hit.text
-  const text = plainMarkdown(expandTextEmbeds(b, body.text))
+  const text = plainMarkdown(expandSynced(b, expandTextEmbeds(b, body.text)))
   plainBodies.set(body, { snaps: b.snaps, text })
   return text
 }

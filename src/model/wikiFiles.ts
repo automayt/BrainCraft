@@ -6,6 +6,7 @@
  */
 
 import { expandTextEmbeds } from './embedText'
+import { expandSynced } from './synced'
 import { type LinkTarget, parseNote } from './notes'
 import type { Board } from './types'
 import { BODY_MAX, getPage, pageText, pageTree, type PageNode } from './wiki'
@@ -17,7 +18,7 @@ export type WebLink = (to: LinkTarget) => string | null
 /** One page's words as plain Markdown, with its title as the first heading. */
 export function pageMarkdown(b: Board, id: string, webLink: WebLink): string {
   const page = getPage(b, id)
-  const text = expandTextEmbeds(b, pageText(b, id))
+  const text = expandSynced(b, expandTextEmbeds(b, pageText(b, id)))
   let out = ''
   for (const part of parseNote(text)) {
     if ('text' in part) out += part.text

@@ -7,6 +7,7 @@
  */
 
 import { expandTextEmbeds } from './embedText'
+import { expandSynced } from './synced'
 import { type Block, type Inline, headings, macroText, parseMarkdown, taskIsFor, taskItems, tasksFor } from './markdown'
 import { argText, countdown, parseDay, statusLook } from './macros'
 import type { LinkTarget } from './notes'
@@ -156,6 +157,9 @@ function macroBlock(b: Extract<Block, { t: 'macro' }>, x: Ctx): string {
         ? `<ul>${changes.map(({ rev }) => `<li>${pageLink(rev.page, x)} · ${esc(new Date(rev.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}${rev.by ? ` · ${esc(rev.by)}` : ''}${rev.note ? ` · ${esc(rev.note)}` : ''}</li>`).join('')}</ul>`
         : ''
     }
+    case 'synced':
+      // The page holding a synced section shows its words (pages that only name it had them written in).
+      return b.children ? `<div class="synced">${blocks(b.children, x)}</div>` : ''
     case 'include': {
       const name = argText(b.args) || b.args.named.page || ''
       const p = pageByTitle(x.b, name) ?? getPage(x.b, name)
@@ -284,7 +288,7 @@ export function wikiHtml(b: Board, o: WikiHtmlOptions = {}): string {
       return `<section class="page" id="${pageAnchor(p.id)}">
 ${path.length ? `<p class="page-path">${path.map((q) => pageLink(q.id, x(p.id))).join(' › ')}</p>` : ''}
 <h1>${esc(`${p.icon ? `${p.icon} ` : ''}${p.title || 'Untitled'}`)}</h1>
-${blocks(dropTitle(parseMarkdown(expandTextEmbeds(b, getBody(b, p.id)?.text ?? '')), p.title), x(p.id))}
+${blocks(dropTitle(parseMarkdown(expandSynced(b, expandTextEmbeds(b, getBody(b, p.id)?.text ?? ''))), p.title), x(p.id))}
 </section>`
     })
     .join('\n')

@@ -19,6 +19,7 @@ import { applyOutline, rootOf as mapRoot } from '../model/outlineSync'
 import { type Problem, fixAll, fixProblem } from '../model/boardCheck'
 import { runAutomations } from '../model/automations'
 import { type ButtonPlan, newTitle, stamp } from '../model/pageButtons'
+import { withSynced } from '../model/synced'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
@@ -833,6 +834,18 @@ export class Editor {
       (this.board.pages ?? []).filter((p) => RV.unsavedChanges(this.board, p.id)).map((p) => p.id),
       { at: Date.now(), by: this.author.trim() || undefined, note },
     )
+  }
+
+  /** Changes a synced section's words in the page that holds it (every page showing it follows). */
+  setSyncedSection(name: string, words: string): boolean {
+    if (this.readOnly) return false
+    const next = withSynced(this.board, name, words)
+    if (!next) return false
+    if (next.text === W.pageText(this.board, next.page)) return true
+    this.saveVersions([next.page])
+    this.setPageText(next.page, next.text)
+    this.saveVersions([next.page], { at: Date.now(), by: this.author.trim() || undefined, quick: true, note: `Changed the synced section “${name}”` })
+    return true
   }
 
   /** Replaces one line of a page while reading (switching an embed between picture and text), as a small version. */
