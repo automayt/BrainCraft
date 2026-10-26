@@ -211,6 +211,11 @@ These become interactive once selected; drag them by their title strip.
   *undecided*, *done* or *dropped*. Select objects and pick a status from the
   toolbar, or press **Ctrl+K** and type "mark as". Each status has its own
   colour and icon on the object; dropped ones fade.
+- **Done in one key:** select anything (a sticky, a shape, an idea, a
+  flowchart step, a comment block) and press **Ctrl+Enter**. Its words are
+  crossed out and it goes quieter, so finished things read as finished at a
+  glance. Press it again to undo that. It's also **Mark done** on the
+  right-click menu.
 - **Mind maps count progress**: an idea with marked ideas under it shows how
   many of them are done ("3/7"), turning green when they all are.
 - **The status key** along the bottom counts each status on the board. Click

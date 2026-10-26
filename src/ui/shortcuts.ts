@@ -31,6 +31,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Type', 'With one object selected, typing replaces its text (? and Shift P type too: press Esc first)'],
       ['Right-click · Shift F10', 'Actions for whatever is under the pointer (or the selection)'],
       ['Alt C', 'Comments on the selected object'],
+      ['Ctrl Enter', 'Mark the selection done: its words are crossed out (again: not done)'],
       ['🔗 Link (selection toolbar)', 'Make the object lead to a wiki page, a board, an object or a web address; click its badge to follow'],
       ['Ctrl Z / Ctrl Shift Z · Ctrl Y', 'Undo / redo'],
       ['Ctrl C / X / V / D', 'Copy, cut, paste, duplicate'],

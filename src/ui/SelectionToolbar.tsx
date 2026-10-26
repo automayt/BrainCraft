@@ -549,6 +549,7 @@ function StatusMenu() {
               >
                 <StatusDot status={st.id} />
                 {st.label}
+                {st.id === 'done' && <kbd>Ctrl Enter</kbd>}
               </button>
             ))}
             {marked.some((i) => i.status) && (

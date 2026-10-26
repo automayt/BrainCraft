@@ -509,11 +509,12 @@ export const BoardView = memo(function BoardView({
     ) : (
       <ItemShape key={i.id} item={i} depth={depth} editing={editingId === i.id} live={selection.size === 1 && selection.has(i.id) && editingId === null} deps={depsOf(board, i)} />
     )
-  // Dropped objects fade; with a status filter, so does everything else.
+  // Done objects are crossed out, dropped ones fade; with a status filter, everything else fades.
   const shape = (i: Item, depth: number) => {
-    const fade = statusFilter && i.kind !== 'frame' ? i.status !== statusFilter && !selection.has(i.id) : i.status === 'dropped'
-    return fade ? (
-      <g key={i.id} className={statusFilter ? 'filtered-out' : 'status-dropped'}>
+    const out = statusFilter && i.kind !== 'frame' && i.status !== statusFilter && !selection.has(i.id)
+    const look = [out && 'filtered-out', i.status === 'done' && 'status-done', !statusFilter && i.status === 'dropped' && 'status-dropped'].filter(Boolean).join(' ')
+    return look ? (
+      <g key={i.id} className={look}>
         {drawn(i, depth)}
       </g>
     ) : (

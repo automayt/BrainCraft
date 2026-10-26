@@ -1272,3 +1272,29 @@ describe('Flowstate', () => {
     expect(e.flow).toBe(false)
   })
 })
+
+describe('marking done', () => {
+  it('ticks the selection off with Ctrl Enter, and back again, skipping what can’t have a status', () => {
+    let b = emptyBoard()
+    let a: number, c: number, f: number
+    ;[b, a] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }))
+    ;[b, c] = B.addItem(b, B.newItem('rect', { x: 200, y: 0, w: 100, h: 100 }))
+    ;[b, f] = B.addItem(b, B.newItem('frame', { x: 0, y: 300, w: 100, h: 100 }))
+    const e = new Editor(b, fakeMeasure)
+    e.select([a, c, f])
+    expect(e.keyDown('Enter', { ctrl: true, shift: false, alt: false })).toBe(true)
+    expect([a, c, f].map((id) => B.getItem(e.board, id)!.status)).toEqual(['done', 'done', undefined])
+    // Some done, some not: all done.
+    e.markStatus(null)
+    e.select([a])
+    e.toggleDone()
+    e.select([a, c])
+    e.toggleDone()
+    expect([a, c].map((id) => B.getItem(e.board, id)!.status)).toEqual(['done', 'done'])
+    // All done: not done any more.
+    e.keyDown('Enter', { ctrl: true, shift: false, alt: false })
+    expect([a, c].map((id) => B.getItem(e.board, id)!.status)).toEqual([undefined, undefined])
+    e.undo()
+    expect(B.getItem(e.board, a)!.status).toBe('done')
+  })
+})

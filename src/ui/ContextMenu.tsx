@@ -9,6 +9,7 @@ import { canSketch } from '../model/sketch'
 import { sketchIt } from './excalidraw/sketchIt'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
+import { canHaveStatus } from '../model/status'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
@@ -143,6 +144,9 @@ export function ContextMenu() {
           ]
         : []),
       ...(hasSketch(editor) ? [{ label: 'Turn sketch into a board (AI)', run: () => void sketchToBoard(editor) }] : []),
+      ...(editor.selectedItems.some((i) => canHaveStatus(i.kind))
+        ? [{ label: editor.selectedItems.filter((i) => canHaveStatus(i.kind)).every((i) => i.status === 'done') ? 'Not done' : 'Mark done', keys: 'Ctrl Enter', run: () => editor.toggleDone() }]
+        : []),
       editor.selectedItems.every((i) => i.locked)
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },

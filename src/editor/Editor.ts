@@ -2382,6 +2382,16 @@ export class Editor {
     this.setStatus(info ? `Marked ${ids.length === 1 ? 'as' : `${ids.length} objects as`} ${info.label.toLowerCase()}` : 'Status cleared')
   }
 
+  /** Ticks the selection off (or, when it's all done already, unticks it): Ctrl Enter. */
+  toggleDone() {
+    const marked = this.selectedItems.filter((i) => ST.canHaveStatus(i.kind))
+    if (!marked.length) return
+    if (marked.every((i) => i.status === 'done')) {
+      this.edit((b) => ST.setStatus(b, marked.map((i) => i.id), null))
+      this.setStatus(marked.length === 1 ? 'Not done any more' : `${marked.length} objects not done any more`)
+    } else this.markStatus('done')
+  }
+
   /** Dims everything without this status; the same status again (or null) shows everything. */
   setStatusFilter(status: Status | null) {
     this.statusFilter = status === this.statusFilter ? null : status
@@ -3180,6 +3190,7 @@ export class Editor {
         })
       }
       else if (k === 'k' || k === 'f') this.setSearchOpen(true)
+      else if (k === 'Enter' && this.selection.size) this.toggleDone()
       else return false
       return true
     }

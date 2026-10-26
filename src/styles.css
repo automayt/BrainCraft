@@ -11604,3 +11604,20 @@ button.on,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Done: crossed out and quieter, whatever the object, so it reads as finished at a glance. */
+.status-done .item-text,
+.status-done .mind-text,
+.status-done .comment-body {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-skip-ink: none;
+}
+
+.status-done {
+  opacity: 0.6;
+}
+
+.status-menu kbd {
+  margin-left: auto;
+}
