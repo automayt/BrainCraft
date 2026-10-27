@@ -31,6 +31,8 @@ export interface AccountInfo {
   permissions: Permission[]
   /** An admin's announcement for everyone signed in. */
   notice?: string
+  /** The server keeps backups, so deleted boards can be put back (from /api/health). */
+  backups?: boolean
 }
 
 export interface ServerBoard {
@@ -141,9 +143,9 @@ export async function call<T = Record<string, unknown>>(server: string, path: st
 export async function fetchAccount(server: string | null): Promise<AccountInfo | null> {
   if (!server) return null
   try {
-    const health = await fetch(join(server, 'api/health')).then((r) => r.json() as Promise<{ accounts?: boolean }>)
+    const health = await fetch(join(server, 'api/health')).then((r) => r.json() as Promise<{ accounts?: boolean; backups?: boolean }>)
     if (!health.accounts) return null
-    return await call<AccountInfo>(server, 'api/auth/me')
+    return { ...(await call<AccountInfo>(server, 'api/auth/me')), backups: !!health.backups }
   } catch {
     return null
   }

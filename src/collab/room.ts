@@ -11,7 +11,7 @@ import type { Measure } from '../model/mindmap'
 import { layoutAll } from '../model/mindmap'
 import type { Board } from '../model/types'
 import { MAX_PAGES, MAX_SNAPS, WIKI_TEXT_MAX } from '../model/wiki'
-import { MAX_REVS, REV_TEXT_BUDGET } from '../model/revisions'
+import { MAX_REVS, REV_TEXT_BUDGET, pruneRevs } from '../model/revisions'
 import { type Patch, applyPatches, diff } from './patch'
 import { type ClientMessage, ID_BLOCK, type PeerInfo, type Presence, type Role, type ServerMessage, type Signal } from './protocol'
 
@@ -223,6 +223,32 @@ export class Room {
     }
     if (patches.length) this.applyServerPatches(patches, after)
     return results
+  }
+
+  /**
+   * Puts the board back to an earlier version, for everyone in the session. Wiki page versions and
+   * time logged are a record of what happened, so the ones since stay (alongside the version's own).
+   */
+  restore(board: Board, who: { manages?: boolean } = {}) {
+    const before = this.data.board
+    const had = new Set((board.revs ?? []).map((r) => r.id))
+    const revs = [...(board.revs ?? []), ...(before.revs ?? []).filter((r) => !had.has(r.id))].sort((a, z) => a.at - z.at)
+    const { time: _then, ...rest } = board
+    const merged = pruneRevs({
+      ...rest,
+      ...(revs.length ? { revs } : {}),
+      ...(before.time?.length ? { time: before.time } : {}),
+      // Ids handed out since stay taken.
+      nextId: Math.max(before.nextId, board.nextId),
+    })
+    const after = layoutAll(merged, this.measure)
+    const patches = diff(before, after)
+    if (who.manages === false && before.kind === 'wiki') {
+      const why = protectedChange(before, patches)
+      if (why) throw new OpError(why)
+    }
+    if (patches.length) this.applyServerPatches(patches, after)
+    else this.data.board = after
   }
 
   private applyServerPatches(patches: Patch[], after: Board) {

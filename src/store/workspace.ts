@@ -1002,7 +1002,8 @@ export class Workspace {
     // Signed in from a shared form's link: back to the form.
     const back = info.user ? takeReturn() : null
     if (back) return void location.assign(back)
-    this.account = info
+    // What the server said about itself before signing in (backups) carries over.
+    this.account = { ...(this.account?.backups !== undefined ? { backups: this.account.backups } : {}), ...info }
     if (info.user) {
       this.editor.setAuthor(info.user.name, info.user.id)
       this.live?.setMe(this.me)

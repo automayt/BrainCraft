@@ -6,7 +6,9 @@ import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import { isWiki, pageOrder, pagePath } from '../model/wiki'
-import { type BoardMeta, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
+import { type BoardMeta, type LiveInfo, type ThumbRect, thumbnail, type VersionMeta } from '../store/library'
+import { type DeletedBoard, deletedBoards, readServerVersion, restoreDeleted, restoreServerVersion, saveServerVersion, type ServerVersion, serverVersions, versionLabel } from '../store/serverBackups'
+import type { Board } from '../model/types'
 import { darken } from './BoardView'
 import { ink, mindRootFill } from './paint'
 import { useEditor } from './useEditor'
@@ -137,6 +139,8 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                 ))}
               {!ws.serverBoards.length && <li className="muted">Nothing here yet. New boards you make go to the server.</li>}
             </ul>
+            {ws.account.backups && <RecentlyDeleted />}
+
             <h3 className="templates-title">In this browser</h3>
           </section>
         )}
@@ -336,10 +340,82 @@ function BoardCard(p: {
   )
 }
 
+/** Boards deleted from the server in the last 90 days that you managed (admins: all), to put back. */
+function RecentlyDeleted() {
+  const ws = useWorkspace()
+  const [boards, setBoards] = useState<DeletedBoard[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const load = () =>
+    void deletedBoards(ws.server!).then(
+      (b) => (setBoards(b), setError(null)),
+      (err: Error) => setError(err.message),
+    )
+  return (
+    <details className="recently-deleted" onToggle={(e) => e.currentTarget.open && !boards && load()}>
+      <summary>Recently deleted</summary>
+      {error && <p className="signin-error">{error}</p>}
+      {boards && !boards.length && <p className="muted">Nothing deleted in the last 90 days that you could put back.</p>}
+      {!!boards?.length && (
+        <ul className="access-list">
+          {boards.map((b) => (
+            <li key={b.id}>
+              <span>
+                {b.kind === 'wiki' ? '📘 ' : ''}
+                {b.title || 'Untitled'}
+                <small className="muted">
+                  {' '}
+                  deleted {timeAgo(b.deleted)}
+                  {b.by ? ` by ${b.by}` : ''}
+                  {b.owner && b.owner.id !== ws.account?.user?.id ? ` · ${b.owner.name}’s` : ''}
+                </small>
+              </span>
+              <button
+                onClick={async () => {
+                  try {
+                    const back = await restoreDeleted(ws.server!, b.id)
+                    ws.editor.setStatus(`Put back “${back.title || 'Untitled'}”`)
+                    setBoards((all) => all?.filter((x) => x.id !== b.id) ?? null)
+                    await ws.loadServerBoards()
+                  } catch (err) {
+                    setError((err as Error).message)
+                  }
+                }}
+              >
+                Put back
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  )
+}
+
 // ----- version history ---------------------------------------------------------------
+
+/** What a version preview shows: a miniature of a board, or a wiki's pages. */
+function previewOf(b: Board) {
+  return { thumb: thumbnail(b), ...(isWiki(b) ? { pages: pageOrder(b).map((p) => `${'  '.repeat(pagePath(b, p.id).length - 1)}${p.icon ?? '📄'} ${p.title || 'Untitled'}`) } : {}) }
+}
+
+function PreviewBody({ preview }: { preview: ReturnType<typeof previewOf> }) {
+  return preview.pages ? (
+    <ul className="version-pages">
+      {preview.pages.slice(0, 60).map((p, n) => (
+        <li key={n}>{p}</li>
+      ))}
+      {preview.pages.length > 60 && <li className="muted">and {preview.pages.length - 60} more</li>}
+    </ul>
+  ) : (
+    <Thumb {...preview.thumb} />
+  )
+}
 
 export function VersionsDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
+  const live = ws.liveInfo
+  // A board on a server has the server's backups too: shared, and safe from a cleared browser.
+  const [source, setSource] = useState<'server' | 'browser'>(live ? 'server' : 'browser')
   const [versions, setVersions] = useState<VersionMeta[] | null>(null)
   const [name, setName] = useState('')
   const [preview, setPreview] = useState<{ v: VersionMeta; thumb: ReturnType<typeof thumbnail>; pages?: string[] } | null>(null)
@@ -349,7 +425,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
   const show = async (v: VersionMeta) => {
     const b = await ws.previewVersion(v)
     // A wiki has no drawing to show: its pages instead.
-    if (b) setPreview({ v, thumb: thumbnail(b), ...(isWiki(b) ? { pages: pageOrder(b).map((p) => `${'  '.repeat(pagePath(b, p.id).length - 1)}${p.icon ?? '📄'} ${p.title || 'Untitled'}`) } : {}) })
+    if (b) setPreview({ v, ...previewOf(b) })
   }
 
   return (
@@ -360,6 +436,24 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
           ×
         </button>
       </header>
+      {live && (
+        <div className="admin-tabs versions-source" role="tablist" aria-label="Where the versions are kept">
+          {(
+            [
+              ['server', 'On the server'],
+              ['browser', 'In this browser'],
+            ] as const
+          ).map(([s, label]) => (
+            <button key={s} role="tab" aria-selected={source === s} className={source === s ? 'on' : ''} onClick={() => setSource(s)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {live && source === 'server' ? (
+        <ServerVersions live={live} onClose={onClose} />
+      ) : (
+      <>
       <form
         className="version-save"
         onSubmit={async (e) => {
@@ -395,16 +489,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
         <div className="version-preview">
           {preview ? (
             <>
-              {preview.pages ? (
-                <ul className="version-pages">
-                  {preview.pages.slice(0, 60).map((p, n) => (
-                    <li key={n}>{p}</li>
-                  ))}
-                  {preview.pages.length > 60 && <li className="muted">and {preview.pages.length - 60} more</li>}
-                </ul>
-              ) : (
-                <Thumb {...preview.thumb} />
-              )}
+              <PreviewBody preview={preview} />
               <div className="version-preview-foot">
                 <span>
                   <strong>{preview.v.title}</strong>
@@ -441,7 +526,121 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+      </>
+      )}
     </Dialog>
+  )
+}
+
+/**
+ * The server's versions of a live board: saved every hour it changes, before anyone puts an older
+ * one back, and whenever someone saves one. Putting one back changes the board for everyone.
+ */
+function ServerVersions({ live, onClose }: { live: LiveInfo; onClose: () => void }) {
+  const ws = useWorkspace()
+  const [versions, setVersions] = useState<ServerVersion[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [preview, setPreview] = useState<({ v: ServerVersion } & ReturnType<typeof previewOf>) | null>(null)
+  const canEdit = live.role === 'edit'
+  const reload = () =>
+    void serverVersions(live).then(
+      (v) => (setVersions(v), setError(null)),
+      (err: Error) => setError(err.message),
+    )
+  useEffect(reload, [live.server, live.id])
+  const when = (at: number) => new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+  const show = async (v: ServerVersion) => {
+    try {
+      setPreview({ v, ...previewOf(await readServerVersion(live, v.id)) })
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  return (
+    <>
+      {canEdit && (
+        <form
+          className="version-save"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            try {
+              const v = await saveServerVersion(live, name)
+              ws.editor.setStatus(v.note ? `Saved version “${v.note}” on the server` : 'Saved a version on the server')
+              setName('')
+              reload()
+            } catch (err) {
+              setError((err as Error).message)
+            }
+          }}
+        >
+          <input placeholder="Name this version, e.g. “Before the reorg”" aria-label="Name this version" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <button className="primary" type="submit">
+            Save version
+          </button>
+        </form>
+      )}
+      <p className="muted versions-wiki-note">
+        Everyone on this board sees these. The server saves one each hour the board changes, then keeps fewer as they age: one a day for a month, one a week
+        for six months.{isWiki(ws.editor.board) ? ' Restoring takes every page back; for one page, use its Page history.' : ''}
+      </p>
+      {error && (
+        <p className="signin-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="versions-body">
+        <ol className="version-list">
+          {versions?.map((v) => (
+            <li key={v.id} className={preview?.v.id === v.id ? 'on' : ''}>
+              <button className="version-pick" onClick={() => void show(v)}>
+                <strong>{versionLabel(v)}</strong>
+                <small>
+                  {when(v.at)} · {v.objects} {v.kind === 'wiki' ? (v.objects === 1 ? 'page' : 'pages') : v.objects === 1 ? 'object' : 'objects'}
+                  {v.note && v.by ? ` · ${v.by}` : ''}
+                </small>
+              </button>
+            </li>
+          ))}
+          {versions && !versions.length && <li className="muted empty">No versions yet. The server saves the first within the hour, or save one now.</li>}
+          {!versions && !error && <li className="muted empty">Loading…</li>}
+        </ol>
+        <div className="version-preview">
+          {preview ? (
+            <>
+              <PreviewBody preview={preview} />
+              <div className="version-preview-foot">
+                <span>
+                  <strong>{preview.v.title}</strong>
+                  <small className="muted"> · {timeAgo(preview.v.at)}</small>
+                </span>
+                {canEdit && (
+                  <button
+                    className="primary"
+                    onClick={async () => {
+                      if (!window.confirm(`Put the board back to how it was on ${when(preview.v.at)}? Everyone on it sees the change. The board as it is now is saved first, so you can come back to it.`)) return
+                      try {
+                        await restoreServerVersion(live, preview.v.id)
+                        ws.editor.setStatus(`Restored the version from ${when(preview.v.at)}. To undo, restore the one saved just before.`)
+                        onClose()
+                      } catch (err) {
+                        setError((err as Error).message)
+                      }
+                    }}
+                  >
+                    Restore this version
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="muted">Pick a version to preview it.</p>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 

@@ -182,7 +182,8 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
               <button
                 className="danger-quiet"
                 onClick={async () => {
-                  if (!window.confirm('Delete this board from the server for everyone? Copies in browsers stay, but nobody can open it live again.')) return
+                  const back = ws.account?.backups ? ' You or an admin can put it back from Your boards → Recently deleted for 90 days.' : ' Copies in browsers stay, but nobody can open it live again.'
+                  if (!window.confirm(`Delete this board from the server for everyone?${back}`)) return
                   try {
                     await call(ws.server!, `api/boards/${live.id}`, 'DELETE')
                     await ws.leaveLive()

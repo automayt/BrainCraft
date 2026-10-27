@@ -5,13 +5,14 @@ import { copyText } from '../copyText'
 import { useWorkspace } from '../useWorkspace'
 import { appName } from '../../store/brand'
 import { UsagePanel } from './UsagePanel'
+import { type BackupStatus, backupNow, backupStatus, sizeLabel } from '../../store/serverBackups'
 
-type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'notice' | 'signin' | 'branding'
+type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'backups' | 'notice' | 'signin' | 'branding'
 
 /**
  * Admins: people (add, role, groups, turn off, password links), groups (what their members may
  * do, who's in them, which sign-in provider groups map to them), boards waiting for an owner, the
- * activity log, how this server signs people in, and what the app is called here.
+ * activity log, backups, how this server signs people in, and what the app is called here.
  */
 export function AdminDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
@@ -38,6 +39,7 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
     ['boards', 'Boards without an owner'],
     ['usage', 'Usage'],
     ['activity', 'Activity'],
+    ['backups', 'Backups'],
     ['notice', 'Announcement'],
     ['signin', 'Sign-in'],
     ['branding', 'Branding'],
@@ -82,6 +84,8 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
           <UsagePanel />
         ) : tab === 'activity' ? (
           <Activity />
+        ) : tab === 'backups' ? (
+          <Backups />
         ) : tab === 'notice' ? (
           <Announcement />
         ) : tab === 'branding' ? (
@@ -91,6 +95,91 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Dialog>
+  )
+}
+
+/** Where the backups are, how they stand, backing up now, and the whole server as one download. */
+function Backups() {
+  const ws = useWorkspace()
+  const [status, setStatus] = useState<BackupStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  useEffect(() => void backupStatus(ws.server!).then(setStatus, (e: Error) => setError(e.message)), [ws.server])
+  if (error) return <p className="signin-error">{error}</p>
+  if (!status) return <p className="muted">Loading…</p>
+  const download = new URL('api/admin/backup', ws.server ?? location.href).href
+  const hours = Math.round(status.every / 60_000)
+  return (
+    <div className="admin-backups">
+      <p>
+        Every board and wiki that changes gets a saved version at most every {hours >= 60 && hours % 60 === 0 ? (hours === 60 ? 'hour' : `${hours / 60} hours`) : `${hours} minutes`}, and
+        always just before it’s deleted or put back to an earlier version. The newest two days are all kept, then one a day for a month, one a week for six
+        months and one a month for a year. People, groups and settings are copied once a day.
+      </p>
+      <dl className="backup-facts">
+        <dt>Kept in</dt>
+        <dd>
+          <code>{status.dir}</code>
+        </dd>
+        <dt>Boards and wikis</dt>
+        <dd>
+          {status.boards} with {status.versions} version{status.versions === 1 ? '' : 's'}
+          {status.deleted ? `, and ${status.deleted} deleted that can be put back` : ''}
+        </dd>
+        <dt>Daily copies of people and settings</dt>
+        <dd>{status.serverCopies}</dd>
+        <dt>Space used</dt>
+        <dd>{sizeLabel(status.bytes)}</dd>
+        <dt>Last checked</dt>
+        <dd>{status.lastPass ? timeAgo(status.lastPass) : 'not yet (the first round runs half a minute after the server starts)'}</dd>
+        {status.lastError && (
+          <>
+            <dt>Last problem</dt>
+            <dd className="signin-error">{status.lastError}</dd>
+          </>
+        )}
+      </dl>
+      {status.insideData && (
+        <p className="backup-warning" role="note">
+          These backups are in the same folder as the boards, so a failed disk would lose both. Set <code>BRAINCRAFT_BACKUP_DIR</code> to a folder on
+          another disk, or download everything regularly and keep it somewhere else.
+        </p>
+      )}
+      <div className="account-actions">
+        <button
+          className="primary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              const r = await backupNow(ws.server!)
+              setStatus(r)
+              setSaid(r.saved ? `Saved a version of ${r.saved} board${r.saved === 1 ? '' : 's'}.` : 'Every board was already backed up as it is.')
+            } catch (err) {
+              setError((err as Error).message)
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? 'Backing up…' : 'Back up every board now'}
+        </button>
+        <a className="button" href={download} download>
+          Download everything (.tar.gz)
+        </a>
+        {said && <span className="muted">{said}</span>}
+      </div>
+      <h3>Putting things back</h3>
+      <ul className="backup-help">
+        <li>One board or wiki: open it, then Version history (Ctrl+K “version”) → On the server.</li>
+        <li>A deleted board: Your boards → Recently deleted, for 90 days. Its owner can do this too.</li>
+        <li>
+          The whole server, on this machine or a new one: stop it, unpack the download into its data folder (<code>tar -xzf braincraft-backup-….tar.gz -C braincraft-data</code>),
+          and start it again.
+        </li>
+      </ul>
+    </div>
   )
 }
 

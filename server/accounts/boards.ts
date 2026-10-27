@@ -11,7 +11,10 @@
  *   GET    /api/boards/:id/people       the people who can open it, to @mention
  *   GET    /api/mentions                where you're @mentioned, across the boards you can open
  *   PUT    /api/boards/:id/access       change who has access, or the owner (manage)
- *   DELETE /api/boards/:id              delete it (manage)
+ *   DELETE /api/boards/:id              delete it (manage); it can be put back for 90 days
+ *   GET    /api/boards/:id/versions…    its saved versions, and putting one back (see backupRoutes.ts)
+ *   GET    /api/backups/deleted         deleted boards you could put back (ones you managed; admins: all)
+ *   POST   /api/backups/deleted/:id/restore   put one back
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -23,6 +26,8 @@ import { hours, summarize, timeCsv, type TimeFilter } from '../../src/model/time
 import { mentionsOf, objectLabel, parseNote } from '../../src/model/notes'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
+import type { Backups } from '../backups'
+import { versionRoute } from '../backupRoutes'
 import { readBoard, sendRead } from '../boardReads'
 import { boardWrite } from '../boardWrites'
 import { atLeast, levelFor, roleOf } from './access'
@@ -38,7 +43,12 @@ const PEEK_QUIET_MS = 60 * 60_000
 export interface RoomHost {
   get(id: string): Room | null
   create(board: Board, owner: string): Room
-  remove(id: string): boolean
+  /** Deletes a board (`by`: who, noted with its last backup). */
+  remove(id: string, by?: string): boolean
+  /** Saved versions, and deleted boards that can be put back. */
+  backups?: Backups
+  /** A deleted board, back as it was stored. */
+  revive?(data: RoomData): Room
   /** Every board id on disk, and a board's stored data without opening its room (for the index). */
   ids(): string[]
   peek(id: string): RoomData | null
@@ -151,11 +161,13 @@ export class AccountBoards {
   /** Handles a board route; false when it isn't one. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'time') return false
+    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'time' && parts[1] !== 'backups') return false
     if (!this.accounts.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const me = this.accounts.userOf(req)
     if (!me) return json(res, 401, { error: 'Sign in first' }), true
     const m = req.method ?? 'GET'
+
+    if (parts[1] === 'backups') return this.deletedRoute(req, res, me, m, parts.slice(2)), true
 
     if (parts[1] === 'mentions') {
       if (m !== 'GET' || parts.length !== 2) return json(res, 405, { error: 'Method not allowed' }), true
@@ -225,6 +237,19 @@ export class AccountBoards {
         .slice(0, 500)
         .map((u) => ({ id: u.id, name: u.name, ...(emails ? { email: u.email } : {}) }))
       return json(res, 200, { people }), true
+    }
+
+    // Its saved versions, and putting one back.
+    if (!this.host.backups && parts[3] === 'versions') return json(res, 404, { error: 'Backups are off on this server' }), true
+    if (this.host.backups && parts[3] === 'versions') {
+      const restored = (v: { at: number }) =>
+        this.accounts.log(req, me, {
+          action: 'board.restore',
+          target: boardTarget(room.data),
+          text: `${me.name} put “${room.data.board.title}” back to how it was on ${new Date(v.at).toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+        })
+      if (m === 'GET') this.peek(req, me, room.data, 'looked at the versions of')
+      if (await versionRoute(this.host.backups, room, m, parts.slice(3), { canEdit: atLeast(level, 'edit'), manages: level === 'manage', name: me.name, restored }, body, res)) return true
     }
 
     // Files kept with the board.
@@ -316,12 +341,41 @@ export class AccountBoards {
       if (level !== 'manage') return json(res, 403, { error: 'Only people who manage this board can delete it' }), true
       const owner = room.data.owner ? this.store.user(room.data.owner) : undefined
       this.accounts.log(req, me, { action: 'board.delete', target: boardTarget(room.data), text: `${me.name} deleted “${room.data.board.title}”${owner && owner.id !== me.id ? ` (${owner.name}’s board)` : ''} from the server` })
-      this.host.remove(room.data.id)
+      this.host.remove(room.data.id, me.name)
       delete this.store.boards[room.data.id]
       this.store.saveBoards()
       return json(res, 200, { ok: true }), true
     }
     return json(res, 405, { error: 'Method not allowed' }), true
+  }
+
+  /**
+   * GET deleted → deleted boards `me` could put back: ones they managed (admins: all).
+   * POST deleted/:id/restore → puts one back, with its owner, access and files.
+   */
+  private deletedRoute(req: IncomingMessage, res: ServerResponse, me: User, m: string, rest: string[]) {
+    const backups = this.host.backups
+    if (!backups || rest[0] !== 'deleted') return json(res, 404, { error: 'Not found' })
+    const mine = backups.deleted().filter((d) => me.role === 'admin' || this.level(me, d) === 'manage')
+    if (rest.length === 1) {
+      if (m !== 'GET') return json(res, 405, { error: 'Method not allowed' })
+      return json(res, 200, {
+        boards: mine.map((d) => {
+          const owner = d.owner ? this.store.user(d.owner) : undefined
+          return { id: d.id, title: d.title, ...(d.kind ? { kind: d.kind } : {}), deleted: d.at, ...(d.by ? { by: d.by } : {}), owner: owner ? { id: owner.id, name: owner.name } : null }
+        }),
+      })
+    }
+    if (rest.length !== 3 || rest[2] !== 'restore') return json(res, 404, { error: 'Not found' })
+    if (m !== 'POST') return json(res, 405, { error: 'Method not allowed' })
+    if (!mine.some((d) => d.id === rest[1])) return json(res, 404, { error: 'No such deleted board, or it isn’t yours to put back' })
+    if (this.host.get(rest[1])) return json(res, 409, { error: 'A board with that id is already here' })
+    const back = backups.undelete(rest[1])
+    if (!back || !this.host.revive) return json(res, 422, { error: 'That board’s backup can’t be read' })
+    const room = this.host.revive(back.data)
+    this.index(room)
+    this.accounts.log(req, me, { action: 'board.undelete', target: boardTarget(room.data), text: `${me.name} put back “${room.data.board.title}”, which had been deleted` })
+    return json(res, 200, { id: room.data.id, title: room.data.board.title, ...(room.data.board.kind === 'wiki' ? { kind: 'wiki' } : {}), level: this.level(me, room.data) })
   }
 
   /** Where `me` is mentioned on the boards they can open, newest first. */

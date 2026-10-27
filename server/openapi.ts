@@ -14,6 +14,8 @@ export interface SpecOptions {
   accounts: boolean
   /** Which AI routes are switched on. */
   ai: { anthropic: boolean; openai: boolean; command: boolean; transcribe?: boolean }
+  /** The server keeps backups (saved versions of boards). */
+  backups?: boolean
 }
 
 type Schema = Record<string, unknown>
@@ -297,6 +299,101 @@ export function openApiSpec(o: SpecOptions) {
     security: boardAuth,
     responses: { '200': ok('The time', { type: 'object' }), '400': error('A date that isn’t one'), ...denied },
   })
+  if (o.backups) {
+    const versionId = path('version', 'A version’s id, from the list')
+    const Version = {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        at: { type: 'number', description: 'When it was saved (milliseconds)' },
+        reason: { type: 'string', enum: ['auto', 'manual', 'before-restore', 'before-delete'] },
+        by: { type: 'string' },
+        note: { type: 'string', description: 'Its name, for one saved by hand' },
+        title: { type: 'string' },
+        kind: { type: 'string', enum: ['wiki'] },
+        objects: { type: 'integer', description: 'Objects on a board, or pages in a wiki' },
+        bytes: { type: 'integer' },
+        files: { type: 'integer' },
+      },
+    }
+    add('/api/boards/{id}/versions', 'get', {
+      tags: ['Backups'],
+      summary: 'The board’s saved versions, newest first',
+      description: 'The server saves one each hour the board changes, and keeps fewer as they age: everything from two days, one a day for a month, one a week for six months, one a month for a year.',
+      operationId: 'listVersions',
+      parameters: [boardId],
+      security: boardAuth,
+      responses: { '200': ok('The versions', { type: 'object', properties: { versions: { type: 'array', items: Version } } }), ...denied },
+    })
+    add('/api/boards/{id}/versions', 'post', {
+      tags: ['Backups'],
+      summary: 'Save a version now',
+      description: 'Needs edit. One the same as the latest isn’t saved twice (it gets the name instead).',
+      operationId: 'saveVersion',
+      parameters: [boardId],
+      security: boardAuth,
+      requestBody: { required: false, ...json({ type: 'object', properties: { note: { type: 'string', description: 'A name for it' } } }, { note: 'Before the reorg' }) },
+      responses: { '201': ok('The version', { type: 'object', properties: { version: Version } }), ...denied },
+    })
+    add('/api/boards/{id}/versions/{version}', 'get', {
+      tags: ['Backups'],
+      summary: 'One version, with the board as it was',
+      operationId: 'readVersion',
+      parameters: [boardId, versionId],
+      security: boardAuth,
+      responses: { '200': ok('The version and its board', { type: 'object', properties: { version: Version, board: { type: 'object' } } }), ...denied },
+    })
+    add('/api/boards/{id}/versions/{version}/restore', 'post', {
+      tags: ['Backups'],
+      summary: 'Put the board back to a version, for everyone',
+      description: 'Needs edit. The board as it is now is saved first (returned as `before`), so this can be undone the same way. Wiki page history and time logged since are kept.',
+      operationId: 'restoreVersion',
+      parameters: [boardId, versionId],
+      security: boardAuth,
+      responses: { '200': ok('Put back', { type: 'object', properties: { restored: Version, before: Version, version: { type: 'integer' } } }), '409': error('A wiki’s version onto a board, or the other way round'), ...denied },
+    })
+    if (o.accounts) {
+      add('/api/backups/deleted', 'get', {
+        tags: ['Backups'],
+        summary: 'Deleted boards you could put back',
+        description: 'Boards deleted in the last 90 days that you managed (admins: all).',
+        operationId: 'listDeleted',
+        security: boardAuth,
+        responses: { '200': ok('The boards', { type: 'object' }), '401': error('Not signed in') },
+      })
+      add('/api/backups/deleted/{id}/restore', 'post', {
+        tags: ['Backups'],
+        summary: 'Put a deleted board back',
+        description: 'With its owner, access list and files, as it was just before it was deleted.',
+        operationId: 'restoreDeleted',
+        parameters: [boardId],
+        security: boardAuth,
+        responses: { '200': ok('Put back', { type: 'object' }), '404': error('No such deleted board, or it isn’t yours to put back'), '401': error('Not signed in') },
+      })
+      add('/api/admin/backups', 'get', {
+        tags: ['Backups'],
+        summary: 'How the backups stand (admins)',
+        operationId: 'backupStatus',
+        security: boardAuth,
+        responses: { '200': ok('Where they are, how many, how big, and the last round', { type: 'object' }), '403': error('Not an admin') },
+      })
+      add('/api/admin/backups', 'post', {
+        tags: ['Backups'],
+        summary: 'Save a version of every board now (admins)',
+        operationId: 'backupNow',
+        security: boardAuth,
+        responses: { '200': ok('How many were saved', { type: 'object' }), '403': error('Not an admin') },
+      })
+      add('/api/admin/backup', 'get', {
+        tags: ['Backups'],
+        summary: 'Everything the server keeps, as a .tar.gz (admins)',
+        description: 'Boards, their files, people, groups and settings. Unpack it into a data folder to rebuild the server.',
+        operationId: 'downloadBackup',
+        security: boardAuth,
+        responses: { '200': { description: 'The archive', content: { 'application/gzip': { schema: { type: 'string', format: 'binary' } } } }, '403': error('Not an admin') },
+      })
+    }
+  }
   const formPath = [
     { name: 'board', in: 'path', required: true, description: 'The board', schema: { type: 'string' } },
     { name: 'item', in: 'path', required: true, description: 'The form view on it', schema: { type: 'integer' } },
@@ -389,6 +486,7 @@ export function openApiSpec(o: SpecOptions) {
       { name: 'Reading boards', description: 'The same answers AI assistants get' },
       { name: 'Wikis', description: 'Pages, their Markdown and their history. Change pages with the createPage, updatePage, movePage and deletePage operations' },
       ...(o.accounts ? [{ name: 'Accounts', description: 'Signing in, your password and API tokens' }, { name: 'Admin', description: 'People, groups and the activity log (admins only)' }] : []),
+      ...(o.backups ? [{ name: 'Backups', description: 'Saved versions of boards, putting them back, and deleted boards' }] : []),
       { name: 'AI', description: 'The in-app assistant’s routes to its model' },
       { name: 'Server', description: 'About the server' },
     ],

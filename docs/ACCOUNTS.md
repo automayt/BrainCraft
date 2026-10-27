@@ -56,6 +56,8 @@ permissions.
   view**, **Can edit** or **Can manage** (manage: change who has access, delete
   it from the server). Adding people needs *Share boards*.
 - The owner (or an admin) can hand a board to someone else.
+- A deleted board can be put back for 90 days, by whoever managed it or an
+  admin: **Your boards → Recently deleted** (see [BACKUPS.md](BACKUPS.md)).
 - Boards made before accounts were turned on have no owner: only admins see
   them, under **Admin… → Boards without an owner**, and can give
   each one an owner. A board whose owner was removed goes back to admins the

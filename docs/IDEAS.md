@@ -201,6 +201,17 @@ Built:
   text, form answers and exports day by day; features in use; storage; the
   busiest and biggest boards.
 - [x] **Announcement** for everyone signed in, set by admins.
+- [x] **Backups:** versions of every board on the server (hourly, thinned out
+  over a year), restore for everyone, deleted boards put back for 90 days,
+  daily copies of people and settings, and the whole server as one download.
+
+Backups, next:
+
+- **Compare two versions:** what was added, removed and changed, before
+  restoring.
+- **Copy from a version:** open an old version read-only and copy objects out
+  of it, instead of taking the whole board back.
+- **Off-site copies:** send the nightly archive to S3-compatible storage.
 - [x] **Time tracking:** timers on objects, records, pages or the board; time
   logged by hand for anyone; assignees and estimates on objects; a timesheet
   with CSV; a Time tracked database field; time across boards with accounts.

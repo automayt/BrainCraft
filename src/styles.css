@@ -12096,3 +12096,107 @@ button.on,
   font-size: 13px;
   text-align: left;
 }
+
+/* ----- backups -------------------------------------------------------------------------- */
+
+.versions-source {
+  padding: 12px 20px 0;
+}
+
+.recently-deleted {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+
+.recently-deleted summary {
+  cursor: pointer;
+  color: var(--muted);
+  width: max-content;
+}
+
+.recently-deleted summary:hover {
+  color: var(--text);
+}
+
+.recently-deleted > p,
+.recently-deleted > ul {
+  margin: 8px 0 0;
+}
+
+.admin-backups p,
+.backup-help {
+  max-width: 72ch;
+  line-height: 1.55;
+}
+
+.admin-backups h3 {
+  margin: 22px 0 6px;
+  font-size: 14px;
+}
+
+.backup-help {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.backup-help li + li {
+  margin-top: 4px;
+}
+
+.backup-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 18px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.backup-facts dt {
+  color: var(--muted);
+}
+
+.backup-facts dd {
+  margin: 0;
+}
+
+.backup-facts code,
+.backup-help code,
+.backup-warning code {
+  overflow-wrap: anywhere;
+}
+
+.backup-warning {
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.admin-backups .account-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.admin-backups a.button {
+  font-size: 13px;
+  padding: 5px 12px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.admin-backups a.button:hover {
+  background: var(--surface-2);
+}
+
+@media (max-width: 560px) {
+  .backup-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .backup-facts dd + dt {
+    margin-top: 8px;
+  }
+}

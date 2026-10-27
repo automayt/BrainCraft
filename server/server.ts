@@ -21,6 +21,10 @@
  * HTTPS: BRAINCRAFT_TLS_CERT and BRAINCRAFT_TLS_KEY (PEM files) make the server speak HTTPS itself;
  * renewed certificates are picked up without a restart. Or put it behind a proxy that does
  * (see docs/HTTPS.md).
+ *
+ * Backups: every board that changed gets a saved version at most once an hour, kept in
+ * BRAINCRAFT_DATA/backups or BRAINCRAFT_BACKUP_DIR (better on another disk); BRAINCRAFT_BACKUP_EVERY
+ * sets the minutes, BRAINCRAFT_BACKUPS=off turns them off (see docs/BACKUPS.md).
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto'
@@ -38,6 +42,8 @@ import { AccountBoards } from './accounts/boards'
 import { AssistantThreads } from './accounts/threads'
 import { cleanAppName, DEFAULT_APP_NAME } from './accounts/store'
 import { BoardFiles } from './boardFiles'
+import { Backups } from './backups'
+import { versionRoute } from './backupRoutes'
 import { readBoard, sendRead } from './boardReads'
 import { answerForm, readForm } from './forms'
 import { type BoardStats, boardStats, eventOf, Usage, usageCsv } from './usage'
@@ -84,6 +90,32 @@ const rooms = new Map<string, Room>()
 const saveTimers = new Map<string, NodeJS.Timeout>()
 
 const fileOf = (id: string) => join(DATA, 'boards', `${id}.json`)
+const boardIds = () => readdirSync(join(DATA, 'boards')).flatMap((f) => (f.endsWith('.json') ? [f.slice(0, -5)] : []))
+
+/** Saved versions of every board (see backups.ts). */
+const backups = /^(0|off|false|no)$/i.test(process.env.BRAINCRAFT_BACKUPS ?? '')
+  ? null
+  : new Backups({
+      dir: resolve(process.env.BRAINCRAFT_BACKUP_DIR?.trim() || join(DATA, 'backups')),
+      data: DATA,
+      every: Math.max(5, Number(process.env.BRAINCRAFT_BACKUP_EVERY) || 60) * 60_000,
+      log,
+      host: {
+        ids: boardIds,
+        data: (id) => rooms.get(id)?.data ?? readStored(id),
+        open: (id) => rooms.has(id),
+        filesDir: (id) => join(DATA, 'files', id),
+      },
+    })
+
+/** A board as stored on disk, without opening its room. */
+function readStored(id: string): RoomData | null {
+  try {
+    return JSON.parse(readFileSync(fileOf(id), 'utf8')) as RoomData
+  } catch {
+    return null
+  }
+}
 const validId = (id: string) => /^[A-Za-z0-9_-]{6,64}$/.test(id)
 const newKey = () => randomBytes(18).toString('base64url')
 
@@ -315,7 +347,12 @@ const accountBoards = accounts
           log('created board', id)
           return room
         },
-        remove(id) {
+        remove(id, by) {
+          try {
+            backups?.deleting(id, by)
+          } catch (err) {
+            log('couldn’t keep a last backup of', id, err)
+          }
           rooms.delete(id)
           clearTimeout(saveTimers.get(id))
           saveTimers.delete(id)
@@ -324,16 +361,18 @@ const accountBoards = accounts
           log('deleted board', id)
           return true
         },
-        ids: () => readdirSync(join(DATA, 'boards')).flatMap((f) => (f.endsWith('.json') ? [f.slice(0, -5)] : [])),
+        ids: boardIds,
+        ...(backups ? { backups } : {}),
+        revive(data) {
+          data.board = fromJson(JSON.stringify(data.board))
+          const room = makeRoom(data)
+          save(room)
+          log('put back board', data.id)
+          return room
+        },
         loaded: (id) => rooms.get(id) ?? null,
         files: (room, req, res, rest, canEdit) => files.handle(room.data.id, room.data.board, req, res, rest, canEdit),
-        peek(id) {
-          try {
-            return JSON.parse(readFileSync(fileOf(id), 'utf8')) as RoomData
-          } catch {
-            return null
-          }
-        },
+        peek: readStored,
       },
       ALLOWED_ORIGINS,
     )
@@ -417,6 +456,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         : {}),
       previews: true,
       accounts: !!accounts,
+      backups: !!backups,
       transcribe: !!transcriber,
       transcribePreview: !!transcriber && TRANSCRIBE_PREVIEW,
       appName: appName(),
@@ -425,7 +465,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // The API described: OpenAPI for tools, and the same as a page to read.
   if ((parts[1] === 'openapi.json' || parts[1] === 'docs') && parts.length === 2) {
     if (req.method !== 'GET') return send(res, 405, { error: 'Method not allowed' })
-    const spec = openApiSpec({ version: VERSION, accounts: !!accounts, ai: { anthropic: !!aiProxy, openai: !!openAiProxy, command: !!commandRunner, transcribe: !!transcriber } })
+    const spec = openApiSpec({ version: VERSION, accounts: !!accounts, backups: !!backups, ai: { anthropic: !!aiProxy, openai: !!openAiProxy, command: !!commandRunner, transcribe: !!transcriber } })
     if (parts[1] === 'openapi.json') return send(res, 200, spec)
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
     return res.end(docsPage(spec))
@@ -461,6 +501,35 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       return e ? [{ ...b, title: e.title || 'Untitled', kind: e.kind === 'wiki' ? 'wiki' : 'board' }] : []
     })
     return send(res, 200, { ...report, busiest, ...statsCache.stats, people: accounts.store.users.filter((u) => !u.disabled).length })
+  }
+
+  // GET /api/admin/backups → how the backups stand; POST → a version of every board now;
+  // GET /api/admin/backup → everything this server keeps, as a .tar.gz.
+  if (accounts && parts[1] === 'admin' && (parts[2] === 'backups' || parts[2] === 'backup') && parts.length === 3) {
+    if (someone?.role !== 'admin') return send(res, someone ? 403 : 401, { error: 'Only admins can do that' })
+    if (!backups) return send(res, 404, { error: 'Backups are off on this server (BRAINCRAFT_BACKUPS)' })
+    if (parts[2] === 'backups' && req.method === 'GET') return send(res, 200, backups.status())
+    if (parts[2] === 'backups' && req.method === 'POST') {
+      if (!accounts.fromApp(req)) return send(res, 403, { error: 'Missing the X-BrainCraft header' })
+      let saved = 0
+      for (const id of boardIds()) {
+        const before = backups.versions(id)[0]?.id
+        if (backups.snapshot(id, 'manual', { by: someone.name })?.id !== before) saved++
+      }
+      return send(res, 200, { saved, ...backups.status() })
+    }
+    if (parts[2] === 'backup' && req.method === 'GET') {
+      const day = new Date().toISOString().slice(0, 10)
+      accounts.log(req, someone, { action: 'backup.download', text: `${someone.name} downloaded a backup of the whole server` })
+      res.writeHead(200, { 'content-type': 'application/gzip', 'content-disposition': `attachment; filename="braincraft-backup-${day}.tar.gz"`, 'cache-control': 'no-store' })
+      const out = backups.archive((name, why) => log('left out of the backup:', name, why))
+      out.on('error', (err) => {
+        log('backup download failed', err)
+        res.destroy(err)
+      })
+      return void out.pipe(res)
+    }
+    return send(res, 405, { error: 'Method not allowed' })
   }
 
   // Accounts: sign-in, admin, people, and boards by access instead of keys.
@@ -551,6 +620,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (!room) return send(res, 404, { error: 'No such board' })
   const role = room.roleFor(keyOf(req, url), safeEqual)
   if (!role) return send(res, 403, { error: 'Missing or wrong key' })
+
+  // Saved versions, and putting one back (see backupRoutes.ts).
+  if (!backups && parts[3] === 'versions') return send(res, 404, { error: 'Backups are off on this server' })
+  if (backups && parts[3] === 'versions' && (await versionRoute(backups, room, req.method ?? 'GET', parts.slice(3), { canEdit: role === 'edit' }, () => readBody(req), res))) return
 
   // Files kept with the board (see boardFiles.ts).
   if (parts[3] === 'files' && (await files.handle(room.data.id, room.data.board, req, res, parts.slice(4), role === 'edit'))) return
@@ -709,12 +782,19 @@ server.on('upgrade', (req, socket, head) => {
   })
 })
 
+// Backups: a first round soon after starting (every board), then every ten minutes.
+if (backups) {
+  setTimeout(() => void backups.pass(), 30_000).unref()
+  setInterval(() => void backups.pass(), 10 * 60_000).unref()
+}
+
 // A last line of defence: log a stray error rather than drop every friend's live session.
 process.on('uncaughtException', (err) => log('unexpected error', err))
 
 server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on ${tlsServer ? 'https' : 'http'}://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
+  log(backups ? `backups in ${backups.dir}${backups.insideData ? ' (inside the data folder: copy it to another disk too, or set BRAINCRAFT_BACKUP_DIR)' : ''}` : 'backups off')
   log(
     accounts
       ? `accounts on${accounts.sso ? ` with single sign-on (${accounts.sso.label})` : ''}${devIdp ? ' — TEST PROVIDER at /dev-idp: anyone can sign in as anyone, never use this for real' : ''}${accounts.needsSetup ? ' — open the server to create the first admin' : ''}`

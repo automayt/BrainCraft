@@ -31,7 +31,10 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | --- | --- | --- |
 | `PORT` | `8080` | Port to listen on. |
 | `HOST` | `0.0.0.0` | Address to listen on. |
-| `BRAINCRAFT_DATA` | `./braincraft-data` | Where boards are stored, one JSON file each. Back this folder up. |
+| `BRAINCRAFT_DATA` | `./braincraft-data` | Where boards are stored, one JSON file each. |
+| `BRAINCRAFT_BACKUP_DIR` | `<data>/backups` | Where the server keeps backups: versions of every board, deleted boards for 90 days, daily copies of people and settings. Better on another disk. See [BACKUPS.md](BACKUPS.md). |
+| `BRAINCRAFT_BACKUP_EVERY` | `60` | Minutes between saved versions of a board that keeps changing. |
+| `BRAINCRAFT_BACKUPS` | on | `off` turns backups off. |
 | `BRAINCRAFT_STATIC` | the script's folder | The built app to serve. |
 | `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant (Claude) for everyone using this server, paid from this key. See [AI.md](AI.md). |
 | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL` | — | Turns on the assistant with an OpenAI-compatible server such as vLLM. See [AI.md](AI.md). |
@@ -121,6 +124,8 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/pages/{page}?version=` | edit or view | One page by id or exact title (URL-encoded): its Markdown, place, sub-pages and backlinks; with `version`, that saved version. |
 | `GET /api/boards/{id}/pages/{page}/history` | edit or view | The page's saved versions, newest first. |
 | `GET /api/boards/{id}/time?from=&to=&who=&format=csv` | edit or view | Time tracked on the board: hours in all, who is timing what now, hours by person, by what it was on and by day, and each entry; `format=csv` for a spreadsheet. |
+| `GET /api/boards/{id}/versions`, `…/versions/{version}` | edit or view | The board's saved versions, and one of them with the board as it was (see [BACKUPS.md](BACKUPS.md)). |
+| `POST /api/boards/{id}/versions {note?}`, `…/versions/{version}/restore` | edit | Save a version now; put the board back to one, for everyone. |
 | `GET /api/time?from=&to=&who=&format=csv` | signed in (accounts) | Your time on every board you can open, by board (or as CSV). Admins can pass `who` (a name, or `all`). |
 | `POST /api/boards/{id}/pages` with `{"title", "parent"?, "before"?, "text"?, "icon"?, "note"?}` | edit | Adds a page; answers with it (201). |
 | `PUT /api/boards/{id}/pages/{page}` with `{"title"?, "text"?, "append"?, "icon"?, "note"?, "protected"?}` | edit | Changes a page, keeping a version from before and after; `protected` is for people who manage the wiki. |
