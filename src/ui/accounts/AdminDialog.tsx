@@ -109,13 +109,14 @@ function Backups() {
   if (error) return <p className="signin-error">{error}</p>
   if (!status) return <p className="muted">Loading…</p>
   const download = new URL('api/admin/backup', ws.server ?? location.href).href
-  const hours = Math.round(status.every / 60_000)
+  const minutes = Math.round(status.every / 60_000)
   return (
     <div className="admin-backups">
       <p>
-        Every board and wiki that changes gets a saved version at most every {hours >= 60 && hours % 60 === 0 ? (hours === 60 ? 'hour' : `${hours / 60} hours`) : `${hours} minutes`}, and
-        always just before it’s deleted or put back to an earlier version. The newest two days are all kept, then one a day for a month, one a week for six
-        months and one a month for a year. People, groups and settings are copied once a day.
+        These are for taking back a mistake. Every board and wiki that changes gets a saved version at most every{' '}
+        {minutes >= 60 && minutes % 60 === 0 ? (minutes === 60 ? 'hour' : `${minutes / 60} hours`) : `${minutes} minutes`}, and always just before it’s
+        deleted or put back to an earlier version. The newest {status.keep} of each are kept. Deleted boards can be put back for 90 days. People, groups and
+        settings are copied once a day, for a week.
       </p>
       <dl className="backup-facts">
         <dt>Kept in</dt>
@@ -140,12 +141,6 @@ function Backups() {
           </>
         )}
       </dl>
-      {status.insideData && (
-        <p className="backup-warning" role="note">
-          These backups are in the same folder as the boards, so a failed disk would lose both. Set <code>BRAINCRAFT_BACKUP_DIR</code> to a folder on
-          another disk, or download everything regularly and keep it somewhere else.
-        </p>
-      )}
       <div className="account-actions">
         <button
           className="primary"

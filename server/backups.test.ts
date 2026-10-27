@@ -9,12 +9,12 @@ import { fakeMeasure } from '../src/model/test-helpers'
 import { AccountBoards, type RoomHost } from './accounts/boards'
 import { cookieOf, req, res, tempDir } from './accounts/fakes'
 import { Accounts } from './accounts/service'
-import { Backups, DAY, DELETED_KEEP, HOUR, retained, type Version } from './backups'
+import { BACKUP_KEEP, Backups, DAY, DELETED_KEEP, HOUR, retained, type Version } from './backups'
 import { versionRoute } from './backupRoutes'
 import { header, splitName } from './tar'
 
 /** A data folder with boards in memory, their files on disk, and backups beside them. */
-function setup(every = HOUR) {
+function setup(every = HOUR, keep?: number) {
   const data = tempDir()
   const rooms = new Map<string, Room>()
   const open = new Set<string>()
@@ -23,6 +23,7 @@ function setup(every = HOUR) {
     dir: join(data, 'backups'),
     data,
     every,
+    keep,
     now: () => clock,
     host: {
       ids: () => [...rooms.keys()],
@@ -81,25 +82,13 @@ async function read(stream: NodeJS.ReadableStream): Promise<Buffer> {
 
 describe('which versions are kept', () => {
   const now = Date.UTC(2026, 9, 27, 12)
-  it('keeps everything from two days, then one a day, a week and a month', () => {
-    const hourly = Array.from({ length: 24 * 60 }, (_, k) => v(`h${k}`, now - k * HOUR))
-    const keep = retained(hourly, now)
-    // Two days of hours (49 counting now), then one a day for the rest of the month.
-    expect([...keep].filter((id) => Number(id.slice(1)) <= 48)).toHaveLength(49)
-    // Then one for each day to a month (about 28), and one a week after that (about 5).
-    expect(keep.size).toBeGreaterThan(49 + 30)
-    expect(keep.size).toBeLessThan(49 + 38)
-    // Within a day past the first two, only the newest stays.
-    const day = hourly.filter((x) => x.at <= now - 10 * DAY && x.at > now - 11 * DAY && keep.has(x.id))
-    expect(day.length).toBeLessThanOrEqual(2)
-  })
-
-  it('always keeps the newest, and ones made on purpose for a month', () => {
-    expect([...retained([v('old', now - 400 * DAY)], now)]).toEqual(['old'])
-    const keep = retained([v('a', now - 5 * DAY, 'manual'), v('b', now - 5 * DAY + HOUR), v('c', now - 5 * DAY + 2 * HOUR, 'before-restore'), v('new', now)], now)
-    expect(keep).toEqual(new Set(['a', 'c', 'new', 'b']))
-    // Past a year, nothing but the newest.
-    expect(retained([v('n', now), v('y', now - 366 * DAY)], now)).toEqual(new Set(['n']))
+  it('keeps the newest five, whatever made them, however old', () => {
+    expect(BACKUP_KEEP).toBe(5)
+    const shuffled = [3, 0, 6, 1, 5, 2, 4].map((k) => v(`h${k}`, now - k * 3 * HOUR, k === 6 ? 'manual' : 'auto'))
+    expect(retained(shuffled)).toEqual(new Set(['h0', 'h1', 'h2', 'h3', 'h4']))
+    expect(retained(shuffled, 2)).toEqual(new Set(['h0', 'h1']))
+    // At least the newest, always.
+    expect(retained([v('old', now - 400 * DAY)], 0)).toEqual(new Set(['old']))
   })
 })
 
@@ -128,6 +117,21 @@ describe('backups of boards', () => {
     expect(s.backups.versions('board-one')).toHaveLength(2)
   })
 
+  it('keeps only the newest few of a board that keeps changing', async () => {
+    const s = setup(3 * HOUR)
+    const r = s.room('board-one')
+    for (let k = 0; k < 8; k++) {
+      note(r, `Note ${k}`)
+      await s.backups.pass()
+      s.tick(3 * HOUR)
+    }
+    const kept = s.backups.versions('board-one')
+    expect(kept).toHaveLength(5)
+    // The newest has all eight notes; the oldest kept has four.
+    expect(kept.map((x) => x.objects)).toEqual([8, 7, 6, 5, 4])
+    expect(readdirSync(join(s.backups.dir, 'boards', 'board-one')).filter((n) => n.endsWith('.json.gz'))).toHaveLength(5)
+  })
+
   it('only looks again at boards that were open since the first round', async () => {
     const s = setup()
     const r = s.room('board-one')
@@ -153,7 +157,7 @@ describe('backups of boards', () => {
   })
 
   it('forgets copies of files no version needs any more', async () => {
-    const s = setup()
+    const s = setup(HOUR, 1)
     const r = s.room('board-one')
     s.file('board-one', 'old.bin', 'x')
     s.backups.snapshot('board-one', 'auto')

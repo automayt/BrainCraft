@@ -35,6 +35,8 @@ export interface DeletedBoard {
 export interface BackupStatus {
   dir: string
   insideData: boolean
+  /** Versions kept of each board. */
+  keep: number
   every: number
   lastPass: number | null
   lastError: string | null

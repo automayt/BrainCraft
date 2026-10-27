@@ -22,9 +22,10 @@
  * renewed certificates are picked up without a restart. Or put it behind a proxy that does
  * (see docs/HTTPS.md).
  *
- * Backups: every board that changed gets a saved version at most once an hour, kept in
- * BRAINCRAFT_DATA/backups or BRAINCRAFT_BACKUP_DIR (better on another disk); BRAINCRAFT_BACKUP_EVERY
- * sets the minutes, BRAINCRAFT_BACKUPS=off turns them off (see docs/BACKUPS.md).
+ * Backups, for taking back a mistake: every board that changed gets a saved version at most every
+ * three hours (BRAINCRAFT_BACKUP_EVERY minutes), and the newest five of each are kept
+ * (BRAINCRAFT_BACKUP_KEEP), in BRAINCRAFT_DATA/backups or BRAINCRAFT_BACKUP_DIR;
+ * BRAINCRAFT_BACKUPS=off turns them off (see docs/BACKUPS.md).
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto'
@@ -98,7 +99,8 @@ const backups = /^(0|off|false|no)$/i.test(process.env.BRAINCRAFT_BACKUPS ?? '')
   : new Backups({
       dir: resolve(process.env.BRAINCRAFT_BACKUP_DIR?.trim() || join(DATA, 'backups')),
       data: DATA,
-      every: Math.max(5, Number(process.env.BRAINCRAFT_BACKUP_EVERY) || 60) * 60_000,
+      every: Math.max(5, Number(process.env.BRAINCRAFT_BACKUP_EVERY) || 180) * 60_000,
+      keep: Math.min(100, Math.max(1, Math.floor(Number(process.env.BRAINCRAFT_BACKUP_KEEP)) || 5)),
       log,
       host: {
         ids: boardIds,
@@ -794,7 +796,7 @@ process.on('uncaughtException', (err) => log('unexpected error', err))
 server.listen(PORT, HOST, () => {
   log(`BrainCraft ${VERSION} on ${tlsServer ? 'https' : 'http'}://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   log(`boards stored in ${DATA}; app served from ${STATIC}`)
-  log(backups ? `backups in ${backups.dir}${backups.insideData ? ' (inside the data folder: copy it to another disk too, or set BRAINCRAFT_BACKUP_DIR)' : ''}` : 'backups off')
+  log(backups ? `backups in ${backups.dir}` : 'backups off')
   log(
     accounts
       ? `accounts on${accounts.sso ? ` with single sign-on (${accounts.sso.label})` : ''}${devIdp ? ' — TEST PROVIDER at /dev-idp: anyone can sign in as anyone, never use this for real' : ''}${accounts.needsSetup ? ' — open the server to create the first admin' : ''}`

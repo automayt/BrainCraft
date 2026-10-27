@@ -201,8 +201,8 @@ Built:
   text, form answers and exports day by day; features in use; storage; the
   busiest and biggest boards.
 - [x] **Announcement** for everyone signed in, set by admins.
-- [x] **Backups:** versions of every board on the server (hourly, thinned out
-  over a year), restore for everyone, deleted boards put back for 90 days,
+- [x] **Backups:** versions of every board on the server (every three hours,
+  the newest five kept), restore for everyone, deleted boards put back for 90 days,
   daily copies of people and settings, and the whole server as one download.
 
 Backups, next:

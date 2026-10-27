@@ -12160,16 +12160,8 @@ button.on,
 }
 
 .backup-facts code,
-.backup-help code,
-.backup-warning code {
+.backup-help code {
   overflow-wrap: anywhere;
-}
-
-.backup-warning {
-  padding: 10px 12px;
-  border-left: 3px solid var(--warning);
-  border-radius: 6px;
-  background: var(--surface-2);
 }
 
 .admin-backups .account-actions {

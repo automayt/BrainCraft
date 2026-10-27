@@ -533,8 +533,9 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * The server's versions of a live board: saved every hour it changes, before anyone puts an older
- * one back, and whenever someone saves one. Putting one back changes the board for everyone.
+ * The server's versions of a live board: saved every few hours it changes, before anyone puts an
+ * older one back, and whenever someone saves one; the newest few are kept. Putting one back changes
+ * the board for everyone.
  */
 function ServerVersions({ live, onClose }: { live: LiveInfo; onClose: () => void }) {
   const ws = useWorkspace()
@@ -583,8 +584,7 @@ function ServerVersions({ live, onClose }: { live: LiveInfo; onClose: () => void
         </form>
       )}
       <p className="muted versions-wiki-note">
-        Everyone on this board sees these. The server saves one each hour the board changes, then keeps fewer as they age: one a day for a month, one a week
-        for six months.{isWiki(ws.editor.board) ? ' Restoring takes every page back; for one page, use its Page history.' : ''}
+        Everyone on this board sees these. The server saves one every few hours the board changes, and keeps the newest five.{isWiki(ws.editor.board) ? ' Restoring takes every page back; for one page, use its Page history.' : ''}
       </p>
       {error && (
         <p className="signin-error" role="alert">

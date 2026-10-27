@@ -32,8 +32,9 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `PORT` | `8080` | Port to listen on. |
 | `HOST` | `0.0.0.0` | Address to listen on. |
 | `BRAINCRAFT_DATA` | `./braincraft-data` | Where boards are stored, one JSON file each. |
-| `BRAINCRAFT_BACKUP_DIR` | `<data>/backups` | Where the server keeps backups: versions of every board, deleted boards for 90 days, daily copies of people and settings. Better on another disk. See [BACKUPS.md](BACKUPS.md). |
-| `BRAINCRAFT_BACKUP_EVERY` | `60` | Minutes between saved versions of a board that keeps changing. |
+| `BRAINCRAFT_BACKUP_DIR` | `<data>/backups` | Where the server keeps backups: recent versions of every board, deleted boards for 90 days, daily copies of people and settings. See [BACKUPS.md](BACKUPS.md). |
+| `BRAINCRAFT_BACKUP_EVERY` | `180` | Minutes between saved versions of a board that keeps changing. |
+| `BRAINCRAFT_BACKUP_KEEP` | `5` | Versions kept of each board, newest first. |
 | `BRAINCRAFT_BACKUPS` | on | `off` turns backups off. |
 | `BRAINCRAFT_STATIC` | the script's folder | The built app to serve. |
 | `ANTHROPIC_API_KEY` | — | Turns on the in-app AI assistant (Claude) for everyone using this server, paid from this key. See [AI.md](AI.md). |

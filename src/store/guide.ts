@@ -505,7 +505,7 @@ Every object has comments and a description (**Alt+C**). Comment blocks (**C**) 
       title: 'Saving, files and sharing',
       icon: '💾',
       text: `- Boards **save as you work**, in this browser. The dot by the title says when.
-- **Version history** (board menu) keeps a version every ten minutes and any you name; restore one in one undoable step. On a server, **On the server** has versions everyone shares: one every hour the board changes, kept for a year.
+- **Version history** (board menu) keeps a version every ten minutes and any you name; restore one in one undoable step. On a server, **On the server** has versions everyone shares: one every few hours the board changes, the newest five kept.
 - **Ctrl+S** saves a \`.braincraft\` file; open one with **Open file…** or by dropping it on the window.
 - **Export** (**Ctrl+Shift+E**): the board or the selection as PNG, SVG or PDF (one page per frame), or the board as Markdown. Right-click a table or database for CSV.
 - **A wiki** goes out as Markdown files (a page, or the whole wiki as a .zip), as one web page with its pictures, or printed (save as PDF): page menu **⋯**.

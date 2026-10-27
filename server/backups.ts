@@ -8,10 +8,10 @@
  *   files/<id>/<file>.*              copies of the board's files, so a version's files come back too
  *   server/<day>.tar.gz              people, groups and settings, once a day
  *
- * A board that changed gets a new version at most once an hour (BRAINCRAFT_BACKUP_EVERY minutes),
- * and always just before it's deleted or put back to an earlier version. Older versions thin out:
- * everything from the last two days, then one a day for a month, one a week for six months and one
- * a month for a year. A deleted board's versions stay for 90 days, so it can be put back.
+ * They're for taking back a mistake, not an archive. A board that changed gets a new version at most
+ * every three hours (BRAINCRAFT_BACKUP_EVERY minutes), and always just before it's deleted or put
+ * back to an earlier version; only the newest five of a board are kept (BRAINCRAFT_BACKUP_KEEP). A
+ * deleted board's versions stay for 90 days, so it can be put back.
  */
 
 import { createHash, randomBytes } from 'node:crypto'
@@ -25,11 +25,13 @@ import { folderEntries, tarGz } from './tar'
 export const HOUR = 60 * 60_000
 export const DAY = 24 * HOUR
 /** A changed board gets a new version at most this often (unless asked for one). */
-export const BACKUP_EVERY = HOUR
+export const BACKUP_EVERY = 3 * HOUR
+/** Versions kept of each board: the newest ones. */
+export const BACKUP_KEEP = 5
 /** How long a deleted board's versions are kept, so it can be put back. */
 export const DELETED_KEEP = 90 * DAY
 /** Daily copies of people, groups and settings kept. */
-export const SERVER_KEEP = 30
+export const SERVER_KEEP = 7
 
 export type Reason = 'auto' | 'manual' | 'before-restore' | 'before-delete'
 
@@ -82,6 +84,8 @@ export interface BackupOptions {
   /** The server's data folder: for the daily copy of people and settings, and the full download. */
   data: string
   every?: number
+  /** How many versions of each board to keep. */
+  keep?: number
   now?: () => number
   log?: (...a: unknown[]) => void
 }
@@ -96,38 +100,14 @@ function stamp(at: number) {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`
 }
 
-/** Which versions to keep: the newest, everything recent, then fewer the older they get. */
-export function retained(versions: Version[], now: number): Set<string> {
-  const keep = new Set<string>()
-  const newest = [...versions].sort((a, z) => z.at - a.at)
-  if (newest[0]) keep.add(newest[0].id)
-  const buckets = new Set<string>()
-  for (const v of newest) {
-    const age = now - v.at
-    if (age <= 2 * DAY) {
-      keep.add(v.id)
-      continue
-    }
-    // Ones made on purpose, or just before a restore or delete, stay a month whatever else.
-    if (v.reason !== 'auto' && age <= 30 * DAY) {
-      keep.add(v.id)
-      continue
-    }
-    const d = new Date(v.at)
-    const bucket =
-      age <= 30 * DAY
-        ? `d${Math.floor(v.at / DAY)}`
-        : age <= 26 * 7 * DAY
-          ? `w${Math.floor((v.at / DAY + 3) / 7)}`
-          : age <= 365 * DAY
-            ? `m${d.getUTCFullYear() * 12 + d.getUTCMonth()}`
-            : null
-    if (bucket && !buckets.has(bucket)) {
-      buckets.add(bucket)
-      keep.add(v.id)
-    }
-  }
-  return keep
+/** Which versions to keep: the newest few, whatever made them. */
+export function retained(versions: Version[], keep = BACKUP_KEEP): Set<string> {
+  return new Set(
+    [...versions]
+      .sort((a, z) => z.at - a.at)
+      .slice(0, Math.max(1, keep))
+      .map((v) => v.id),
+  )
 }
 
 const countOf = (d: RoomData) => (d.board.kind === 'wiki' ? (d.board.pages?.length ?? 0) : d.board.items.length)
@@ -162,6 +142,7 @@ export class Backups {
   readonly dir: string
   private o: BackupOptions
   private every: number
+  private keep: number
   private now: () => number
   private log: (...a: unknown[]) => void
   /** The first pass looks at every board; later ones only at boards whose room has been open. */
@@ -174,6 +155,7 @@ export class Backups {
     this.o = o
     this.dir = resolve(o.dir)
     this.every = o.every ?? BACKUP_EVERY
+    this.keep = o.keep ?? BACKUP_KEEP
     this.now = o.now ?? Date.now
     this.log = o.log ?? (() => {})
     mkdirSync(join(this.dir, 'boards'), { recursive: true })
@@ -327,10 +309,10 @@ export class Backups {
     return null
   }
 
-  /** Thins out a board's versions, and the copies of files none of the kept ones need. */
+  /** Drops a board's versions past the newest few, and the copies of files none of the kept ones need. */
   private prune(id: string) {
     const versions = this.versions(id)
-    const keep = retained(versions, this.now())
+    const keep = retained(versions, this.keep)
     const kept = versions.filter((v) => keep.has(v.id))
     if (kept.length !== versions.length) {
       for (const v of versions) if (!keep.has(v.id)) rmSync(join(this.boardDir(id), `${v.id}.json.gz`), { force: true })
@@ -342,8 +324,8 @@ export class Backups {
   }
 
   /**
-   * One round: a version of every board that changed since its last one (and the hour is up),
-   * thinning out old versions, forgetting boards deleted long ago, and the daily copy of people and
+   * One round: a version of every board that changed since its last one (once it's due), dropping
+   * versions past the newest few, forgetting boards deleted long ago, and the daily copy of people and
    * settings. Returns how many versions were saved.
    */
   async pass(): Promise<number> {
@@ -377,7 +359,7 @@ export class Backups {
             rmSync(join(this.dir, 'files', id), { recursive: true, force: true })
             continue
           }
-          // A board gone without a note (removed by hand) keeps what it had; it just isn't thinned.
+          // A board gone without a note (removed by hand) keeps what it had; it just isn't pruned.
           if (live.has(id) || note) this.prune(id)
         } catch (err) {
           this.log('couldn’t tidy the backups of', id, err)
@@ -395,7 +377,7 @@ export class Backups {
     return saved
   }
 
-  /** People, groups, settings and usage: one copy a day, the last month of them kept. */
+  /** People, groups, settings and usage: one copy a day, the last week of them kept. */
   private async daily(now: number) {
     const dir = join(this.dir, 'server')
     mkdirSync(dir, { recursive: true })
@@ -450,6 +432,7 @@ export class Backups {
       dir: this.dir,
       insideData: this.insideData,
       every: this.every,
+      keep: this.keep,
       lastPass: this.lastPass,
       lastError: this.lastError,
       boards,

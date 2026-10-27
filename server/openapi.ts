@@ -319,7 +319,7 @@ export function openApiSpec(o: SpecOptions) {
     add('/api/boards/{id}/versions', 'get', {
       tags: ['Backups'],
       summary: 'The board’s saved versions, newest first',
-      description: 'The server saves one each hour the board changes, and keeps fewer as they age: everything from two days, one a day for a month, one a week for six months, one a month for a year.',
+      description: 'The server saves one every three hours the board changes (and before a restore or delete), and keeps the newest five.',
       operationId: 'listVersions',
       parameters: [boardId],
       security: boardAuth,

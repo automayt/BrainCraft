@@ -56,7 +56,7 @@ export async function versionRoute(backups: Backups, room: Room, method: string,
   }
 
   const version = isVersionId(vid) ? backups.versions(id).find((v) => v.id === vid) : undefined
-  if (!version) return json(res, 404, { error: 'No such version (it may have been thinned out)' }), true
+  if (!version) return json(res, 404, { error: 'No such version (only the newest few are kept)' }), true
   const stored = backups.read(id, version.id)
   if (!stored) return json(res, 404, { error: 'That version can’t be read' }), true
   let board

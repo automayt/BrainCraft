@@ -296,9 +296,9 @@ These become interactive once selected; drag them by their title strip.
 - **Version history** keeps a version every ten minutes plus any you name
   ("Before the reorg"). Preview any version and restore it in one undoable
   step; the board being replaced is kept as a version too.
-- **On a server, everything is backed up:** each board and wiki gets a
-  version every hour it changes, kept for a year (thinning out as it ages),
-  shared by everyone on it under **Version history → On the server**.
+- **On a server, mistakes can be taken back:** each board and wiki gets a
+  version every three hours it changes, and the newest five are kept, shared
+  by everyone on it under **Version history → On the server**.
   Deleted boards can be put back for 90 days (**Your boards → Recently
   deleted**), and admins can download the whole server as one file. See
   [docs/BACKUPS.md](docs/BACKUPS.md).

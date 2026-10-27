@@ -1,30 +1,25 @@
 # Backups
 
-A BrainCraft server backs up every board and wiki by itself. Nothing needs
-turning on. This page covers what it keeps, how to put things back, and how to
-keep a copy safe if the machine itself is lost.
+A BrainCraft server backs up every board and wiki by itself, so someone can
+take back a change they didn't mean. Nothing needs turning on. This page covers
+what it keeps, how to put things back, and how to keep a copy of the whole
+server.
 
 ## What the server keeps
 
-- **Versions of every board and wiki.** A board that changed gets a saved
-  version at most once an hour. One is also saved just before the board is
-  deleted, and just before anyone puts it back to an earlier version. Anyone
-  who can edit a board can also save a version with a name ("Before the
+- **The last few versions of every board and wiki.** A board that changed gets
+  a saved version at most every three hours. One is also saved just before the
+  board is deleted, and just before anyone puts it back to an earlier version.
+  Anyone who can edit a board can also save a version with a name ("Before the
   reorg").
-- **Older versions thin out:**
-  - everything from the last two days;
-  - then one a day for a month;
-  - then one a week for six months;
-  - then one a month for a year.
-
-  Versions saved by hand, and the ones taken before a restore or a delete,
-  stay for at least a month. The newest version of a board is always kept.
+- **Only the newest five** of each board are kept, whatever made them: a new
+  one pushes the oldest out.
 - **Files.** A board's files (PDFs, documents) are copied beside its versions,
   so putting a version back brings its files back too.
 - **Deleted boards** stay for 90 days, with their owner, access list and
   files.
 - **People, groups and settings** (with accounts) are copied once a day, and
-  the last 30 days of copies are kept. This includes the sign-in sessions and
+  the last week of copies is kept. This includes the sign-in sessions and
   API tokens, stored only as hashes, so people stay signed in after a restore.
 
 The backups live in `backups/` inside the data folder, unless
@@ -70,8 +65,8 @@ are kept by the browser itself, for boards that aren't on a server.
 
 ## Keep a copy somewhere else
 
-Backups in the same folder as the boards protect against mistakes, not
-against losing the disk. Do at least one of these:
+The versions are for taking back mistakes. They sit beside the boards, so they
+won't survive losing the disk. If that matters, do one of these:
 
 - **Point `BRAINCRAFT_BACKUP_DIR` at another disk** (or a synced folder such
   as OneDrive or Dropbox):
@@ -99,8 +94,9 @@ when they last ran, and any problem. It also has **Back up every board now**.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `BRAINCRAFT_BACKUP_DIR` | `<data>/backups` | Where backups are kept. Better on another disk. |
-| `BRAINCRAFT_BACKUP_EVERY` | `60` | Minutes between versions of a board that keeps changing (5 at least). |
+| `BRAINCRAFT_BACKUP_DIR` | `<data>/backups` | Where backups are kept. |
+| `BRAINCRAFT_BACKUP_EVERY` | `180` | Minutes between versions of a board that keeps changing (5 at least). |
+| `BRAINCRAFT_BACKUP_KEEP` | `5` | Versions kept of each board, newest first. |
 | `BRAINCRAFT_BACKUPS` | on | `off` turns backups off. Deleted boards then can't be put back. |
 
 ## The API
