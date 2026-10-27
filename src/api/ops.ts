@@ -13,6 +13,7 @@ import { startPoll, toggleReaction } from '../model/reactions'
 import { type Rect, type Vec, unionAll } from '../model/geom'
 import * as D from '../model/dataset'
 import { askable } from '../model/forms'
+import * as TT from '../model/timeTracking'
 import { newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
@@ -20,7 +21,7 @@ import * as F from '../model/flowchart'
 import { applyOutline } from '../model/outlineSync'
 import { runAutomations } from '../model/automations'
 import { linkItem, urlIn } from '../model/linkCard'
-import { parseStatus, setStatus } from '../model/status'
+import { canHaveStatus, parseStatus, setStatus } from '../model/status'
 import { newWheel } from '../model/wheel'
 import { setSketch } from '../model/sketch'
 import { codeSize, langId } from '../model/code'
@@ -39,6 +40,7 @@ import {
   type DataViewType,
   type Automation,
   type FormSettings,
+  type TimeTarget,
   type Dataset,
   type Field,
   type FieldValue,
@@ -162,7 +164,29 @@ export type Op =
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string; freeform?: boolean }
-  | { op: 'update'; id: Ref; text?: string; description?: string; color?: string; x?: number; y?: number; w?: number; h?: number; locked?: boolean; status?: string | null; sketch?: boolean; linkTo?: string | Record<string, unknown> | null }
+  | {
+      op: 'update'
+      id: Ref
+      text?: string
+      description?: string
+      color?: string
+      x?: number
+      y?: number
+      w?: number
+      h?: number
+      locked?: boolean
+      status?: string | null
+      sketch?: boolean
+      linkTo?: string | Record<string, unknown> | null
+      assignees?: string[] | null
+      estimate?: string | number | null
+    }
+  /** A timer for a person (one at a time each: one already running stops first). */
+  | { op: 'startTimer'; on?: TimeOn; who?: string; note?: string }
+  | { op: 'stopTimer'; who?: string; at?: string | number }
+  /** Time spent, logged by hand: a duration (ending now or at `end`), or a start and an end. */
+  | { op: 'logTime'; on?: TimeOn; who?: string; duration?: string | number; start?: string | number; end?: string | number; note?: string }
+  | { op: 'deleteTime'; entry: string }
   | { op: 'delete'; ids: Ref[] }
   | { op: 'addComment'; id: Ref; text: string; author?: string }
   /** Wiki pages (in a wiki only). `page`, `parent` and `before` take a page id, a `ref` or an exact title. */
@@ -171,8 +195,13 @@ export type Op =
   | { op: 'movePage'; page: string; parent?: string | null; before?: string }
   | { op: 'deletePage'; page: string }
 
+/** What time is on: an object (id or ref), a record of a database, or a wiki page (id or title). */
+export type TimeOn = Ref | { record: string; database?: Ref } | { page: string }
+
 export interface OpResult {
   op: Op['op']
+  /** The time entry made or changed. */
+  entry?: string
   /** Id of the object or line created (if any). */
   id?: Id
   /** Ids of everything created, for multi-object operations like flowcharts and mind maps. */
@@ -189,6 +218,8 @@ export interface ApplyContext {
   now?: number
   /** Objects these operations may not change or delete (other people's hidden brainstorm notes). */
   protect?: ReadonlySet<Id>
+  /** Who's asking, for timers and time when no "who" is given (the signed-in person, or the assistant's user). */
+  who?: TT.Person
 }
 
 /** Other people's hidden brainstorm notes on a board as someone sees it (blanked, so off limits). */
@@ -804,6 +835,16 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           if (typeof op.sketch !== 'boolean') fail(index, op, '"sketch" should be true or false')
           b = setSketch(b, [id], op.sketch)
         }
+        if (op.assignees !== undefined) {
+          if (op.assignees !== null && (!Array.isArray(op.assignees) || !op.assignees.every((n) => typeof n === 'string'))) fail(index, op, '"assignees" should be a list of names, or null')
+          if (!canHaveStatus(B.getItem(b, id)!.kind)) fail(index, op, 'frames, drawings and widgets can’t be assigned')
+          b = TT.assign(b, [id], op.assignees ?? [])
+        }
+        if (op.estimate !== undefined) {
+          const m = op.estimate === null || op.estimate === '' ? null : typeof op.estimate === 'number' ? op.estimate : TT.parseDuration(String(op.estimate))
+          if (m === undefined || (op.estimate !== null && op.estimate !== '' && (m === null || !(m > 0)))) fail(index, op, '"estimate" should be minutes, or a duration like "2h" or "1h 30m", or null')
+          b = TT.setEstimate(b, [id], m)
+        }
         if (op.linkTo !== undefined) {
           // A web address as text, a place in BrainCraft as {board?, page?, heading?, item?}, or null to remove it.
           const raw = typeof op.linkTo === 'string' ? { url: op.linkTo } : op.linkTo
@@ -948,6 +989,101 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'startTimer':
+      case 'stopTimer':
+      case 'logTime':
+      case 'deleteTime': {
+        const now = ctx.now ?? Date.now()
+        const person = (): TT.Person => {
+          if (op.op === 'deleteTime') return { name: '' }
+          if (op.who !== undefined) {
+            const name = text(op.who, 'who').trim()
+            if (!name) fail(index, op, '"who" should be a person’s name')
+            // Naming yourself keeps your account on it.
+            return ctx.who && ctx.who.name.toLowerCase() === name.toLowerCase() ? ctx.who : { name: name.slice(0, 60) }
+          }
+          if (!ctx.who) fail(index, op, 'say whose time it is: "who"')
+          return ctx.who
+        }
+        /** A time: epoch milliseconds, an ISO date and time, or "HH:MM" today. */
+        const when = (v: unknown, field: string): number => {
+          if (typeof v === 'number' && Number.isFinite(v)) return v
+          if (typeof v === 'string') {
+            const hm = /^(\d{1,2}):(\d{2})$/.exec(v.trim())
+            if (hm) {
+              const d = new Date(now)
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate(), Number(hm[1]), Number(hm[2])).getTime()
+            }
+            const t = Date.parse(v)
+            if (Number.isFinite(t)) return t
+          }
+          fail(index, op, `"${field}" should be a time: "2026-10-27T14:30", "14:30" (today) or milliseconds`)
+        }
+        const target = (v: unknown): TimeTarget | undefined => {
+          if (v === undefined || v === null) return undefined
+          if (typeof v === 'number' || typeof v === 'string') {
+            const id = resolve(v, 'on')
+            if (!canHaveStatus(B.getItem(b, id)!.kind)) fail(index, op, '"on" should be something time can go on: not a frame, drawing or widget (use {"record", "database"} for a database record)')
+            return { item: id }
+          }
+          const o = obj(v, 'on') as { record?: unknown; database?: unknown; page?: unknown }
+          if (o.page !== undefined) {
+            const p = typeof o.page === 'string' ? (W.getPage(b, o.page) ?? W.pageByTitle(b, o.page)) : undefined
+            if (!p || p.trashed) fail(index, op, '"on.page" should be a page id or title in this wiki')
+            return { page: p.id }
+          }
+          const all = b.datasets ?? []
+          const name = typeof o.database === 'string' ? o.database.trim().toLowerCase() : ''
+          const ds =
+            o.database === undefined
+              ? all.length === 1
+                ? all[0]
+                : undefined
+              : typeof o.database === 'number' || refs.has(String(o.database))
+                ? D.getDataset(b, B.getItem(b, resolve(o.database as Ref, 'on.database'))?.view?.dataset)
+                : all.find((d) => d.name.toLowerCase() === name)
+          if (!ds) fail(index, op, `"on.database" should name a database on this board (${all.map((d) => d.name).join(', ') || 'none yet'})`)
+          const r = ds.records.find((x) => x.id === o.record) ?? ds.records.find((x) => D.recordTitle(ds, x).toLowerCase() === String(o.record ?? '').trim().toLowerCase())
+          if (!r) fail(index, op, `"on.record" matches no record of ${ds.name} by id or ${D.titleField(ds).name}`)
+          return { dataset: ds.id, record: r.id }
+        }
+        if (op.op === 'startTimer') {
+          const r = TT.startTimer(b, { ...person(), on: target(op.on), note: typeof op.note === 'string' ? op.note : undefined, now, by: ctx.who?.name })
+          b = r.board
+          results.push({ op: op.op, entry: r.id })
+        } else if (op.op === 'stopTimer') {
+          const who = person()
+          const r = TT.stopTimer(b, who, now, op.at === undefined ? now : when(op.at, 'at'))
+          if (!r.stopped) fail(index, op, `${who.name} has no timer running`)
+          b = r.board
+          results.push({ op: op.op, entry: r.stopped.id })
+        } else if (op.op === 'logTime') {
+          const minutes = op.duration === undefined ? null : typeof op.duration === 'number' ? op.duration : TT.parseDuration(String(op.duration))
+          if (op.duration !== undefined && !(minutes && minutes > 0)) fail(index, op, '"duration" should be minutes, or like "1h 30m", "45m" or "1.5h"')
+          let start: number
+          let end: number
+          if (minutes) {
+            end = op.end !== undefined ? when(op.end, 'end') : op.start !== undefined ? when(op.start, 'start') + minutes * 60_000 : now
+            start = op.start !== undefined && op.end === undefined ? when(op.start, 'start') : end - minutes * 60_000
+          } else {
+            if (op.start === undefined || op.end === undefined) fail(index, op, 'give "duration", or "start" and "end"')
+            start = when(op.start, 'start')
+            end = when(op.end, 'end')
+          }
+          try {
+            const r = TT.logTime(b, { ...person(), on: target(op.on), start, end, note: typeof op.note === 'string' ? op.note : undefined, by: ctx.who?.name })
+            b = r.board
+            results.push({ op: op.op, entry: r.id })
+          } catch (err) {
+            fail(index, op, (err as Error).message)
+          }
+        } else {
+          if (!(b.time ?? []).some((e) => e.id === op.entry)) fail(index, op, '"entry" should be the id of a time entry on this board')
+          b = TT.deleteEntry(b, op.entry)
+          results.push({ op: op.op, entry: op.entry })
+        }
+        break
+      }
       case 'addRecords':
       case 'updateRecord':
       case 'deleteRecords': {
@@ -1079,7 +1215,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
   }
 }
 
-const PAGE_OPS = new Set<string>(['createPage', 'updatePage', 'movePage', 'deletePage'])
+const PAGE_OPS = new Set<string>(['createPage', 'updatePage', 'movePage', 'deletePage', 'startTimer', 'stopTimer', 'logTime', 'deleteTime'])
 
 export const OPS: Op['op'][] = [
   'createNote',
@@ -1112,6 +1248,10 @@ export const OPS: Op['op'][] = [
   'addField',
   'addAutomation',
   'setForm',
+  'startTimer',
+  'stopTimer',
+  'logTime',
+  'deleteTime',
   'addRecords',
   'updateRecord',
   'deleteRecords',

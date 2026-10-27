@@ -1298,3 +1298,28 @@ describe('marking done', () => {
     expect(B.getItem(e.board, a)!.status).toBe('done')
   })
 })
+
+describe('time tracking from the keyboard', () => {
+  it('Alt T starts a timer on the selection, the open wiki page or the board, and stops it again', () => {
+    let b = emptyBoard()
+    let a: number
+    ;[b, a] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Plan' }))
+    const e = new Editor(b, fakeMeasure)
+    e.setAuthor('Ann', 'u-ann')
+    e.select([a])
+    e.keyDown('t', { ctrl: false, shift: false, alt: true })
+    expect(e.myTimer).toMatchObject({ who: 'Ann', user: 'u-ann', on: { item: a } })
+    // Nothing selected: Alt T starts one on the board, stopping the first.
+    e.select([])
+    e.keyDown('t', { ctrl: false, shift: false, alt: true })
+    expect(e.myTimer?.on).toBeUndefined()
+    expect(e.board.time).toHaveLength(2)
+    expect(e.board.time![0].end).toBeDefined()
+    e.keyDown('t', { ctrl: false, shift: false, alt: true })
+    expect(e.myTimer).toBeUndefined()
+    // Time logged for someone else says who logged it.
+    expect(e.logTime({ who: { name: 'Bo' }, on: { item: a }, start: 1_800_000_000_000, end: 1_800_000_000_000 + 3_600_000 })).toBeNull()
+    expect(e.board.time![2]).toMatchObject({ who: 'Bo', by: 'Ann' })
+    expect(e.logTime({ start: 1_800_000_000_000, end: 1_800_000_000_000 })).toMatch(/after the start/)
+  })
+})

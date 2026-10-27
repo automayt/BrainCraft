@@ -4,6 +4,7 @@
  */
 
 import { type Op, OpError, type OpResult, applyOps } from '../api/ops'
+import type { Person } from '../model/timeTracking'
 import { protectedChange } from '../model/protection'
 import { cleanPatches } from '../model/sanitize'
 import type { Measure } from '../model/mindmap'
@@ -210,9 +211,9 @@ export class Room {
    * Applies API operations as if someone edited the board, and passes the changes to everyone.
    * `manages: false` (someone signed in who doesn't manage it) keeps them off protected pages.
    */
-  applyOps(ops: Op[], who: { manages?: boolean } = {}): OpResult[] {
+  applyOps(ops: Op[], who: { manages?: boolean; person?: Person } = {}): OpResult[] {
     const before = this.data.board
-    const { board, results } = applyOps(before, ops, { measure: this.measure })
+    const { board, results } = applyOps(before, ops, { measure: this.measure, ...(who.person ? { who: who.person } : {}) })
     // Keep server-made ids out of every person's block.
     const after = layoutAll(board, this.measure)
     const patches = diff(before, after)

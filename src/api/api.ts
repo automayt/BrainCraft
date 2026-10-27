@@ -28,7 +28,7 @@ export class BrainCraftAPI {
     if (this.editor.readOnly) throw new OpError('This board can’t be changed right now (it’s view-only, being presented, or running a flowchart)')
     let results: OpResult[] = []
     this.editor.edit((b) => {
-      const out = applyOps(b, list, { measure: this.editor.measure, origin: center(this.editor.visibleWorld), protect: maskedIds(this.editor.viewBoard) })
+      const out = applyOps(b, list, { measure: this.editor.measure, origin: center(this.editor.visibleWorld), protect: maskedIds(this.editor.viewBoard), who: this.editor.person })
       results = out.results
       return out.board
     })

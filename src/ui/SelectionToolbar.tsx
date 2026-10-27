@@ -10,6 +10,7 @@ import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, is
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useButtonMenu } from './menuKeys'
+import { AssignMenu, TrackMenu } from './TimeTracking'
 import { canLink, describeLink, type ItemLink } from '../model/itemLink'
 import { mentionCandidates, objectLabel } from '../model/notes'
 import { targetFromUrl } from '../store/deepLink'
@@ -287,6 +288,8 @@ export function SelectionToolbar() {
           </button>
         ))}
       {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
+      {!editor.readOnly && items.some((i) => canHaveStatus(i.kind)) && <AssignMenu />}
+      {items.some((i) => canHaveStatus(i.kind)) && <TrackMenu />}
       {!editor.readOnly && items.length > 0 && items.every((i) => canLink(i.kind)) && <LinkMenu />}
       {items.length > 0 && <ReactMenu />}
       {items.length === 1 && isDrawing(items[0]) && (

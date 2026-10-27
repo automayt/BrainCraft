@@ -9,7 +9,7 @@ import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import type { Board, Id, Kind } from '../model/types'
 import { KIND_LABELS } from '../model/types'
 import { type Op, type OpResult, opsFromText } from './ops'
-import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf, pageHistory, pageVersion } from './queries'
+import { describeBoard, timeReport, findObjects, getObject, getPage, listPages, mermaidOf, pageHistory, pageVersion } from './queries'
 import { isWiki } from '../model/wiki'
 
 export interface BoardInfo {
@@ -55,14 +55,15 @@ createCode {code, lang?} — a code block with syntax colouring (javascript, typ
 createSpinner {options: [text, …]} — a spinner wheel card; anyone can spin it and everyone sees the same answer
 createLink {url, w?, h?} — a card for a web page: its title, description and picture fill in when the app is connected to a BrainCraft server; YouTube, Vimeo and Spotify links play on the card
 connect {from, to, label?, style?: straight|elbow|curved, arrows?: end|both|none, dashed?, freeform?} — freeform: true when loose boxes and lines are really wanted (not for mind maps or flowcharts)
-update {id, text?, description?, color?, x?, y?, w?, h?, locked?, status?, sketch?, linkTo?} — linkTo makes the object lead somewhere when clicked: a wiki page {"board": WIKI_KEY, "page": PAGE_ID, "heading"?: anchor} (or {"page": ID} in this wiki), another board {"board": KEY}, an object {"item": ID} (with "board" for another board's), or a web address as a string; null removes it. sketch: true draws it by hand (wobbly outline, handwriting); description is free text shown above an object's comments; locked objects can't be moved or changed by accident; status marks where it stands: todo, doing, waiting, undecided, done, dropped, or none to clear (not on frames, drawings or data widgets)
+update {id, text?, description?, color?, x?, y?, w?, h?, locked?, status?, sketch?, linkTo?, assignees?, estimate?} — linkTo makes the object lead somewhere when clicked: a wiki page {"board": WIKI_KEY, "page": PAGE_ID, "heading"?: anchor} (or {"page": ID} in this wiki), another board {"board": KEY}, an object {"item": ID} (with "board" for another board's), or a web address as a string; null removes it. sketch: true draws it by hand (wobbly outline, handwriting); description is free text shown above an object's comments; locked objects can't be moved or changed by accident; status marks where it stands: todo, doing, waiting, undecided, done, dropped, or none to clear (not on frames, drawings or data widgets)
 delete {ids: [...]} — deleting a mind-map idea deletes its branch
 addComment {id, text, author?} — a timestamped comment on an object; mention another object with @[Label](#id). In comments and descriptions, [[Name]] links to the board or object called Name (boards first)
 createDatabase {title, fields?: [name | {name, type: text|number|date|select|person|checkbox, options?}], records?: [{FieldName: value}], views?: [table|board|timeline|calendar|gallery|form], groupBy?} — one set of records shown as linked views that stay in sync (a board groups by a select/person field; a timeline uses the first two date fields; a calendar puts records on their first date field's days; a gallery shows cards, with a picture from any field holding an image address). Types are guessed from values when not given. The first field is the record title.
 react {ids: [...], emoji: "👍", by?} — an emoji reaction on objects (by defaults to "AI")
 createVote {options: [ids/refs], question?, each?} — a dot vote: a card above the options; each person spreads "each" votes (default about a third of the options, 1–5), counts hidden until someone reveals them
-addField {id: any view, field: {name, type, …}} — a field for an existing database. Besides text|number|date|select|person|checkbox, fields can be: formula {formula: "{Price} * {Qty}"} (fields in braces; + - * / %, = != < > <= >=, and/or/not, if(test, a, b), round(x, n), min, max, empty(x), daysUntil({Due}), days(from, to), addDays(date, n), today()); relation {to: "Other database name"} linking each record to records there (give a record's links as their titles, a list or "A, B"); rollup {relation: "Relation field", field?: "Their field", fn: count|filled|sum|average|min|max|earliest|latest|percentDone|list}. Formulas and rollups are worked out, never set. createDatabase takes the same field specs.
+addField {id: any view, field: {name, type, …}} — a field for an existing database. Besides text|number|date|select|person|checkbox, fields can be: formula {formula: "{Price} * {Qty}"} (fields in braces; + - * / %, = != < > <= >=, and/or/not, if(test, a, b), round(x, n), min, max, empty(x), daysUntil({Due}), days(from, to), addDays(date, n), today()); relation {to: "Other database name"} linking each record to records there (give a record's links as their titles, a list or "A, B"); rollup {relation: "Relation field", field?: "Their field", fn: count|filled|sum|average|min|max|earliest|latest|percentDone|list}. tracked: the hours tracked on each record (timers and time logged on it). Formulas, rollups and tracked are worked out, never set. createDatabase takes the same field specs.
 addAutomation {id: any view, when: {added: true} | {field, to?}, set: [{field, value | "today" | null}]} — a rule that runs on every change from then on: "when Status becomes Done, set Completed to today" is {when: {field: "Status", to: "Done"}, set: [{field: "Completed", value: "today"}]}
+startTimer {on?: object id/ref | {record, database?} | {page}, who?, note?} · stopTimer {who?, at?} · logTime {on?, who?, duration: "1h 30m" | start + end, note?} · deleteTime {entry} — time tracking: one timer per person (starting another stops theirs), who defaults to the person asking. update also takes assignees: [names] and estimate: "2h" (how long it should take).
 setForm {id: a view, title?, intro?, thanks?, ask?: [field names], required?: [field names], shared?: true} — turns the view into a form: each answer becomes a record (automations run). Formulas, rollups and relations are never asked. shared lets anyone with the link answer without opening the board. createDatabase views can include "form" too.
 addRecords {id: any view, records: [{FieldName: value}]} · updateRecord {id: view, record: record id or title, values?: {FieldName: value or null}, body?: Markdown} — body is the record's page (notes, a checklist, a spec), shown under its fields when opened · deleteRecords {id: view, records: [ids or titles]}
 
@@ -159,6 +160,14 @@ export const TOOL_DEFS: ToolDef[] = [
     readOnly: true,
   },
   {
+    name: 'read_time',
+    title: 'Read time tracked',
+    description:
+      'Time people tracked on the board: total hours, who is timing what now, hours by person, by what it was on (object, database record or wiki page) and by day, and each entry. Optional "from" and "to" (dates or date-times) and "who" (a name) narrow it.',
+    inputSchema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' }, who: { type: 'string' }, ...fileProp } },
+    readOnly: true,
+  },
+  {
     name: 'list_boards',
     title: 'List boards',
     description: 'Every board saved in the browser (or every .braincraft file in the working folder when no browser is connected).',
@@ -216,6 +225,8 @@ export async function runTool(host: ToolHost, name: string, args: Record<string,
       const results = await host.apply(opsArg(args.ops))
       return { where: host.where(), results }
     }
+    case 'read_time':
+      return timeReport(host.board(), { from: typeof args.from === 'string' ? args.from : undefined, to: typeof args.to === 'string' ? args.to : undefined, who: typeof args.who === 'string' ? args.who : undefined })
     case 'list_pages': {
       const b = host.board()
       if (!isWiki(b)) throw new ToolError('This board isn’t a wiki. Open one with open_board, or make one with create_board and template "wiki".')

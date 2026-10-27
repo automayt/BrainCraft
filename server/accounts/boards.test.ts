@@ -236,3 +236,28 @@ describe('wikis on a server with accounts', () => {
     expect((await s.call('GET', `/api/boards/${other}/people`, s.sam.cookie)).status).toBe(404)
   })
 })
+
+describe('time across boards', () => {
+  it('adds up a person’s time on every board they can open; admins can ask for anyone’s', async () => {
+    const s = await server()
+    const one = String((await s.call('POST', '/api/boards', s.sam.cookie, { board: emptyBoard('=Launch') })).body.id)
+    const two = String((await s.call('POST', '/api/boards', s.lee.cookie, { board: emptyBoard('Lee only') })).body.id)
+    // Timers and time through the API are the signed-in person's own.
+    await s.call('POST', `/api/boards/${one}/ops`, s.sam.cookie, { ops: [{ op: 'logTime', duration: '2h', end: '2026-10-26T12:00' }, { op: 'logTime', who: 'Lee', duration: 30, end: '2026-10-26T12:00' }] })
+    await s.call('POST', `/api/boards/${two}/ops`, s.lee.cookie, { ops: [{ op: 'logTime', duration: '1h', end: '2026-10-26T12:00' }] })
+    expect(s.rooms.get(one)!.data.board.time![0]).toMatchObject({ who: 'Sam', user: s.sam.id })
+    const sam = (await s.call('GET', '/api/time', s.sam.cookie)).body
+    expect(sam).toMatchObject({ hours: 2, boards: [{ title: '=Launch', hours: 2 }] })
+    // Lee's own time, on a board Sam can't open, isn't Sam's to see.
+    expect((await s.call('GET', '/api/time?who=Lee', s.sam.cookie)).status).toBe(403)
+    expect((await s.call('GET', '/api/time?who=all', s.ann)).body).toMatchObject({ hours: 3.5 })
+    expect((await s.call('GET', '/api/time?who=Lee&from=2026-10-26', s.ann)).body).toMatchObject({ hours: 1.5 })
+    expect((await s.call('GET', '/api/time?from=soon', s.ann)).status).toBe(400)
+    const csv = String((await s.call('GET', '/api/time?who=all&format=csv', s.ann)).body.text)
+    expect(csv.split('\n')[0]).toBe('Board,Person,On,Kind,Start,End,Hours,Note,Logged by')
+    // A title a spreadsheet would run stays text.
+    expect(csv).toContain(`"'=Launch",Sam,`)
+    expect((await s.call('GET', '/api/time', '')).status).toBe(401)
+  })
+})
+

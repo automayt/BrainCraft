@@ -5,6 +5,7 @@
  */
 
 import { FormulaError, type FormulaValue, compile } from './formula'
+import { formatDuration } from './duration'
 import { fromDay, isIsoDay, toDay, today } from './timeline'
 import { uid } from './uid'
 import {
@@ -35,10 +36,12 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string }[] = [
   { type: 'relation', label: 'Relation', icon: '↗' },
   { type: 'rollup', label: 'Rollup', icon: 'Σ' },
   { type: 'formula', label: 'Formula', icon: 'ƒ' },
+  { type: 'tracked', label: 'Time tracked', icon: '⏱' },
 ]
 
 /** Fields worked out from others, never typed into (or stored). */
-export const isComputed = (f: Field) => f.type === 'rollup' || f.type === 'formula'
+/** Worked out, never set: rollups, formulas, and the time tracked on each record (in hours). */
+export const isComputed = (f: Field) => f.type === 'rollup' || f.type === 'formula' || f.type === 'tracked'
 
 /** The record ids a relation value links to. */
 export const relIds = (v: FieldValue | undefined): string[] => (typeof v === 'string' && v ? v.split(',').filter(Boolean) : [])
@@ -354,6 +357,8 @@ export function display(_ds: Dataset, f: Field, v: FieldValue | undefined): stri
       const ids = relIds(v)
       return titles ? ids.map((x) => titles[x] ?? '').filter(Boolean).join(', ') : `${ids.length} linked`
     }
+    case 'tracked':
+      return typeof v === 'number' && v > 0 ? formatDuration(v * 3_600_000) : ''
     case 'rollup':
     case 'formula':
       if (typeof v === 'boolean') return v ? '✓' : ''
@@ -690,7 +695,7 @@ export function plainRecords(ds: Dataset): Record<string, string | number | bool
   })
 }
 
-const FIELD_W: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140 }
+const FIELD_W: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140, tracked: 110 }
 
 /** A good size for a new view of `ds`. */
 export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: number } {
@@ -774,10 +779,19 @@ export function withComputed(b: Board, ds: Dataset, now = new Date()): Dataset {
     return { ...f, titles: Object.fromEntries((target?.records ?? []).map((r) => [r.id, recordTitle(target!, r)])) }
   })
   const shown: Dataset = { ...ds, fields }
+  // Hours tracked on each record, running timers up to now.
+  const tracked = new Map<string, number>()
+  if (fields.some((f) => f.type === 'tracked'))
+    for (const e of b.time ?? [])
+      if (e.on && 'record' in e.on && e.on.dataset === ds.id) tracked.set(e.on.record, (tracked.get(e.on.record) ?? 0) + Math.max(0, (e.end ?? Math.max(now.getTime(), e.start)) - e.start))
   const records = ds.records.map((r) => {
     const values: Record<string, FieldValue> = { ...r.values }
     for (const f of fields) {
-      if (f.type === 'rollup') {
+      if (f.type === 'tracked') {
+        const ms = tracked.get(r.id)
+        if (ms) values[f.id] = Math.round((ms / 3_600_000) * 100) / 100
+        else delete values[f.id]
+      } else if (f.type === 'rollup') {
         const rel = fields.find((x) => x.id === f.rollup?.relation)
         const target = other(rel?.relation?.dataset)
         if (!rel || !target || !f.rollup) continue

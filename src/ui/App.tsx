@@ -28,6 +28,7 @@ import { WikiView } from './wiki/WikiView'
 import { PagePeek } from './wiki/PagePeek'
 import { targetFromUrl } from '../store/deepLink'
 import { NotesPanel } from './NotesPanel'
+import { TimesheetDialog } from './TimeTracking'
 import { OutlinePanel } from './OutlinePanel'
 import { CheckDialog } from './CheckDialog'
 import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
@@ -72,7 +73,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.outlineOf ?? ''}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.outlineOf ?? ''}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}|${editor.timesheet ? 'time' : ''}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -466,6 +467,7 @@ function App({ ws }: { ws: Workspace }) {
             </PartBoundary>
           )}
           <ContextMenu />
+          {editor.timesheet && <TimesheetDialog />}
           <Toast />
           <SearchPalette />
           <ReadOnlyBanner />

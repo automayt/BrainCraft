@@ -30,6 +30,7 @@ function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
   if (i.description) out.push({ where: 'Description', text: plainNote(i.description) })
   const status = statusInfo(i.status)
   if (status) out.push({ where: 'Status', text: status.label })
+  if (i.assignees?.length) out.push({ where: 'Assigned to', text: i.assignees.join(', ') })
   for (const n of i.notes ?? []) out.push({ where: 'Comment', text: plainNote(n.text) })
   if (i.table) {
     const cols = new Map(i.table.columns.map((c) => [c.id, c.name]))

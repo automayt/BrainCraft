@@ -120,6 +120,8 @@ listed in `/api/docs`.
 | `GET /api/boards/{id}/pages` | edit or view | A wiki's page tree, with who edited each page and when. |
 | `GET /api/boards/{id}/pages/{page}?version=` | edit or view | One page by id or exact title (URL-encoded): its Markdown, place, sub-pages and backlinks; with `version`, that saved version. |
 | `GET /api/boards/{id}/pages/{page}/history` | edit or view | The page's saved versions, newest first. |
+| `GET /api/boards/{id}/time?from=&to=&who=&format=csv` | edit or view | Time tracked on the board: hours in all, who is timing what now, hours by person, by what it was on and by day, and each entry; `format=csv` for a spreadsheet. |
+| `GET /api/time?from=&to=&who=&format=csv` | signed in (accounts) | Your time on every board you can open, by board (or as CSV). Admins can pass `who` (a name, or `all`). |
 | `POST /api/boards/{id}/pages` with `{"title", "parent"?, "before"?, "text"?, "icon"?, "note"?}` | edit | Adds a page; answers with it (201). |
 | `PUT /api/boards/{id}/pages/{page}` with `{"title"?, "text"?, "append"?, "icon"?, "note"?, "protected"?}` | edit | Changes a page, keeping a version from before and after; `protected` is for people who manage the wiki. |
 | `POST /api/boards/{id}/pages/{page}/move` with `{"parent"?, "before"?}` | edit | Moves a page with its sub-pages (`"parent": null` for the top). |

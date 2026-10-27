@@ -484,6 +484,7 @@ export const BoardView = memo(function BoardView({
   view = null,
   coarse = false,
   statusFilter = null,
+  personFilter = null,
 }: {
   board: Board
   hidden: ReadonlySet<Id>
@@ -497,6 +498,8 @@ export const BoardView = memo(function BoardView({
   coarse?: boolean
   /** Objects without this status are dimmed. */
   statusFilter?: Status | null
+  /** Objects not assigned to this person are dimmed. */
+  personFilter?: string | null
 }) {
   const depths = mindDepths(board)
   // The selection and the object being edited always render, wherever they are.
@@ -511,8 +514,11 @@ export const BoardView = memo(function BoardView({
     )
   // Done objects are crossed out, dropped ones fade; with a status filter, everything else fades.
   const shape = (i: Item, depth: number) => {
-    const out = statusFilter && i.kind !== 'frame' && i.status !== statusFilter && !selection.has(i.id)
-    const look = [out && 'filtered-out', i.status === 'done' && 'status-done', !statusFilter && i.status === 'dropped' && 'status-dropped'].filter(Boolean).join(' ')
+    const out =
+      i.kind !== 'frame' &&
+      !selection.has(i.id) &&
+      ((statusFilter && i.status !== statusFilter) || (personFilter && !i.assignees?.some((n) => n.toLowerCase() === personFilter.toLowerCase())))
+    const look = [out && 'filtered-out', i.status === 'done' && 'status-done', !statusFilter && !personFilter && i.status === 'dropped' && 'status-dropped'].filter(Boolean).join(' ')
     return look ? (
       <g key={i.id} className={look}>
         {drawn(i, depth)}

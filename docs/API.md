@@ -104,6 +104,10 @@ timeline.
 | `createDatabase` | `title?`, `fields?` (names or field specs, as `addField` takes them), `records?` (objects keyed by field name), `views?` (`table` \| `board` \| `timeline` \| `calendar` \| `gallery` \| `form`), `groupBy?` | One dataset shown as linked views that stay in sync. Field types: `text`, `number`, `date`, `select`, `person`, `checkbox`, and the worked-out ones `addField` describes; guessed from the values when not given. The first field is each record's title. A board groups by `groupBy` (a choice or person field); a timeline uses the first two date fields. With no fields or records, a sample project list. |
 | `addField` | `id` (any view), `field`: `{"name", "type", "options?"}`, or `{"name", "type": "formula", "formula"}`, `{"name", "type": "relation", "to": "Other database"}`, `{"name", "type": "rollup", "relation": "Relation field", "field?", "fn"}` | A field for an existing database. Formulas name fields in braces: `{Price} * {Qty}`, with `+ - * / %`, comparisons, `and`/`or`/`not`, `if(test, a, b)`, `round`, `floor`, `ceil`, `abs`, `min`, `max`, `len`, `upper`, `lower`, `contains`, `empty`, `today()`, `daysUntil`, `days`, `addDays`, `year`, `month`. A relation's values are the linked records' titles (a list, or `"A, B"`). A rollup's `fn` is `count`, `filled`, `sum`, `average`, `min`, `max`, `earliest`, `latest`, `percentDone` or `list`. Formulas and rollups are worked out, never set. |
 | `addAutomation` | `id` (any view), `when`: `{"added": true}` or `{"field", "to?"}`, `set`: `[{"field", "value"}]` | A rule that runs on every change from then on: when a record is added, or a field changes (to a value), set fields of that record. `value` can be `"today"` for a date, or `null` to empty it. |
+| `startTimer` | `on?` (an object id or ref, `{"record", "database"?}`, or `{"page"}` in a wiki; left out, the board), `who?`, `note?` | A timer for a person (whoever is asking by default: the signed-in person with accounts). One timer each at a time: one already running stops first. Result: `entry`. |
+| `stopTimer` | `who?`, `at?` (when they stopped working; default now) | Stops a person’s running timer. |
+| `logTime` | `on?`, `who?`, `duration` (minutes, or `"1h 30m"`, `"45m"`, `"1.5h"`), `end?` (default now) — or `start` and `end`; `note?` | Time spent, logged by hand. Times are ISO date-times, `"14:30"` (today) or milliseconds. Logged for someone else, it notes who logged it. Result: `entry`. |
+| `deleteTime` | `entry` | Deletes a time entry. |
 | `setForm` | `id` (any view), `title?`, `intro?`, `thanks?`, `ask?` (field names), `required?` (field names), `shared?` | Makes the view a form: each answer becomes a record, and automations run on it. `shared: true` lets anyone with the link answer (with accounts, anyone signed in) through `/api/forms/{board}/{item}`, without seeing the records. Formulas, rollups and relations are never asked. |
 | `addRecords` | `id` (any view), `records` | Adds records; new choice values become new options. |
 | `updateRecord` | `id` (any view), `record` (record id or title), `values?`, `body?` | Sets fields by name (`null` or `""` clears one); `body` is the record's page in Markdown (notes, a checklist, a spec), shown under its fields when it's opened (`""` removes it). |
@@ -163,8 +167,13 @@ on `/api/boards/{id}/pages…`), and any board comes out as a file from
 
 The server's reads give the same answers as `list`, `get` and `find` below:
 `GET /api/boards/{id}/objects`, `/objects/{objectId}`, `/search?q=`,
-`/mermaid`, and for wikis `/pages`, `/pages/{page}` and `/pages/{page}/history`
-(see [SERVER.md](SERVER.md)).
+`/mermaid`, `/time?from=&to=&who=&format=csv` (time tracked: totals by person,
+by what it was on and by day, and each entry), and for wikis `/pages`,
+`/pages/{page}` and `/pages/{page}/history` (see [SERVER.md](SERVER.md)).
+
+`update` also takes `assignees` (a list of names; `null` clears it) and
+`estimate` (minutes, or `"2h"`; `null` clears it), on anything a status can go
+on.
 
 ## JavaScript
 

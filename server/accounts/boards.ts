@@ -19,6 +19,7 @@ import { OpError, opsFromText } from '../../src/api/ops'
 import type { Role } from '../../src/collab/protocol'
 import type { Room, RoomData } from '../../src/collab/room'
 import { maskFor } from '../../src/model/brainstorm'
+import { hours, summarize, timeCsv, type TimeFilter } from '../../src/model/timeTracking'
 import { mentionsOf, objectLabel, parseNote } from '../../src/model/notes'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
@@ -150,7 +151,7 @@ export class AccountBoards {
   /** Handles a board route; false when it isn't one. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'boards' && parts[1] !== 'mentions') return false
+    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'time') return false
     if (!this.accounts.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const me = this.accounts.userOf(req)
     if (!me) return json(res, 401, { error: 'Sign in first' }), true
@@ -159,6 +160,27 @@ export class AccountBoards {
     if (parts[1] === 'mentions') {
       if (m !== 'GET' || parts.length !== 2) return json(res, 405, { error: 'Method not allowed' }), true
       return json(res, 200, { mentions: this.mentions(me) }), true
+    }
+
+    // GET /api/time?from=&to=&who=&format=csv → time across every board you can open.
+    if (parts[1] === 'time') {
+      if (m !== 'GET' || parts.length !== 2) return json(res, 405, { error: 'Method not allowed' }), true
+      const q = url.searchParams
+      const at = (k: string) => {
+        const v = q.get(k)
+        return v ? Date.parse(v) : undefined
+      }
+      for (const k of ['from', 'to']) if (q.get(k) && !Number.isFinite(at(k))) return json(res, 400, { error: `"${k}" should be a date, like 2026-10-27` }), true
+      // Your own time; admins can ask for anyone's (a name), or everyone's ("all").
+      const who = q.get('who')?.trim()
+      if (who && who !== 'me' && me.role !== 'admin') return json(res, 403, { error: 'Only admins can see other people’s time across boards' }), true
+      const person = !who || who === 'me' ? { name: me.name, user: me.id } : who === 'all' ? undefined : { name: who }
+      const report = this.timeAcross(me, { from: at('from'), to: at('to'), ...(person ? { who: person } : {}) })
+      if (q.get('format') === 'csv') {
+        res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="time.csv"', 'cache-control': 'no-store' })
+        return res.end(report.csv), true
+      }
+      return json(res, 200, { hours: report.hours, boards: report.boards }), true
     }
 
     if (parts.length === 2 && m === 'GET') {
@@ -236,7 +258,7 @@ export class AccountBoards {
       const ops = opsFromText(await body())
       if (!ops) return json(res, 400, { error: 'Send {"ops": [...]} (see docs/API.md)' }), true
       try {
-        const results = room.applyOps(ops, { manages: level === 'manage' })
+        const results = room.applyOps(ops, { manages: level === 'manage', person: { name: me.name, user: me.id } })
         this.index(room)
         return json(res, 200, { version: room.data.version, results }), true
       } catch (err) {
@@ -303,6 +325,35 @@ export class AccountBoards {
   }
 
   /** Where `me` is mentioned on the boards they can open, newest first. */
+  /** Time on every board this person can open (as they'd see it: hidden notes stay hidden). */
+  private timeAcross(me: User, f: TimeFilter) {
+    const now = Date.now()
+    const boards: { board: string; title: string; hours: number; byPerson: { who: string; hours: number }[] }[] = []
+    const rows: string[] = []
+    let total = 0
+    for (const [id, e] of Object.entries(this.store.boards)) {
+      if (!this.level(me, e)) continue
+      const data = this.host.loaded?.(id)?.data ?? this.host.peek(id)
+      if (!data?.board.time?.length) continue
+      const board = maskFor(data.board, me.name)
+      const s = summarize(board, f, now)
+      if (!s.entries.length) continue
+      total += s.total
+      boards.push({ board: id, title: board.title, hours: hours(s.total), byPerson: s.byPerson.map((p) => ({ who: p.who, hours: hours(p.ms) })) })
+      // The same rows as a board's CSV, with the board first.
+      const lines = timeCsv(board, s).trimEnd().split('\n').slice(1)
+      // A title a spreadsheet would run as a formula is kept as text.
+      const t = /^[=+\-@]/.test(board.title) ? `'${board.title}` : board.title
+      const title = /[",\n']/.test(t) ? `"${t.replace(/"/g, '""')}"` : t
+      for (const l of lines) rows.push(`${title},${l}`)
+    }
+    return {
+      hours: hours(total),
+      boards: boards.sort((a, z) => z.hours - a.hours),
+      csv: ['Board,Person,On,Kind,Start,End,Hours,Note,Logged by', ...rows].join('\n') + '\n',
+    }
+  }
+
   private mentions(me: User) {
     const out: { board: string; title: string; kind?: 'wiki'; at?: number; by?: string; excerpt: string; item?: number; label?: string; note?: string; page?: string; pageTitle?: string }[] = []
     for (const [id, e] of Object.entries(this.store.boards)) {

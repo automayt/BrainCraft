@@ -11,6 +11,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { OpError, type Op, applyOps, maskedIds } from '../api/ops'
+import type { Person } from '../model/timeTracking'
 import { OPS_GUIDE, TOOL_DEFS, type ToolHost, runTool } from '../api/tools'
 import { BUDGET, SUMMARY_SYSTEM, dropStale, sizeOf, summaryCut, transcript, withSummary } from './thread'
 import { problemsWith } from './check'
@@ -117,6 +118,8 @@ export interface AssistantHost {
   others?(): Others
   /** A file's words (Markdown), for read_file; null when they can't be had from here. */
   fileText?(id: string): Promise<string | null>
+  /** The person asking, for timers and time logged with no "who". */
+  who?(): Person
 }
 
 export interface Others {
@@ -146,7 +149,7 @@ export interface Callbacks {
 /** What a live turn tells the model, besides what was said. */
 const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk, quickly. First say in a few words what you're doing (it appears on their screen as you write it, e.g. "Mind map of the launch, three branches."), then call propose_changes once with everything for this turn; it's applied at once (they can undo it), and that ends your turn, so write nothing after it. Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup, replace or remove parts of it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. Build it BrainCraft's way: start a mind map with createMindMap even if it's only the topic so far, then grow it with addIdeas under the idea they name ("add X and Y off Z" is two new ideas under Z, never more words in Z); grow a flowchart with addSteps; change a Kanban board, table or timeline with setKanban, setTable or setTimeline. When they correct themselves ("actually, replace X with Y"), change what you made: rename it with update, or delete it and add the right one. When they are only thinking aloud and there is nothing to add yet, just say a few words and change nothing.]`
 
-const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards']
+const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards', 'read_time']
 
 /** How much of a file read_file gives at once (characters). */
 const FILE_CHUNK = 40_000
@@ -339,7 +342,7 @@ export class Assistant {
     const before = this.host.board()
     try {
       const view = this.host.readable?.()
-      const after = layoutAll(applyOps(before, x.ops as Op[], { measure: this.host.measure, protect: view && maskedIds(view) }).board, this.host.measure)
+      const after = layoutAll(applyOps(before, x.ops as Op[], { measure: this.host.measure, protect: view && maskedIds(view), who: this.host.who?.() }).board, this.host.measure)
       const patches = diff(before, after)
       if (!patches.length) return 'Those operations change nothing on the board.'
       // Messes models tend to make go back once to be tidied (never twice: it can't get stuck).
@@ -453,7 +456,7 @@ export class Assistant {
       target = { board: x.board, title: base.title, kind: isWiki(base) ? 'wiki' : 'board' }
     }
     try {
-      const after = layoutAll(applyOps(base, x.ops as Op[], { measure: this.host.measure, protect: maskedIds(maskFor(base, others.me)) }).board, this.host.measure)
+      const after = layoutAll(applyOps(base, x.ops as Op[], { measure: this.host.measure, protect: maskedIds(maskFor(base, others.me)), who: this.host.who?.() }).board, this.host.measure)
       const patches = diff(base, after)
       if (!patches.length) return 'Those operations change nothing there.'
       return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches: [], counts: countChanges(base, patches), status: 'pending', target }

@@ -47,7 +47,7 @@ export interface Note {
 
 // ----- linked data: one dataset, many views ------------------------------------------
 
-export type FieldType = 'text' | 'number' | 'date' | 'select' | 'person' | 'checkbox' | 'relation' | 'rollup' | 'formula'
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'person' | 'checkbox' | 'relation' | 'rollup' | 'formula' | 'tracked'
 
 /** How a rollup sums up the records a relation links to. */
 export type RollupFn = 'count' | 'filled' | 'sum' | 'average' | 'min' | 'max' | 'earliest' | 'latest' | 'percentDone' | 'list'
@@ -379,6 +379,10 @@ export interface Item extends Rect {
   group?: string
   /** Where this object stands: to do, in progress, done… */
   status?: Status
+  /** Who it's assigned to: people's names (their account names, with accounts). */
+  assignees?: string[]
+  /** How long it should take, in minutes (time tracked on it is measured against this). */
+  estimate?: number
   /** Who last changed it (their name), for "Since you were here". */
   by?: string
   /** On a comment card: a private brainstorm round, and whether it was revealed. */
@@ -442,6 +446,28 @@ export interface Board {
   files?: BoardFile[]
   /** A hand-drawn board: new objects come out drawn by hand (see `sketch.ts`). */
   sketch?: true
+  /** Time people spent, and timers running now (see `timeTracking.ts`). */
+  time?: TimeEntry[]
+}
+
+/** What time was spent on: an object, a database record, a wiki page (or, left out, the board). */
+export type TimeTarget = { item: Id } | { dataset: string; record: string } | { page: string }
+
+/** Time someone spent: from `start` to `end`, or still running when `end` is missing. */
+export interface TimeEntry {
+  id: string
+  /** Whose time: a person's name (their account name, with accounts). */
+  who: string
+  /** Their account, with accounts. */
+  user?: string
+  start: number
+  end?: number
+  on?: TimeTarget
+  /** What the target was called when the time was logged, for when it's gone. */
+  label?: string
+  note?: string
+  /** Who logged it, when it isn't `who` (time logged for someone else). */
+  by?: string
 }
 
 /** A file kept with a board: its details (its bytes and text are in the file store). */

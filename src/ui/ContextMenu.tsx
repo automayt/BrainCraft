@@ -147,6 +147,21 @@ export function ContextMenu() {
       ...(editor.selectedItems.some((i) => canHaveStatus(i.kind))
         ? [{ label: editor.selectedItems.filter((i) => canHaveStatus(i.kind)).every((i) => i.status === 'done') ? 'Not done' : 'Mark done', keys: 'Ctrl Enter', run: () => editor.toggleDone() }]
         : []),
+      ...(single && canHaveStatus(single.kind) && !editor.readOnly
+        ? [
+            editor.myTimer?.on && 'item' in editor.myTimer.on && editor.myTimer.on.item === single.id
+              ? { label: 'Stop the timer', keys: 'Alt T', run: () => editor.stopTracking() }
+              : { label: 'Start a timer on this', keys: 'Alt T', run: () => editor.startTracking({ item: single.id }) },
+            { label: 'Log time on this…', run: () => editor.openTimesheet({ on: { item: single.id }, log: true }) },
+          ]
+        : []),
+      ...(editor.selectedItems.some((i) => canHaveStatus(i.kind)) && !editor.readOnly
+        ? [
+            editor.selectedItems.filter((i) => canHaveStatus(i.kind)).every((i) => i.assignees?.some((n) => n.toLowerCase() === editor.me.toLowerCase()))
+              ? { label: 'Unassign me', run: () => editor.assign([editor.me], 'remove') }
+              : { label: 'Assign to me', run: () => editor.assign([editor.me], 'add') },
+          ]
+        : []),
       editor.selectedItems.every((i) => i.locked)
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },

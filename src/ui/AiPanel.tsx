@@ -309,6 +309,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       s.assistant = new Assistant(backend, {
           board: () => editor.board,
           readable: () => editor.viewBoard,
+          who: () => editor.person,
           measure: editor.measure,
           selection: () => [...editor.selection],
           view: () => editor.visibleWorld,

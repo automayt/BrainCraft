@@ -4,7 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
-import type { Automation, Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap } from '../model/types'
+import type { Automation, Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap, TimeEntry } from '../model/types'
 
 export interface DatasetMeta {
   id: string
@@ -35,6 +35,7 @@ export type Patch =
   | { k: 'rev'; id: string; v: PageRev | null }
   /** A file's details (its bytes go to the file store, not through here). */
   | { k: 'file'; id: string; v: BoardFile | null }
+  | { k: 'time'; id: string; v: TimeEntry | null }
 
 /** What a patch is about: two patches with the same key replace each other. */
 export function keyOf(p: Patch): string {
@@ -65,6 +66,8 @@ export function keyOf(p: Patch): string {
       return `v:${p.id}`
     case 'file':
       return `f:${p.id}`
+    case 'time':
+      return `t:${p.id}`
   }
 }
 
@@ -184,6 +187,7 @@ export function diff(a: Board, z: Board): Patch[] {
   }
   diffById(a.revs, z.revs, (id, v) => ({ k: 'rev', id, v }), out)
   diffById(a.files, z.files, (id, v) => ({ k: 'file', id, v }), out)
+  diffById(a.time, z.time, (id, v) => ({ k: 'time', id, v }), out)
   return out
 }
 
@@ -264,6 +268,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let snaps = b.snaps
   let revs = b.revs
   let files = b.files
+  let time = b.time
   // Versions by id, made on the first version patch: one pass however many arrive at once.
   let revMap: Map<string, PageRev> | null = null
   let pageIds: Set<string> | null = null
@@ -356,6 +361,12 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         files = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
         break
       }
+      case 'time': {
+        const list = time ?? []
+        const at = list.findIndex((x) => x.id === p.id)
+        time = p.v === null ? list.filter((x) => x.id !== p.id) : at >= 0 ? list.map((x, k) => (k === at ? p.v! : x)) : [...list, p.v]
+        break
+      }
     }
   }
   const items = itemList.result() as Item[]
@@ -382,6 +393,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   else delete next.revs
   if (files?.length) next.files = files
   else delete next.files
+  if (time?.length) next.time = time
+  else delete next.time
   return next
 }
 
@@ -433,6 +446,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return (b.revs ?? []).find((r) => r.id === p.id) ?? null
       case 'file':
         return (b.files ?? []).find((f) => f.id === p.id) ?? null
+      case 'time':
+        return (b.time ?? []).find((e) => e.id === p.id) ?? null
     }
   }
 }

@@ -11621,3 +11621,478 @@ button.on,
 .status-menu kbd {
   margin-left: auto;
 }
+
+/* ----- time tracking ----- */
+
+.time-chip.running {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--on-accent);
+  background: var(--accent-strong);
+}
+
+.time-chip.long {
+  background: #b07a00;
+}
+
+.time-chip-clock {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.anchor > .time-pop {
+  left: auto;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(340px, calc(100vw - 32px));
+}
+
+.time-pop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.time-pop-body p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.time-pop-body input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.time-pop-actions,
+.time-endat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-endat input {
+  width: auto;
+  flex: 1;
+}
+
+.time-pop-foot {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.time-warn {
+  color: #b07a00;
+  font-size: 12px;
+}
+
+:root[data-theme='dark'] .time-warn,
+:root:not([data-theme]) .time-warn {
+  color: #e0a92a;
+}
+
+.time-others {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.time-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  animation: time-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes time-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .time-dot {
+    animation: none;
+  }
+}
+
+.time-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--muted);
+}
+
+.time-avatars {
+  display: inline-flex;
+}
+
+.time-avatars .time-avatar + .time-avatar {
+  margin-left: -5px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Under objects on the board. */
+.time-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transform-origin: 0 0;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.time-mark .time-avatar {
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+.time-mark .time-avatar + .time-avatar {
+  margin-left: -6px;
+}
+
+.time-spent,
+.time-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.time-spent.over {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.track-button.running {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.assign-button,
+.track-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.assign-menu,
+.track-menu {
+  min-width: 240px;
+}
+
+.assign-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assign-check {
+  margin-left: auto;
+  color: var(--accent);
+}
+
+.assign-new {
+  padding: 4px 6px;
+}
+
+.assign-new input,
+.track-estimate input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+}
+
+.track-estimate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.track-progress {
+  padding: 2px 10px 6px;
+  font-size: 12px;
+}
+
+.track-menu kbd {
+  margin-left: auto;
+}
+
+.time-estimate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.time-estimate.over .usage-meter span {
+  background: var(--danger);
+}
+
+.time-estimate.over {
+  color: var(--danger);
+}
+
+/* The timesheet. */
+.modal.timesheet {
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(860px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+}
+
+.timesheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 18px;
+  overflow: auto;
+}
+
+.timesheet-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.timesheet-filters select,
+.timesheet-log select,
+.timesheet-log input,
+.timesheet-edit select,
+.timesheet-edit input {
+  max-width: 260px;
+  padding: 5px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+}
+
+.timesheet-filters .on {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+}
+
+.timesheet-log {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.timesheet-log label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.timesheet-log label input,
+.timesheet-log label select {
+  max-width: none;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.timesheet-log-note,
+.timesheet-log .form-error,
+.timesheet-log-actions {
+  grid-column: 1 / -1;
+}
+
+.timesheet-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timesheet-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.timesheet-total {
+  display: flex;
+  flex-direction: column;
+}
+
+.timesheet-total strong {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.timesheet-people,
+.timesheet-days,
+.timesheet-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timesheet-people li,
+.timesheet-days li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.timesheet-people .usage-meter {
+  margin-left: auto;
+}
+
+.usage-meter.wide {
+  flex: 1;
+  width: auto;
+}
+
+.timesheet-days li > span:first-child {
+  width: 110px;
+}
+
+.timesheet-tabs {
+  padding: 0;
+  align-items: center;
+}
+
+.timesheet-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.timesheet-entry.running .timesheet-ms {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.timesheet-what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.timesheet-what small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timesheet-ms {
+  min-width: 64px;
+}
+
+.timesheet-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.timesheet-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.timesheet-edit label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.timesheet-edit .form-error,
+.timesheet-edit .timesheet-log-actions {
+  flex-basis: 100%;
+}
+
+.timesheet-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.record-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .timesheet-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A menu open in a bar comes in front of the banners below it. */
+.island:has(.popover) {
+  z-index: 40;
+}
+
+.align-menu.assign-menu,
+.align-menu.track-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.align-menu.assign-menu button,
+.align-menu.track-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 13px;
+  text-align: left;
+}

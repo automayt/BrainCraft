@@ -8,7 +8,7 @@ import * as B from '../model/board'
 import { isDrawing, sceneText } from '../model/excalidraw'
 import { canSketch, flowComponent, setBoardSketch, setSketch, sketchNew } from '../model/sketch'
 import { type ItemLink, setItemLink } from '../model/itemLink'
-import type { BoardFile, ExcalidrawScene } from '../model/types'
+import type { BoardFile, ExcalidrawScene, TimeEntry, TimeTarget } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
@@ -35,6 +35,7 @@ import * as CU from '../model/catchup'
 import { uid } from '../model/uid'
 import { linkItem, urlIn, withPreview } from '../model/linkCard'
 import * as ST from '../model/status'
+import * as TT from '../model/timeTracking'
 import * as BS from '../model/brainstorm'
 import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
@@ -338,6 +339,10 @@ export class Editor {
   notesOpen = false
   /** Only objects with this status show at full strength (the status key's filter). */
   statusFilter: Status | null = null
+  /** Only objects assigned to this person show at full strength. */
+  personFilter: string | null = null
+  /** The timesheet is open, showing time on this (or everything). */
+  timesheet: { on?: TimeTarget; log?: boolean } | null = null
   /** The search / object lookup palette is showing. */
   searchOpen = false
   /** Name stamped on new comments. */
@@ -2392,6 +2397,115 @@ export class Editor {
     } else this.markStatus('done')
   }
 
+  // ----- time tracking, assignees and estimates -------------------------------------------
+
+  /** Me, for timers and time: my name, and my account when signed in. */
+  get person(): TT.Person {
+    return { name: this.me, ...(this.userId ? { user: this.userId } : {}) }
+  }
+
+  /** My timer running on this board, if any. */
+  get myTimer(): TimeEntry | undefined {
+    return TT.runningFor(this.board, this.person)
+  }
+
+  /** What "this" is for a timer: the one selected object, else the wiki page open, else the board. */
+  get timeTarget(): TimeTarget | undefined {
+    const one = this.single
+    if (one && ST.canHaveStatus(one.kind)) return { item: one.id }
+    if (W.isWiki(this.board) && this.page) return { page: this.page }
+    return undefined
+  }
+
+  /** Starts my timer on `on` (what's selected, by default); one already running stops first. */
+  startTracking(on: TimeTarget | undefined = this.timeTarget, note?: string) {
+    if (this.readOnly) return
+    let started: { id: string; stopped?: TimeEntry } | null = null
+    this.edit((b) => {
+      const r = TT.startTimer(b, { ...this.person, on, note, now: Date.now() })
+      started = r
+      return r.board
+    })
+    const what = TT.describeTarget(this.board, on).label
+    const stopped = started!.stopped
+    this.setStatus(stopped ? `Timing ${what} (stopped ${TT.formatDuration(TT.durationOf(stopped, Date.now()))} on ${TT.describeTarget(this.board, stopped.on, stopped.label).label})` : `Timing ${what}`)
+  }
+
+  /** Stops my timer (at `end`, when it ran on after I stopped working). */
+  stopTracking(end?: number) {
+    if (this.readOnly || !this.myTimer) return
+    let stopped: TimeEntry | undefined
+    this.edit((b) => {
+      const r = TT.stopTimer(b, this.person, Date.now(), end)
+      stopped = r.stopped
+      return r.board
+    })
+    if (stopped) this.setStatus(`${TT.formatDuration(TT.durationOf(stopped, Date.now()))} on ${TT.describeTarget(this.board, stopped.on, stopped.label).label}`)
+  }
+
+  /** Alt T: stops my timer when it's on what's selected, else starts one there. */
+  toggleTracking() {
+    const mine = this.myTimer
+    if (mine && TT.sameTarget(mine.on, this.timeTarget)) this.stopTracking()
+    else this.startTracking()
+  }
+
+  /** Time logged by hand; the error's words when it can't be right. */
+  logTime(o: { who?: TT.Person; on?: TimeTarget; start: number; end: number; note?: string }): string | null {
+    if (this.readOnly) return 'This board is view-only'
+    try {
+      const who = o.who ?? this.person
+      const next = TT.logTime(this.board, { ...who, on: o.on, start: o.start, end: o.end, note: o.note, by: this.me }).board
+      this.edit(() => next)
+      this.setStatus(`Logged ${TT.formatDuration(o.end - o.start)}${who.name === this.me ? '' : ` for ${who.name}`}`)
+      return null
+    } catch (err) {
+      return (err as Error).message
+    }
+  }
+
+  /** Changes one time entry; the error's words when it can't be right. */
+  updateTime(id: string, c: TT.EntryChange): string | null {
+    if (this.readOnly) return 'This board is view-only'
+    try {
+      const next = TT.updateEntry(this.board, id, c)
+      this.edit(() => next)
+      return null
+    } catch (err) {
+      return (err as Error).message
+    }
+  }
+
+  deleteTime(id: string) {
+    if (this.readOnly) return
+    this.edit((b) => TT.deleteEntry(b, id))
+    this.setStatus('Time entry deleted (Ctrl Z brings it back)')
+  }
+
+  /** Assigns people to the selection (or `ids`): set, add or take away. */
+  assign(names: string[], how: 'set' | 'add' | 'remove' = 'set', ids: Id[] = [...this.selection]) {
+    if (this.readOnly || !ids.length) return
+    this.edit((b) => TT.assign(b, ids, names, how))
+  }
+
+  /** How long the selection (or `ids`) should take, in minutes; null clears it. */
+  setEstimate(minutes: number | null, ids: Id[] = [...this.selection]) {
+    if (this.readOnly || !ids.length) return
+    this.edit((b) => TT.setEstimate(b, ids, minutes))
+  }
+
+  /** Dims everything not assigned to this person; the same person again (or null) shows everything. */
+  setPersonFilter(name: string | null) {
+    this.personFilter = name && name.toLowerCase() !== this.personFilter?.toLowerCase() ? name : null
+    this.emit()
+  }
+
+  /** Opens the timesheet, on time spent on `on` (or everything), or with time to log. */
+  openTimesheet(o: { on?: TimeTarget; log?: boolean } | null = {}) {
+    this.timesheet = o
+    this.emit()
+  }
+
   /** Dims everything without this status; the same status again (or null) shows everything. */
   setStatusFilter(status: Status | null) {
     this.statusFilter = status === this.statusFilter ? null : status
@@ -3197,6 +3311,10 @@ export class Editor {
     // Letters with Alt act on the selection; plain or shifted ones type into it (below).
     if (mods.alt && k === 'c') {
       this.toggleNotes()
+      return true
+    }
+    if (mods.alt && k === 't' && !this.readOnly) {
+      this.toggleTracking()
       return true
     }
     if (mods.alt && k === 'r' && this.single?.kind === 'flow') {

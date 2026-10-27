@@ -201,6 +201,17 @@ Built:
   text, form answers and exports day by day; features in use; storage; the
   busiest and biggest boards.
 - [x] **Announcement** for everyone signed in, set by admins.
+- [x] **Time tracking:** timers on objects, records, pages or the board; time
+  logged by hand for anyone; assignees and estimates on objects; a timesheet
+  with CSV; a Time tracked database field; time across boards with accounts.
+
+Time, next:
+
+- **Rates and invoices.** An hourly rate per person or per board, and a
+  printable invoice from a span of time.
+- **Weekly reminders.** A note on Friday to anyone whose week has gaps, or a
+  timer that has run past the end of the day.
+- **Timers in Kanban cards and table rows**, not just objects and records.
 
 Admin, next:
 

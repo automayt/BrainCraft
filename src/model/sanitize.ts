@@ -33,6 +33,7 @@ import type {
 import { type Automation, defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { cleanFile, isFileId } from './files'
+import { cleanAssignees, cleanEntry, isEntryId } from './timeTracking'
 import { canLink, cleanItemLink } from './itemLink'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
@@ -42,7 +43,7 @@ export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'fra
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
 const FLOW_SHAPES = ['process', 'decision', 'terminator', 'data', 'document', 'database', 'subroutine']
 const VIEW_TYPES = ['table', 'board', 'timeline', 'calendar', 'gallery', 'form']
-const FIELD_TYPES = ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula']
+const FIELD_TYPES = ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula', 'tracked']
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -321,6 +322,10 @@ export function cleanItem(raw: unknown): Item | null {
   const group = str(raw.group, 64)
   if (group) out.group = group
   if (STATUSES.includes(raw.status as Status)) out.status = raw.status as Status
+  const assignees = cleanAssignees(raw.assignees)
+  if (assignees.length) out.assignees = assignees
+  const estimate = num(raw.estimate)
+  if (estimate !== undefined && estimate > 0) out.estimate = Math.min(Math.round(estimate), 100_000)
   for (const k of ['by', 'hiddenBy'] as const) {
     const v = str(raw[k], 60)
     if (v) out[k] = v
@@ -556,6 +561,15 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         else {
           const v = cleanRecord(p.v)
           if (v && v.id === p.id) out.push({ k: 'rec', ds: p.ds, id: p.id, v })
+        }
+        break
+      }
+      case 'time': {
+        if (!isEntryId(p.id)) break
+        if (p.v === null) out.push({ k: 'time', id: p.id, v: null })
+        else {
+          const v = cleanEntry(p.v)
+          if (v && v.id === p.id) out.push({ k: 'time', id: p.id, v })
         }
         break
       }

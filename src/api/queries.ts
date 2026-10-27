@@ -9,10 +9,11 @@ import { linksIn, objectLabel, plainNote } from '../model/notes'
 import { search } from '../model/search'
 import { sceneText } from '../model/excalidraw'
 import { toCsv } from '../model/table'
-import type { Board, Id, Item, Kind, Status } from '../model/types'
+import type { Board, Id, Item, Kind, Status, TimeTarget } from '../model/types'
 import * as W from '../model/wiki'
 import { diffCounts } from '../model/merge'
 import * as RV from '../model/revisions'
+import * as TT from '../model/timeTracking'
 
 export interface ObjectSummary {
   id: Id
@@ -24,6 +25,10 @@ export interface ObjectSummary {
   h: number
   commentCount: number
   status?: Status
+  /** Who it's assigned to. */
+  assignees?: string[]
+  /** How long it should take, in minutes. */
+  estimate?: number
   /** Someone else's private brainstorm note: blank until the round is revealed, and off limits. */
   hidden?: true
 }
@@ -45,6 +50,8 @@ export const summary = (i: Item): ObjectSummary => ({
   h: Math.round(i.h),
   commentCount: i.notes?.length ?? 0,
   ...(i.status ? { status: i.status } : {}),
+  ...(i.assignees ? { assignees: i.assignees } : {}),
+  ...(i.estimate ? { estimate: i.estimate } : {}),
   ...(i.masked ? { hidden: true as const } : {}),
 })
 
@@ -187,9 +194,38 @@ export function listLinks(b: Board) {
   }))
 }
 
+/**
+ * Time spent on the board: totals by person, by what it was on and by day, and each entry, in
+ * hours, for a span (`from`/`to` as anything Date takes) and optionally one person or target.
+ */
+export function timeReport(b: Board, f: { from?: string; to?: string; who?: string } = {}, now = Date.now()) {
+  const at = (s: string | undefined) => (s && Number.isFinite(Date.parse(s)) ? Date.parse(s) : undefined)
+  const s = TT.summarize(b, { from: at(f.from), to: at(f.to), ...(f.who ? { who: { name: f.who } } : {}) }, now)
+  const where = (on: TimeTarget | undefined) => (!on ? 'board' : 'item' in on ? { object: on.item } : 'record' in on ? { database: on.dataset, record: on.record } : { page: on.page })
+  return {
+    hours: TT.hours(s.total),
+    running: TT.running(b).map((e) => ({ who: e.who, on: TT.describeTarget(b, e.on, e.label).label, since: new Date(e.start).toISOString() })),
+    byPerson: s.byPerson.map((p) => ({ who: p.who, hours: TT.hours(p.ms) })),
+    byTarget: s.byTarget.map((t) => ({ on: t.label, kind: t.kind, ...(t.gone ? { deleted: true } : {}), hours: TT.hours(t.ms) })),
+    byDay: s.byDay.map((d) => ({ day: d.day, hours: TT.hours(d.ms) })),
+    entries: s.entries.slice(0, 500).map(({ entry: e, ms }) => ({
+      id: e.id,
+      who: e.who,
+      where: where(e.on),
+      on: TT.describeTarget(b, e.on, e.label).label,
+      start: new Date(e.start).toISOString(),
+      ...(e.end ? { end: new Date(e.end).toISOString() } : { running: true }),
+      hours: TT.hours(ms),
+      ...(e.note ? { note: e.note } : {}),
+      ...(e.by ? { loggedBy: e.by } : {}),
+    })),
+  }
+}
+
 /** A compact description of the whole board: what an assistant reads first. */
 export function describeBoard(b: Board, kind?: Kind) {
-  if (W.isWiki(b)) return { kind: 'wiki', ...listPages(b), note: 'This is a wiki: read pages with read_page, change them with createPage, updatePage, movePage and deletePage.' }
+  const time = b.time?.length ? timeOverview(b) : undefined
+  if (W.isWiki(b)) return { kind: 'wiki', ...listPages(b), ...(time ? { time } : {}), note: 'This is a wiki: read pages with read_page, change them with createPage, updatePage, movePage and deletePage.' }
   const counts: Partial<Record<Kind, number>> = {}
   for (const i of b.items) counts[i.kind] = (counts[i.kind] ?? 0) + 1
   return {
@@ -197,5 +233,12 @@ export function describeBoard(b: Board, kind?: Kind) {
     counts,
     objects: listObjects(b, kind),
     links: kind ? undefined : listLinks(b),
+    ...(time ? { time } : {}),
   }
+}
+
+/** Time in brief: who's timing what now, and the totals. */
+function timeOverview(b: Board) {
+  const r = timeReport(b)
+  return { hours: r.hours, running: r.running, byPerson: r.byPerson, byTarget: r.byTarget.slice(0, 20), note: 'Each entry: read_time (or GET …/time); start or log time with startTimer, stopTimer and logTime' }
 }

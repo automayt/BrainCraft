@@ -205,6 +205,44 @@ These become interactive once selected; drag them by their title strip.
   labels, filtered by type. With an empty query it
   lists every object, so it doubles as the object lookup.
 
+### Time tracking, assignees and estimates
+
+- **A timer on anything:** select an object and press **Alt+T** (or the clock
+  in the top bar, or **Time** on the selection toolbar) to start timing it.
+  With nothing selected it times the board, or the open page in a wiki.
+  Database records have their own **Start a timer** on their page.
+  - Each person has one timer at a time on a board: starting another stops
+    the first.
+  - Timers are kept with the board, so one keeps running through a reload, on
+    another device, and while you're away. Everyone in a live session sees who
+    is timing what.
+  - A timer left running for hours asks whether you forgot it, and **Stop at
+    an earlier time…** sets when you really stopped.
+- **Log time by hand**, for yourself or for someone else: how long ("1h 30m",
+  "90m", "1.5h", "1:30"), when it ended, what it was on, and a note. Time
+  logged for someone else says who logged it.
+- **Assign** objects to people (**Assign** on the selection toolbar, **Assign
+  to me** on the right-click menu). Give them an **estimate** under **Time**.
+  - Under each object: who it's assigned to, the time spent against its
+    estimate (red once over it), and who's timing it now.
+  - A mind map's ideas count the time on the ideas under them.
+  - **Ctrl+K → "Show only what's assigned to…"** dims everything else, and
+    search finds objects by who they're assigned to.
+- **The timesheet** (clock → **Timesheet**, or Ctrl+K "timesheet"):
+  - every entry for today, this week, last week, this month or all time, for
+    everyone or one person, and on everything or one thing;
+  - totals by person, by what it was on (against estimates) and by day;
+  - fix any entry's times, person, target or note, or delete it;
+  - entries that overlap, or a timer running suspiciously long, are flagged;
+  - **Download CSV** for a spreadsheet or an invoice, or **Copy totals** as a
+    Markdown table;
+  - with accounts, **My time on all boards (CSV)** gathers your time from every
+    board you can open.
+- **Databases** can add a **Time tracked** field: the hours on each record,
+  which rollups can sum (a project's total from its tasks).
+- The assistant and the [API](docs/API.md) read and log time too
+  (`startTimer`, `stopTimer`, `logTime`, `GET …/time`).
+
 ### Status marks
 
 - **Mark where anything stands**: *to do*, *in progress*, *waiting*,
@@ -512,7 +550,7 @@ shares live exactly like a board.
   floats up from your cursor for everyone in the live session.
 - **/** opens cursor chat: type a line and it appears next to your cursor
   for a few seconds.
-- **Timers:** "Start a 5-minute timer" in Ctrl+K (1, 3, 5 or 10 minutes).
+- **Countdowns:** "Start a 5-minute countdown for everyone" in Ctrl+K (1, 3, 5 or 10 minutes). For tracking time spent, see [Time tracking](#time-tracking-assignees-and-estimates).
   Everyone sees the same countdown — people who join late too — with
   +1 min and stop, and a chime at the end.
 - All of these work alone as well; nothing is saved into the board.

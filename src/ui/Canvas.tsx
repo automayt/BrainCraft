@@ -17,6 +17,7 @@ import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
 import { Social } from './Social'
 import { StatusMarks } from './StatusMarks'
+import { TimeMarks } from './TimeTracking'
 import { StatusKey } from './StatusKey'
 import { CatchUpOverlay } from './CatchUp'
 import { BoardView, COARSE_ZOOM, ItemShape, commentBodyRect, inkFor, mindDepths } from './BoardView'
@@ -285,9 +286,11 @@ export function Canvas() {
             view={cull}
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
             statusFilter={editor.statusFilter}
+            personFilter={editor.personFilter}
           />
           <Social editor={editor} />
           <StatusMarks editor={editor} />
+          <TimeMarks editor={editor} />
           <CatchUpOverlay editor={editor} />
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />

@@ -18,13 +18,14 @@ import { answersToValues, askable, definitionOf } from '../../model/forms'
 import { call } from '../../store/account'
 import { formLink } from '../../store/formLink'
 import { FormFill } from '../FormFill'
+import { RecordTime } from '../TimeTracking'
 import { WorkspaceContext } from '../useWorkspace'
 import { textOn } from '../paint'
 import { EditorContext } from '../useEditor'
 import { useEscape } from '../useEscape'
 import { Menu, Widget } from './Widget'
 
-const WIDTH: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140 }
+const WIDTH: Record<FieldType, number> = { text: 220, number: 96, date: 132, select: 140, person: 128, checkbox: 76, relation: 180, rollup: 110, formula: 140, tracked: 110 }
 const ROWNUM = 36
 
 const typeIcon = (t: FieldType) => D.FIELD_TYPES.find((x) => x.type === t)!.icon
@@ -516,6 +517,7 @@ function RecordPage({ c, id, onClose }: { c: Ctx; id: string; onClose: () => voi
               ))}
             </dl>
           )}
+          <RecordTime dataset={c.ds.id} record={r.id} />
           <section className="record-notes" aria-label="Page">
             {draft !== null ? (
               <>

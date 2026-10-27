@@ -12,6 +12,12 @@ const str = (description?: string): Schema => ({ type: 'string', ...(description
 const num = (description?: string): Schema => ({ type: 'number', ...(description ? { description } : {}) })
 const bool = (description?: string): Schema => ({ type: 'boolean', ...(description ? { description } : {}) })
 const list = (items: Schema, description?: string): Schema => ({ type: 'array', items, ...(description ? { description } : {}) })
+/** What time is on. */
+const timeOn: Schema = {
+  description: 'An object (id or ref), {"record": id or title, "database"?: name or view} for a database record, or {"page": id or title} in a wiki; left out, the board as a whole',
+  anyOf: [{ type: 'integer' }, { type: 'string' }, { type: 'object' }],
+}
+const when = (description: string): Schema => ({ description: `${description}: "2026-10-27T14:30", "14:30" (today) or milliseconds`, anyOf: [{ type: 'string' }, { type: 'number' }] })
 const oneOf = (...s: Schema[]): Schema => ({ oneOf: s })
 const ref = oneOf(num('An object id'), str('The "ref" of an object made earlier in the batch'))
 const day = str('A date, YYYY-MM-DD')
@@ -156,6 +162,8 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
       locked: bool(),
       status: { enum: ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped', 'none'], description: '"none" clears it' },
       sketch: bool('Drawn by hand: wobbly outlines and handwriting (shapes, flowchart shapes, notes, text, frames, mind maps)'),
+      assignees: { description: 'People it is assigned to, by name (replaces the list); null or [] clears it', anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
+      estimate: { description: 'How long it should take: minutes, or a duration like "2h" or "1h 30m"; null clears it', anyOf: [{ type: 'number' }, { type: 'string' }, { type: 'null' }] },
       linkTo: {
         description: 'Where the object leads when clicked: a web address, a wiki page {"board": key, "page": id, "heading"?: anchor}, a board {"board": key}, or an object {"item": id, "board"?: key}; null removes it',
         anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'null' }],
@@ -184,7 +192,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
         type: 'object',
         properties: {
           name: str(),
-          type: { enum: ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula'] },
+          type: { enum: ['text', 'number', 'date', 'select', 'person', 'checkbox', 'relation', 'rollup', 'formula', 'tracked'] },
           options: list(str()),
           formula: str('For a formula: fields in braces, e.g. {Price} * {Qty}'),
           to: oneOf(str('For a relation: the database it links to, by name'), num('or one of its views')),
@@ -219,6 +227,29 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     },
     required: ['id'],
   },
+  startTimer: {
+    summary: 'Starts a timer for a person on an object, a database record, a wiki page or the board (a timer of theirs already running stops first)',
+    properties: {
+      on: timeOn,
+      who: str('Whose time (default: whoever is asking, with accounts)'),
+      note: str('What they are doing'),
+    },
+    required: [],
+  },
+  stopTimer: { summary: 'Stops a person’s running timer', properties: { who: str('Whose timer (default: whoever is asking)'), at: when('When they stopped working (default: now)') }, required: [] },
+  logTime: {
+    summary: 'Logs time spent, by hand: a duration (ending now, or at "end"), or a "start" and an "end"',
+    properties: {
+      on: timeOn,
+      who: str('Whose time (default: whoever is asking)'),
+      duration: { description: 'Minutes, or like "1h 30m", "45m", "1.5h"', anyOf: [{ type: 'number' }, { type: 'string' }] },
+      start: when('When it started'),
+      end: when('When it ended'),
+      note: str(),
+    },
+    required: [],
+  },
+  deleteTime: { summary: 'Deletes a time entry', properties: { entry: str('The entry’s id') }, required: ['entry'] },
   addRecords: { summary: 'Adds records to a database', properties: { id: ref, records: list({ type: 'object' }) }, required: ['id', 'records'] },
   updateRecord: { summary: 'Sets fields of one record by name (null or "" clears one), and/or its page', properties: { id: ref, record: str('A record id or title'), values: { type: 'object' }, body: str('The record’s page, in Markdown: notes, a checklist, a spec ("" removes it)') }, required: ['id', 'record'] },
   deleteRecords: { summary: 'Deletes records', properties: { id: ref, records: list(str('A record id or title')) }, required: ['id', 'records'] },

@@ -7,6 +7,7 @@
 
 import { type Rect, intersects } from '../model/geom'
 import { objectLabel } from '../model/notes'
+import * as TT from '../model/timeTracking'
 import type { Board, Id, Item, Kind } from '../model/types'
 
 /** Above this many objects, the board is summarised instead of listed in full. */
@@ -25,6 +26,8 @@ export function objectLine(i: Item): string {
   if (i.kind === 'flow' && i.shape) parts.push(`shape:${i.shape}`)
   if (typeof i.back === 'string') parts.push(i.flipped ? 'flip-card:showing-back' : 'flip-card:showing-front')
   if (i.status) parts.push(`status:${i.status}`)
+  if (i.assignees) parts.push(`assigned:${i.assignees.join(',')}`)
+  if (i.estimate) parts.push(`estimate:${i.estimate}min`)
   if (i.kind === 'link' && i.link) parts.push(`url:${i.link.url}`)
   if (i.notes?.length) parts.push(`comments:${i.notes.length}`)
   if (i.description) parts.push('has-description')
@@ -83,9 +86,19 @@ export function boardText(b: Board, o: BoardTextOptions = {}): string {
     ['Objects — id kind (x,y wxh) "label" [extras]:', ...pool.map(objectLine)],
     [note],
     lines.length ? ['Lines — from->to "label":', ...lines.map((c) => `${c.from}->${c.to}${c.label ? ` ${quote(c.label)}` : ''}${ids.has(c.from) && ids.has(c.to) ? '' : ' (one end not listed)'}`)] : [],
+    b.time?.length ? [timeLine(b)] : [],
   ]
   return sections
     .map((lines) => lines.filter(Boolean).join('\n'))
     .filter(Boolean)
     .join('\n\n')
+}
+
+/** Time tracked, in brief: the total, who's timing what now, and the most time by what it was on. */
+function timeLine(b: Board): string {
+  const now = Date.now()
+  const s = TT.summarize(b, {}, now)
+  const running = TT.running(b).map((e) => `${e.who} on ${quote(TT.describeTarget(b, e.on, e.label).label)}`)
+  const top = s.byTarget.slice(0, 8).map((t) => `${quote(t.label)} ${TT.hours(t.ms)}h`)
+  return `Time tracked: ${TT.hours(s.total)}h (${s.byPerson.map((p) => `${p.who} ${TT.hours(p.ms)}h`).join(', ')}). ${running.length ? `Timing now: ${running.join(', ')}. ` : ''}Most on: ${top.join(', ')}. Every entry: read_time.`
 }

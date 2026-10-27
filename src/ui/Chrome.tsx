@@ -1,6 +1,7 @@
 /** The floating controls around the canvas. */
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { TimeChip } from './TimeTracking'
 import { AccountMenu } from './accounts/AccountMenu'
 import { useDialog } from './useDialog'
 import { preloadAi } from './lazyAi'
@@ -301,6 +302,7 @@ export function TopRight() {
           <Tip label="Frames become slides" keys="Shift P" />
         </button>
       )}
+      <TimeChip />
       <AccountMenu onAdmin={ui.openAdmin} />
       <button className="search-pill" aria-label="Search or run a command" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />

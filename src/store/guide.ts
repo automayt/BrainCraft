@@ -467,7 +467,8 @@ On a BrainCraft server, **Share → Start a live session** gives an edit link an
 ## In the moment
 
 - **E** sends an emote from your cursor; **/** says something next to it.
-- **Timers:** "Start a 5-minute timer" in **Ctrl+K**; everyone sees the same countdown.
+- **Countdowns:** "Start a 5-minute countdown for everyone" in **Ctrl+K**; everyone sees the same one.
+- **Time tracking:** select something and press **Alt+T** to time it; the clock in the top bar has the timesheet.
 
 ## Deciding
 

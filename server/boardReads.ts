@@ -8,6 +8,7 @@
  *   GET /api/boards/:id/pages                     a wiki's page tree
  *   GET /api/boards/:id/pages/:page[?version=]    one page (id or exact title), or a saved version
  *   GET /api/boards/:id/pages/:page/history       a page's versions
+ *   GET /api/boards/:id/time[?from=&to=&who=&format=csv]   time tracked on it
  *
  * Shared by key-shared boards and boards on a server with accounts; the caller has already
  * checked that the asker may at least view the board. Hidden brainstorm notes stay blank: an API
@@ -15,7 +16,8 @@
  */
 
 import type { ServerResponse } from 'node:http'
-import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf, pageHistory, pageVersion } from '../src/api/queries'
+import { describeBoard, findObjects, getObject, getPage, listPages, mermaidOf, pageHistory, pageVersion, timeReport } from '../src/api/queries'
+import { summarize, timeCsv } from '../src/model/timeTracking'
 import { maskFor } from '../src/model/brainstorm'
 import { KIND_LABELS, type Board, type Kind } from '../src/model/types'
 import { isWiki } from '../src/model/wiki'
@@ -35,7 +37,7 @@ export function sendRead(res: ServerResponse, r: ReadReply) {
 }
 
 /** The sub-routes this answers (after /api/boards/:id/). */
-export const READ_ROUTES = new Set(['objects', 'search', 'mermaid', 'pages'])
+export const READ_ROUTES = new Set(['objects', 'search', 'mermaid', 'pages', 'time'])
 
 const notWiki = { status: 409, body: { error: 'This board is a canvas, not a wiki: read it with /objects' } }
 
@@ -69,6 +71,16 @@ export function readBoard(raw: Board, rest: string[], q: URLSearchParams): ReadR
   if (what === 'mermaid' && !sub) {
     const ids = q.get('ids')?.split(',').map(Number).filter(Number.isInteger)
     return { status: 200, text: mermaidOf(board, ids?.length ? ids : undefined) }
+  }
+  if (what === 'time' && !sub) {
+    const f = { from: q.get('from') ?? undefined, to: q.get('to') ?? undefined, who: q.get('who') ?? undefined }
+    for (const k of ['from', 'to'] as const) if (f[k] && !Number.isFinite(Date.parse(f[k]!))) return { status: 400, body: { error: `"${k}" should be a date, like 2026-10-27` } }
+    if (q.get('format') === 'csv') {
+      const at = (s: string | undefined) => (s ? Date.parse(s) : undefined)
+      const s = summarize(board, { from: at(f.from), to: at(f.to), ...(f.who ? { who: { name: f.who } } : {}) }, Date.now())
+      return { status: 200, text: timeCsv(board, s) }
+    }
+    return { status: 200, body: timeReport(board, f) }
   }
   if (what === 'pages') {
     if (!isWiki(board)) return notWiki

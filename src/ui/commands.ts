@@ -9,6 +9,7 @@ import { isWiki } from '../model/wiki'
 import { canSketch } from '../model/sketch'
 import { sketchIt } from './excalidraw/sketchIt'
 import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
+import { describeTarget, peopleOn, sameTarget } from '../model/timeTracking'
 import { THEMES } from './theme'
 import type { Ui } from './uiContext'
 import { appName } from '../store/brand'
@@ -58,10 +59,11 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     })),
     { id: 'emote', label: 'Send an emote', group: 'Together', keys: 'E', aliases: 'emoji react party celebrate live', run: () => editor.openEmotePicker() },
     { id: 'chat', label: 'Say something by your cursor', group: 'Together', keys: '/', aliases: 'cursor chat message talk live', run: () => editor.setChatting(true) },
-    ...[1, 3, 5, 10].map((m) => ({ id: `timer-${m}`, label: `Start a ${m}-minute timer`, group: 'Together', aliases: 'timer countdown timebox clock brainstorm', run: () => editor.startTimer(m * 60) })),
+    ...[1, 3, 5, 10].map((m) => ({ id: `timer-${m}`, label: `Start a ${m}-minute countdown for everyone`, group: 'Together', aliases: 'timer countdown timebox clock brainstorm', run: () => editor.startTimer(m * 60) })),
+    ...timeCommands(editor),
     { id: 'wheel', label: editor.selection.size > 1 ? 'Spin a wheel between these' : 'Add a spinner wheel', group: 'Together', aliases: 'wheel spinner spin random pick choose decide lottery raffle who', run: () => editor.addWheel() },
     { id: 'brainstorm', label: 'Start a private brainstorm', group: 'Together', aliases: 'brainstorm private hidden secret blind ideas reveal anonymous sticky', run: () => editor.startBrainstorm() },
-    ...(editor.timer ? [{ id: 'timer-stop', label: 'Stop the timer', group: 'Together', aliases: 'timer stop cancel', run: () => editor.startTimer(null) }] : []),
+    ...(editor.timer ? [{ id: 'timer-stop', label: 'Stop the countdown', group: 'Together', aliases: 'timer countdown stop cancel', run: () => editor.startTimer(null) }] : []),
     { id: 'export-image', label: 'Export: image, PDF or Markdown…', group: 'Board', keys: 'Ctrl Shift E', aliases: 'png svg pdf picture screenshot download save handout print markdown md text', run: ui.openExport },
     { id: 'copy-image', label: editor.selection.size ? 'Copy selection as image' : 'Copy board as image', group: 'Board', aliases: 'png picture screenshot clipboard share chat', run: () => void copyImage(editor, editor.selection.size ? new Set(editor.selection) : undefined) },
     { id: 'image', label: 'Add image…', group: 'Create', aliases: 'picture photo upload insert', run: ui.openImage },
@@ -239,3 +241,22 @@ export function matchCommands(list: Command[], query: string): Command[] {
 }
 
 export const kindLabel = (k: keyof typeof KIND_LABELS) => KIND_LABELS[k]
+
+/** Timers, logging time, the timesheet, and showing what's assigned to someone. */
+function timeCommands(editor: Editor) {
+  const out: { id: string; label: string; group: string; keys?: string; aliases: string; run: () => void }[] = []
+  const aliases = 'time tracking track timer stopwatch hours log timesheet work spent'
+  const mine = editor.myTimer
+  const target = editor.timeTarget
+  if (!editor.readOnly) {
+    if (mine) out.push({ id: 'time-stop', label: `Stop the timer (${describeTarget(editor.board, mine.on, mine.label).label})`, group: 'Time', keys: 'Alt T', aliases, run: () => editor.stopTracking() })
+    if (!mine || !sameTarget(mine.on, target))
+      out.push({ id: 'time-start', label: `Start a timer on ${target ? describeTarget(editor.board, target).label : describeTarget(editor.board, target).label.toLowerCase()}`, group: 'Time', keys: mine ? undefined : 'Alt T', aliases, run: () => editor.startTracking(target) })
+    out.push({ id: 'time-log', label: 'Log time by hand…', group: 'Time', aliases, run: () => editor.openTimesheet({ on: target, log: true }) })
+  }
+  out.push({ id: 'timesheet', label: 'Timesheet: time spent on this board', group: 'Time', aliases: `${aliases} report hours csv invoice`, run: () => editor.openTimesheet({}) })
+  for (const name of peopleOn(editor.board).filter((n) => editor.board.items.some((i) => i.assignees?.some((a) => a.toLowerCase() === n.toLowerCase()))))
+    out.push({ id: `assigned-${name}`, label: `Show only what's assigned to ${name}`, group: 'View', aliases: 'assigned assignee owner person filter mine who', run: () => editor.setPersonFilter(name) })
+  if (editor.personFilter) out.push({ id: 'assigned-clear', label: 'Show everything (clear the person filter)', group: 'View', aliases: 'assigned filter clear reset', run: () => editor.setPersonFilter(null) })
+  return out
+}

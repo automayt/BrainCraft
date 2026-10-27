@@ -6,6 +6,7 @@ import { MAX_REVS } from './revisions'
 import { type Board, type BoardFile, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type PageRev, type Snap } from './types'
 import { MAX_PAGES, MAX_SNAPS } from './wiki'
 import { MAX_FILES, cleanFile } from './files'
+import { cleanTime } from './timeTracking'
 
 export function toJson(b: Board): string {
   return JSON.stringify(b, null, 2)
@@ -55,6 +56,8 @@ export function fromJson(json: string): Board {
   const files = (Array.isArray(raw.files) ? raw.files.slice(0, MAX_FILES).map(cleanFile) : []).filter(
     (f): f is BoardFile => !!f && !fileIds.has(f.id) && !!fileIds.add(f.id),
   )
+  // Time: valid entries, the first of any repeated id.
+  const time = cleanTime(raw.time)
   const snapKeys = new Set<string>()
   const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_SNAPS).map(cleanSnap) : []).filter(
     (s): s is Snap => !!s && !snapKeys.has(s.key) && !!snapKeys.add(s.key),
@@ -74,6 +77,7 @@ export function fromJson(json: string): Board {
     ...(snaps.length ? { snaps } : {}),
     ...(revs.length ? { revs } : {}),
     ...(files.length ? { files } : {}),
+    ...(time.length ? { time } : {}),
     ...(raw.sketch === true ? { sketch: true as const } : {}),
   }
 }

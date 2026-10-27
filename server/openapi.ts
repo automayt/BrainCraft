@@ -282,6 +282,21 @@ export function openApiSpec(o: SpecOptions) {
     },
   })
 
+  add('/api/boards/{id}/time', 'get', {
+    tags: ['Reading boards'],
+    summary: 'Time tracked on the board',
+    description: 'Total hours, who is timing what now, hours by person, by what it was on and by day, and each entry. With format=csv, one row per entry for a spreadsheet.',
+    operationId: 'readTime',
+    parameters: [
+      boardId,
+      query('from', 'Only time from this date or date-time', { type: 'string' }),
+      query('to', 'Only time up to this date or date-time', { type: 'string' }),
+      query('who', 'Only this person’s time (their name)', { type: 'string' }),
+      query('format', '"csv" for a spreadsheet', { type: 'string', enum: ['json', 'csv'] }),
+    ],
+    security: boardAuth,
+    responses: { '200': ok('The time', { type: 'object' }), '400': error('A date that isn’t one'), ...denied },
+  })
   const formPath = [
     { name: 'board', in: 'path', required: true, description: 'The board', schema: { type: 'string' } },
     { name: 'item', in: 'path', required: true, description: 'The form view on it', schema: { type: 'integer' } },
