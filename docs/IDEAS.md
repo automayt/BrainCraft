@@ -430,5 +430,18 @@ Admin, next:
 
 ## Built
 
+- [x] **Text that fits its shape:** sized to flowchart shapes, rectangles and
+  ellipses by default, and never spilling out of any shape or sticky note.
+- [x] **Fit to content** for shapes, sticky notes, frames, Kanban boards,
+  database views, tables, code and text, and **Same size** for several shapes.
+- [x] **Kanban column templates**, a **+** strip for new columns, and a
+  **Blank canvas** start for an empty board.
+
+Fitting, next:
+
+- **Shape grows with its text:** a per-shape switch so the shape, not the
+  text, changes size while typing.
+- **Same size, then tidy:** after Same size, lay a flowchart out again so
+  neighbouring steps don't overlap.
 - [x] **Wiki-links and backlinks** between objects and boards.
 - [x] **Link cards** with previews; YouTube, Vimeo and Spotify play in place.

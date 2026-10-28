@@ -5,6 +5,7 @@
  */
 
 import { TEMPLATES } from '../model/templates'
+import { KANBAN_TEMPLATES } from '../model/kanban'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
 import type { Board, Id, Kind } from '../model/types'
 import { KIND_LABELS } from '../model/types'
@@ -47,7 +48,7 @@ moveIdea {id, parent} — moves an idea and its branch under another idea · set
 createFlowchart {mermaid: "flowchart TD\\n  A([Start]) --> B{Ok?}\\n  B -->|Yes| C[Do it]"} — laid out automatically; shapes [ ] process, { } decision, ([ ]) start/end, [/ /] input/output, [( )] database, [[ ]] subprocess
 addSteps {after: step id, steps: [text | {text, shape?: process|decision|start|end|io|database|document|subprocess, label?}], direction?: down|right|up|left} — a chain of connected steps after a step, each sized for its words; for a decision, one addSteps per branch with label "Yes" / "No" · setFlowchart {id: any step in it, mermaid} — replaces the whole flowchart where it is
 createTable {columns: [names], rows?: [[cells]], title?}
-createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}]}
+createKanban {title?, columns?: [{title, cards: [text | {title, start?, due?, color?}]}], template?: ${KANBAN_TEMPLATES.map((t) => t.id).join(' | ')}} — without columns: Not started, In progress, Completed, or a template's
 createTimeline {title?, lanes?: [{name, entries: [{title, start, end?, color?}]}], followKanban?: [kanban ids/refs]} — an entry without end is a milestone; followed Kanban boards show their dated cards live
 setKanban {id, title?, columns} · setTable {id, title?, columns, rows?} · setTimeline {id, title?, lanes} — a widget's whole new content, the same fields as creating it (the board lists what's in each now); cards, rows and entries already there keep their details (matched by title, or a row by its first cell)
 createImage {src: https or data URL, w?, h?}

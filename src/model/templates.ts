@@ -42,6 +42,13 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
+    id: 'kanban',
+    label: 'Kanban board',
+    hint: 'Not started, in progress, completed',
+    title: 'Kanban',
+    ops: [{ op: 'createKanban', title: 'Kanban', at: { x: 0, y: 0 } }],
+  },
+  {
     id: 'sprint',
     label: 'Sprint plan',
     hint: 'Kanban with a linked timeline',

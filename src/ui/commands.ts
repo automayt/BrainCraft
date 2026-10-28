@@ -7,6 +7,7 @@ import { type Editor, TOOLS } from '../editor/Editor'
 import { KIND_LABELS } from '../model/types'
 import { isWiki } from '../model/wiki'
 import { canSketch } from '../model/sketch'
+import { canFitToContent } from '../model/fitText'
 import { sketchIt } from './excalidraw/sketchIt'
 import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { describeTarget, peopleOn, sameTarget } from '../model/timeTracking'
@@ -70,6 +71,11 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'undo', label: 'Undo', group: 'Edit', keys: 'Ctrl Z', run: () => editor.undo() },
     { id: 'redo', label: 'Redo', group: 'Edit', keys: 'Ctrl Shift Z', run: () => editor.redo() },
     { id: 'select-all', label: 'Select all', group: 'Edit', keys: 'Ctrl A', run: () => editor.selectAll() },
+    ...(editor.selectedItems.some((i) => canFitToContent(i))
+      ? [{ id: 'fit-content', label: 'Fit to content', group: 'Edit', aliases: 'resize shrink grow auto size snug wrap text frame shape', run: () => editor.fitToContent() }]
+      : []),
+    ...(editor.canMatchSize ? [{ id: 'same-size', label: 'Make the same size', group: 'Edit', aliases: 'match size equal uniform resize align', run: () => editor.matchSize() }] : []),
+    ...(editor.selectedItems.some((i) => i.fontFixed) ? [{ id: 'fit-text', label: 'Fit text to its shape', group: 'Edit', aliases: 'font size auto text grow shrink', run: () => editor.fitText() }] : []),
     { id: 'comments', label: 'Show comments', group: 'Edit', keys: 'Alt C', aliases: 'notes work notes panel', run: () => editor.toggleNotes(true) },
     { id: 'present', label: 'Present', group: 'View', keys: 'Shift P', aliases: 'slides slideshow presentation fullscreen frames deck', run: ui.present },
     { id: 'zoom-in', label: 'Zoom in', group: 'View', run: () => editor.zoomBy(1.25) },

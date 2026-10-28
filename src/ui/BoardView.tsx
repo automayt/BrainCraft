@@ -5,7 +5,9 @@ import * as B from '../model/board'
 import { type Rect, type Vec, center, intersects, union } from '../model/geom'
 import { route } from '../model/routes'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
-import { flowDetail, flowOutline, flowTextRect } from '../model/shapes'
+import { flowDetail, flowOutline, textRect } from '../model/shapes'
+import { fitsText, itemFontSize } from '../model/fitText'
+import { measureText } from './measure'
 import { frameFill, ink, mindRootFill, mindRootText } from './paint'
 import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
@@ -26,9 +28,12 @@ export function darken(hex: string, k = 0.72): string {
 }
 
 function Text({ item, className, color }: { item: Item; className: string; color?: string }) {
+  // Text inside a shape or sticky note is laid out in its text area, at a size that fits it.
+  const fit = fitsText(item)
+  const r = fit ? textRect(item) : item
   return (
-    <foreignObject x={item.x} y={item.y} width={Math.max(item.w, 1)} height={Math.max(item.h, 1)}>
-      <div className={`item-text ${className}${item.sketch ? ' hand' : ''}${item.linkTo ? ' linked' : ''}`} style={{ fontSize: item.fontSize, color }}>
+    <foreignObject x={r.x} y={r.y} width={Math.max(r.w, 1)} height={Math.max(r.h, 1)}>
+      <div className={`item-text ${className}${fit ? ' fit' : ''}${item.sketch ? ' hand' : ''}${item.linkTo ? ' linked' : ''}`} style={{ fontSize: fit ? itemFontSize(item, measureText) : item.fontSize, color }}>
         {item.text}
       </div>
     </foreignObject>
@@ -227,7 +232,7 @@ export function strokeFor(color: string): string {
 function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
   const detail = flowDetail(item)
   const stroke = strokeFor(item.color)
-  const t = flowTextRect(item)
+  const t = textRect(item)
   return (
     <g>
       {item.sketch ? (
@@ -243,7 +248,7 @@ function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
       )}
       {!editing && item.text && (
         <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
-          <div className={`item-text centered flow${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
+          <div className={`item-text centered flow${item.sketch ? ' hand' : ''}`} style={{ fontSize: itemFontSize(item, measureText), color: TEXT_ON_FILL }}>
             {item.text}
           </div>
         </foreignObject>

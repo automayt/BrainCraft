@@ -1,3 +1,4 @@
+import { approxMeasure } from '../model/approxMeasure'
 import type { Measure } from '../model/mindmap'
 
 export const FONT_FAMILY = '"Inter Variable", Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif'
@@ -13,6 +14,8 @@ export const measureText: Measure = (text, fontSize, weight, maxWidth, hand = fa
   const key = `${hand ? 'h' : ''}${fontSize}|${weight}|${maxWidth}|${text}`
   const hit = cache.get(key)
   if (hit) return hit
+  // Drawn without a browser (a picture made on the server): close enough.
+  if (typeof document === 'undefined') return approxMeasure(text, fontSize, weight, maxWidth, hand)
   ctx ??= document.createElement('canvas').getContext('2d')
   if (!ctx) return { w: text.length * fontSize * 0.55, h: fontSize * LINE_HEIGHT }
   ctx.font = `${weight} ${fontSize}px ${hand ? HAND_FAMILY : FONT_FAMILY}`
@@ -24,6 +27,23 @@ export const measureText: Measure = (text, fontSize, weight, maxWidth, hand = fa
     lines++
     for (const word of para.split(' ')) {
       const w = ctx.measureText(word).width
+      if (w > maxWidth && maxWidth > 0) {
+        // A word too long for a line starts a new one and breaks wherever it must (overflow-wrap: anywhere).
+        if (line > 0) {
+          widest = Math.max(widest, line)
+          lines++
+        }
+        line = 0
+        for (const ch of word) {
+          const cw = ctx.measureText(ch).width
+          if (line > 0 && line + cw > maxWidth) {
+            widest = Math.max(widest, line)
+            lines++
+            line = cw
+          } else line += cw
+        }
+        continue
+      }
       if (line > 0 && line + space + w > maxWidth) {
         widest = Math.max(widest, line)
         lines++

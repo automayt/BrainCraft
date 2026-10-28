@@ -12,6 +12,7 @@ import type { BoardFile, ExcalidrawScene, TimeEntry, TimeTarget } from '../model
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
+import { canFitToContent, canMatchSize, fitToContent, growsText, itemFontSize, sameSize } from '../model/fitText'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
@@ -544,6 +545,7 @@ export class Editor {
 
   load(board: Board, status = '') {
     this.board = M.layoutAll(board, this.measure)
+    this.blankSlate = false
     this.selection.clear()
     this.selectedConnector = null
     this.editing = null
@@ -570,6 +572,15 @@ export class Editor {
     this.measureCache?.()
     const next = M.layoutAll({ ...this.board, items: this.board.items.map((i) => (i.kind === 'mind' ? { ...i, w: 0 } : i)) }, this.measure)
     this.board = next
+    this.emit()
+  }
+
+  /** The empty board's ways to start were put away (Blank canvas), until another board opens. */
+  blankSlate = false
+
+  /** Puts away the empty board's ways to start, for a blank canvas. */
+  startBlank() {
+    this.blankSlate = true
     this.emit()
   }
 
@@ -1985,7 +1996,7 @@ export class Editor {
     const size = same ? { w: source!.w, h: source!.h } : defaultSize(shape)
     const shapes = (k?: Kind) => k === 'rect' || k === 'ellipse'
     const color = same || (shapes(source?.kind) && shapes(shape)) ? { color: source!.color } : {}
-    const item = B.newItem(shape, rectFromCenter(p.at, size.w, size.h), { ...color, ...(same ? { fontSize: source!.fontSize } : {}), ...(source?.sketch ? { sketch: true as const } : {}) })
+    const item = B.newItem(shape, rectFromCenter(p.at, size.w, size.h), { ...color, ...(same ? { fontSize: source!.fontSize, ...(source!.fontFixed ? { fontFixed: true as const } : {}) } : {}), ...(source?.sketch ? { sketch: true as const } : {}) })
     const [b, id] = B.addItem(this.board, item)
     this.apply(B.connect(b, p.from, id)[0])
     this.startEditing(id, { before, created: true })
@@ -2197,7 +2208,13 @@ export class Editor {
   }
 
   updateKanban(id: Id, f: (k: KanbanData) => KanbanData) {
-    this.updateItem(id, (i) => (i.kanban ? { ...i, kanban: f(i.kanban) } : i))
+    this.updateItem(id, (i) => {
+      if (!i.kanban) return i
+      const kanban = f(i.kanban)
+      // More columns than it had: the board widens to show them, if it was showing them all before.
+      const grew = kanban.columns.length > i.kanban.columns.length && i.w >= kanbanWidth(i.kanban) - 2
+      return { ...i, kanban, ...(grew ? { w: Math.max(i.w, kanbanWidth(kanban)) } : {}) }
+    })
   }
 
   updateTimeline(id: Id, f: (t: TimelineData) => TimelineData) {
@@ -2526,11 +2543,70 @@ export class Editor {
     })
   }
 
+  /** Text a size larger or smaller. Text sized to its shape keeps the new size from then on, starting from the size it's shown at. */
   scaleFont(factor: number) {
     this.edit((b) =>
-      B.updateItems(b, this.selection, (i) =>
-        i.kind === 'mind' ? i : { ...i, fontSize: Math.min(400, Math.max(6, Math.round(i.fontSize * factor))) },
-      ),
+      B.updateItems(b, this.selection, (i) => {
+        if (i.kind === 'mind') return i
+        const from = growsText(i) && !i.fontFixed ? itemFontSize(i, this.measure) : i.fontSize
+        return { ...i, fontSize: Math.min(400, Math.max(6, Math.round(from * factor))), ...(growsText(i) ? { fontFixed: true as const } : {}) }
+      }),
+    )
+  }
+
+  /**
+   * Each selected object sized to what's in it: shapes and sticky notes to their text (an empty one
+   * back to its usual size), text boxes, code and tables to theirs, and frames to what's inside.
+   */
+  fitToContent() {
+    // Frames last, so they wrap what's in them as it ends up.
+    const ids = this.selectedItems
+      .filter((i) => !i.locked && canFitToContent(i))
+      .sort((a, z) => Number(a.kind === 'frame') - Number(z.kind === 'frame'))
+      .map((i) => i.id)
+    if (!ids.length) return this.setStatus('Fit to content works on shapes, sticky notes, text, code, tables and frames')
+    let changed = 0
+    let emptyFrames = 0
+    this.edit((b) => {
+      for (const id of ids) {
+        const i = B.getItem(b, id)
+        if (!i) continue
+        const r = fitToContent(b, i, this.measure)
+        if (!r) {
+          if (i.kind === 'frame') emptyFrames++
+          continue
+        }
+        if (r.x === i.x && r.y === i.y && r.w === i.w && r.h === i.h) continue
+        b = B.updateItem(b, id, (x) => B.setRect(x, r))
+        changed++
+      }
+      return b
+    })
+    this.setStatus(changed ? `Fitted ${changed === 1 ? 'it' : `${changed} objects`} to ${changed === 1 ? 'its' : 'their'} content` : emptyFrames ? 'There’s nothing in the frame to fit it to' : 'Already fits its content')
+  }
+
+  /** Whether Same size has two or more objects to work on. */
+  get canMatchSize(): boolean {
+    return this.selectedItems.filter((i) => !i.locked && canMatchSize(i)).length > 1
+  }
+
+  /** The selected shapes, notes and comments made one size: the largest of them, each about its centre. */
+  matchSize() {
+    const items = this.selectedItems.filter((i) => !i.locked && canMatchSize(i))
+    if (items.length < 2) return this.setStatus('Select two or more shapes or notes to make them the same size')
+    const rects = sameSize(items)
+    this.edit((b) => B.updateItems(b, new Set(rects.keys()), (i) => B.setRect(i, rects.get(i.id)!)))
+    this.setStatus(`Made ${items.length} the same size`)
+  }
+
+  /** Text sized to its shape again, after being given a size. */
+  fitText() {
+    this.edit((b) =>
+      B.updateItems(b, this.selection, (i) => {
+        if (!i.fontFixed) return i
+        const { fontFixed: _, ...rest } = i
+        return { ...rest, fontSize: B.newItem(i.kind, i).fontSize }
+      }),
     )
   }
 
@@ -3199,7 +3275,7 @@ export class Editor {
       this.emit()
       return
     }
-    const item = B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize })
+    const item = B.newItem(source.kind, rectFromCenter(world, source.w, source.h), { color: source.color, fontSize: source.fontSize, ...(source.fontFixed ? { fontFixed: true as const } : {}) })
     const [b, id] = B.addItem(this.board, item)
     this.apply(B.connect(b, from, id)[0])
     this.startEditing(id, { before, created: true })

@@ -90,7 +90,7 @@ timeline.
 | `addSteps` | `after` (a step), `steps` (texts or `{"text", "shape?", "label?"}`; shapes `process`, `decision`, `start`, `end`, `io`, `database`, `document`, `subprocess`), `direction?` | Grows a flowchart: a chain of connected steps after `after`, each sized for its words. `label` goes on the line into the step ("Yes", "No"). |
 | `setFlowchart` | `id` (any step in it), `mermaid` | Replaces the whole flowchart, where it was |
 | `createTable` | `columns` (names), `rows?` (lists of cell values), `title?` | Table |
-| `createKanban` | `columns?` (`[{"title", "cards": [text \| {"title", "start?", "due?", "color?"}]}]`), `title?` | Kanban board (default: To do / In progress / Done) |
+| `createKanban` | `columns?` (`[{"title", "cards": [text \| {"title", "start?", "due?", "color?"}]}]`), `title?`, `template?` (`simple`, `todo`, `sprint`, `bugs`, `content`, `hiring`, `priority`, `week`, `retro`) | Kanban board (default: Not started / In progress / Completed, or the template's columns) |
 | `createTimeline` | `lanes?` (`[{"name", "entries": [{"title", "start", "end?", "color?"}]}]`), `followKanban?` (Kanban ids/refs), `title?`, `w?`, `h?` | Timeline. An entry without `end` is a milestone. Followed Kanban boards show their dated cards live. |
 | `setKanban`, `setTable`, `setTimeline` | `id`, then the same fields as creating one (`columns`; `columns` and `rows`; `lanes`), `title?` | Replaces a widget's content. Cards, rows and entries already there keep their details (matched by title, a row by its first cell), so moving a card keeps its dates. |
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |

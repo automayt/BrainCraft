@@ -15,7 +15,7 @@ describe('datasets', () => {
   it('starts with typed fields and sample records', () => {
     const { ds, status } = sample()
     expect(ds.fields.map((f) => f.type)).toEqual(['text', 'select', 'person', 'date', 'date'])
-    expect(status.options!.map((o) => o.name)).toEqual(['To do', 'In progress', 'Done'])
+    expect(status.options!.map((o) => o.name)).toEqual(['Not started', 'In progress', 'Completed'])
     expect(names(ds)).toEqual(['Research', 'Design', 'Build', 'Launch'])
   })
 
@@ -28,7 +28,7 @@ describe('datasets', () => {
     const id = d.records[0].id
     d = D.setValue(d, id, points, '1,250')
     d = D.setValue(d, id, flag, 'yes')
-    d = D.setValue(d, id, status.id, 'done')
+    d = D.setValue(d, id, status.id, 'completed')
     expect(d.records[0].values).toMatchObject({ [points]: 1250, [flag]: true, [status.id]: status.options![2].id })
     d = D.setValue(d, id, points, 'lots')
     expect(points in d.records[0].values).toBe(false)
@@ -63,9 +63,9 @@ describe('datasets', () => {
     const { ds, status } = sample()
     const v: DataView = { dataset: ds.id, type: 'board' }
     expect(D.groups(ds, v).map((g) => [g.name, names(ds, g.records)])).toEqual([
-      ['To do', ['Build', 'Launch']],
+      ['Not started', ['Build', 'Launch']],
       ['In progress', ['Design']],
-      ['Done', ['Research']],
+      ['Completed', ['Research']],
     ])
     const launch = ds.records[3].id
     const moved = D.moveToGroup(ds, v, launch, status.options![2].id, ds.records[0].id)

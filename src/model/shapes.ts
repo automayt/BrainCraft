@@ -93,6 +93,13 @@ export function flowTextRect(i: Item): Rect {
   return { x: i.x + l, y: i.y + t, w: Math.max(1, i.w - l - r), h: Math.max(1, i.h - t - b) }
 }
 
+/** The area a shape's or sticky note's text is laid out in (an ellipse's: the box inside it). */
+export function textRect(i: Item): Rect {
+  if (i.kind === 'flow') return flowTextRect(i)
+  const [mx, my] = i.kind === 'ellipse' ? [i.w * 0.15 + 4, i.h * 0.15 + 4] : [Math.min(14, i.w / 6), Math.min(14, i.h / 6)]
+  return { x: i.x + mx, y: i.y + my, w: Math.max(1, i.w - 2 * mx), h: Math.max(1, i.h - 2 * my) }
+}
+
 /** Where connectors attach on each side. */
 export function portPoint(i: Item, port: Port): Vec {
   const cx = i.x + i.w / 2

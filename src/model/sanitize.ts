@@ -267,6 +267,7 @@ export function cleanItem(raw: unknown): Item | null {
   if (raw.side === 'left' || raw.side === 'right') out.side = raw.side
   if (isObj(raw.offset) && num(raw.offset.x) !== undefined && num(raw.offset.y) !== undefined) out.offset = { x: raw.offset.x as number, y: raw.offset.y as number }
   if (raw.collapsed === true) out.collapsed = true
+  if (raw.fontFixed === true) out.fontFixed = true
   if (typeof raw.shape === 'string' && FLOW_SHAPES.includes(raw.shape)) out.shape = raw.shape as Item['shape']
   const description = str(raw.description, TEXT_MAX)
   if (description) out.description = description

@@ -582,7 +582,7 @@ export function coverOf(ds: Dataset, r: DataRecord): string | undefined {
 // ----- making datasets --------------------------------------------------------------------
 
 export function newDataset(name = 'Projects', now = today()): Dataset {
-  const fields = [field('Name', 'text'), field('Status', 'select', ['To do', 'In progress', 'Done']), field('Owner', 'person'), field('Start', 'date'), field('Due', 'date')]
+  const fields = [field('Name', 'text'), field('Status', 'select', ['Not started', 'In progress', 'Completed']), field('Owner', 'person'), field('Start', 'date'), field('Due', 'date')]
   const [title, status, owner, start, due] = fields
   const opt = (k: number) => status.options![k].id
   const rec = (t: string, s: number, o: string, a: number, z: number): DataRecord => ({
@@ -703,7 +703,7 @@ export function viewSize(ds: Dataset, type: DataViewType): { w: number; h: numbe
     const lanes = groupField(ds, { dataset: ds.id, type }) ? groups(ds, { dataset: ds.id, type }).length : 0
     return { w: 960, h: Math.min(600, Math.max(300, 150 + ds.records.length * 30 + lanes * 26)) }
   }
-  if (type === 'board') return { w: Math.max(620, Math.min(1400, groups(ds, { dataset: ds.id, type }).length * 248 + 40)), h: 440 }
+  if (type === 'board') return { w: Math.max(620, Math.min(1400, groups(ds, { dataset: ds.id, type }).length * 248 + 56)), h: 440 }
   if (type === 'calendar') return { w: 860, h: 640 }
   if (type === 'form') return { w: 520, h: Math.min(820, 190 + ds.fields.filter((f) => !isComputed(f) && f.type !== 'relation').length * 78) }
   if (type === 'gallery') return { w: Math.max(560, Math.min(1100, Math.ceil(Math.sqrt(ds.records.length + 1)) * 236 + 40)), h: Math.min(720, Math.max(360, Math.ceil((ds.records.length + 1) / 4) * 250 + 110)) }

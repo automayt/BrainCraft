@@ -35,6 +35,9 @@ function dropTarget(x: number, y: number, dragged: string): { column: string; in
   return { column: col.dataset.col!, index }
 }
 
+/** The header's template menu, kept apart from the columns' own menus. */
+const TEMPLATES_MENU = '#templates'
+
 export function KanbanView({ item, live, editingTitle }: { item: Item; live: boolean; editingTitle: boolean }) {
   const editor = useContext(EditorContext)!
   const k = item.kanban!
@@ -75,9 +78,17 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
   }
 
   const actions = (
-    <button title="Add a column" onClick={() => update((x) => K.addColumn(x)[0])}>
-      + Column
-    </button>
+    <>
+      <button title="Columns from a template (cards stay where they are)" onClick={() => setMenu(TEMPLATES_MENU)}>
+        Templates
+      </button>
+      {menu === TEMPLATES_MENU && (
+        <Menu
+          onClose={() => setMenu(null)}
+          items={K.KANBAN_TEMPLATES.map((t) => [t.label, () => update((x) => K.withColumns(x, t.columns))] as [string, () => void])}
+        />
+      )}
+    </>
   )
 
   return (
@@ -245,6 +256,11 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
             </div>
           </section>
         ))}
+        {live && (
+          <button className="kanban-add-col" title="Add a column" aria-label="Add a column" onClick={() => update((x) => K.addColumn(x)[0])}>
+            +
+          </button>
+        )}
       </div>
     </Widget>
   )

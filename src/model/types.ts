@@ -327,6 +327,11 @@ export interface Item extends Rect {
   color: string
   text: string
   fontSize: number
+  /**
+   * A shape or flowchart symbol whose text keeps `fontSize` (set with the text buttons) instead of
+   * being sized to the shape. Either way it shrinks rather than spill out (see fitText.ts).
+   */
+  fontFixed?: true
   /** Stroke points of a `pen` item, in world coordinates. */
   points?: Vec[]
   strokeWidth?: number

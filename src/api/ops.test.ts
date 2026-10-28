@@ -328,3 +328,14 @@ describe('a database record as a page', () => {
     expect(() => run([{ op: 'updateRecord', id: view, record: 'Laptop for Sam' }], b)).toThrow(/"values".*"body"/)
   })
 })
+
+describe('Kanban columns', () => {
+  const titles = (ops: Op[]) => run(ops).board.items[0].kanban!.columns.map((c) => c.title)
+  it('start as Not started, In progress, Completed, or a template’s', () => {
+    expect(titles([{ op: 'createKanban' }])).toEqual(['Not started', 'In progress', 'Completed'])
+    expect(titles([{ op: 'createKanban', template: 'bugs' }])).toEqual(['Reported', 'Confirmed', 'Fixing', 'Testing', 'Fixed'])
+    // Columns given win.
+    expect(titles([{ op: 'createKanban', template: 'bugs', columns: [{ title: 'Mine' }] }])).toEqual(['Mine'])
+    expect(() => run([{ op: 'createKanban', template: 'nope' }])).toThrow(/template/)
+  })
+})

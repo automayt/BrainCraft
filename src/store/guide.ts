@@ -226,6 +226,8 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Lines:** select something and drag its blue dot onto another object. Drop it on empty space for a new linked note. **Double-click a line** to label it.
 - **Type to rename:** with one object selected, just start typing.
 - **Frames** hold what's inside them and become slides when you present.
+- **Text fits its shape:** it grows and shrinks with flowchart shapes, rectangles and ellipses; **A−/A+** set a size instead, and **Fit text** goes back.
+- **Fit to content** (right-click or **Ctrl+K**) sizes a shape to its text, a frame around what's inside, or a Kanban board, table or database view to show everything. **Same size** makes several shapes alike.
 - **Status marks** (*to do*, *in progress*, *waiting*, *undecided*, *done*, *dropped*): pick one on the toolbar. The key along the bottom counts them and filters the board. ${link('This note', 'n4')} has one.
 - **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention someone or another object, and **[[** to link a board. On a server with accounts, the people you mention see it under **Mentions of you** in their account menu.
 - **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar.
@@ -260,7 +262,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
           icon: '🗂',
           text: `${embed('Kanban and timeline', 'plan', 480)}
 
-- **Kanban (K):** drag cards between columns (or **Alt+arrows**). Cards have colours and start and due dates; late ones are flagged.
+- **Kanban (K):** drag cards between columns (or **Alt+arrows**). Cards have colours and start and due dates; late ones are flagged. New ones start **Not started, In progress, Completed**; **Templates** in the header swaps the columns, and the **+** after the last column adds one.
 - **Timelines (I):** lanes of events and milestones with a "today" line. Drag to reschedule, drag an end to change the length.
 - A timeline can **follow Kanban boards**: their dated cards appear on it live, as on ${link('this one', 'timeline')}.
 - **Waits for…** links events; **Line up** moves them so none starts too early.

@@ -7,7 +7,8 @@ import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import { applyPatches } from '../collab/patch'
 import type { FlowDir } from '../model/flowchart'
-import { flowTextRect } from '../model/shapes'
+import { textRect } from '../model/shapes'
+import { fitsText, itemFontSize } from '../model/fitText'
 import { ACCENT, mindRootText } from './paint'
 import { type Item, WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
@@ -299,7 +300,7 @@ export function Canvas() {
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
       </svg>
-      {board.items.length === 0 && editor.tool === 'select' && !editor.flow && <EmptyBoard />}
+      {board.items.length === 0 && editor.tool === 'select' && !editor.flow && !editor.blankSlate && <EmptyBoard />}
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <PeerLayer />
@@ -692,7 +693,7 @@ function TextEditor({ editor }: { editor: Editor }) {
   if (!item) return null
   const r = editor.screenRect(item)
   let box: Rect
-  let fontSize = item.fontSize * z
+  let fontSize = (fitsText(item) ? itemFontSize(item, editor.measure) : item.fontSize) * z
   let fontWeight = 400
   let align: 'left' | 'center' = 'center'
   let color = inkFor(item)
@@ -708,11 +709,11 @@ function TextEditor({ editor }: { editor: Editor }) {
       align = 'left'
       vcenter = false
       break
+    case 'sticky':
+    case 'rect':
     case 'ellipse':
-      box = inset(r, Math.min(r.w, r.h) * 0.15 + 14 * z)
-      break
     case 'flow':
-      box = editor.screenRect(flowTextRect(item))
+      box = editor.screenRect(textRect(item))
       break
     case 'table':
     case 'kanban':
@@ -818,6 +819,15 @@ function EmptyBoard() {
       <h1>Start with an idea</h1>
       <p className="muted">Pick a starting point, double-click (or double-tap) anywhere for a sticky note, or paste a list of ideas, a link, Mermaid, an outline or a spreadsheet. Your boards (Ctrl O) has templates.</p>
       <div className="starters">
+        <button className="starter-blank" onClick={() => editor.startBlank()}>
+          <span className="starter-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeDasharray="3 3" />
+            </svg>
+          </span>
+          <strong>Blank canvas</strong>
+          <small>Nothing yet; start anywhere</small>
+        </button>
         {STARTERS.map((s) => (
           <button key={s.tool} onClick={() => start(s.tool)}>
             <span className="starter-icon">{TOOL_ICONS[s.tool]}</span>

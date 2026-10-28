@@ -928,6 +928,7 @@ button.on,
 }
 
 .item-text.flow,
+.item-text.fit,
 .comment-body {
   padding: 0;
 }
@@ -1166,7 +1167,7 @@ button.on,
   left: 50%;
   top: 50%;
   z-index: 4;
-  width: min(620px, calc(100% - 140px));
+  width: min(720px, calc(100% - 140px));
   transform: translate(-50%, -50%);
   text-align: center;
   animation: pop 0.25s var(--ease);
@@ -1188,7 +1189,7 @@ button.on,
 
 .starters {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -2238,6 +2239,8 @@ button.on,
 
 .kanban-col {
   flex: 0 0 260px;
+  /* Its width, whatever the title box would like (Fit to content counts on it). */
+  min-width: 0;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -4507,11 +4510,28 @@ button.on,
   text-align: left;
 }
 
-.dv-add-col {
-  flex: none;
-  padding: 10px 14px !important;
-  border: 1px dashed var(--widget-line) !important;
-  border-radius: 12px;
+/* A thin strip beside the last column that adds another. */
+.dv-add-col,
+.kanban-add-col {
+  flex: 0 0 28px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 80px;
+  padding: 0 !important;
+  font-size: 18px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border-strong) !important;
+  border-radius: 10px;
+}
+
+.dv-add-col:hover,
+.kanban-add-col:hover {
+  color: var(--accent);
+  border-color: var(--accent) !important;
+  background: var(--accent-soft);
 }
 
 .dv-add-input {

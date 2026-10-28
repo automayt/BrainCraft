@@ -1,12 +1,13 @@
 import * as B from '../model/board'
 import { isDrawing } from '../model/excalidraw'
 import { canSketch } from '../model/sketch'
+import { canFitToContent } from '../model/fitText'
 import { rectToWorld } from '../model/camera'
 import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
 import { canHaveStatus, STATUSES, statusInfo } from '../model/status'
 import { hasSketch, sketchToBoard } from './sketch'
-import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
+import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, type Kind, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useButtonMenu } from './menuKeys'
@@ -31,6 +32,9 @@ const keepCanvasKeys = (e: React.MouseEvent) => {
 }
 
 /** Floating controls above the selection: colour, text size, mind-map and arrangement actions. */
+/** Objects whose toolbar has Fit (shapes and notes have it in their menu, beside the text sizes). */
+const FIT_BUTTON = new Set<Kind>(['frame', 'kanban', 'table', 'data', 'code', 'text'])
+
 export function SelectionToolbar() {
   const editor = useEditor()
   const ui = useUi()
@@ -218,6 +222,11 @@ export function SelectionToolbar() {
           <button title="Larger text" aria-label="Larger text" onClick={() => editor.scaleFont(1.2)}>
             A+
           </button>
+          {items.some((i) => i.fontFixed) && (
+            <button title="Size the text to fit the shape again" onClick={() => editor.fitText()}>
+              Fit text
+            </button>
+          )}
         </>
       )}
       {mind && (
@@ -265,6 +274,11 @@ export function SelectionToolbar() {
           onClick={() => editor.setLocked(!items.every((i) => i.locked))}
         >
           {items.every((i) => i.locked) ? 'Unlock' : 'Lock'}
+        </button>
+      )}
+      {!editor.readOnly && items.some((i) => FIT_BUTTON.has(i.kind) && canFitToContent(i)) && (
+        <button title="Fit to content: the size that shows everything in it" onClick={() => editor.fitToContent()}>
+          Fit
         </button>
       )}
       {items.length > 0 && !mind && (

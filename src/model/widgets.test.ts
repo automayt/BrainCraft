@@ -107,9 +107,26 @@ describe('kanban', () => {
     ;[k, id] = K.addColumn(k, 'Review')
     k = K.renameColumn(k, id, 'QA')
     k = K.moveColumn(k, id, -1)
-    expect(k.columns.map((c) => c.title)).toEqual(['To do', 'In progress', 'QA', 'Done'])
+    expect(k.columns.map((c) => c.title)).toEqual(['Not started', 'In progress', 'QA', 'Completed'])
     expect(K.moveColumn(k, k.columns[0].id, -1)).toBe(k)
     expect(K.deleteColumn(k, id).columns).toHaveLength(3)
+  })
+
+  it('takes a template’s columns, keeping every card', () => {
+    let k = K.newKanban()
+    ;[k] = K.addCard(k, k.columns[0].id, 'Spec')
+    ;[k] = K.addCard(k, k.columns[2].id, 'Kick-off')
+    const ids = k.columns.map((c) => c.id)
+    // Fewer columns: the last takes the cards of those past the end.
+    const two = K.withColumns(k, ['Now', 'Later'])
+    expect(two.columns.map((c) => [c.title, c.cards.map((x) => x.title)])).toEqual([['Now', ['Spec']], ['Later', ['Kick-off']]])
+    expect(two.columns.map((c) => c.id)).toEqual(ids.slice(0, 2))
+    // More: new, empty ones after.
+    const five = K.withColumns(k, K.KANBAN_TEMPLATES.find((t) => t.id === 'sprint')!.columns)
+    expect(five.columns).toHaveLength(5)
+    expect(five.columns[0].cards.map((x) => x.title)).toEqual(['Spec'])
+    expect(five.columns[2].cards.map((x) => x.title)).toEqual(['Kick-off'])
+    expect(K.withColumns(k, [])).toBe(k)
   })
 })
 

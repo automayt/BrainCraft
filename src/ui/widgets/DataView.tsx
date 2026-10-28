@@ -871,12 +871,14 @@ function BoardBody({ c }: { c: Ctx }) {
       {c.live && group.type === 'select' && (
         <button
           className="dv-add-col"
+          title={`Add a column (a new ${group.name} choice)`}
+          aria-label={`Add a column (a new ${group.name} choice)`}
           onClick={() => {
             const n = (group.options?.length ?? 0) + 1
             c.edit((d) => D.addOption(d, group.id, `Group ${n}`)[0])
           }}
         >
-          + {group.name}
+          +
         </button>
       )}
     </div>

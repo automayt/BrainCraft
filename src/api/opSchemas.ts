@@ -5,6 +5,7 @@
  */
 
 import type { Op } from './ops'
+import { KANBAN_TEMPLATES } from '../model/kanban'
 
 type Schema = Record<string, unknown>
 
@@ -79,9 +80,10 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   setFlowchart: { summary: 'Replaces the whole flowchart a step belongs to, where it is', properties: { id: ref, mermaid: str('The new flowchart in Mermaid') }, required: ['id', 'mermaid'] },
   createTable: { summary: 'A table', properties: { title: str(), columns: list(str()), rows: list(list(oneOf(str(), num()))), ...placed }, required: ['columns'] },
   createKanban: {
-    summary: 'A Kanban board (default columns: To do, In progress, Done)',
+    summary: 'A Kanban board (default columns: Not started, In progress, Completed)',
     properties: {
       title: str(),
+      template: { enum: KANBAN_TEMPLATES.map((t) => t.id), description: 'Columns from a template, when no columns are given' },
       columns: list({
         type: 'object',
         properties: { title: str(), cards: list(oneOf(str(), { type: 'object', properties: { title: str(), start: day, due: day, color }, required: ['title'] })) },

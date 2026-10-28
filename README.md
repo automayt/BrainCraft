@@ -158,7 +158,10 @@ These become interactive once selected; drag them by their title strip.
 - **Kanban boards (K):** drag cards between columns, or focus a card and
   press **Alt + arrows** (or use "Move to" in its ⋯ menu). Press Enter to keep
   adding cards. Cards have colors and start/due dates, and overdue cards are
-  flagged.
+  flagged. A new board starts with **Not started, In progress, Completed**;
+  **Templates** in its header swaps in other columns (Sprint, Bug tracking,
+  Content, Hiring, Now / Next / Later, a week…) and keeps the cards. The
+  **+** strip after the last column adds one.
 - **Timelines (I):** lanes of events and milestones on a time axis that
   scales itself, with a "today" line. Drag to reschedule, drag the ends to
   change the length, double-click to add, and zoom and pan. A timeline can
@@ -714,6 +717,15 @@ shares live exactly like a board.
 - Select with a click, shift-click or a drag box. Resize from the corners,
   and use the floating toolbar for color, text size, layer order, duplicate
   and delete.
+- **Text always fits its shape:** in flowchart shapes, rectangles and
+  ellipses it grows and shrinks with the shape; **A−/A+** set a size instead
+  (**Fit text** goes back), and it still shrinks rather than spill out.
+  Sticky notes keep their size until the text would overflow.
+- **Fit to content** (right-click, Ctrl+K, or **Fit** on the toolbar) sizes
+  an object to what's in it: a shape or sticky note to its text (an empty one
+  back to its usual size), a frame around what's inside, a Kanban board,
+  database view, table, code block or text box to show everything.
+  **Same size** makes several shapes one size, the largest.
 - Copy, cut and paste work through the system clipboard. Plain text you
   paste becomes a sticky note. **Paste a list** (one idea per line, bullets
   fine) to get a tidy grid of sticky notes, one per line; Ctrl+K → "Add many

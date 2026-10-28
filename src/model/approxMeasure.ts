@@ -16,6 +16,14 @@ export const approxMeasure: Measure = (text, fontSize, weight, maxWidth, hand = 
         lines++
         line = 0
       }
+      // A word too long for a line breaks wherever it must, over as many lines as it takes.
+      if (maxWidth > 0 && w > maxWidth) {
+        const whole = Math.ceil(w / maxWidth) - 1
+        widest = maxWidth
+        lines += whole
+        line = w - whole * maxWidth
+        continue
+      }
       line += w
     }
     widest = Math.max(widest, line)

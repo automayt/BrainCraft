@@ -14,7 +14,7 @@ import { type Rect, type Vec, unionAll } from '../model/geom'
 import * as D from '../model/dataset'
 import { askable } from '../model/forms'
 import * as TT from '../model/timeTracking'
-import { newKanban } from '../model/kanban'
+import { KANBAN_TEMPLATES, kanbanWidth, newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
 import * as F from '../model/flowchart'
@@ -126,6 +126,8 @@ export type Op =
   | ({
       op: 'createKanban'
       title?: string
+      /** Columns from one of KANBAN_TEMPLATES (by id), when `columns` isn't given. */
+      template?: string
       columns?: { title: string; cards?: (string | { title: string; start?: string; due?: string; color?: string })[] }[]
     } & Placed)
   | ({
@@ -735,8 +737,13 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         break
       }
       case 'createKanban': {
-        const kanban: KanbanData = op.columns ? kanbanOf(op.columns) : newKanban()
-        const id = add(B.newItem('kanban', r0(Math.max(600, kanban.columns.length * 272 + 200), 460), { text: text(op.title, 'title', false) || 'Kanban board', kanban }))
+        let template: string[] | undefined
+        if (op.template !== undefined) {
+          template = KANBAN_TEMPLATES.find((t) => t.id === op.template)?.columns
+          if (!template) fail(index, op, `"template" should be one of ${KANBAN_TEMPLATES.map((t) => t.id).join(', ')}`)
+        }
+        const kanban: KanbanData = op.columns ? kanbanOf(op.columns) : newKanban(template)
+        const id = add(B.newItem('kanban', r0(Math.max(600, kanbanWidth(kanban)), 460), { text: text(op.title, 'title', false) || 'Kanban board', kanban }))
         place([id], op.at)
         done({ id })
         break

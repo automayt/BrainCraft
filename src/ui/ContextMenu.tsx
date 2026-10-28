@@ -6,6 +6,7 @@ import { download } from './imageExport'
 import { excalidrawFile, isDrawing, sceneText } from '../model/excalidraw'
 import { itemCsv } from '../model/boardMarkdown'
 import { canSketch } from '../model/sketch'
+import { canFitToContent } from '../model/fitText'
 import { sketchIt } from './excalidraw/sketchIt'
 import { runsOf } from '../model/runbook'
 import { FLOW_SHAPES } from '../model/types'
@@ -165,6 +166,8 @@ export function ContextMenu() {
       editor.selectedItems.every((i) => i.locked)
         ? { label: 'Unlock', keys: 'Ctrl Shift L', run: () => editor.setLocked(false) }
         : { label: 'Lock', keys: 'Ctrl Shift L', run: () => editor.setLocked(true) },
+      ...(editor.selectedItems.some((i) => canFitToContent(i)) && !editor.readOnly ? [{ label: 'Fit to content', run: () => editor.fitToContent() }] : []),
+      ...(editor.canMatchSize && !editor.readOnly ? [{ label: 'Same size', run: () => editor.matchSize() }] : []),
       ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
       ...(editor.selection.size > 1 ? [{ label: 'Spin a wheel between these', run: () => editor.addWheel() }] : []),
       ...(editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame') ? [{ label: 'Start a dot vote on these', run: () => editor.startVote() }] : []),
