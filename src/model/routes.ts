@@ -17,7 +17,12 @@ export interface Route {
   startDir: Vec
   /** Halfway along the route, for the label. */
   mid: Vec
+  /** A curved line's curve (start, two control points, end); other lines are `points` with rounded corners. */
+  curve?: [Vec, Vec, Vec, Vec]
 }
+
+/** How round a bending line's corners are. */
+export const CORNER = 10
 
 const unit = (v: Vec): Vec => {
   const l = Math.hypot(v.x, v.y)
@@ -58,7 +63,7 @@ function simplify(points: Vec[]): Vec[] {
 }
 
 /** Polyline path data with gently rounded corners. */
-function roundedPath(points: Vec[], radius = 10): string {
+function roundedPath(points: Vec[], radius = CORNER): string {
   let d = `M${points[0].x} ${points[0].y}`
   for (let k = 1; k < points.length - 1; k++) {
     const p = points[k]
@@ -135,6 +140,7 @@ export function route(c: Connector, a: Item, z: Item, obstacles: readonly Rect[]
       endDir: unit(sub(end, c2)),
       startDir: unit(sub(c1, start)),
       mid: polylineMid(points),
+      curve: [start, c1, c2, end],
     }
   }
 
@@ -171,5 +177,21 @@ export function shiftRoute<R extends Route>(r: R, dx: number, dy: number): R {
   // Path data is absolute pairs (M, L, Q and C), so every other number is an x.
   let n = 0
   const d = r.d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (v) => String(Number(v) + (n++ % 2 ? dy : dx)))
-  return { ...r, d, points: r.points.map(at), start: at(r.start), end: at(r.end), mid: at(r.mid) }
+  return { ...r, d, points: r.points.map(at), start: at(r.start), end: at(r.end), mid: at(r.mid), ...(r.curve ? { curve: r.curve.map(at) as Route['curve'] } : {}) }
+}
+
+/** A mind-map branch from parent `p` to idea `n`: a curve from the side of one to the facing side of the other. */
+export function mindBranch(n: Item, p: Item): [Vec, Vec, Vec, Vec] {
+  const right = n.x >= p.x + p.w / 2
+  const x0 = right ? p.x + p.w : p.x
+  const y0 = p.y + p.h / 2
+  const x1 = right ? n.x : n.x + n.w
+  const y1 = n.y + n.h / 2
+  const mx = (x0 + x1) / 2
+  return [
+    { x: x0, y: y0 },
+    { x: mx, y: y0 },
+    { x: mx, y: y1 },
+    { x: x1, y: y1 },
+  ]
 }

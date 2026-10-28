@@ -3,7 +3,8 @@
 import { memo } from 'react'
 import * as B from '../model/board'
 import { type Rect, type Vec, center, intersects, union } from '../model/geom'
-import type { Route } from '../model/routes'
+import { type Route, mindBranch } from '../model/routes'
+import { boardHops } from '../model/hops'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, textRect } from '../model/shapes'
 import { fitsText, itemFontSize } from '../model/fitText'
@@ -295,27 +296,38 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
   )
 }
 
-const MindEdge = memo(function MindEdge({ n, p, depth }: { n: Item; p: Item; depth: number }) {
-  const right = n.x >= p.x + p.w / 2
-  const x0 = right ? p.x + p.w : p.x
-  const y0 = p.y + p.h / 2
-  const x1 = right ? n.x : n.x + n.w
-  const y1 = n.y + n.h / 2
-  const mx = (x0 + x1) / 2
-  const d = `M${x0} ${y0}C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`
+const NO_HOPS: ReadonlyMap<string, string> = new Map()
+
+/** A branch to idea `n` from its parent `p`; `hopped` is its path when it hops over other lines. */
+const MindEdge = memo(function MindEdge({ n, p, depth, hopped }: { n: Item; p: Item; depth: number; hopped?: string }) {
+  const [a, c1, c2, z] = mindBranch(n, p)
+  const d = hopped ?? `M${a.x} ${a.y}C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${z.x} ${z.y}`
   if (n.sketch) return <Rough geom={{ kind: 'path', d, closed: false }} style={{ stroke: n.color, seed: n.id, strokeWidth: depth === 1 ? 3 : 2 }} />
   return <path d={d} stroke={n.color} strokeWidth={depth === 1 ? 3.5 : 2.2} />
 })
 
 /** Curved branches from each visible mind node to its parent. */
-export function MindEdges({ board, hidden, depths, inView = () => true }: { board: Board; hidden: ReadonlySet<Id>; depths: Map<Id, number>; inView?: (a: Item, b: Item) => boolean }) {
+export function MindEdges({
+  board,
+  hidden,
+  depths,
+  inView = () => true,
+  hops = NO_HOPS,
+}: {
+  board: Board
+  hidden: ReadonlySet<Id>
+  depths: Map<Id, number>
+  inView?: (a: Item, b: Item) => boolean
+  /** Paths of lines that hop over others (see boardHops). */
+  hops?: ReadonlyMap<string, string>
+}) {
   return (
     <g fill="none" strokeLinecap="round">
       {board.items.map((n) => {
         if (n.kind !== 'mind' || n.parent === undefined || hidden.has(n.id)) return null
         const p = B.getItem(board, n.parent)
         if (!p || !inView(n, p)) return null
-        return <MindEdge key={n.id} n={n} p={p} depth={depths.get(n.id) ?? 1} />
+        return <MindEdge key={n.id} n={n} p={p} depth={depths.get(n.id) ?? 1} hopped={hops.get(`m${n.id}`)} />
       })}
     </g>
   )
@@ -380,6 +392,7 @@ export const ConnectorView = memo(function ConnectorView({
   to,
   selected,
   editing,
+  hopped,
 }: {
   c: Connector
   r: Route
@@ -387,7 +400,10 @@ export const ConnectorView = memo(function ConnectorView({
   to: Item
   selected: boolean
   editing: boolean
+  /** Its path when it hops over other lines. */
+  hopped?: string
 }) {
+  const d = hopped ?? r.d
   if (Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
   const color = selected ? 'var(--accent)' : ink(c.color)
   const arrows = c.arrows ?? 'end'
@@ -397,10 +413,10 @@ export const ConnectorView = memo(function ConnectorView({
   return (
     <g>
       {hand ? (
-        <Rough geom={{ kind: 'path', d: r.d, closed: false }} style={{ stroke: color, seed: c.id, strokeWidth: selected ? 2.6 : 1.8, dashed: c.dashed }} className="connector-line" />
+        <Rough geom={{ kind: 'path', d, closed: false }} style={{ stroke: color, seed: c.id, strokeWidth: selected ? 2.6 : 1.8, dashed: c.dashed }} className="connector-line" />
       ) : (
         <path
-          d={r.d}
+          d={d}
           fill="none"
           className="connector-line"
           style={{ stroke: color }}
@@ -513,6 +529,8 @@ export const BoardView = memo(function BoardView({
   const depths = mindDepths(board)
   // Worked out together, so lines that go around things keep apart.
   const routes = B.routesOf(board, dragging)
+  // Where lines cross, one hops over the other (too small to see from far away).
+  const hops = coarse ? NO_HOPS : boardHops(board, routes, hidden)
   // The selection and the object being edited always render, wherever they are.
   const shown = (i: Item) => !hidden.has(i.id) && (!view || intersects(view, i) || selection.has(i.id) || editingId === i.id)
   const visible = board.items.filter(shown)
@@ -541,7 +559,7 @@ export const BoardView = memo(function BoardView({
   return (
     <g>
       {visible.filter((i) => i.kind === 'frame').map((i) => shape(i, 0))}
-      <MindEdges board={board} hidden={hidden} depths={depths} inView={pairInView} />
+      <MindEdges board={board} hidden={hidden} depths={depths} inView={pairInView} hops={hops} />
       {visible.filter((i) => i.kind !== 'frame').map((i) => shape(i, depths.get(i.id) ?? 0))}
       {!coarse && <CollapseToggles board={board} hidden={hidden} selection={selection} />}
       {board.connectors.map((c) => {
@@ -549,7 +567,7 @@ export const BoardView = memo(function BoardView({
         const from = B.getItem(board, c.from)
         const to = B.getItem(board, c.to)
         if (!from || !to || !pairInView(from, to)) return null
-        return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
+        return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} hopped={hops.get(`c${c.id}`)} />
       })}
       {/* Objects that lead somewhere: a badge on their corner to follow it. */}
       {!coarse &&

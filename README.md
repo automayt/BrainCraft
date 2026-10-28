@@ -107,6 +107,9 @@ The board fills the window and the controls float above it:
   to Mermaid for docs and wikis that draw Mermaid diagrams.
 - **Lines go around shapes:** a square-cornered line that would cut through
   something takes a way around it instead, keeping clear of other lines.
+- **Lines hop where they cross:** where two lines cross (connectors and
+  mind-map branches alike), the more level one jumps over the other in a
+  small arc, so it's clear they pass rather than join.
 
 A hint bar at the bottom of the canvas shows the shortcuts that apply to
 whatever you have selected.
