@@ -168,6 +168,9 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     )
   }
   const single = editor.single
+  if (single?.kind === 'frame' && !editor.readOnly) {
+    list.push({ id: 'frame-board', label: 'Move this frame to its own board', group: 'Board', aliases: 'sub-board split separate child board slow heavy busy break up', run: () => ui.moveFrameToBoard(single.id) })
+  }
   if (single && (single.kind === 'table' || single.kind === 'kanban' || single.kind === 'timeline')) {
     list.push({ id: 'to-data', label: 'Convert to linked data', group: 'Data', aliases: 'database dataset records views sync link', run: () => editor.convertToData(single.id) })
   }

@@ -27,6 +27,8 @@ export interface Ui {
   /** Saves to the board's file (asking where the first time); `saveAs` always asks. */
   saveFile: (saveAs?: boolean) => void
   newBoard: () => void
+  /** Moves a frame and what's in it to a board of its own (a card here opens it). */
+  moveFrameToBoard: (frame: number) => void
   openBoards: () => void
   openVersions: () => void
   openShare: () => void

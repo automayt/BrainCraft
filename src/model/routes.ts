@@ -164,3 +164,12 @@ export function route(c: Connector, a: Item, z: Item, obstacles: readonly Rect[]
     ...(around ? { around: true as const } : {}),
   }
 }
+
+/** A route moved by (dx, dy): for a line whose two ends moved together. */
+export function shiftRoute<R extends Route>(r: R, dx: number, dy: number): R {
+  const at = (p: Vec) => ({ x: p.x + dx, y: p.y + dy })
+  // Path data is absolute pairs (M, L, Q and C), so every other number is an x.
+  let n = 0
+  const d = r.d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (v) => String(Number(v) + (n++ % 2 ? dy : dx)))
+  return { ...r, d, points: r.points.map(at), start: at(r.start), end: at(r.end), mid: at(r.mid) }
+}

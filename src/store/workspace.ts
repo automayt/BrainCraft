@@ -11,7 +11,8 @@ import { GUIDE_TITLE, guideWiki, tourBoard } from './guide'
 import { headings, parseMarkdown } from '../model/markdown'
 import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
-import type { Board } from '../model/types'
+import type { Board, Id } from '../model/types'
+import { boardOfFrame, withoutFrame } from '../model/subBoard'
 import { type KV, openKV } from './kv'
 import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
@@ -569,6 +570,40 @@ export class Workspace {
   }
 
   /**
+   * Makes a new board without leaving this one: on the server when signed in to one with accounts
+   * (yours), otherwise in this browser. Returns its id here and the key links to it use.
+   */
+  async createAside(board: Board): Promise<{ local: string; key: string }> {
+    if (this.boardsOnServer && this.server) {
+      const { id } = await call<{ id: string }>(this.server, 'api/boards', 'POST', { board }, true)
+      const local = await this.library.create(board)
+      await this.library.setLive(local, { server: this.server, id, key: '', role: 'edit', account: true })
+      this.libraryChanged()
+      await this.loadServerBoards()
+      await this.refresh()
+      return { local, key: id }
+    }
+    const local = await this.library.create(board)
+    this.libraryChanged()
+    await this.refresh()
+    return { local, key: local }
+  }
+
+  /** Moves a frame and everything in it to a board of its own, leaving a card here that opens it. */
+  async moveFrameToBoard(frameId: Id) {
+    const here = this.linkKey
+    const part = boardOfFrame(this.editor.board, frameId, here ? { key: here, title: this.editor.board.title } : undefined)
+    if (!part || this.editor.readOnly) return
+    try {
+      const { key } = await this.createAside(part)
+      this.editor.edit((b) => withoutFrame(b, frameId, key)?.board ?? b)
+      this.editor.setStatus(`Moved “${part.title}” to a board of its own. The card in its place opens it.`)
+    } catch (err) {
+      this.editor.setStatus(`Couldn’t make the new board: ${(err as Error).message}`)
+    }
+  }
+
+  /**
    * Applies operations to another board or wiki (by its link key), or makes a new one with them
    * (for the assistant's changes elsewhere). A shared board is changed on its server, so everyone in
    * it sees the change; a board only in this browser is changed here. Returns the board's id in this
@@ -578,20 +613,7 @@ export class Workspace {
     const measure = this.editor.measure
     if (target.create) {
       const board = layoutAll(applyOps(blankBoard(target.create.kind, target.create.title), ops, { measure }).board, measure)
-      // Signed in to a server with accounts: new boards live there, yours.
-      if (this.boardsOnServer && this.server) {
-        const { id } = await call<{ id: string }>(this.server, 'api/boards', 'POST', { board }, true)
-        const local = await this.library.create(board)
-        await this.library.setLive(local, { server: this.server, id, key: '', role: 'edit', account: true })
-        this.libraryChanged()
-        await this.loadServerBoards()
-        await this.refresh()
-        return local
-      }
-      const local = await this.library.create(board)
-      this.libraryChanged()
-      await this.refresh()
-      return local
+      return (await this.createAside(board)).local
     }
     const meta = target.board ? this.findBoard(target.board) : undefined
     if (!meta) throw new Error('That board isn’t in this browser')
@@ -873,7 +895,19 @@ export class Workspace {
   }
 
   /** Follows a link: opens its board when it's another one, then shows its object. */
-  async openLink(to: LinkTarget) {
+  async openLink(to: LinkTarget): Promise<void> {
+    if (to.board && !this.selfKeys.includes(to.board) && !this.findBoard(to.board) && this.account?.user) {
+      // A board on the server that's shared with you, not yet in this browser.
+      if (!this.serverBoards.some((b) => b.id === to.board)) await this.loadServerBoards()
+      const remote = this.serverBoards.find((b) => b.id === to.board)
+      if (!remote) {
+        this.editor.setStatus('That board isn’t shared with you. Ask whoever manages it for access.')
+        return
+      }
+      await this.openServerBoard(remote)
+      await this.live?.whenSynced()
+      return this.openLink({ ...to, board: undefined })
+    }
     if (to.board && !this.selfKeys.includes(to.board)) {
       const meta = this.findBoard(to.board)
       if (!meta) {

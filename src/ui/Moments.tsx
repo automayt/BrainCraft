@@ -7,6 +7,7 @@ import { LiveViewerBanner } from './Boards'
 import { CatchUpBanner } from './CatchUp'
 import { WhatsNew } from './WhatsNew'
 import { ServerNotice } from './ServerNotice'
+import { HeavyBoard } from './HeavyBoard'
 import { useEditor } from './useEditor'
 
 export const EMOTES = REACTIONS
@@ -183,6 +184,7 @@ export function Moments() {
       {/* Clear of a side panel (comments, a page beside the board). */}
       <div className="top-stack" style={editor.rightInset ? { right: 76 + editor.rightInset } : undefined}>
         <LiveViewerBanner />
+        <HeavyBoard />
         <ServerNotice />
         {!editor.catchUp && <WhatsNew />}
         <CatchUpBanner />

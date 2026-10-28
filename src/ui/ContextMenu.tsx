@@ -171,6 +171,7 @@ export function ContextMenu() {
       ...(editor.selection.size > 1 && !editor.selectedItems.every((i) => i.kind === 'mind') ? [{ label: 'Group', keys: 'Ctrl G', run: () => editor.group() }] : []),
       ...(editor.selection.size > 1 ? [{ label: 'Spin a wheel between these', run: () => editor.addWheel() }] : []),
       ...(editor.selection.size > 1 && !editor.selectedItems.some((i) => i.poll || i.kind === 'frame') ? [{ label: 'Start a dot vote on these', run: () => editor.startVote() }] : []),
+      ...(single?.kind === 'frame' && !editor.readOnly ? [{ label: 'Move to its own board', run: () => ui.moveFrameToBoard(single.id) }] : []),
       ...(single?.kind === 'sticky' ? [typeof single.back === 'string' ? { label: 'Remove the back (plain sticky note)', run: () => editor.setFlipCards(false) } : { label: 'Make a flip card', run: () => editor.setFlipCards(true) }] : []),
       ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',

@@ -430,6 +430,10 @@ Admin, next:
 
 ## Built
 
+- [x] **Busy boards stay quick:** lines are only worked out again when
+  something near them moves, the minimap is painted rather than drawn shape
+  by shape, and frames can move to boards of their own (suggested past
+  4,000 objects).
 - [x] **Text that fits its shape:** sized to flowchart shapes, rectangles and
   ellipses by default, and never spilling out of any shape or sticky note.
 - [x] **Fit to content** for shapes, sticky notes, frames, Kanban boards,

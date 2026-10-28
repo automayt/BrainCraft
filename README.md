@@ -710,6 +710,12 @@ shares live exactly like a board.
   (Enter), a rectangle, ellipse, sticky note or text, or a decision diamond
   or start/end oval, linked from it.
 - Frames carry their contents when you move them.
+- **Boards inside boards:** right-click a frame → **Move to its own board**.
+  The frame and everything in it go to a new board (on the server when
+  you're signed in to one), a card in its place opens it, lines from
+  outside end at that card, and the new board has a card leading back.
+  Boards stay smooth to about 5,000 objects; past 4,000 a banner suggests
+  splitting one up this way.
 - **Magnets:** drag a shape near another and it snaps one step away and
   connects. Sticky notes snap into neat rows and columns without lines. Hold
   **Alt** to place freely.

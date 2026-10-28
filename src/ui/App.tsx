@@ -109,6 +109,7 @@ function App({ ws }: { ws: Workspace }) {
     download: () => ws.download(),
     saveFile: (saveAs) => void ws.saveFile(saveAs),
     newBoard: () => void ws.newBoard(),
+    moveFrameToBoard: (frame) => void ws.moveFrameToBoard(frame),
     openBoards: () => {
       void ws.loadServerBoards()
       setDialog('boards')

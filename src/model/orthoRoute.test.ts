@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectorRoute, emptyBoard, getItem, routeBetween } from './board'
+import { connectorRoute, emptyBoard, getItem, routeBetween, routesOf } from './board'
 import { insertMermaid, parseMermaid } from './mermaid'
 import { pathHits } from './orthoRoute'
 import { route } from './routes'
@@ -102,3 +102,16 @@ describe('lines that go around', () => {
 })
 
 type V = { x: number; y: number }
+
+describe('dragging several things together', () => {
+  it('moves a line whose ends both moved, as it was', () => {
+    const b: Board = { ...emptyBoard(), items: [box(1, 0, 0), box(2, 0, 160), box(3, 0, 320)], connectors: [elbow(1, 3)] }
+    const before = routesOf(b).get(b.connectors[0].id)!
+    const moved = { ...b, items: b.items.map((i) => (i.id === 2 ? i : { ...i, x: i.x + 50, y: i.y + 20 })) }
+    const quick = routesOf(moved, true).get(b.connectors[0].id)!
+    expect(quick.points).toEqual(before.points.map((p) => ({ x: p.x + 50, y: p.y + 20 })))
+    // Its drawing moved too.
+    const nums = (d: string) => d.match(/-?\d*\.?\d+/g)!.map(Number)
+    expect(nums(quick.d)).toEqual(nums(before.d).map((v, k) => v + (k % 2 ? 20 : 50)))
+  })
+})
