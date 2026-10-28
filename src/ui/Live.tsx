@@ -78,7 +78,8 @@ export function PeerLayer() {
   return <div className="peer-layer">{out}</div>
 }
 
-function Copy({ text, label }: { text: string; label: string }) {
+/** A link in a box, with a button that copies it. */
+export function Copy({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState<'' | 'copied' | 'failed'>('')
   const field = useRef<HTMLInputElement>(null)
   return (

@@ -38,8 +38,11 @@ export function SignIn() {
           : mode === 'setup'
             ? await call<AccountInfo>(ws.server, 'api/auth/setup', 'POST', { email, name, password })
             : await call<AccountInfo>(ws.server, 'api/auth/login', 'POST', { email, password })
+      // A link followed before signing in (to a board, page or object) opens once signed in.
+      const link = typeof location !== 'undefined' && mode !== 'reset' ? location.hash : ''
       if (typeof location !== 'undefined' && location.hash) history.replaceState(null, '', location.pathname + location.search)
       await ws.signedIn(info)
+      if (link) await ws.openHash(link)
     } catch (err) {
       setError((err as Error).message)
     } finally {

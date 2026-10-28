@@ -263,7 +263,14 @@ export class Workspace {
     ws.account = await fetchAccount(ws.server)
     if (ws.account?.user) await ws.signedIn(ws.account)
     if (await ws.openHash(hash)) return ws
+    // Why a link didn't open, still shown once the last board is back.
+    const said = ws.editor.status
     await ws.openLast()
+    if (said) {
+      // A live board's first sync loads it again, clearing the status: say it after that.
+      await ws.live?.whenSynced()
+      ws.editor.setStatus(said)
+    }
     return ws
   }
 
@@ -297,7 +304,22 @@ export class Workspace {
     const open = openFromHash(hash)
     if (open) {
       if (!this.boards.length) await this.refresh()
-      if (!this.findBoard(open.board!)) {
+      // Signed in to a server: a board there that's shared with you opens live.
+      if (this.account?.user && !this.findBoard(open.board!) && this.liveInfo?.id !== open.board) {
+        if (!this.serverBoards.some((b) => b.id === open.board)) await this.loadServerBoards()
+        const remote = this.serverBoards.find((b) => b.id === open.board)
+        if (remote) {
+          await this.openServerBoard(remote)
+          await this.live?.whenSynced()
+          await this.openLink({ ...open, board: undefined })
+          this.clearShareHash()
+          return true
+        }
+        this.editor.setStatus('That board isn’t shared with you. Ask whoever manages it for access.')
+        this.clearShareHash()
+        return false
+      }
+      if (!this.findBoard(open.board!) && this.liveInfo?.id !== open.board) {
         this.editor.setStatus('That link is to a board that isn’t in this browser. Ask a friend for the live link.')
         return false
       }

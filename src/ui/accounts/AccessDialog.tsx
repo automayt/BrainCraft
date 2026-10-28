@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type BoardAccessInfo, call, can, type Grant, LEVEL_LABEL, type Level } from '../../store/account'
 import { Dialog } from '../Boards'
 import { useWorkspace } from '../useWorkspace'
+import { Copy } from '../Live'
 
 interface Found {
   people: { id: string; name: string; email: string }[]
@@ -90,6 +91,8 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
     }
   }
   const me = ws.account?.user
+  // No secret links with accounts: the board's own address, which opens it for whoever has access.
+  const link = ws.webLink()
 
   return (
     <Dialog label="Access" onClose={onClose} className="share access">
@@ -100,6 +103,15 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
         </button>
       </header>
       {msg && <p className="signin-error">{msg}</p>}
+      {link && (
+        <div className="access-link">
+          <label className="link-label">
+            Link to this board
+            <Copy text={link} label="Link to this board" />
+          </label>
+          <small className="muted">Opens it for the people and groups below, once they’ve signed in. Anyone else is told to ask for access.</small>
+        </div>
+      )}
       {!info ? (
         <p className="muted">Loading…</p>
       ) : (

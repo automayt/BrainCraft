@@ -141,6 +141,30 @@ describe('mind map keyboard flow', () => {
 })
 
 describe('whiteboard gestures', () => {
+  it('pans while the right button is held and dragged, and a still right-click selects for the menu', () => {
+    const e = editor()
+    e.pasteText('one')
+    const id = e.board.items[0].id
+    e.select([])
+    const at = screenCenter(e, id)
+    // Dragged: the board moves with the pointer, nothing is selected, no menu.
+    e.rightDown(at)
+    e.pointerMove({ x: at.x + 3, y: at.y })
+    expect(e.camera.x).toBe(0)
+    e.pointerMove({ x: at.x + 120, y: at.y + 40 })
+    expect(e.camera).toMatchObject({ x: 120, y: 40 })
+    expect(e.rightUp({ x: at.x + 120, y: at.y + 40 })).toBe(false)
+    expect(e.selection.size).toBe(0)
+    expect(e.drag.type).toBe('none')
+    // Held still (a wobble under the slop): a right-click on what's under it.
+    const now = screenCenter(e, id)
+    e.rightDown(now)
+    e.pointerMove({ x: now.x + 2, y: now.y + 2 })
+    expect(e.rightUp({ x: now.x + 2, y: now.y + 2 })).toBe(true)
+    expect([...e.selection]).toEqual([id])
+    expect(e.camera).toMatchObject({ x: 120, y: 40 })
+  })
+
   it('creates a sticky note with a click and records one undo step with its text', () => {
     const e = editor()
     e.setTool('sticky')

@@ -12212,3 +12212,11 @@ button.on,
     margin-top: 8px;
   }
 }
+
+/* The board's link on a server with accounts. */
+.access-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}

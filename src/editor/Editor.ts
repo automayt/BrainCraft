@@ -154,7 +154,7 @@ export type Handle =
 export type Drag =
   | { type: 'none' }
   /** `tap`: what a finger came down on, selected if it lifts without moving the board. */
-  | { type: 'pan'; last: Vec; tap?: { id: Id; at: Vec } }
+  | { type: 'pan'; last: Vec; tap?: { id: Id; at: Vec }; right?: { at: Vec; moved: boolean } }
   | {
       type: 'move'
       ids: Set<Id>
@@ -261,6 +261,8 @@ export interface AiChange {
 const SLIDE_MAX_ZOOM = 4
 const EMOTE_MS = 2200
 const CHAT_MS = 6000
+/** How far a right press may move and still be a right-click (screen pixels); further, it pans. */
+const RIGHT_CLICK_SLOP = 5
 const FLIGHT_MS = 520
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
@@ -2844,6 +2846,29 @@ export class Editor {
     return B.hitTest(this.board, toWorld(this.camera, screen), this.tol(), this.hidden, withLocked)
   }
 
+  /** The right mouse button pressed: dragging pans the board, and letting go without moving is a right-click. */
+  rightDown(screen: Vec) {
+    this.shapePicker = null
+    this.drag = { type: 'pan', last: screen, right: { at: screen, moved: false } }
+    this.emit()
+  }
+
+  /**
+   * The right mouse button let go. True when it was a right-click rather than a pan: what's under it
+   * is selected (as a right-click does) and the menu should open.
+   */
+  rightUp(screen: Vec): boolean {
+    const d = this.drag
+    if (d.type !== 'pan' || !d.right) return false
+    this.drag = { type: 'none' }
+    if (d.right.moved) {
+      this.emit()
+      return false
+    }
+    this.pointerDown(screen, 2, {})
+    return true
+  }
+
   pointerDown(screen: Vec, button: number, mods: Modifiers, handle?: Handle) {
     const world = toWorld(this.camera, screen)
     this.shapePicker = null
@@ -3023,6 +3048,11 @@ export class Editor {
       case 'none':
         return
       case 'pan':
+        // A right press only pans once it moves: held still, it's a right-click (the menu).
+        if (d.right && !d.right.moved) {
+          if (dist(d.right.at, screen) < RIGHT_CLICK_SLOP) break
+          d.right.moved = true
+        }
         this.camera = { ...this.camera, x: this.camera.x + screen.x - d.last.x, y: this.camera.y + screen.y - d.last.y }
         d.last = screen
         break

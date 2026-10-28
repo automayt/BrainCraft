@@ -103,6 +103,8 @@ export function Canvas() {
   }, [editor])
 
   const longPress = useRef<{ at: { x: number; y: number }; timer: ReturnType<typeof setTimeout> } | null>(null)
+  /** The right mouse button: held down, or when it was last let go (see onContextMenu). */
+  const rightPress = useRef<'down' | number | null>(null)
 
   const local = (e: { clientX: number; clientY: number }) => {
     const r = ref.current!.getBoundingClientRect()
@@ -120,6 +122,14 @@ export function Canvas() {
         pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
         return
       }
+    }
+    // The right mouse button: hold and drag to pan; a click opens the menu when it's let go.
+    if (e.button === 2 && e.pointerType !== 'touch') {
+      ref.current!.setPointerCapture(e.pointerId)
+      if (document.activeElement instanceof HTMLElement && !editor.editing) document.activeElement.blur()
+      rightPress.current = 'down'
+      editor.rightDown(p)
+      return
     }
     // An object's link badge: follow the link (a wiki page opens beside the board).
     const badge = (e.target as Element).closest?.('[data-handle="followLink"]')
@@ -180,6 +190,14 @@ export function Canvas() {
   }
 
   const onPointerUp = (e: RPointerEvent) => {
+    if (e.button === 2 && rightPress.current === 'down') {
+      rightPress.current = Date.now()
+      const p = local(e)
+      if (editor.rightUp(p)) ui.openMenu(p)
+      return
+    }
+    // A right press cut short (the pointer was cancelled): no longer held.
+    if (rightPress.current === 'down') rightPress.current = null
     if (longPress.current) {
       clearTimeout(longPress.current.timer)
       longPress.current = null
@@ -225,6 +243,10 @@ export function Canvas() {
       onContextMenu={(e) => {
         e.preventDefault()
         if ((e.target as Element).closest('.no-canvas')) return
+        // A right press opens the menu itself when let go without moving (some systems send this
+        // as the button goes down, others as it comes up); the menu key and Shift+F10 come here.
+        const r = rightPress.current
+        if (r === 'down' || (typeof r === 'number' && Date.now() - r < 700)) return
         ui.openMenu(local(e))
       }}
       // Focusing an input inside a board object makes the browser scroll this
