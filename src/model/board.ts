@@ -14,11 +14,14 @@ import {
   ellipseBorderPoint,
   ellipseContains,
   expand,
+  intersects,
   rectBorderPoint,
   remap,
+  union,
   unionAll,
 } from './geom'
-import { type Route, route } from './routes'
+import { type Route, goesAround, route } from './routes'
+import { type Taken, take } from './orthoRoute'
 import { flowHit } from './shapes'
 import {
   type Board,
@@ -256,9 +259,104 @@ export function anchorTowards(i: Item, toward: Vec): Vec {
 }
 
 export function connectorRoute(b: Board, c: Connector): Route | null {
-  const a = getItem(b, c.from)
-  const z = getItem(b, c.to)
-  return a && z ? route(c, a, z) : null
+  return routesOf(b).get(c.id) ?? null
+}
+
+/** Objects lines go around: everything but frames (they hold things) and pen strokes. */
+const blocksLines = (i: Item) => i.kind !== 'frame' && i.kind !== 'pen'
+const solidsOf = new WeakMap<readonly Item[], Item[]>()
+
+function solids(b: Board): Item[] {
+  let s = solidsOf.get(b.items)
+  if (!s) {
+    const hidden = hiddenIds(b)
+    s = b.items.filter((i) => blocksLines(i) && !hidden.has(i.id))
+    solidsOf.set(b.items, s)
+  }
+  return s
+}
+
+/** What a line between `a` and `z` should go around: the objects near them (not ones holding either end). */
+export function obstaclesFor(b: Board, a: Item, z: Item): Item[] {
+  const area = expand(union(a, z), 160)
+  return solids(b).filter(
+    (i) => i.id !== a.id && i.id !== z.id && intersects(i, area) && !containsRect(i, a) && !containsRect(i, z) && !containsRect(a, i) && !containsRect(z, i),
+  )
+}
+
+/** The last route of each connector, kept while its ends, what's near them and the lines it keeps clear of stay put. */
+const lastRoute = new WeakMap<Connector, { a: Item; z: Item; near: string; r: Route & { around?: true } }>()
+
+const segmentsNear = (taken: Taken, area: Rect) =>
+  taken.segments
+    .filter(([p, q]) => intersects({ x: Math.min(p.x, q.x), y: Math.min(p.y, q.y), w: Math.abs(p.x - q.x) + 1, h: Math.abs(p.y - q.y) + 1 }, area))
+    .map(([p, q]) => `${Math.round(p.x)},${Math.round(p.y)},${Math.round(q.x)},${Math.round(q.y)}`)
+    .join(' ')
+
+/**
+ * A connector's route on the board: a square-cornered line goes around what's in its way, and
+ * clear of lines already gone around (`taken`). The same route comes back (the same object) until
+ * any of that moves.
+ */
+export function routeBetween(b: Board, c: Connector, a: Item, z: Item, taken?: Taken): Route {
+  const obstacles = c.style === 'elbow' ? obstaclesFor(b, a, z) : []
+  const near = obstacles.length ? `${obstacles.map((o) => `${o.x},${o.y},${o.w},${o.h}`).join(';')}|${taken ? segmentsNear(taken, expand(union(a, z), 200)) : ''}` : ''
+  const hit = lastRoute.get(c)
+  if (hit && hit.a === a && hit.z === z && hit.near === near) {
+    if (hit.r.around && taken) take(taken, hit.r.points)
+    return hit.r
+  }
+  const r = route(c, a, z, obstacles, taken)
+  lastRoute.set(c, { a, z, near, r })
+  return r
+}
+
+/** Every connector's route, worked out in turn so lines that go around things keep apart. Kept per board. */
+const boardRoutes = new WeakMap<readonly Connector[], { items: readonly Item[]; routes: Map<Id, Route>; quick: boolean }>()
+
+/**
+ * Every connector's route on the board. `quick` (while something's being dragged): only lines whose
+ * ends moved are worked out again, on their own; the rest keep their routes until it's let go.
+ */
+export function routesOf(b: Board, quick = false): Map<Id, Route> {
+  const hit = boardRoutes.get(b.connectors)
+  if (hit && hit.items === b.items && (quick || !hit.quick)) return hit.routes
+  if (quick) {
+    const routes = new Map<Id, Route>()
+    for (const c of b.connectors) {
+      const a = getItem(b, c.from)
+      const z = getItem(b, c.to)
+      if (!a || !z) continue
+      const last = lastRoute.get(c)
+      routes.set(c.id, last && last.a === a && last.z === z ? last.r : routeBetween(b, c, a, z))
+    }
+    boardRoutes.set(b.connectors, { items: b.items, routes, quick: true })
+    return routes
+  }
+  const found = new Map<Id, Route>()
+  const taken: Taken = { segments: [], ends: new Set() }
+  // Plain lines first; then the ones that go around, clear of those and of each other.
+  const around: [Connector, Item, Item][] = []
+  for (const c of b.connectors) {
+    const a = getItem(b, c.from)
+    const z = getItem(b, c.to)
+    if (!a || !z) continue
+    if (goesAround(c, a, z, c.style === 'elbow' ? obstaclesFor(b, a, z) : [])) around.push([c, a, z])
+    else {
+      const r = routeBetween(b, c, a, z)
+      take(taken, r.points)
+      found.set(c.id, r)
+    }
+  }
+  for (const [c, a, z] of around) found.set(c.id, routeBetween(b, c, a, z, taken))
+  // In the board's order.
+  const routes = new Map<Id, Route>()
+  for (const c of b.connectors) {
+    const r = found.get(c.id)
+    if (r) routes.set(c.id, r)
+  }
+  boardRoutes.set(b.connectors, { items: b.items, routes, quick: false })
+  return routes
 }
 
 export function connectorEndpoints(b: Board, c: Connector): [Vec, Vec] | null {

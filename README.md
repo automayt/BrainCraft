@@ -102,8 +102,11 @@ The board fills the window and the controls float above it:
   most after that kind of shape, then the usual conventions. Press **1–7** to
   pick. **Shift-click** a blue arrow for the same choice, placed that way.
 - **Mermaid:** paste a Mermaid flowchart (or use **Import / Export**) to build
-  it, laid out automatically. Export any flowchart back to Mermaid for docs
-  and wikis that draw Mermaid diagrams.
+  it, laid out automatically: steps line up in straight runs, and links that
+  skip a step or loop back get a lane of their own. Export any flowchart back
+  to Mermaid for docs and wikis that draw Mermaid diagrams.
+- **Lines go around shapes:** a square-cornered line that would cut through
+  something takes a way around it instead, keeping clear of other lines.
 
 A hint bar at the bottom of the canvas shows the shortcuts that apply to
 whatever you have selected.

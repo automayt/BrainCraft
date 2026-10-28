@@ -307,6 +307,7 @@ export function Canvas() {
             selectedConnector={editor.selectedConnector}
             selection={editor.selection}
             view={cull}
+            dragging={editor.drag.type === 'move' || editor.drag.type === 'resize'}
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
             statusFilter={editor.statusFilter}
             personFilter={editor.personFilter}

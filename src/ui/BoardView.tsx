@@ -3,7 +3,7 @@
 import { memo } from 'react'
 import * as B from '../model/board'
 import { type Rect, type Vec, center, intersects, union } from '../model/geom'
-import { route } from '../model/routes'
+import type { Route } from '../model/routes'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, textRect } from '../model/shapes'
 import { fitsText, itemFontSize } from '../model/fitText'
@@ -372,22 +372,23 @@ function Arrowhead({ tip, dir, size, color, hand }: { tip: Vec; dir: Vec; size: 
   return <polygon points={`${tip.x},${tip.y} ${bx - dir.y * w},${by + dir.x * w} ${bx + dir.y * w},${by - dir.x * w}`} style={{ fill: color }} />
 }
 
-/** A line between two objects. Memoized on its two ends, so it only redraws when they move. */
+/** A line between two objects, along its route. Memoized, so it only redraws when its ends or its route change. */
 export const ConnectorView = memo(function ConnectorView({
   c,
+  r,
   from,
   to,
   selected,
   editing,
 }: {
   c: Connector
+  r: Route
   from: Item
   to: Item
   selected: boolean
   editing: boolean
 }) {
-  const r = route(c, from, to)
-  if (!r || Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
+  if (Math.hypot(r.end.x - r.start.x, r.end.y - r.start.y) < 1) return null
   const color = selected ? 'var(--accent)' : ink(c.color)
   const arrows = c.arrows ?? 'end'
   const head = 12
@@ -490,6 +491,7 @@ export const BoardView = memo(function BoardView({
   coarse = false,
   statusFilter = null,
   personFilter = null,
+  dragging = false,
 }: {
   board: Board
   hidden: ReadonlySet<Id>
@@ -505,8 +507,12 @@ export const BoardView = memo(function BoardView({
   statusFilter?: Status | null
   /** Objects not assigned to this person are dimmed. */
   personFilter?: string | null
+  /** Something's being dragged: lines go around things again once it's let go. */
+  dragging?: boolean
 }) {
   const depths = mindDepths(board)
+  // Worked out together, so lines that go around things keep apart.
+  const routes = B.routesOf(board, dragging)
   // The selection and the object being edited always render, wherever they are.
   const shown = (i: Item) => !hidden.has(i.id) && (!view || intersects(view, i) || selection.has(i.id) || editingId === i.id)
   const visible = board.items.filter(shown)
@@ -539,11 +545,11 @@ export const BoardView = memo(function BoardView({
       {visible.filter((i) => i.kind !== 'frame').map((i) => shape(i, depths.get(i.id) ?? 0))}
       {!coarse && <CollapseToggles board={board} hidden={hidden} selection={selection} />}
       {board.connectors.map((c) => {
-        if (hidden.has(c.from) || hidden.has(c.to)) return null
+        if (hidden.has(c.from) || hidden.has(c.to) || !routes.has(c.id)) return null
         const from = B.getItem(board, c.from)
         const to = B.getItem(board, c.to)
         if (!from || !to || !pairInView(from, to)) return null
-        return <ConnectorView key={c.id} c={c} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
+        return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} />
       })}
       {/* Objects that lead somewhere: a badge on their corner to follow it. */}
       {!coarse &&

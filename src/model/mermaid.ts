@@ -8,6 +8,7 @@
 import { addItem, connect, getItem } from './board'
 import { flowItem } from './flowchart'
 import type { Vec } from './geom'
+import { RANK_GAP, layered } from './layered'
 import { type Arrowheads, type Board, type FlowShape, type Id, type Item, flowShapeInfo } from './types'
 
 export type MermaidDir = 'TD' | 'BT' | 'LR' | 'RL'
@@ -303,8 +304,6 @@ export function toMermaid(b: Board, ids?: ReadonlySet<Id>): string {
 
 // ----- import with layout ------------------------------------------------------
 
-const RANK_GAP = 70
-const NODE_GAP = 50
 
 /** A flowchart step's size for its words. */
 export const stepSize = (shape: FlowShape, label: string) => nodeSize({ shape, label } as MermaidNode)
@@ -357,37 +356,23 @@ export function rankNodes(g: MermaidGraph): Map<string, number> {
 /** Adds the graph to the board, laid out in layers centred on `at`. Returns the new shape ids. */
 export function insertMermaid(b: Board, g: MermaidGraph, at: Vec): [Board, Id[]] {
   const rank = rankNodes(g)
-  const layers: MermaidNode[][] = []
-  for (const n of g.nodes) (layers[rank.get(n.key)!] ??= []).push(n)
-  // One barycentre sweep keeps children under their parents.
-  const index = new Map<string, number>()
-  layers.forEach((layer) => layer.forEach((n, k) => index.set(n.key, k)))
-  for (let r = 1; r < layers.length; r++) {
-    const bary = (n: MermaidNode) => {
-      const preds = g.edges.filter((e) => e.to === n.key && rank.get(e.from) === r - 1).map((e) => index.get(e.from)!)
-      return preds.length ? preds.reduce((a, z) => a + z, 0) / preds.length : index.get(n.key)!
-    }
-    layers[r] = (layers[r] ?? []).map((n) => [n, bary(n)] as const).sort((a, z) => a[1] - z[1]).map(([n]) => n)
-    layers[r].forEach((n, k) => index.set(n.key, k))
-  }
-
   const vertical = g.dir === 'TD' || g.dir === 'BT'
   const sizes = new Map(g.nodes.map((n) => [n.key, nodeSize(n)]))
-  const pos = new Map<string, Vec>()
-  let along = 0
-  layers.forEach((layer = []) => {
-    const depth = Math.max(0, ...layer.map((n) => (vertical ? sizes.get(n.key)!.h : sizes.get(n.key)!.w)))
-    const breadth = layer.reduce((s, n) => s + (vertical ? sizes.get(n.key)!.w : sizes.get(n.key)!.h), 0) + NODE_GAP * Math.max(0, layer.length - 1)
-    let across = -breadth / 2
-    for (const n of layer) {
+  const placed = layered(
+    g.nodes.map((n) => {
       const sz = sizes.get(n.key)!
-      const span = vertical ? sz.w : sz.h
-      const c = across + span / 2
-      pos.set(n.key, vertical ? { x: c, y: along + depth / 2 } : { x: along + depth / 2, y: c })
-      across += span + NODE_GAP
-    }
-    along += depth + RANK_GAP
+      return { key: n.key, span: vertical ? sz.w : sz.h, depth: vertical ? sz.h : sz.w }
+    }),
+    g.edges,
+    rank,
+  )
+  const pos = new Map([...placed].map(([k, p]) => [k, vertical ? { x: p.across, y: p.along } : { x: p.along, y: p.across }]))
+  const ends = g.nodes.map((n) => {
+    const p = placed.get(n.key)!
+    const sz = sizes.get(n.key)!
+    return p.along + (vertical ? sz.h : sz.w) / 2
   })
+  const along = Math.max(0, ...ends) + RANK_GAP
   const total = along - RANK_GAP
   const flip = g.dir === 'BT' || g.dir === 'RL'
 

@@ -1,6 +1,7 @@
 /** Connector paths between two items. */
 
-import { type Vec, add, dist, ellipseBorderPoint, rectBorderPoint, scale, sub } from './geom'
+import { type Rect, type Vec, add, dist, ellipseBorderPoint, rectBorderPoint, scale, sub } from './geom'
+import { type Taken, orthoRoute, pathHits, take } from './orthoRoute'
 import { PORT_DIR, facingPorts, portPoint } from './shapes'
 import type { Connector, Item } from './types'
 
@@ -70,8 +71,28 @@ function roundedPath(points: Vec[], radius = 10): string {
   return `${d}L${last.x} ${last.y}`
 }
 
-/** Lays out connector `c` between items `a` (from) and `z` (to). */
-export function route(c: Connector, a: Item, z: Item): Route {
+/** An elbow: leave and arrive square to the sides, turning halfway between. */
+function elbowPoints(start: Vec, end: Vec, pa: string): Vec[] {
+  if (pa === 'n' || pa === 's') {
+    const my = (start.y + end.y) / 2
+    return [start, { x: start.x, y: my }, { x: end.x, y: my }, end]
+  }
+  const mx = (start.x + end.x) / 2
+  return [start, { x: mx, y: start.y }, { x: mx, y: end.y }, end]
+}
+
+/** Whether connector `c`'s plain line would cut through one of `obstacles` (so it goes around). */
+export function goesAround(c: Connector, a: Item, z: Item, obstacles: readonly Rect[]): boolean {
+  if (c.style !== 'elbow' || !obstacles.length) return false
+  const [pa, pz] = facingPorts(a, z)
+  return pathHits(elbowPoints(portPoint(a, pa), portPoint(z, pz), pa), obstacles)
+}
+
+/**
+ * Lays out connector `c` between items `a` (from) and `z` (to). A square-cornered (elbow) line that
+ * would cut through one of `obstacles` goes around instead.
+ */
+export function route(c: Connector, a: Item, z: Item, obstacles: readonly Rect[] = [], taken?: Taken): Route & { around?: true } {
   const style = c.style ?? 'straight'
   const [pa, pz] = facingPorts(a, z)
   // Flowchart symbols always connect at the middle of a side; other items do once the line bends.
@@ -117,23 +138,29 @@ export function route(c: Connector, a: Item, z: Item): Route {
     }
   }
 
-  // Elbow: leave and arrive square to the sides, turning halfway between.
-  let pts: Vec[]
-  if (pa === 'n' || pa === 's') {
-    const my = (start.y + end.y) / 2
-    pts = [start, { x: start.x, y: my }, { x: end.x, y: my }, end]
-  } else {
-    const mx = (start.x + end.x) / 2
-    pts = [start, { x: mx, y: start.y }, { x: mx, y: end.y }, end]
+  let pts = elbowPoints(start, end, pa)
+  // Something in the way: around it.
+  let around = false
+  if (obstacles.length && pathHits(pts, obstacles)) {
+    const way = orthoRoute(a, z, obstacles, [pa, pz], taken)
+    if (way) {
+      pts = way.points
+      around = true
+    }
   }
   pts = simplify(pts)
+  if (around && taken) take(taken, pts)
+  // A way around may leave and arrive by other sides.
+  const first = pts[0]
+  const last = pts[pts.length - 1]
   return {
     d: roundedPath(pts),
     points: pts,
-    start,
-    end,
-    endDir: unit(sub(end, pts[pts.length - 2])),
-    startDir: unit(sub(pts[1], start)),
+    start: first,
+    end: last,
+    endDir: unit(sub(last, pts[pts.length - 2])),
+    startDir: unit(sub(pts[1], first)),
     mid: polylineMid(pts),
+    ...(around ? { around: true as const } : {}),
   }
 }
