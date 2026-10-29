@@ -456,6 +456,7 @@ function Groups({ data, run, api }: Props) {
 }
 
 function GroupRow({ group: g, data, run, api }: Props & { group: Group }) {
+  const ws = useWorkspace()
   const [sso, setSso] = useState((g.ssoGroups ?? []).join(', '))
   const members = data.users.filter((u) => u.groups.includes(g.id))
   const patch = (body: object) => void run(() => api(`api/admin/groups/${g.id}`, 'PATCH', body))
@@ -498,10 +499,19 @@ function GroupRow({ group: g, data, run, api }: Props & { group: Group }) {
               )
             })}
           </div>
-          <label className="group-sso">
-            <small className="muted">Sign-in provider groups that join people to it (comma-separated):</small>
-            <input value={sso} onChange={(e) => setSso(e.target.value)} onBlur={() => sso !== (g.ssoGroups ?? []).join(', ') && patch({ ssoGroups: sso.split(',').map((s) => s.trim()).filter(Boolean) })} />
-          </label>
+          {/* Only with single sign-on: it's the sign-in provider that says who's in its groups. */}
+          {(ws.account?.sso || !!g.ssoGroups?.length) && (
+            <label className="group-sso">
+              <span>Add people from single sign-on</span>
+              <small className="muted">Group names from your sign-in provider, separated by commas. Whoever is in one of them there is in “{g.name}” too, checked each time they sign in.</small>
+              <input
+                placeholder="e.g. Engineering, Design"
+                value={sso}
+                onChange={(e) => setSso(e.target.value)}
+                onBlur={() => sso !== (g.ssoGroups ?? []).join(', ') && patch({ ssoGroups: sso.split(',').map((s) => s.trim()).filter(Boolean) })}
+              />
+            </label>
+          )}
         </>
       )}
     </li>
