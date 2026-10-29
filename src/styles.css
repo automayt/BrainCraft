@@ -12220,3 +12220,13 @@ button.on,
   gap: 4px;
   margin-bottom: 14px;
 }
+
+/* A group admin's groups, at the top of their screen. */
+.team-groups {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

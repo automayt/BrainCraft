@@ -197,6 +197,11 @@ export class AccountStore {
 
   removeUser(userId: string) {
     this.users = this.users.filter((u) => u.id !== userId)
+    // No longer anyone's group admin.
+    if (this.groups.some((g) => g.admins?.includes(userId))) {
+      for (const g of this.groups) if (g.admins?.includes(userId)) refill(g, { ...g, admins: g.admins.filter((x) => x !== userId) })
+      this.saveGroups()
+    }
     this.revokeAll(userId)
     this.saveUsers()
   }
@@ -223,7 +228,7 @@ export class AccountStore {
   updateGroup(groupId: string, patch: Partial<Omit<Group, 'id' | 'everyone'>>): Group | undefined {
     const g = this.groups.find((x) => x.id === groupId)
     if (!g) return undefined
-    Object.assign(g, cleanGroup({ ...g, ...patch }), { id: g.id }, g.everyone ? { everyone: true } : {})
+    refill(g, { ...g, ...patch })
     this.saveGroups()
     return g
   }
@@ -302,12 +307,21 @@ export class AccountStore {
   }
 }
 
+/** Changes a group in place to `next` (checked), keeping its id and whether it's Everyone; a field left empty goes. */
+function refill(g: Group, next: Omit<Group, 'id'>) {
+  const clean = cleanGroup({ ...next, ...(g.everyone ? { everyone: true as const } : {}) })
+  for (const k of Object.keys(g) as (keyof Group)[]) if (k !== 'id') delete g[k]
+  Object.assign(g, clean)
+}
+
 function cleanGroup(g: Omit<Group, 'id'>): Omit<Group, 'id'> {
   return {
     name: String(g.name ?? '').trim().slice(0, 80) || 'Untitled group',
     ...(g.description ? { description: String(g.description).slice(0, 300) } : {}),
     permissions: [...new Set((g.permissions ?? []).filter(isPermission))],
     ...(g.ssoGroups?.length ? { ssoGroups: [...new Set(g.ssoGroups.map((s) => String(s).trim()).filter(Boolean))].slice(0, 50) } : {}),
+    // Everyone has no group admins: they'd look after every account on the server.
+    ...(g.admins?.length && !g.everyone ? { admins: [...new Set(g.admins.filter((s) => typeof s === 'string' && s))].slice(0, 50) } : {}),
     ...(g.everyone ? { everyone: true as const } : {}),
   }
 }

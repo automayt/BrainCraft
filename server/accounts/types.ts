@@ -44,6 +44,11 @@ export interface Group {
   permissions: Permission[]
   /** Group names from the sign-in provider that put people in this group automatically. */
   ssoGroups?: string[]
+  /**
+   * Its group admins (user ids): they add people to it and look after its members (password links,
+   * turning accounts off), without seeing other groups or changing what this one may do.
+   */
+  admins?: string[]
   /** The group every signed-in person is in. */
   everyone?: true
 }

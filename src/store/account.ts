@@ -29,6 +29,8 @@ export interface AccountInfo {
   sso?: { label: string }
   user: AccountUser | null
   permissions: Permission[]
+  /** The groups they're a group admin of: they add people to them and look after their members. */
+  groupAdmin?: { id: string; name: string }[]
   /** An admin's announcement for everyone signed in. */
   notice?: string
   /** The server keeps backups, so deleted boards can be put back (from /api/health). */
@@ -82,7 +84,37 @@ export interface Group {
   description?: string
   permissions: Permission[]
   ssoGroups?: string[]
+  /** Its group admins' ids. */
+  admins?: string[]
   everyone?: true
+}
+
+/** A person in groups a group admin runs, as they see them. */
+export interface TeamPerson {
+  id: string
+  name: string
+  email: string
+  /** Which of the group admin's groups they're in (not their other groups). */
+  groups: string[]
+  /** Of those, the ones their sign-in provider puts them in (not for the group admin to change). */
+  fromSignIn?: string[]
+  sso: boolean
+  password: boolean
+  disabled?: boolean
+  lastSeen?: number
+  admin?: true
+  /** Only in the group admin's groups, so theirs to look after: password links, turning off. */
+  yours: boolean
+}
+
+/** What a group admin sees: their groups and the people in them. */
+export interface TeamData {
+  groups: { id: string; name: string; permissions: string[] }[]
+  people: TeamPerson[]
+  /** After adding someone: their name, a set-your-password link for a new account, or that they had one. */
+  added?: string
+  link?: string
+  existing?: true
 }
 
 export interface AdminData {

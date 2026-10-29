@@ -5,13 +5,14 @@ import { copyText } from '../copyText'
 import { timeAgo } from '../Boards'
 import { useWorkspace } from '../useWorkspace'
 import { useClickAway } from '../useClickAway'
+import { GroupAdminDialog } from './GroupAdminDialog'
 
 /** The signed-in person's button: who they are, the admin screen, password, API tokens, sign out. */
 export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
   const ws = useWorkspace()
   const user = ws.account?.user
   const [open, setOpen] = useState(false)
-  const [dialog, setDialog] = useState<'password' | 'tokens' | 'mentions' | null>(null)
+  const [dialog, setDialog] = useState<'password' | 'tokens' | 'mentions' | 'groups' | null>(null)
   const box = useRef<HTMLDivElement>(null)
   // A press anywhere else closes it (the dialogs it opens are inside it, so they don't).
   useClickAway(box, () => setOpen(false), undefined, open)
@@ -44,7 +45,7 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
             <strong>{user.name}</strong>
             <small className="muted">
               {user.email}
-              {user.role === 'admin' ? ' · admin' : ''}
+              {user.role === 'admin' ? ' · admin' : ws.account?.groupAdmin?.length ? ` · group admin of ${ws.account.groupAdmin.map((g) => g.name).join(', ')}` : ''}
             </small>
           </li>
           <li role="none">
@@ -56,6 +57,13 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
             <li role="none">
               <button role="menuitem" onClick={pick(onAdmin)}>
                 Admin…
+              </button>
+            </li>
+          )}
+          {!!ws.account?.groupAdmin?.length && (
+            <li role="none">
+              <button role="menuitem" onClick={pick(() => setDialog('groups'))}>
+                Group admin…
               </button>
             </li>
           )}
@@ -81,6 +89,7 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
       {dialog === 'password' && <PasswordDialog onClose={() => setDialog(null)} />}
       {dialog === 'tokens' && <TokensDialog onClose={() => setDialog(null)} />}
       {dialog === 'mentions' && <MentionsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'groups' && <GroupAdminDialog onClose={() => setDialog(null)} />}
     </div>
   )
 }

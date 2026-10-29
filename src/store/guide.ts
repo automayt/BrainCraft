@@ -577,7 +577,7 @@ ${FENCE}
 
 ## Accounts
 
-With \`BRAINCRAFT_ACCOUNTS=1\` people sign in. **Admins** manage people and groups; **groups carry permissions** (make boards, share them, use the AI, see everyone); every board has an **owner** and an **Access** list. Sign in with a password or **single sign-on** with any OpenID Connect provider. Admins see an **activity log** of who changed what.
+With \`BRAINCRAFT_ACCOUNTS=1\` people sign in. **Admins** manage people and groups, and **group admins** add people to the groups they look after; **groups carry permissions** (make boards, share them, use the AI, see everyone); every board has an **owner** and an **Access** list. Sign in with a password or **single sign-on** with any OpenID Connect provider. Admins see an **activity log** of who changed what.
 
 {{expand Where to read more}}
 The project's docs folder: SERVER.md (settings and the HTTP API), ACCOUNTS.md (accounts and single sign-on), AI.md (the assistant), MCP.md (AI assistants outside the app) and API.md (every operation).

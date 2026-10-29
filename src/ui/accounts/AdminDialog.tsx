@@ -413,7 +413,7 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
 }
 
 /** Choosing groups: each as a toggle chip. */
-function GroupPicker({ groups, value, onChange }: { groups: Group[]; value: string[]; onChange: (v: string[]) => void }) {
+export function GroupPicker({ groups, value, onChange }: { groups: { id: string; name: string }[]; value: string[]; onChange: (v: string[]) => void }) {
   if (!groups.length) return <small className="muted">No groups yet</small>
   return (
     <span className="group-chips" role="group" aria-label="Groups">
@@ -445,7 +445,10 @@ function Groups({ data, run, api }: Props) {
         <input required aria-label="New group’s name" placeholder="New group (e.g. Planners)" value={name} onChange={(e) => setName(e.target.value)} />
         <button className="primary">Add group</button>
       </form>
-      <p className="muted admin-hint">A group says what its members may do; put people in groups and they get it. Everyone is in “Everyone”. Admins may do everything.</p>
+      <p className="muted admin-hint">
+        A group says what its members may do; put people in groups and they get it. Everyone is in “Everyone”. Admins may do everything. A group’s group admins add people to it and
+        look after them, without seeing other groups or the rest of this screen.
+      </p>
       <ul className="group-list">
         {data.groups.map((g) => (
           <GroupRow key={g.id} group={g} data={data} run={run} api={api} />
@@ -498,6 +501,26 @@ function GroupRow({ group: g, data, run, api }: Props & { group: Group }) {
                 </button>
               )
             })}
+          </div>
+          <div className="group-members">
+            <small className="muted">Group admins:</small>{' '}
+            {data.users
+              .filter((u) => u.role !== 'admin')
+              .map((u) => {
+                const on = !!g.admins?.includes(u.id)
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className={`chip${on ? ' on' : ''}`}
+                    aria-pressed={on}
+                    title={on ? `${u.name} adds people to ${g.name} and looks after them` : `Let ${u.name} add people to ${g.name} and look after them`}
+                    onClick={() => patch({ admins: on ? (g.admins ?? []).filter((x) => x !== u.id) : [...(g.admins ?? []), u.id] })}
+                  >
+                    {u.name}
+                  </button>
+                )
+              })}
           </div>
           {/* Only with single sign-on: it's the sign-in provider that says who's in its groups. */}
           {(ws.account?.sso || !!g.ssoGroups?.length) && (

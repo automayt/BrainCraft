@@ -9,6 +9,7 @@
  *   GET|POST /api/auth/tokens, DELETE /api/auth/tokens/:id     your API tokens (for scripts, MCP)
  *   GET  /api/people?q=               people and groups to share with
  *   /api/admin/users[/:id[/reset]], /api/admin/groups[/:id]    admins: people and groups
+ *   /api/team[/people[/:id[/reset]]]  group admins: the people in the groups they run
  *   GET  /api/admin/audit[/verify|/download]                    admins: the activity log (audit.ts)
  *
  * Signed-in browsers carry an HttpOnly session cookie; scripts send `Authorization: Bearer bct_…`.
@@ -17,7 +18,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { can, permissionsOf } from './access'
+import { can, groupsAdminOf, groupsOf, looksAfter, permissionsOf } from './access'
 import { type Actor, AUDIT_KINDS, type AuditInput, type AuditKind, AuditLog, type AuditTarget, changesOf, changeText } from './audit'
 import { AccountStore, checkPassword, cleanAppName, cleanNotice, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
 import { type AccountRole, type Group, PERMISSIONS, type Permission, publicUser, type User } from './types'
@@ -158,6 +159,7 @@ export class Accounts {
     description: g.description ?? '',
     permissions: g.permissions.map((p) => PERMISSIONS.find((x) => x.id === p)?.label ?? p),
     'provider groups': g.ssoGroups ?? [],
+    'group admins': (g.admins ?? []).map((id) => this.store.user(id)?.name ?? id),
     members: this.store.users.filter((u) => u.groups.includes(g.id)).map((u) => u.name),
   })
 
@@ -205,6 +207,7 @@ export class Accounts {
       ...(this.sso ? { sso: { label: this.sso.label } } : {}),
       user: u ? publicUser(u) : null,
       permissions: [...this.permissions(u)],
+      groupAdmin: this.runs(u),
       ...(u && this.store.settings.notice ? { notice: this.store.settings.notice } : {}),
     }
   }
@@ -217,8 +220,11 @@ export class Accounts {
   }
 
   private meFor(u: User) {
-    return { accounts: true, setup: this.needsSetup, ...(this.sso ? { sso: { label: this.sso.label } } : {}), user: publicUser(u), permissions: [...this.permissions(u)], ...(this.store.settings.notice ? { notice: this.store.settings.notice } : {}) }
+    return { accounts: true, setup: this.needsSetup, ...(this.sso ? { sso: { label: this.sso.label } } : {}), user: publicUser(u), permissions: [...this.permissions(u)], groupAdmin: this.runs(u), ...(this.store.settings.notice ? { notice: this.store.settings.notice } : {}) }
   }
+
+  /** The groups someone is a group admin of, by name. */
+  private runs = (u: User | null) => groupsAdminOf(u, this.store.groups).map((g) => ({ id: g.id, name: g.name }))
 
   // ----- single sign-on --------------------------------------------------------------------------------
 
@@ -258,7 +264,7 @@ export class Accounts {
   /** Handles an accounts route; false when the path isn't one of them. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'auth' && parts[1] !== 'admin' && parts[1] !== 'people') return false
+    if (parts[1] !== 'auth' && parts[1] !== 'admin' && parts[1] !== 'people' && parts[1] !== 'team') return false
     if (!this.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const read = async (): Promise<Record<string, unknown>> => {
       try {
@@ -413,11 +419,106 @@ export class Accounts {
       )
     }
 
+    if (parts[1] === 'team') {
+      if (!groupsAdminOf(me, this.store.groups).length) return json(res, 403, { error: 'Only group admins can do that' }), true
+      return this.team(req, res, parts.slice(2), m, me, read), true
+    }
+
     if (parts[1] === 'admin') {
       if (me.role !== 'admin') return json(res, 403, { error: 'Only admins can do that' }), true
       return this.admin(req, res, url, parts.slice(2), m, me, read), true
     }
     return json(res, 404, { error: 'Not found' }), true
+  }
+
+  /**
+   * What a group admin sees and does: the groups they run and the people in them. They add people
+   * (new accounts, or existing ones by email) to those groups and take them out again; for people
+   * only in their groups, they also make set-your-password links and turn accounts off and on.
+   * Nothing about other groups, permissions or the rest of the server.
+   */
+  private async team(req: IncomingMessage, res: ServerResponse, p: string[], m: string, me: User, read: () => Promise<Record<string, unknown>>) {
+    const s = this.store
+    const mine = groupsAdminOf(me, s.groups)
+    const ids = new Set(mine.map((g) => g.id))
+    const names = (gs: string[]) => gs.map(this.groupName).join(', ')
+    const inMine = (u: User) => groupsOf(u, s.groups).some((g) => ids.has(g.id))
+    const view = () => ({
+      groups: mine.map((g) => ({ id: g.id, name: g.name, permissions: g.permissions.map((x) => PERMISSIONS.find((y) => y.id === x)?.label ?? x) })),
+      people: s.users.filter(inMine).map((u) => {
+        const via = groupsOf(u, s.groups).filter((g) => ids.has(g.id) && !u.groups.includes(g.id))
+        return {
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          // Only the groups this group admin runs: the rest are none of their business.
+          groups: u.groups.filter((g) => ids.has(g)),
+          ...(via.length ? { fromSignIn: via.map((g) => g.id) } : {}),
+          sso: !!u.sso,
+          password: !!u.password,
+          ...(u.disabled ? { disabled: true } : {}),
+          ...(u.lastSeen ? { lastSeen: u.lastSeen } : {}),
+          ...(u.role === 'admin' ? { admin: true } : {}),
+          yours: looksAfter(me, u, s.groups),
+        }
+      }),
+    })
+    const link = (u: User) => `${this.origin(req)}/#reset=${s.issue(u.id, 'reset')}`
+    const chosen = (raw: unknown) => (Array.isArray(raw) ? [...new Set(raw.filter((g): g is string => typeof g === 'string' && ids.has(g)))] : [])
+
+    if (!p[0] && m === 'GET') return json(res, 200, view())
+    if (p[0] !== 'people') return json(res, 404, { error: 'Not found' })
+
+    if (!p[1] && m === 'POST') {
+      const b = await read()
+      if (!validEmail(b.email)) return json(res, 400, { error: 'Enter an email address' })
+      const groups = chosen(b.groups)
+      if (!groups.length) return json(res, 400, { error: 'Choose at least one of your groups for them' })
+      const existing = s.byEmail(b.email)
+      if (existing) {
+        // Someone with an account already: they join the groups, and that's all a group admin learns.
+        const add = groups.filter((g) => !existing.groups.includes(g))
+        if (add.length) {
+          const before = this.userView(existing)
+          s.updateUser(existing.id, { groups: [...existing.groups, ...add] })
+          this.log(req, me, { action: 'user.change', target: this.userTarget(existing), changes: changesOf(before, this.userView(existing)), text: `${me.name} (group admin) added ${existing.name} to ${names(add)}` })
+        }
+        return json(res, 200, { added: existing.name, existing: true, ...view() })
+      }
+      const u = s.addUser({ email: b.email, name: String(b.name ?? '').trim().slice(0, 80) || b.email.split('@')[0], role: 'user', groups })
+      this.log(req, me, { action: 'user.add', target: this.userTarget(u), text: `${me.name} (group admin) added ${u.name} (${u.email}), in ${names(groups)}` })
+      this.promote(u)
+      return json(res, 201, { added: u.name, link: link(u), ...view() })
+    }
+
+    const u = p[1] ? s.user(p[1]) : undefined
+    if (!u || !inMine(u)) return json(res, 404, { error: 'No such person in your groups' })
+    const yours = looksAfter(me, u, s.groups)
+
+    if (p[2] === 'reset' && m === 'POST') {
+      if (!yours) return json(res, 403, { error: 'They’re in other groups too (or an admin), so an admin makes their password link' })
+      if (u.sso) return json(res, 409, { error: 'They sign in with single sign-on, so they don’t need a password' })
+      this.log(req, me, { action: 'user.reset-link', target: this.userTarget(u), text: `${me.name} (group admin) made a set-your-password link for ${u.name}` })
+      return json(res, 200, { link: link(u) })
+    }
+
+    if (!p[2] && m === 'PATCH') {
+      const b = await read()
+      const patch: Partial<User> = {}
+      // Their place in this group admin's groups changes; any other groups stay as they are.
+      if (Array.isArray(b.groups)) patch.groups = [...u.groups.filter((g) => !ids.has(g)), ...chosen(b.groups)]
+      if (typeof b.disabled === 'boolean') {
+        if (!yours) return json(res, 403, { error: 'They’re in other groups too (or an admin), so only an admin can turn their account off' })
+        patch.disabled = b.disabled || undefined
+      }
+      const before = this.userView(u)
+      s.updateUser(u.id, patch)
+      if (patch.disabled) s.revokeAll(u.id)
+      const changes = changesOf(before, this.userView(u))
+      if (Object.keys(changes).length) this.log(req, me, { action: 'user.change', target: this.userTarget(u), changes, text: `${me.name} (group admin) changed ${u.name}: ${changeText(changes)}` })
+      return json(res, 200, view())
+    }
+    return json(res, 405, { error: 'Method not allowed' })
   }
 
   private async admin(req: IncomingMessage, res: ServerResponse, url: URL, p: string[], m: string, me: User, read: () => Promise<Record<string, unknown>>) {
@@ -529,6 +630,7 @@ export class Accounts {
         ...(typeof b.description === 'string' ? { description: b.description } : {}),
         ...(Array.isArray(b.permissions) ? { permissions: b.permissions as Permission[] } : {}),
         ...(Array.isArray(b.ssoGroups) ? { ssoGroups: b.ssoGroups.filter((x): x is string => typeof x === 'string') } : {}),
+        ...(Array.isArray(b.admins) ? { admins: b.admins.filter((x): x is string => typeof x === 'string' && !!s.user(x)) } : {}),
       })
       if (!p[1] && m === 'POST') {
         const b = await read()

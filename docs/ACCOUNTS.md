@@ -28,6 +28,8 @@ Either:
 
 - **Admins** can do everything: manage people and groups, open and hand over
   any board.
+- **Group admins** look after one or more groups: they add people to them and
+  take them out, without being admins (see below).
 - **Users** can do what their groups allow.
 - **Groups** are lists of people with permissions attached, so adding someone
   is just putting them in the right groups:
@@ -48,6 +50,28 @@ people (they get a one-time link to choose a password, valid
 for a week, which you send them; no mail server needed), set roles, put people
 in groups, turn accounts off, and make groups with checkboxes for their
 permissions.
+
+### Group admins
+
+Make someone a group admin when they should add people to their own team
+without seeing the rest of the server. In **Admin… → Groups**, pick them under
+**Group admins** on each group they look after. They then have **Group admin…**
+in their account menu, where they:
+
+- see the groups they run (and what each may do) and the people in them; only
+  those groups show, never anyone's other groups;
+- add people: a new account gets a set-your-password link to send, and someone
+  who already has an account just joins (by exact email);
+- move people between their groups, or take them out of them;
+- make password links for, and turn off or on, people who are **only** in
+  groups they run. Anyone also in another group, an admin or another group
+  admin is looked after by an admin, so nobody on another team can be taken
+  over this way.
+
+They can't make or remove groups, change what a group may do, choose group
+admins, remove accounts, or open the rest of the admin screen, and they see
+only the boards shared with them. Everything they do is in the activity log as
+"(group admin)". The Everyone group has no group admins.
 
 ## Board access
 
@@ -199,7 +223,7 @@ tab shows the exact address). BrainCraft uses PKCE, checks `state` and
 ES256/384), issuer, audience and expiry.
 
 **Groups from your provider:** in a BrainCraft group, list the provider's group
-names under *Sign-in provider groups*. People whose sign-in carries one of
+names under *Add people from single sign-on*. People whose sign-in carries one of
 those names are in the group, updated at each sign-in. Groups an admin set by
 hand stay as they are.
 
@@ -271,7 +295,7 @@ Provider notes:
    new one.
 4. Optional, for groups: **Token configuration → Add groups claim** (security
    groups). Entra sends group ids, so put those ids in BrainCraft groups'
-   *Sign-in provider groups*.
+   *Add people from single sign-on*.
 5. Start BrainCraft with:
 
    ```sh

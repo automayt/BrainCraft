@@ -13,6 +13,26 @@ export function groupsOf(user: User, groups: readonly Group[]): Group[] {
   return groups.filter((g) => g.everyone || user.groups.includes(g.id) || (g.ssoGroups ?? []).some((s) => sso.has(s.toLowerCase())))
 }
 
+/** The groups someone is a group admin of (never Everyone; none while their account is off). */
+export function groupsAdminOf(user: User | null, groups: readonly Group[]): Group[] {
+  if (!user || user.disabled) return []
+  return groups.filter((g) => !g.everyone && g.admins?.includes(user.id))
+}
+
+/**
+ * Whether a group admin looks after `person` wholly: someone else (not an admin, not a group admin
+ * themselves) who is only in groups they run. Only then may they turn the account off or make
+ * a set-your-password link for it, so nobody on another team can be taken over that way.
+ */
+export function looksAfter(admin: User, person: User, groups: readonly Group[]): boolean {
+  if (person.id === admin.id || person.role === 'admin') return false
+  const mine = new Set(groupsAdminOf(admin, groups).map((g) => g.id))
+  const theirs = groupsOf(person, groups).filter((g) => !g.everyone)
+  if (!theirs.length || !theirs.every((g) => mine.has(g.id))) return false
+  // Another group admin (even of the same group) is looked after by an admin.
+  return !groups.some((g) => g.admins?.includes(person.id))
+}
+
 /** What someone may do: everything for an admin, nothing when disabled, else their groups' permissions together. */
 export function permissionsOf(user: User | null, groups: readonly Group[]): Set<Permission> {
   if (!user || user.disabled) return new Set()

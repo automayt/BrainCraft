@@ -657,6 +657,9 @@ shares live exactly like a board.
   **admins** manage people and groups, **groups carry permissions** (make
   boards, share them, use the AI, see everyone), so adding someone is putting
   them in groups.
+- **Group admins** add people to the groups they look after (and look after
+  people only in those groups) without being admins: they don't see other
+  groups, everyone's boards or the rest of the admin screen.
 - Every board has an **owner** and an **Access** list of people and groups who
   can view, edit or manage it; the secret share links stop working.
 - Sign in with a password, or **single sign-on** with any OpenID Connect
