@@ -6,9 +6,10 @@ import { looksLikeMermaid, otherMermaid, parseMermaid } from '../model/mermaid'
 import { parseSequence } from '../model/sequence'
 import { parseOutline } from '../model/mindmap'
 import { listLines } from '../model/stickyGrid'
-import { toJson } from '../model/serialize'
+import { fromJson, toJson } from '../model/serialize'
 import type { ExcalidrawScene } from '../model/types'
 import { useEditor } from './useEditor'
+import { useWorkspace } from './useWorkspace'
 
 type Tab = 'import' | 'export'
 
@@ -24,6 +25,8 @@ interface Found {
   flowchart?: boolean
   /** What the main button makes, when it isn't "Add to board". */
   as?: string
+  /** A whole board (as exported): it opens as a new board. */
+  board?: boolean
 }
 
 function detect(text: string): Found {
@@ -49,6 +52,14 @@ function detect(text: string): Found {
     const raw = JSON.parse(text)
     if (raw?.type === 'braincraft/clip') return { label: 'BrainCraft objects', ok: true }
     if (raw?.braincraft === 'ops' || Array.isArray(raw?.ops)) return { label: `BrainCraft API operations (${raw.ops?.length ?? 0})`, ok: true }
+    if (Array.isArray(raw?.items) && Array.isArray(raw?.connectors)) {
+      try {
+        const b = fromJson(text)
+        return { label: `A whole board, “${b.title || 'Untitled'}” · ${b.items.length} objects`, ok: true, board: true, as: 'Open as a new board' }
+      } catch (err) {
+        return { label: (err as Error).message, ok: false }
+      }
+    }
   } catch {
     // Not JSON.
   }
@@ -61,6 +72,7 @@ function detect(text: string): Found {
 
 export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () => void; initialTab?: Tab }) {
   const editor = useEditor()
+  const ws = useWorkspace()
   const dialogRef = useRef<HTMLDivElement>(null)
   useDialog(dialogRef)
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -98,6 +110,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
           <>
             <textarea
               autoFocus
+              aria-label="What to import"
               value={text}
               spellCheck={false}
               placeholder={'flowchart TD\n  A([Start]) --> B{Ready?}\n  B -->|Yes| C[Ship it]\n  B -->|No| D[Fix it] --> B'}
@@ -106,7 +119,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
             <div className="dialog-foot">
               <span className={found.ok || !text.trim() ? 'muted' : 'error'}>{found.label}</span>
               <span className="dialog-foot-actions">
-                <button onClick={() => fileInput.current?.click()} title="An .excalidraw drawing, or Mermaid, Markdown or text">
+                <button className="link" onClick={() => fileInput.current?.click()} title="An .excalidraw drawing, or Mermaid, Markdown or text">
                   Open a file…
                 </button>
                 {found.drawable && (
@@ -126,6 +139,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
                     disabled={!found.ok}
                     onClick={() => {
                       if (found.scene) void addDrawing(editor, found.scene)
+                      else if (found.board) void ws.newBoard(fromJson(text))
                       else editor.pasteText(text)
                       onClose()
                     }}

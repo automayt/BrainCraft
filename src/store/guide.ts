@@ -208,7 +208,7 @@ Nothing leaves your browser unless you share it: boards are kept here, saved as 
     {
       title: 'The canvas',
       icon: '🎨',
-      text: `An endless board. **Scroll** to zoom at the pointer, drag with the **middle button** (or hold **Space**) to move around, and drag on empty space to select. On a trackpad, two fingers move and pinch zooms.
+      text: `An endless board. **Scroll** to zoom at the pointer, drag with the **right** or **middle button** (or hold **Space**) to move around, and drag on empty space to select. On a trackpad, two fingers move and pinch zooms.
 
 The ${tour} has a frame for each part below. Press **Shift+P** on it to see it as slides.
 
@@ -268,7 +268,8 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **↑** / **↓** go back to earlier messages to change them; **Alt ↑** / **↓** moves one; **Backspace** on an empty one takes it out. **Esc** when you're done.
 - **Tab** also makes a **note** over the lanes the arrow spans. Bars on the lines show who is busy answering a call; they come by themselves.
 - Boxes: **Shift ↑** / **↓** picks several messages, then type **/loop**, **/alt**, **/opt**, **/par**, **/critical** or **/break**, with words after it for its label, and **Enter**. **/else** divides an alt box above the message you're on; **/unbox** takes a box away. Type **/** to see them all.
-- Click a lane to send the message there (**Shift**-click: from there), or a message to go to it.
+- Click a lane to send the message there (**Shift**-click: from there), or a message to go to it. On a phone, buttons under the box do the same.
+- **Esc** when you're done keeps what you typed.
 - Select a diagram and press **Enter** or just start typing to carry on. **Numbered** on its toolbar numbers the messages; **Copy Mermaid** copies it for docs elsewhere, and pasting a Mermaid sequence diagram makes one.`,
         },
         {

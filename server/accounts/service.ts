@@ -485,9 +485,10 @@ export class Accounts {
         }
         return json(res, 200, { added: existing.name, existing: true, ...view() })
       }
-      const u = s.addUser({ email: b.email, name: String(b.name ?? '').trim().slice(0, 80) || b.email.split('@')[0], role: 'user', groups })
+      // Someone listed as an admin is an admin's to set up: a group admin never gets their password link.
+      if (this.isEnvAdmin(b.email)) return json(res, 403, { error: 'That person is set up as an admin on this server, so an admin adds them' })
+      const u = s.addUser({ email: b.email, name: String(b.name ?? '').trim().slice(0, 80) || b.email.split('@')[0], role: 'user', groups, createdBy: me.id })
       this.log(req, me, { action: 'user.add', target: this.userTarget(u), text: `${me.name} (group admin) added ${u.name} (${u.email}), in ${names(groups)}` })
-      this.promote(u)
       return json(res, 201, { added: u.name, link: link(u), ...view() })
     }
 
@@ -496,7 +497,7 @@ export class Accounts {
     const yours = looksAfter(me, u, s.groups)
 
     if (p[2] === 'reset' && m === 'POST') {
-      if (!yours) return json(res, 403, { error: 'They’re in other groups too (or an admin), so an admin makes their password link' })
+      if (!yours) return json(res, 403, { error: 'You didn’t add their account, or they’re in other groups too, so an admin makes their password link' })
       if (u.sso) return json(res, 409, { error: 'They sign in with single sign-on, so they don’t need a password' })
       this.log(req, me, { action: 'user.reset-link', target: this.userTarget(u), text: `${me.name} (group admin) made a set-your-password link for ${u.name}` })
       return json(res, 200, { link: link(u) })
@@ -508,7 +509,7 @@ export class Accounts {
       // Their place in this group admin's groups changes; any other groups stay as they are.
       if (Array.isArray(b.groups)) patch.groups = [...u.groups.filter((g) => !ids.has(g)), ...chosen(b.groups)]
       if (typeof b.disabled === 'boolean') {
-        if (!yours) return json(res, 403, { error: 'They’re in other groups too (or an admin), so only an admin can turn their account off' })
+        if (!yours) return json(res, 403, { error: 'You didn’t add their account, or they’re in other groups too, so only an admin can turn it off' })
         patch.disabled = b.disabled || undefined
       }
       const before = this.userView(u)

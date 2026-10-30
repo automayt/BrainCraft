@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { askOnce } from '../ai/once'
+import { connectionFor, loadSettings, serverAi } from '../ai/settings'
 import { type Plan, parseTopics, planByFrame, planByKind, TOPIC_SYSTEM, topicPrompt, topicUnits, unitsOf } from '../model/divide'
 import { Dialog } from './Boards'
 import { useEditor } from './useEditor'
@@ -61,8 +62,16 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
   const choose = (m: Mode) => {
     setMode(m)
     setError('')
-    if (m === 'topic' && !topics && !asking) void ask()
   }
+  // Whether there's an assistant to ask, checked when the dialog opens.
+  const [ai, setAi] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    void serverAi(ws.server).then((s) => live && setAi(!!connectionFor(loadSettings(), ws.server, s)))
+    return () => {
+      live = false
+    }
+  }, [ws.server])
 
   const close = () => {
     abort.current?.abort()
@@ -72,18 +81,27 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
   const go = async () => {
     if (!chosen.length) return
     setBusy(true)
-    const made = await ws.divideBoard(chosen)
+    const { made, cards, kept } = await ws.divideBoard(chosen)
     setBusy(false)
-    if (!made) return setError('No child boards were made.')
-    editor.setStatus(`Made ${count(made, 'child board')}. Each card here opens one; Undo brings the objects back (the new boards stay in Your boards).`)
+    if (!made) return setError(kept.length ? 'Everything changed while it was being moved, so it all stays here.' : 'No child boards were made.')
     onClose()
+    // The cards for the new boards, in view.
+    editor.select(cards)
     editor.zoomToFit()
+    editor.setStatus(
+      `Made ${count(made, 'child board')}. Each card here opens one; Undo brings the objects back (the new boards stay in Your boards).${kept.length ? ` ${kept.join(', ')} changed meanwhile, so ${kept.length === 1 ? 'it stays' : 'they stay'} here too.` : ''}`,
+    )
   }
 
   const MODES: { id: Mode; label: string; hint: string; disabled?: string }[] = [
     { id: 'frame', label: 'By frame', hint: 'Each frame and what’s in it gets a board of its own.', disabled: byFrame.groups.length ? undefined : 'There are no frames with anything in them.' },
     { id: 'kind', label: 'By kind of object', hint: 'Flowcharts together, mind maps together, notes together…', disabled: byKind.groups.length ? undefined : 'There isn’t enough of any one kind.' },
-    { id: 'topic', label: 'By topic, with AI', hint: 'The assistant reads the words on the board and suggests topics. Nothing moves until you say so.' },
+    {
+      id: 'topic',
+      label: 'By topic, with AI',
+      hint: 'The assistant reads the words on the board and suggests topics. Nothing moves until you say so.',
+      disabled: ai === false ? 'Set up the assistant first (Ask AI, Ctrl J).' : undefined,
+    },
   ]
 
   return (
@@ -114,9 +132,12 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
             {error}
           </p>
         )}
-        {mode === 'topic' && asking && (
-          <p className="muted" role="status">
-            Asking the assistant for topics…
+        {mode === 'topic' && !topics && (
+          <p className="divide-ask">
+            <button className="primary" disabled={asking} onClick={() => void ask()}>
+              {asking ? 'Asking the assistant…' : 'Suggest topics'}
+            </button>
+            <small className="muted">Sends the words on this board to the assistant.</small>
           </p>
         )}
         {plan && (
@@ -134,7 +155,7 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
                     <input
                       type="checkbox"
                       checked={on}
-                      aria-label={`Make a board of ${g.title}`}
+                      aria-label={`Make a child board of ${titles[id] ?? g.title}`}
                       onChange={() => {
                         const next = new Set(off)
                         if (on) next.add(id)
@@ -143,7 +164,7 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
                       }}
                     />
                     <span className="divide-what">
-                      <input aria-label="Child board name" value={titles[id] ?? g.title} disabled={!on} onChange={(e) => setTitles({ ...titles, [id]: e.target.value })} />
+                      <input aria-label={`Name for the child board of ${g.title}`} value={titles[id] ?? g.title} disabled={!on} onChange={(e) => setTitles({ ...titles, [id]: e.target.value })} />
                       <small className="muted">
                         {count(objects(g.units), 'object')}
                         {sample.length ? `: ${sample.join(', ')}${g.units.length > sample.length ? '…' : ''}` : ''}

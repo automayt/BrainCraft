@@ -20,7 +20,7 @@ import { followLink } from './followLink'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
 import { copyText } from './copyText'
-import { toMermaidSequence } from '../model/sequence'
+import { setNumbered, toMermaidSequence } from '../model/sequence'
 
 /** A toolbar too wide for the screen scrolls sideways with an ordinary mouse wheel. */
 const scrollSideways = (e: React.WheelEvent<HTMLElement>) => {
@@ -112,10 +112,10 @@ export function SelectionToolbar() {
     }
     return area
   }
-  // Below the top bar, and below what stacks under it while that's showing: "Since you were
-  // here", the timer, the "Watching live" banner. (The board fills the window, so the stack's
+  // Below the top bar, and below whatever stacks under it: "Since you were here", the timer, the
+  // "Watching live" banner, a welcome or news banner. (The board fills the window, so the stack's
   // page position is its position here too.)
-  const stack = editor.catchUp || editor.timer || editor.readOnly ? document.querySelector('.top-stack')?.getBoundingClientRect() : undefined
+  const stack = document.querySelector('.top-stack')?.getBoundingClientRect()
   const topLimit = stack && stack.height ? Math.max(64, stack.bottom + 8) : 64
   const aboveTop = anchor.y - size.h
   // On phones the tool rail and zoom bar take the bottom ~130px.
@@ -254,7 +254,7 @@ export function SelectionToolbar() {
               className={items[0].sequence.numbered ? 'on' : ''}
               aria-pressed={!!items[0].sequence.numbered}
               title="Number the messages 1, 2, 3…"
-              onClick={() => editor.updateSequence(items[0].id, (d) => (d.numbered ? { lanes: d.lanes, steps: d.steps } : { ...d, numbered: true }))}
+              onClick={() => editor.updateSequence(items[0].id, (d) => setNumbered(d, !d.numbered))}
             >
               Numbered
             </button>

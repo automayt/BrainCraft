@@ -12,7 +12,7 @@ import { headings, parseMarkdown } from '../model/markdown'
 import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board, Id } from '../model/types'
-import { boardOfFrame, withoutFrame } from '../model/subBoard'
+import { boardOfFrame, frameMembers, withoutFrame } from '../model/subBoard'
 import { boardAfter, childBoard, type Group } from '../model/divide'
 import { type KV, openKV } from './kv'
 import { LiveSession } from '../collab/live'
@@ -586,20 +586,59 @@ export class Workspace {
       await this.refresh()
       return { local, key: id }
     }
+    // A board shared by link: the new one is shared on the same server too, so friends can open it
+    // from its card (the server gives each of them the rights they have here; see childKey).
+    const live = this.liveInfo
+    if (live && !live.account) {
+      const made = await call<{ id: string; editKey: string; viewKey: string }>(live.server, 'api/boards', 'POST', { board }, false)
+      const local = await this.library.create(board)
+      await this.library.setLive(local, { server: live.server, id: made.id, key: made.editKey, role: 'edit', viewKey: made.viewKey })
+      this.libraryChanged()
+      await this.refresh()
+      return { local, key: made.id }
+    }
     const local = await this.library.create(board)
     this.libraryChanged()
     await this.refresh()
     return { local, key: local }
   }
 
+  /**
+   * A child board of the open shared board that isn't in this browser yet: the server gives the key
+   * for the rights this browser has here, and it joins. False when it isn't one.
+   */
+  private async joinChild(key: string): Promise<boolean> {
+    const live = this.liveInfo
+    if (!live || live.account || !/^[\w-]{6,64}$/.test(key)) return false
+    try {
+      const base = live.server.endsWith('/') ? live.server : `${live.server}/`
+      const res = await fetch(new URL(`api/boards/${encodeURIComponent(key)}/key?parent=${encodeURIComponent(live.id)}`, base), { headers: { authorization: `Bearer ${live.key}` } })
+      if (!res.ok) return false
+      const got = (await res.json()) as { id?: unknown; key?: unknown }
+      if (typeof got.id !== 'string' || typeof got.key !== 'string') return false
+      await this.joinLive({ id: got.id, key: got.key }, live.server)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   /** Moves a frame and everything in it to a board of its own, leaving a card here that opens it. */
   async moveFrameToBoard(frameId: Id) {
     const here = this.linkKey
     const parent = here ? { key: here, title: this.editor.board.title } : undefined
-    const part = boardOfFrame(this.editor.board, frameId, parent)
+    const before = this.editor.board
+    const part = boardOfFrame(before, frameId, parent)
     if (!part || this.editor.readOnly) return
+    const members = frameMembers(before, frameId)
     try {
       const { key } = await this.createAside(parent ? { ...part, parent } : part)
+      // Changed here while the new board was being made (a friend dropped something in, or edited
+      // something there): it stays here too, rather than be lost.
+      const now = this.editor.board
+      const still = frameMembers(now, frameId)
+      const changed = still.size !== members.size || [...members].some((id) => !still.has(id) || getItem(now, id) !== getItem(before, id))
+      if (changed) return this.editor.setStatus(`“${part.title}” changed while it was being moved, so it stays here too. Its board has it as it was.`)
       this.editor.edit((b) => withoutFrame(b, frameId, key)?.board ?? b)
       this.editor.setStatus(`Moved “${part.title}” to a board of its own. The card in its place opens it.`)
     } catch (err) {
@@ -612,14 +651,15 @@ export class Workspace {
    * and a card here opens it. One undo step here; the child boards stay in Your boards. Returns how
    * many were made.
    */
-  async divideBoard(groups: Group[]): Promise<number> {
-    if (this.editor.readOnly || !groups.length) return 0
+  async divideBoard(groups: Group[]): Promise<{ made: number; cards: Id[]; kept: string[] }> {
+    if (this.editor.readOnly || !groups.length) return { made: 0, cards: [], kept: [] }
     const here = this.linkKey
-    const parent = here ? { key: here, title: this.editor.board.title || 'Untitled board' } : undefined
+    const before = this.editor.board
+    const parent = here ? { key: here, title: before.title || 'Untitled board' } : undefined
     const keys: (string | null)[] = []
     for (const g of groups) {
-      // The board as it is now: anything deleted meanwhile is left out.
-      const child = childBoard(this.editor.board, g, parent)
+      // The board as it was when dividing started, so every child board is from the same moment.
+      const child = childBoard(before, g, parent)
       if (child.items.length <= (parent ? 1 : 0)) {
         keys.push(null)
         continue
@@ -631,9 +671,25 @@ export class Workspace {
         this.editor.setStatus(`Couldn’t make “${g.title}”: ${(err as Error).message}`)
       }
     }
+    // A group changed here while its board was being made (a friend edited something in it) stays
+    // here too, rather than be lost: its child board has it as it was.
+    const now = this.editor.board
+    const kept: string[] = []
+    groups.forEach((g, k) => {
+      if (keys[k] !== null && g.units.some((u) => u.ids.some((id) => getItem(now, id) !== getItem(before, id)))) {
+        kept.push(g.title)
+        keys[k] = null
+      }
+    })
     const made = keys.filter((k) => k !== null).length
-    if (made) this.editor.edit((b) => boardAfter(b, groups, keys).board)
-    return made
+    let cards: Id[] = []
+    if (made)
+      this.editor.edit((b) => {
+        const out = boardAfter(b, groups, keys)
+        cards = out.cards
+        return out.board
+      })
+    return { made, cards, kept }
   }
 
   /**
@@ -947,6 +1003,11 @@ export class Workspace {
     }
     if (to.board && !this.selfKeys.includes(to.board)) {
       const meta = this.findBoard(to.board)
+      // A child board of this shared board: joined through it.
+      if (!meta && (await this.joinChild(to.board))) {
+        await this.live?.whenSynced()
+        return this.openLink({ ...to, board: undefined })
+      }
       if (!meta) {
         this.editor.setStatus('That board isn’t in this browser. Ask a friend for its link.')
         return

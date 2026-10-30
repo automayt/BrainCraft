@@ -1537,7 +1537,7 @@ export class Editor {
    * Adds a sequence diagram (two lanes to start, or `data`, say from Mermaid) at the pointer or the
    * middle of the view, and starts writing its first message.
    */
-  addSequence(data: SequenceData = SQ.newSequence(), title = '', at: Vec = this.pointer ?? center(this.visibleWorld)) {
+  addSequence(data: SequenceData = SQ.newSequence(), title = '', at: Vec = this.pointer ?? center(this.visibleWorld), compose = true) {
     if (this.readOnly) return -1
     const { w, h } = SQ.sequenceSize(data)
     let id: Id = -1
@@ -1550,27 +1550,43 @@ export class Editor {
     this.tool = 'select'
     this.select([id])
     this.keepInView(id)
-    this.composeSequence(id)
+    // A new, empty one is for writing in at once; one brought in from Mermaid is to look at first.
+    if (compose) this.composeSequence(id, '', !data.steps.length)
+    else this.focusObject(id)
     return id
   }
 
-  /** The sequence diagram being written with the keyboard, and the first key typed into it. */
-  composing: { id: Id; seed: string } | null = null
+  /**
+   * The sequence diagram being written with the keyboard, the first key typed into it, and whether
+   * it was made just now (and so goes again if nothing is written in it).
+   */
+  composing: { id: Id; seed: string; fresh?: boolean } | null = null
 
   /** Starts writing in a sequence diagram: its next message (`seed`, a key just typed, starts the words). */
-  composeSequence(id: Id, seed = '') {
+  composeSequence(id: Id, seed = '', fresh = false) {
     const item = B.getItem(this.board, id)
     if (this.readOnly || item?.kind !== 'sequence') return
     if (item.locked) return this.setStatus('Locked — unlock it to edit')
     this.finishEditing()
     this.selection = new Set([id])
-    this.composing = { id, seed }
+    this.composing = { id, seed, ...(fresh ? { fresh } : {}) }
+    // Zoomed out (or on a phone), the box to write in would be too small to read: come closer.
+    const want = this.viewport.w <= 720 ? 0.9 : 0.75
+    if (this.camera.zoom < want && !this.presenting) this.flyTo(centerOn({ ...this.camera, zoom: want }, { x: item.x + item.w / 2, y: item.y + item.h - 90 }, this.viewport))
     this.emit()
   }
 
   stopComposing() {
-    if (!this.composing) return
+    const was = this.composing
+    if (!was) return
     this.composing = null
+    // A diagram made just now and left without a message goes again.
+    const item = B.getItem(this.board, was.id)
+    if (was.fresh && item?.sequence && !item.sequence.steps.length && !this.readOnly) {
+      this.edit((b) => B.remove(b, new Set([was.id])))
+      this.select([])
+      this.setStatus('Nothing written, so the empty sequence diagram went again')
+    }
     this.emit()
   }
 
@@ -2201,6 +2217,9 @@ export class Editor {
 
   /** Mermaid for the selection, or for every flowchart shape when nothing is selected. */
   exportMermaid(): string {
+    // A selected sequence diagram goes out as itself.
+    const seq = this.single?.sequence
+    if (seq) return SQ.toMermaidSequence(seq, this.single!.text)
     return toMermaid(this.viewBoard, this.selection.size ? this.selection : undefined)
   }
 
@@ -2816,7 +2835,7 @@ export class Editor {
     // A Mermaid sequence diagram becomes one here, to carry on writing.
     const seq = SQ.parseSequence(text)
     if (seq) {
-      this.addSequence(seq.data, seq.title, at)
+      this.addSequence(seq.data, seq.title, at, false)
       return
     }
     const ops = opsFromText(text)
@@ -3636,7 +3655,7 @@ export class Editor {
 
   /** A one-line reminder of what the keyboard can do right now. */
   get hint(): string | null {
-    if (this.composing) return '← → to  ·  Shift ← → from  ·  Tab call / reply / message / note  ·  Enter add  ·  ↑ ↓ earlier (Shift: several)  ·  / boxes  ·  Esc done'
+    if (this.composing && B.getItem(this.board, this.composing.id)) return 'Type the words  ·  ← → who gets it  ·  Tab kind  ·  Enter add  ·  ↑ ↓ earlier  ·  / boxes  ·  Esc done'
     const e = this.editing
     if (e) {
       if (e.connector) return 'Type a label  ·  Esc done'

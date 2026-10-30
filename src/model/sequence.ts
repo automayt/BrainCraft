@@ -69,18 +69,19 @@ export function sequenceLayout(d: SequenceData): SequenceLayout {
   let y = TOP + HEAD_H + 8
   const n = d.steps.length
   for (let k = 0; k <= n; k++) {
+    // Dividers of boxes already open come before boxes opening here (which sit inside them).
+    for (const s of all)
+      for (const e of s.elses) {
+        if (e.k !== k || s.f >= k) continue
+        elses.push({ box: s.box.id, y, label: e.label })
+        y += ELSE_H
+      }
     // Outer boxes open first and close last.
     for (const s of all.filter((x) => x.f === k).sort((p, q) => q.l - p.l)) {
       const depth = all.filter((o) => o !== s && o.f <= s.f && o.l >= s.l && (o.f < s.f || o.l > s.l || all.indexOf(o) < all.indexOf(s))).length
       boxes.set(s.box.id, { top: y, bottom: y, depth, ...laneSpan(d, s.f, s.l) })
       y += BOX_HEAD
     }
-    for (const s of all)
-      for (const e of s.elses) {
-        if (e.k !== k) continue
-        elses.push({ box: s.box.id, y, label: e.label })
-        y += ELSE_H
-      }
     rows.push(y + ROW_H * 0.6)
     y += ROW_H
     if (k === n) break
@@ -150,7 +151,7 @@ const nextId = (prefix: string, used: { id: string }[]) => {
 export const laneIndex = (d: SequenceData, id: string) => d.lanes.findIndex((l) => l.id === id)
 
 export function addLane(d: SequenceData, name: string, at = d.lanes.length): { data: SequenceData; id: string } {
-  if (d.lanes.length >= MAX_LANES) return { data: d, id: d.lanes[d.lanes.length - 1]?.id ?? '' }
+  if (d.lanes.length >= MAX_LANES) return { data: d, id: '' }
   const id = nextId('l', d.lanes)
   const lanes = [...d.lanes]
   lanes.splice(Math.max(0, Math.min(at, lanes.length)), 0, { id, name: name.trim() || `Participant ${d.lanes.length + 1}` })
@@ -189,6 +190,12 @@ function restep(d: SequenceData, steps: SequenceStep[], place: (k: number) => nu
   })
   const { boxes: _, ...rest } = d
   return { ...rest, steps, ...(boxes.length ? { boxes } : {}) }
+}
+
+/** Numbers the messages, or not. */
+export function setNumbered(d: SequenceData, on: boolean): SequenceData {
+  const { numbered: _, ...rest } = d
+  return on ? { ...rest, numbered: true } : rest
 }
 
 /** Takes a lane out, and every step to or from it. */
@@ -333,7 +340,21 @@ export function sequenceText(d: SequenceData): string {
 
 // ----- Mermaid ------------------------------------------------------------------------------------
 
-export const looksLikeSequence = (text: string) => /^\s*sequenceDiagram\b/.test(text.split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith('%%')) ?? '')
+/** The lines of Mermaid after any front matter (a block between `---` lines at the top). */
+function body(text: string): string[] {
+  const lines = text.split(/\r?\n/)
+  const first = lines.findIndex((l) => l.trim())
+  if (first >= 0 && lines[first].trim() === '---') {
+    const end = lines.findIndex((l, k) => k > first && l.trim() === '---')
+    if (end > first) return lines.slice(end + 1)
+  }
+  return lines
+}
+
+export const looksLikeSequence = (text: string) => /^\s*sequenceDiagram\b/.test(body(text).find((l) => l.trim() && !l.trim().startsWith('%%')) ?? '')
+
+/** A line with an arrow in it is a message, whatever word it starts with. */
+const HAS_ARROW = /--?(?:>>|>|\)|x)/
 
 /** Arrows, longest first: dashed ones are replies, `)` and `x` ones don't wait. */
 const ARROWS: [string, SequenceStep['style']][] = [
@@ -373,40 +394,42 @@ export function parseSequence(text: string): { data: SequenceData; title: string
       return known
     }
     const made = addLane(data, label)
+    if (!made.id) return ''
     data = actor ? setActor(made.data, made.id, true) : made.data
     byKey.set(key, made.id)
     return made.id
   }
   const words = (s: string) => s.trim().replace(/<br\s*\/?>/gi, ' ')
-  const lines = text.split(/\r?\n/)
+  const lines = body(text)
   for (const raw of lines.slice(lines.findIndex((l) => looksLikeSequence(l)) + 1)) {
     const line = raw.trim()
     if (!line || line.startsWith('%%')) continue
+    const arrow = HAS_ARROW.test(line)
     const p = /^(participant|actor)\s+(.+?)(?:\s+as\s+(.+))?$/i.exec(line)
-    if (p) {
-      lane(p[2].trim(), (p[3] ?? p[2]).trim(), p[1].toLowerCase() === 'actor')
+    if (p && !arrow) {
+      if (!lane(p[2].trim(), (p[3] ?? p[2]).trim(), p[1].toLowerCase() === 'actor')) skipped++
       continue
     }
     if (/^autonumber\b/i.test(line)) {
       data = { ...data, numbered: true }
       continue
     }
-    const t = /^title\s*:?\s*(.*)$/i.exec(line)
+    const t = arrow ? null : /^title\b\s*:?\s*(.*)$/i.exec(line)
     if (t) {
       title = t[1].trim()
       continue
     }
-    if (/^(?:activate|deactivate)\s/i.test(line)) continue
-    const block = /^(loop|alt|opt|par|critical|break)\b\s*(.*)$/i.exec(line)
+    if (!arrow && /^(?:activate|deactivate)\s/i.test(line)) continue
+    const block = arrow ? null : /^(loop|alt|opt|par|critical|break)\b\s*(.*)$/i.exec(line)
     if (block) {
       open.push({ kind: block[1].toLowerCase() as SequenceBoxKind, label: words(block[2]), f: data.steps.length, elses: [] })
       continue
     }
-    if (/^(?:rect|box)\b/i.test(line)) {
+    if (!arrow && /^(?:rect|box)\b/i.test(line)) {
       open.push(null)
       continue
     }
-    const divider = /^(else|and|option)\b\s*(.*)$/i.exec(line)
+    const divider = arrow ? null : /^(else|and|option)\b\s*(.*)$/i.exec(line)
     if (divider && open.length) {
       open[open.length - 1]?.elses.push({ k: data.steps.length, label: words(divider[2]) })
       continue
@@ -420,11 +443,13 @@ export function parseSequence(text: string): { data: SequenceData; title: string
       }
       continue
     }
-    const note = NOTE.exec(line)
+    const note = arrow ? null : NOTE.exec(line)
     if (note) {
       const from = lane(note[1].trim())
       const to = note[2] ? lane(note[2].trim()) : from
-      data = addStep(data, { from, to, text: words(note[3]), style: 'note' }).data
+      // Past the most lanes a diagram holds, a line is left out (and counted) rather than misdrawn.
+      if (from && to) data = addStep(data, { from, to, text: words(note[3]), style: 'note' }).data
+      else skipped++
       continue
     }
     const m = STEP.exec(line)
@@ -432,7 +457,8 @@ export function parseSequence(text: string): { data: SequenceData; title: string
       const style = ARROWS.find(([a]) => a === m[2])![1]
       const from = lane(m[1].trim())
       const to = lane(m[3].trim())
-      data = addStep(data, { from, to, text: words(m[4]), ...(style ? { style } : {}) }).data
+      if (from && to) data = addStep(data, { from, to, text: words(m[4]), ...(style ? { style } : {}) }).data
+      else skipped++
       continue
     }
     skipped++
@@ -453,11 +479,12 @@ export function toMermaidSequence(d: SequenceData, title = ''): string {
   let depth = 1
   const pad = () => '  '.repeat(depth)
   d.steps.forEach((s, k) => {
+    // A divider belongs to a box already open, so it comes before any box opening here.
+    for (const b of all) for (const e of b.elses) if (e.k === k) out.push(`${'  '.repeat(Math.max(1, depth - 1))}${DIVIDER[b.box.kind] ?? 'else'}${e.label ? ` ${clean(e.label)}` : ''}`)
     for (const b of all.filter((x) => x.f === k).sort((p, q) => q.l - p.l)) {
       out.push(`${pad()}${b.box.kind}${b.box.label ? ` ${clean(b.box.label)}` : ''}`)
       depth++
     }
-    for (const b of all) for (const e of b.elses) if (e.k === k) out.push(`${'  '.repeat(Math.max(1, depth - 1))}${DIVIDER[b.box.kind] ?? 'else'}${e.label ? ` ${clean(e.label)}` : ''}`)
     if (key.has(s.from) && key.has(s.to)) {
       if (isNote(s)) out.push(`${pad()}Note over ${key.get(s.from)}${s.to !== s.from ? `,${key.get(s.to)}` : ''}: ${clean(s.text)}`)
       else out.push(`${pad()}${key.get(s.from)}${ARROW_OUT[s.style ?? 'call']}${key.get(s.to)}: ${clean(s.text)}`)
@@ -498,12 +525,22 @@ export function cleanSequence(raw: unknown): SequenceData | null {
     if (!isObj(b) || typeof b.id !== 'string' || !ID.test(b.id) || boxes.some((x) => x.id === b.id)) continue
     if (typeof b.kind !== 'string' || !BOX_KINDS.includes(b.kind as SequenceBoxKind)) continue
     if (typeof b.first !== 'string' || typeof b.last !== 'string' || !stepIds.has(b.first) || !stepIds.has(b.last)) continue
-    const elses = (Array.isArray(b.elses) ? b.elses.slice(0, 20) : []).flatMap((e) =>
-      isObj(e) && typeof e.before === 'string' && stepIds.has(e.before) ? [{ before: e.before, label: typeof e.label === 'string' ? e.label.slice(0, 200) : '' }] : [],
-    )
+    // Dividers only in boxes that have them, one per step.
+    const seen = new Set<string>()
+    const elses = (canDivide(b.kind as SequenceBoxKind) && Array.isArray(b.elses) ? b.elses.slice(0, 20) : []).flatMap((e) => {
+      if (!isObj(e) || typeof e.before !== 'string' || !stepIds.has(e.before) || seen.has(e.before)) return []
+      seen.add(e.before)
+      return [{ before: e.before, label: typeof e.label === 'string' ? e.label.slice(0, 200) : '' }]
+    })
     boxes.push({ id: b.id, kind: b.kind as SequenceBoxKind, label: typeof b.label === 'string' ? b.label.slice(0, 200) : '', first: b.first, last: b.last, ...(elses.length ? { elses } : {}) })
   }
   const data: SequenceData = { lanes, steps, ...(raw.numbered === true ? { numbered: true as const } : {}) }
-  // Boxes that don't fit (an end before their start, a divider outside) are dropped or trimmed.
-  return boxes.length ? restep({ ...data, boxes }, steps, (k) => k) : data
+  // Boxes that don't fit (an end before their start, a divider outside) are dropped or trimmed, and
+  // one crossing a box kept before it goes: boxes nest, never cross.
+  const fitted = boxes.length ? restep({ ...data, boxes }, steps, (k) => k) : data
+  const at = new Map(steps.map((s, k) => [s.id, k]))
+  const kept: SequenceBox[] = []
+  for (const b of fitted.boxes ?? []) if (!crossesBox({ ...fitted, boxes: kept }, at.get(b.first)!, at.get(b.last)!)) kept.push(b)
+  const { boxes: _, ...rest } = fitted
+  return kept.length ? { ...rest, boxes: kept } : rest
 }

@@ -847,6 +847,10 @@ button.on,
   line-height: 1.25;
 }
 
+.flyout-option .check {
+  flex: 0 0 16px;
+}
+
 .flyout-option small {
   color: var(--muted);
   font-size: 11.5px;
@@ -1037,8 +1041,7 @@ button.on,
   stroke-dasharray: 6 4;
 }
 
-.seq-box rect,
-.seq-box line {
+.seq-box-edge {
   fill: none;
   stroke: var(--line);
   stroke-width: 1.5;
@@ -1057,9 +1060,15 @@ button.on,
 }
 
 .seq-cond {
+  width: auto;
+  max-width: 100%;
+  display: inline-block;
+  padding: 0 4px;
   font-size: 12.5px;
   line-height: 22px;
   color: var(--muted);
+  background: var(--canvas);
+  border-radius: 4px;
 }
 
 .seq-hit {
@@ -1085,7 +1094,7 @@ button.on,
 }
 
 .seq-commands {
-  margin-top: 6px;
+  margin-bottom: 6px;
   padding: 4px;
   font: 12.5px var(--font);
   color: var(--text);
@@ -1096,7 +1105,8 @@ button.on,
 }
 
 .seq-commands div {
-  height: 22px;
+  height: 24px;
+  cursor: pointer;
   padding: 0 6px;
   overflow: hidden;
   line-height: 22px;
@@ -1113,8 +1123,53 @@ button.on,
   color: var(--muted);
 }
 
+.seq-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+}
+
+.seq-kind {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  font: 600 11.5px/22px var(--font);
+  color: var(--accent);
+  white-space: nowrap;
+  background: var(--accent-soft);
+  border-radius: 6px;
+}
+
+.seq-kind.reply {
+  color: var(--muted);
+  background: var(--surface-3);
+}
+
+.seq-kind.note {
+  color: #5c4a00;
+  background: #fff4b8;
+}
+
+.seq-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.seq-tools button {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
 .seq-input {
   box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
   width: 100%;
   height: 28px;
   padding: 0 8px;

@@ -66,7 +66,7 @@ describe('plans', () => {
   it('by kind: flowcharts together, notes together; too few of a kind stays', () => {
     const s = setup()
     const plan = planByKind(unitsOf(s.b))
-    expect(plan.groups.map((g) => g.title)).toEqual(['Flowcharts', 'Notes'])
+    expect(plan.groups.map((g) => g.title)).toEqual(['Flowcharts and diagrams', 'Notes'])
     // The frame of notes goes with the notes; the lone mind map (2 objects) and table stay.
     expect(plan.groups[1].units.flatMap((u) => u.ids)).toEqual(expect.arrayContaining([s.frame, s.n2, s.n3, s.vote]))
     expect(plan.stays.flatMap((u) => u.ids).sort()).toEqual([s.root, s.idea, s.table].sort())
@@ -76,7 +76,7 @@ describe('plans', () => {
     let b = setup().b
     for (const k of [0, 1, 2, 3]) b = addItem(b, newItem('rect', { x: k * 400, y: -1000, w: 320, h: 130 }, { text: `📋 Part ${k}\nOn a board of its own`, linkTo: { board: `B${k}` } }))[0]
     const plan = planByKind(unitsOf(b))
-    expect(plan.groups.map((g) => g.title)).toEqual(['Flowcharts', 'Notes'])
+    expect(plan.groups.map((g) => g.title)).toEqual(['Flowcharts and diagrams', 'Notes'])
     expect(plan.stays.filter((u) => u.kind === 'card')).toHaveLength(4)
     expect(plan.stays.find((u) => u.kind === 'card')!.title).toBe('📋 Part 0')
   })
@@ -106,6 +106,15 @@ describe('plans', () => {
     const few = topicUnits(unitsOf(b))
     expect(few.length).toBeLessThanOrEqual(MAX_TOPIC_UNITS)
     expect(few.reduce((n, u) => n + u.ids.length, 0)).toBe(2000)
+    // Spread thinly over a big board, and with hundreds of frames, it's still at most the limit.
+    let spread: Board = emptyBoard('Spread')
+    for (let k = 0; k < 10_000; k++) spread = addItem(spread, newItem('sticky', { x: (k % 100) * 900, y: Math.floor(k / 100) * 900, w: 200, h: 200 }, { text: `n${k}` }))[0]
+    const parts = topicUnits(unitsOf(spread))
+    expect(parts.length).toBeLessThanOrEqual(MAX_TOPIC_UNITS)
+    expect(parts.reduce((n, u) => n + u.ids.length, 0)).toBe(10_000)
+    let frames: Board = emptyBoard('Frames')
+    for (let k = 0; k < 400; k++) frames = addItem(frames, newItem('frame', { x: k * 1000, y: 0, w: 800, h: 600 }, { text: `f${k}` }))[0]
+    expect(topicUnits(unitsOf(frames)).length).toBe(MAX_TOPIC_UNITS)
   })
 })
 
@@ -115,7 +124,7 @@ describe('making the child boards', () => {
     const plan = planByKind(unitsOf(s.b))
     const flows = plan.groups[0]
     const child = childBoard(s.b, flows, { key: 'CROWD', title: 'Crowded' })
-    expect(child).toMatchObject({ title: 'Flowcharts', parent: { key: 'CROWD', title: 'Crowded' } })
+    expect(child).toMatchObject({ title: 'Flowcharts and diagrams', parent: { key: 'CROWD', title: 'Crowded' } })
     // The flowchart unit's top left goes to 0,0 and its steps keep their places relative to it.
     const start = getItem(child, s.start)!
     const step = getItem(child, s.step)!
@@ -144,7 +153,7 @@ describe('making the child boards', () => {
     expect(getItem(board, s.n2)).toBeDefined()
     expect(cards).toHaveLength(1)
     const card = getItem(board, cards[0])!
-    expect(card.linkTo).toEqual({ board: 'FLOWS', label: 'Flowcharts' })
+    expect(card.linkTo).toEqual({ board: 'FLOWS', label: 'Flowcharts and diagrams' })
     expect(card.text).toContain('4 objects')
     // Nothing that stays is under the card.
     const stays = board.items.filter((i) => i.id !== card.id)

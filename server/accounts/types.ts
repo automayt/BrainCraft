@@ -35,6 +35,8 @@ export interface User {
   disabled?: boolean
   created: number
   lastSeen?: number
+  /** The group admin who made this account (only they, or an admin, look after it). */
+  createdBy?: string
 }
 
 export interface Group {

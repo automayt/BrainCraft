@@ -618,6 +618,18 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     return send(res, 201, { id, editKey: room.data.editKey, viewKey: room.data.viewKey })
   }
 
+  // GET /api/boards/:id/key?parent=ID, with the parent board's key → the key to this child board
+  // giving the same rights (view or edit), so a card on a shared board opens the board it leads to.
+  if (parts.length === 4 && parts[3] === 'key' && req.method === 'GET') {
+    const child = getRoom(parts[2])
+    const parentId = url.searchParams.get('parent') ?? ''
+    const parent = parentId ? getRoom(parentId) : null
+    const rights = parent?.roleFor(keyOf(req, url), safeEqual)
+    // The same answer for no such board, a wrong key and a board that isn't this one's child.
+    if (!child || !parent || !rights || child.data.board.parent?.key !== parent.data.id) return send(res, 404, { error: 'No such board' })
+    return send(res, 200, { id: child.data.id, key: rights === 'edit' ? child.data.editKey : child.data.viewKey, role: rights })
+  }
+
   const room = parts[2] ? getRoom(parts[2]) : null
   if (!room) return send(res, 404, { error: 'No such board' })
   const role = room.roleFor(keyOf(req, url), safeEqual)

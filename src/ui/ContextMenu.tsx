@@ -104,7 +104,7 @@ export function ContextMenu() {
       entries.push({ label: 'Tidy mind map', run: () => editor.tidyMindMap(single.id) })
     }
     if (editor.selectedItems.some((i) => canSketch(i.kind)) && !editor.readOnly)
-      entries.push({ label: editor.selectionSketched ? 'Clean lines' : 'Hand-drawn look', run: () => editor.setSketch(!editor.selectionSketched) })
+      entries.push({ label: editor.selectionSketched ? 'Clean lines' : 'Hand-drawn', keys: 'Alt H', run: () => editor.setSketch(!editor.selectionSketched) })
     if (single?.kind === 'flow') {
       const runs = runsOf(editor.board, single.id)?.runs.length ?? 0
       if (!editor.readOnly) entries.push({ label: 'Sketch in Excalidraw', run: () => void sketchIt(editor, single.id) })

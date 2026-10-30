@@ -101,8 +101,8 @@ export function GroupAdminDialog({ onClose }: { onClose: () => void }) {
               </button>
             </form>
             <p className="muted admin-hint">
-              New people get a link to choose a password{ws.account?.sso ? ', or can sign in with single sign-on' : ''}. Someone who already has an account just joins. An admin
-              decides what each group may do.
+              New people get a link to choose a password{ws.account?.sso ? ', or can sign in with single sign-on' : ''}. Someone who already has an account just joins, and an admin
+              still looks after their account. An admin decides what each group may do.{!groups.length ? ' Tick a group to add someone to.' : ''}
             </p>
             {data.people.length ? (
               <table className="admin-table">
@@ -138,6 +138,7 @@ export function GroupAdminDialog({ onClose }: { onClose: () => void }) {
                         {p.yours && !p.sso && (
                           <button
                             className="link"
+                            aria-label={`Password link for ${p.name}`}
                             onClick={() =>
                               void run(async () => {
                                 const r = (await call<{ link: string }>(ws.server!, `api/team/people/${p.id}/reset`, 'POST')) as unknown as { link: string }
@@ -149,13 +150,18 @@ export function GroupAdminDialog({ onClose }: { onClose: () => void }) {
                           </button>
                         )}
                         {p.yours && (
-                          <button className="link" onClick={() => person(p, { disabled: !p.disabled })}>
+                          <button
+                            className="link"
+                            aria-label={`${p.disabled ? 'Turn on' : 'Turn off'} ${p.name}’s account`}
+                            onClick={() => (p.disabled || window.confirm(`Turn off ${p.name}’s account? They’re signed out everywhere and can’t sign in until it’s turned on again.`)) && person(p, { disabled: !p.disabled })}
+                          >
                             {p.disabled ? 'Turn on' : 'Turn off'}
                           </button>
                         )}
                         {p.groups.length > 0 && p.id !== ws.account?.user?.id && (
                           <button
                             className="link danger-quiet"
+                            aria-label={`Take ${p.name} out of your groups`}
                             onClick={() =>
                               window.confirm(`Take ${p.name} out of ${p.groups.map(groupName).join(' and ')}? Their account stays; an admin can remove it.`) && person(p, { groups: [] })
                             }
@@ -167,7 +173,7 @@ export function GroupAdminDialog({ onClose }: { onClose: () => void }) {
                           <small className="muted">You</small>
                         ) : (
                           !p.yours && (
-                            <small className="muted" title="They’re in other groups too, an admin, or a group admin themselves, so an admin looks after their account">
+                            <small className="muted" title="You didn’t add their account, or they’re in other groups too, an admin, or a group admin themselves: an admin looks after their account">
                               Shared
                             </small>
                           )

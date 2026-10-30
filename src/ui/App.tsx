@@ -317,6 +317,9 @@ function App({ ws }: { ws: Workspace }) {
           const result = editor.keyDown(e.key, { shift: e.shiftKey, ctrl: true })
           if (result === 'save') void ws.saveFile(e.shiftKey)
           if (result) e.preventDefault()
+        } else if (e.altKey && !ctrl && altLetter(e) === 't') {
+          // Alt T times the open page, as on a board it times the selection.
+          if (editor.keyDown('t', { alt: true })) e.preventDefault()
         }
         return
       }

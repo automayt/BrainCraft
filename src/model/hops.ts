@@ -98,6 +98,34 @@ function crossing(p: Seg, q: Seg): { u: number; v: number; sin: number } | null 
   return { u, v, sin: Math.abs(den) / (p.len * q.len) }
 }
 
+/** At most this many cells along one segment. */
+const MAX_CELLS = 4000
+
+/**
+ * The cells a segment passes through (not every cell of the box around it, which for a long
+ * diagonal is width × height): points along it half a cell apart, and the cell beside each step so
+ * a corner it cuts isn't missed.
+ */
+function cellsOf(s: Seg): Set<string> {
+  const out = new Set<string>()
+  const n = Math.max(1, Math.ceil(s.len / (CELL / 2)))
+  let px = Math.floor(s.a.x / CELL)
+  let py = Math.floor(s.a.y / CELL)
+  out.add(`${px},${py}`)
+  for (let k = 1; k <= n; k++) {
+    const cx = Math.floor((s.a.x + ((s.b.x - s.a.x) * k) / n) / CELL)
+    const cy = Math.floor((s.a.y + ((s.b.y - s.a.y) * k) / n) / CELL)
+    if (cx !== px && cy !== py) {
+      out.add(`${cx},${py}`)
+      out.add(`${px},${cy}`)
+    }
+    out.add(`${cx},${cy}`)
+    px = cx
+    py = cy
+  }
+  return out
+}
+
 /** How level a segment is: 1 across, 0 up and down. */
 const level = (s: Seg) => (s.len ? Math.abs(s.b.x - s.a.x) / s.len : 0)
 
@@ -114,39 +142,35 @@ export function hopPoints(lines: readonly Line[]): Map<number, number[]> {
   for (let n = 0; n < segs.length; n++) {
     const s = segs[n]
     if (s.len < 0.5) continue
-    const x0 = Math.floor(Math.min(s.a.x, s.b.x) / CELL)
-    const x1 = Math.floor(Math.max(s.a.x, s.b.x) / CELL)
-    const y0 = Math.floor(Math.min(s.a.y, s.b.y) / CELL)
-    const y1 = Math.floor(Math.max(s.a.y, s.b.y) / CELL)
+    // A line across a huge stretch of board (from a peer, say) doesn't get hops: it would take too long.
+    if (s.len > CELL * MAX_CELLS) continue
     const seen = new Set<number>()
-    for (let cx = x0; cx <= x1; cx++)
-      for (let cy = y0; cy <= y1; cy++) {
-        const key = `${cx},${cy}`
-        const list = cells.get(key)
-        if (!list) {
-          cells.set(key, [n])
-          continue
-        }
-        for (const m of list) {
-          if (seen.has(m)) continue
-          seen.add(m)
-          const o = segs[m]
-          if (o.line === s.line) continue
-          const x = crossing(o, s)
-          if (!x || x.sin < MIN_SIN) continue
-          const atO = o.at + x.u * o.len
-          const atS = s.at + x.v * s.len
-          if (atO < END_CLEAR || atS < END_CLEAR || total.get(o.line)! - atO < END_CLEAR || total.get(s.line)! - atS < END_CLEAR) continue
-          // The more level one hops; between two alike, the later one.
-          const lo = level(o)
-          const ls = level(s)
-          const [line, at] = lo > ls + 0.05 ? [o.line, atO] : ls > lo + 0.05 ? [s.line, atS] : o.line > s.line ? [o.line, atO] : [s.line, atS]
-          const list2 = out.get(line)
-          if (list2) list2.push(at)
-          else out.set(line, [at])
-        }
-        list.push(n)
+    for (const key of cellsOf(s)) {
+      const list = cells.get(key)
+      if (!list) {
+        cells.set(key, [n])
+        continue
       }
+      for (const m of list) {
+        if (seen.has(m)) continue
+        seen.add(m)
+        const o = segs[m]
+        if (o.line === s.line) continue
+        const x = crossing(o, s)
+        if (!x || x.sin < MIN_SIN) continue
+        const atO = o.at + x.u * o.len
+        const atS = s.at + x.v * s.len
+        if (atO < END_CLEAR || atS < END_CLEAR || total.get(o.line)! - atO < END_CLEAR || total.get(s.line)! - atS < END_CLEAR) continue
+        // The more level one hops; between two alike, the later one.
+        const lo = level(o)
+        const ls = level(s)
+        const [line, at] = lo > ls + 0.05 ? [o.line, atO] : ls > lo + 0.05 ? [s.line, atS] : o.line > s.line ? [o.line, atO] : [s.line, atS]
+        const list2 = out.get(line)
+        if (list2) list2.push(at)
+        else out.set(line, [at])
+      }
+      list.push(n)
+    }
   }
   for (const v of out.values()) v.sort((p, q) => p - q)
   return out

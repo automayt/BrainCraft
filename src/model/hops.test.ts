@@ -82,6 +82,18 @@ describe('lines hopping over each other', () => {
     expect(paths.size).toBe(30)
     for (let k = 0; k < 30; k++) expect(arcs(paths.get(`h${k}`)!)).toHaveLength(30)
   })
+
+  it('stays quick with very long diagonal lines, and still hops on them', () => {
+    // Before, each line looked at every cell of the box around it: this took minutes.
+    const t = performance.now()
+    const far = [poly('a', [0, 0], [300_000, 300_000]), poly('b', [0, 300_000], [300_000, 0]), poly('c', [0, 0], [9e7, 9e7]), poly('d', [9e7, 0], [0, 9e7])]
+    const hops = hopPoints(far)
+    expect(performance.now() - t).toBeLessThan(1000)
+    // The two that fit cross in the middle; the absurdly long ones are drawn plainly.
+    expect([...hops.keys()]).toEqual([1])
+    // Shallow diagonals that cut cell corners still find their crossing.
+    expect(hopPoints([poly('p', [0, 1], [1000, 300]), poly('q', [0, 300], [1000, 1])]).size).toBe(1)
+  })
 })
 
 describe('hops on a board', () => {

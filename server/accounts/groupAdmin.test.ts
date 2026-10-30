@@ -99,6 +99,31 @@ describe('group admins', () => {
     expect(log.some((e) => e.text === 'Bob (group admin) made a set-your-password link for Eve')).toBe(true)
   })
 
+  it('never take over an account they didn’t make, nor set up an admin', async () => {
+    const s = await setup()
+    // Fay has an account in no group yet (only Everyone); Bob adds her to Design by her email.
+    const made = await call(s.a, 'POST', '/api/admin/users', { email: 'fay@x.org', name: 'Fay', groups: [] }, { cookie: s.ann })
+    const fay = (made.body.user as { id: string }).id
+    await call(s.a, 'POST', '/api/team/people', { email: 'fay@x.org', groups: [s.design] }, { cookie: s.bob.cookie })
+    expect(s.a.store.user(fay)!.groups).toEqual([s.design])
+    // …but her password and her account stay out of his hands.
+    expect((await call(s.a, 'POST', `/api/team/people/${fay}/reset`, undefined, { cookie: s.bob.cookie })).status).toBe(403)
+    expect((await call(s.a, 'PATCH', `/api/team/people/${fay}`, { disabled: true }, { cookie: s.bob.cookie })).status).toBe(403)
+    expect(s.a.store.user(fay)!.disabled).toBeUndefined()
+    // An email listed as an admin can't be set up by a group admin (and so get its password link).
+    const env = new Accounts({ dir: tempDir(), admins: ['root@x.org', 'boss@x.org'] })
+    const first = cookieOf(await call(env, 'POST', '/api/auth/setup', { email: 'root@x.org', name: 'Root', password: 'a long password' }))
+    const design = ((await call(env, 'POST', '/api/admin/groups', { name: 'Design', permissions: [] }, { cookie: first })).body.group as Group).id
+    const bobMade = await call(env, 'POST', '/api/admin/users', { email: 'bob@x.org', name: 'Bob', groups: [] }, { cookie: first })
+    const bob = (bobMade.body.user as { id: string }).id
+    const bobCookie = cookieOf(await call(env, 'POST', '/api/auth/reset', { token: String(bobMade.body.link).split('#reset=')[1], password: 'bobs long password' }))
+    await call(env, 'PATCH', `/api/admin/groups/${design}`, { admins: [bob] }, { cookie: first })
+    const tried = await call(env, 'POST', '/api/team/people', { email: 'BOSS@x.org', name: 'Boss', groups: [design] }, { cookie: bobCookie })
+    expect(tried.status).toBe(403)
+    expect(tried.body.link).toBeUndefined()
+    expect(env.store.byEmail('boss@x.org')).toBeUndefined()
+  })
+
   it('stop being one when their account is turned off or removed, or the admin takes it away', async () => {
     const { a, ann, design, bob } = await setup()
     await call(a, 'PATCH', `/api/admin/users/${bob.id}`, { disabled: true }, { cookie: ann })
@@ -123,12 +148,15 @@ describe('who a group admin looks after', () => {
   ]
   const user = (over: Partial<User>): User => ({ id: 'x', email: 'x@x.org', name: 'X', role: 'user', groups: [], created: 0, ...over })
   const bob = user({ id: 'bob' })
+  const his = (over: Partial<User>) => user({ createdBy: 'bob', ...over })
   it('counts groups from single sign-on as well', () => {
-    expect(looksAfter(bob, user({ groups: ['design'] }), groups)).toBe(true)
-    expect(looksAfter(bob, user({ ssoGroups: ['designers'] }), groups)).toBe(true)
-    expect(looksAfter(bob, user({ groups: ['design'], ssoGroups: ['sellers'] }), groups)).toBe(false)
+    expect(looksAfter(bob, his({ groups: ['design'] }), groups)).toBe(true)
+    expect(looksAfter(bob, his({ ssoGroups: ['designers'] }), groups)).toBe(true)
+    expect(looksAfter(bob, his({ groups: ['design'], ssoGroups: ['sellers'] }), groups)).toBe(false)
     // Someone in no group at all isn't in Bob's care.
-    expect(looksAfter(bob, user({}), groups)).toBe(false)
+    expect(looksAfter(bob, his({}), groups)).toBe(false)
+    // Nor anyone whose account he didn't make, even in just his group.
+    expect(looksAfter(bob, user({ groups: ['design'] }), groups)).toBe(false)
     expect(looksAfter(bob, bob, groups)).toBe(false)
   })
 })

@@ -122,13 +122,15 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'guide', label: `Open the ${appName()} guide`, group: 'Help', aliases: 'guide manual docs documentation tutorial learn how tour introduction help api', run: ui.openGuide },
   ]
   if (hasSketch(editor))
-    list.push({ id: 'sketch', label: 'Turn sketch into a board (AI)', group: 'Selection', aliases: 'sketch drawing photo picture napkin whiteboard ocr recognise convert ai', run: () => void sketchToBoard(editor) })
+    list.push({ id: 'sketch-to-board', label: 'Turn sketch into a board (AI)', group: 'Selection', aliases: 'sketch drawing photo picture napkin whiteboard ocr recognise convert ai', run: () => void sketchToBoard(editor) })
   if (editor.selection.size) {
     const locked = editor.selectedItems.every((i) => i.locked)
     list.push({ id: 'lock', label: locked ? 'Unlock' : 'Lock (can’t be moved or changed by accident)', group: 'Selection', keys: 'Ctrl Shift L', aliases: 'lock pin freeze background fix unlock', run: () => editor.setLocked(!locked) })
   }
   if (editor.selectedItems.some((i) => canSketch(i.kind)))
-    list.push({ id: 'sketch', label: editor.selectionSketched ? 'Clean lines for the selection' : 'Hand-drawn look for the selection', group: 'Selection', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting clean', run: () => editor.setSketch(!editor.selectionSketched) })
+    list.push({ id: 'sketch', label: editor.selectionSketched ? 'Clean lines for the selection' : 'Hand-drawn (the selection)', group: 'Selection', keys: 'Alt H', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting clean', run: () => editor.setSketch(!editor.selectionSketched) })
+  if (!editor.readOnly && !isWiki(editor.board))
+    list.push({ id: 'draw-by-hand', label: editor.drawByHand ? 'Clean lines for new objects' : 'Hand-drawn new objects (just you)', group: 'Board', ...(editor.selection.size ? {} : { keys: 'Alt H' }), aliases: 'sketch hand drawn new objects pencil handwriting from now on', run: () => editor.setDrawByHand(!editor.drawByHand) })
   const flow = editor.selectedItems.find((i) => i.kind === 'flow')
   if (flow && !editor.readOnly) list.push({ id: 'sketch-flowchart', label: 'Sketch this flowchart in Excalidraw', group: 'Selection', aliases: 'excalidraw sketch hand drawn flowchart drawing mermaid', run: () => void sketchIt(editor, flow.id) })
   if (editor.selection.size > 1) list.push({ id: 'group', label: 'Group', group: 'Selection', keys: 'Ctrl G', aliases: 'group combine together', run: () => editor.group() })
@@ -221,7 +223,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
           ...(page ? [{ id: 'page-trash', label: `Move “${page.title || 'Untitled'}” to the trash`, group: 'Wiki', aliases: 'delete remove wiki page', run: () => editor.trashPage(page.id) }] : []),
         ]
     const board = list
-      .filter((c) => (c.group === 'Board' || c.group === 'Help') && !CANVAS_IDS.has(c.id) && (!editor.readOnly || !EDIT_IDS.has(c.id)))
+      .filter((c) => (c.group === 'Board' || c.group === 'Help' || c.group === 'Time') && !CANVAS_IDS.has(c.id) && (!editor.readOnly || !EDIT_IDS.has(c.id)))
       // Told apart from a page's own history: this one takes every page back.
       .map((c) => (c.id === 'versions' ? { ...c, label: 'Wiki version history (every page)…', aliases: 'restore backup whole wiki all pages snapshot autosave' } : c))
     return [...wiki, ...board]

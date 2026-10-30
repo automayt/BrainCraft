@@ -572,11 +572,12 @@ export const BoardView = memo(function BoardView({
         if (!from || !to || !pairInView(from, to)) return null
         return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} hopped={hops.get(`c${c.id}`)} />
       })}
-      {/* Objects that lead somewhere: a badge on their corner to follow it. */}
+      {/* Objects that lead somewhere: a badge on their corner to follow it (moved off the corner while
+          selected, where the resize handle is). */}
       {!coarse &&
         visible.map((i) =>
           i.linkTo ? (
-            <g key={`link-${i.id}`} data-handle="followLink" data-id={i.id} className="item-link-badge" transform={`translate(${i.x + i.w} ${i.y})`}>
+            <g key={`link-${i.id}`} data-handle="followLink" data-id={i.id} className="item-link-badge" transform={`translate(${i.x + i.w + (selection.has(i.id) ? 22 : 0)} ${i.y + (selection.has(i.id) ? 16 : 0)})`}>
               <title>{describeLink(i.linkTo)}</title>
               <circle r={12} />
               {i.linkTo.url ? (

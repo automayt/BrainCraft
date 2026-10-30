@@ -25,7 +25,9 @@ export function groupsAdminOf(user: User | null, groups: readonly Group[]): Grou
  * a set-your-password link for it, so nobody on another team can be taken over that way.
  */
 export function looksAfter(admin: User, person: User, groups: readonly Group[]): boolean {
-  if (person.id === admin.id || person.role === 'admin') return false
+  // Only accounts this group admin made: adding someone who already has an account (by their
+  // email) puts them in a group, never in the group admin's hands.
+  if (person.id === admin.id || person.role === 'admin' || person.createdBy !== admin.id) return false
   const mine = new Set(groupsAdminOf(admin, groups).map((g) => g.id))
   const theirs = groupsOf(person, groups).filter((g) => !g.everyone)
   if (!theirs.length || !theirs.every((g) => mine.has(g.id))) return false

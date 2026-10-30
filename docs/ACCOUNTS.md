@@ -63,10 +63,12 @@ in their account menu, where they:
 - add people: a new account gets a set-your-password link to send, and someone
   who already has an account just joins (by exact email);
 - move people between their groups, or take them out of them;
-- make password links for, and turn off or on, people who are **only** in
-  groups they run. Anyone also in another group, an admin or another group
-  admin is looked after by an admin, so nobody on another team can be taken
-  over this way.
+- make password links for, and turn off or on, accounts **they made
+  themselves** that are only in groups they run. Someone they added by email
+  (who had an account already), anyone also in another group, an admin or
+  another group admin is looked after by an admin, so nobody's account can
+  be taken over this way. Emails listed in `BRAINCRAFT_ADMINS` can't be set up
+  by a group admin at all.
 
 They can't make or remove groups, change what a group may do, choose group
 admins, remove accounts, or open the rest of the admin screen, and they see

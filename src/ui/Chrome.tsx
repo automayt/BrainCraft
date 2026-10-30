@@ -151,7 +151,7 @@ function Popover({ onClose, children, className = '' }: { onClose: () => void; c
 
 function MenuItem({ label, keys, onClick, checked }: { label: string; keys?: string; onClick: () => void; checked?: boolean }) {
   return (
-    <button role="menuitem" className="menu-item" onMouseDown={keepFocus} onClick={onClick}>
+    <button role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={checked} className="menu-item" onMouseDown={keepFocus} onClick={onClick}>
       {checked !== undefined && <span className="check">{checked && <CheckIcon />}</span>}
       <span>{label}</span>
       {keys && <kbd>{keys}</kbd>}
@@ -718,7 +718,7 @@ export function BottomLeft() {
         <MinusIcon />
         <Tip label="Zoom out" keys="Ctrl −" />
       </button>
-      <button className="zoom-readout has-tip" onMouseDown={keepFocus} onClick={() => editor.setZoom(1)}>
+      <button className="zoom-readout has-tip" aria-label={`Zoom ${Math.round(editor.camera.zoom * 100)}%: back to 100%`} onMouseDown={keepFocus} onClick={() => editor.setZoom(1)}>
         {Math.round(editor.camera.zoom * 100)}%
         <Tip label="Reset to 100%" />
       </button>

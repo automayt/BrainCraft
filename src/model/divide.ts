@@ -54,12 +54,12 @@ const KIND_OF: Record<Kind, UnitKind> = {
   data: 'planning',
   link: 'links',
   code: 'code',
-  sequence: 'shapes',
+  sequence: 'flowchart',
 }
 
 /** The child boards dividing by kind makes, in this order. */
 export const KIND_GROUPS: { kind: UnitKind; title: string }[] = [
-  { kind: 'flowchart', title: 'Flowcharts' },
+  { kind: 'flowchart', title: 'Flowcharts and diagrams' },
   { kind: 'mindmap', title: 'Mind maps' },
   { kind: 'notes', title: 'Notes' },
   { kind: 'planning', title: 'Tables and plans' },
@@ -76,7 +76,7 @@ export const MIN_GROUP = 3
 function kindOf(items: Item[]): UnitKind {
   // Cards that open other boards (child boards made before, say) stay where they are.
   if (items.every((i) => i.linkTo?.board !== undefined)) return 'card'
-  if (items.some((i) => i.kind === 'flow')) return 'flowchart'
+  if (items.some((i) => i.kind === 'flow' || i.kind === 'sequence')) return 'flowchart'
   if (items.some((i) => i.kind === 'mind')) return 'mindmap'
   const counts = new Map<UnitKind, number>()
   for (const i of items) if (i.kind !== 'frame') counts.set(KIND_OF[i.kind], (counts.get(KIND_OF[i.kind]) ?? 0) + 1)
@@ -211,13 +211,30 @@ export const MAX_TOPIC_UNITS = 300
  * one, coarser and coarser until there are few enough. Frames, flowcharts and mind maps stay whole.
  */
 export function topicUnits(units: Unit[]): Unit[] {
+  const merge = (list: Unit[]): Unit => ({
+    key: list[0].key,
+    ids: list.flatMap((u) => u.ids),
+    kind: list[0].kind,
+    holds: list[0].holds,
+    box: unionAll(list.map((u) => u.box))!,
+    title: short(
+      list
+        .map((u) => u.title)
+        .filter(Boolean)
+        .join('; '),
+      200,
+    ),
+  })
+  // What stays whole: frames, flowcharts and mind maps, and anything already big. Notes put
+  // together here can be put together again, more coarsely.
+  const whole = new Set(units.filter((u) => u.kind === 'frame' || u.kind === 'flowchart' || u.kind === 'mindmap' || u.ids.length > 6))
   let cell = 400
   let out = units
   while (out.length > MAX_TOPIC_UNITS && cell < 1e7) {
     const keep: Unit[] = []
     const cells = new Map<string, Unit[]>()
     for (const u of out) {
-      if (u.kind === 'frame' || u.kind === 'flowchart' || u.kind === 'mindmap' || u.ids.length > 6) {
+      if (whole.has(u)) {
         keep.push(u)
         continue
       }
@@ -226,23 +243,13 @@ export function topicUnits(units: Unit[]): Unit[] {
       if (list) list.push(u)
       else cells.set(k, [u])
     }
-    const merged = [...cells.values()].map((list) =>
-      list.length === 1
-        ? list[0]
-        : {
-            key: list[0].key,
-            ids: list.flatMap((u) => u.ids),
-            kind: list[0].kind,
-            holds: list[0].holds,
-            box: unionAll(list.map((u) => u.box))!,
-            title: list
-              .map((u) => u.title)
-              .filter(Boolean)
-              .join('; '),
-          },
-    )
-    out = [...keep, ...merged]
+    out = [...keep, ...[...cells.values()].map((list) => (list.length === 1 ? list[0] : merge(list)))]
     cell *= 2
+  }
+  // Still too many (hundreds of frames, say): the biggest go as they are, the rest as one.
+  if (out.length > MAX_TOPIC_UNITS) {
+    const sorted = [...out].sort((p, q) => q.ids.length - p.ids.length)
+    out = [...sorted.slice(0, MAX_TOPIC_UNITS - 1), merge(sorted.slice(MAX_TOPIC_UNITS - 1))]
   }
   return out
 }
@@ -403,6 +410,7 @@ export function boardAfter(b: Board, groups: Group[], keys: (string | null)[]): 
     if (keys[k] === null) return
     for (const u of g.units) for (const id of u.ids) groupOf.set(id, k)
   })
+  const present = new Set(b.items.map((i) => i.id))
   const stay = b.items.filter((i) => !groupOf.has(i.id))
   const left = unionAll(stay.map(itemBounds))
   const all = unionAll(b.items.map(itemBounds)) ?? { x: 0, y: 0, w: 0, h: 0 }
@@ -413,7 +421,8 @@ export function boardAfter(b: Board, groups: Group[], keys: (string | null)[]): 
   let nextId = b.nextId
   const cardOf = new Map<number, Id>()
   const cards: Item[] = live.map(({ g, k }) => {
-    const n = g.units.reduce((s, u) => s + u.ids.length, 0)
+    // What really went (anything deleted since the plan was made isn't counted).
+    const n = g.units.reduce((s, u) => s + u.ids.filter((id) => groupOf.get(id) === k && present.has(id)).length, 0)
     const frame = g.units.length === 1 && g.units[0].kind === 'frame' ? g.units[0].box : null
     const slot = gridded.findIndex((x) => x.k === k)
     const at = frame ?? {

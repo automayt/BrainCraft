@@ -247,8 +247,6 @@ Admin, next:
   sign out one or all of them.
 - **Server health.** Version, uptime, memory, free disk space, the size of each
   data folder, and a warning on the admin screen when disk space runs low.
-- **Backups.** Download everything (boards, files, accounts) as one archive, and
-  optionally keep a nightly copy in a folder, with the last few kept.
 - **Features per group.** Turn the assistant, voice, forms shared by link or
   exports off for some groups.
 - **Templates for everyone.** Admins publish boards and wikis as templates that
@@ -291,13 +289,14 @@ Admin, next:
 - [ ] **Totals and money** in databases: sums in table footers and board
   columns, a money field, and an optional "paid by" that shows who has put in
   what.
-- [ ] **Undo what a friend deleted:** the server keeps hourly snapshots of
-  each shared board (and one before any big deletion), shown in version
-  history for everyone.
+- [x] **Undo what a friend deleted:** built as backups: the server keeps
+  versions of each shared board (every three hours), in version history for
+  everyone, and puts deleted boards back.
 - [ ] **Checklists inside things:** a tick-list in a sticky, card or record,
   shown as "3/7" like mind-map progress; pasting "- [ ]" lines makes one.
 - [ ] **Mention people:** @ in a comment also offers people seen on the board,
-  and "Since you were here" opens with "For you: 2 mentions".
+  and "Since you were here" opens with "For you: 2 mentions". (Partly built:
+  @mentions and "Mentions of you" on a server with accounts.)
 - [ ] **This week:** a small panel on opening a board with what's due, overdue
   or waiting, from Kanban cards, records and timeline events.
 - [ ] **Plan it with AI** on an empty board: describe the project and the
@@ -355,8 +354,8 @@ Admin, next:
   never has to guess what to send again.
 - [ ] **QR code in the share dialog**, so friends in the same room join by
   pointing a phone.
-- [ ] **"I'll take it":** put a person on a sticky, card or record (an avatar
-  chip), with a "Mine" filter. For chores, packing lists, who brings what.
+- [x] **"I'll take it":** built as Assign / Assign to me, with "Show only
+  what's assigned to…".
 - [ ] **Find a date:** each friend taps the days they can make it; the best
   days light up and can become a timeline event.
 - [ ] **Add to my calendar:** dated cards, records and events as a calendar
@@ -412,6 +411,31 @@ Admin, next:
 - [ ] **A drag cut off by a reconnect** stays undoable as one step.
 - [ ] **Landscape phones:** the phone layout (tools at the bottom) for any
   screen under about 450px tall.
+
+## From the fifth review (October 2026)
+
+- [ ] **Child-board cards that show progress and news:** "5 of 12 done",
+  "2 new since you looked" and who changed it last, so the parent works as a
+  project overview.
+- [ ] **Bring a child board back:** "Merge back into parent" puts its objects
+  where its card is and takes the child away, so dividing is safe to try.
+- [ ] **A key strip above the phone keyboard** while writing (Tab, Enter,
+  ← →, Esc, /), for mind-map ideas, flowchart steps and sequence messages.
+- [ ] **Sweep the finished things:** move done and dropped things to a Done
+  frame (or a child board) to keep a long-running board readable.
+- [ ] **A "Next up" line on each board,** shown on opening it and under its
+  name in Your boards.
+- [ ] **"Just me" hand-drawn view:** see the whole board hand-drawn in this
+  browser without changing it for anyone.
+- [ ] **Lanes that are friends:** a sequence diagram lane picked from the
+  people on the board, with their colour; a message to them can become a task
+  assigned to them.
+- [ ] **Sequence diagrams step by step in Present,** one message at a time.
+- [ ] **Divide by person:** one child board for each person's assigned things.
+- [ ] **A ⋯ menu on the selection toolbar** for Lock, To front, To back,
+  Duplicate and React, so a crowded toolbar keeps Delete in view.
+- [ ] **The guide refreshes itself** (or says a newer one is there), and uses
+  the server's own app name throughout.
 
 ## From the earlier list
 

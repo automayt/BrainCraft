@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activations, addBox, boxesAround, boxOver, removeBox, removeStep, sequenceLayout, setDivider, updateStep, addLane, addStep, cleanSequence, looksLikeSequence, MAX_STEPS, moveLane, moveStep, newSequence, nextStep, parseSequence, removeLane, sequenceSize, sequenceText, toMermaidSequence } from './sequence'
+import { activations, addBox, boxesAround, boxOver, removeBox, removeStep, sequenceLayout, setDivider, setNumbered, updateStep, addLane, addStep, cleanSequence, looksLikeSequence, MAX_STEPS, moveLane, moveStep, newSequence, nextStep, parseSequence, removeLane, sequenceSize, sequenceText, toMermaidSequence } from './sequence'
 import { cleanItem } from './sanitize'
 import { addItem, emptyBoard, nearestFree, newItem } from './board'
 import { intersects } from './geom'
@@ -217,5 +217,62 @@ sequenceDiagram
     const out2 = cleanSequence({ ...r.data, boxes: [{ ...r.data.boxes![0], elses: [{ before: 's1', label: 'outside' }] }] })!
     expect(out2.boxes![0].elses).toBeUndefined()
     expect(updateStep(r.data, 's2', (x) => ({ ...x, text: 'TLS 1.3' })).steps[1].text).toBe('TLS 1.3')
+  })
+})
+
+describe('sequence diagrams, from the review', () => {
+  it('keep an outer box’s divider outside a box that starts at the same message', () => {
+    let d = newSequence(['A', 'B'])
+    for (let k = 0; k < 6; k++) d = addStep(d, { from: 'l1', to: 'l2', text: `m${k}` }).data
+    const alt = addBox(d, 'alt', 'ok', 0, 5)
+    d = setDivider(alt.data, alt.id, alt.data.steps[3].id, 'not ok')
+    d = addBox(d, 'loop', 'again', 3, 4).data
+    const layout = sequenceLayout(d)
+    // The divider sits above the loop's top.
+    expect(layout.elses[0].y).toBeLessThan(layout.boxes.get('b2')!.top)
+    const out = toMermaidSequence(d)
+    expect(out.indexOf('else not ok')).toBeLessThan(out.indexOf('loop again'))
+    // Read back, it's the same diagram (box ids may come out in another order).
+    expect(toMermaidSequence(parseSequence(out)!.data)).toBe(out)
+    expect(parseSequence(out)!.data.boxes!.find((b) => b.kind === 'alt')!.elses).toEqual([{ before: 's4', label: 'not ok' }])
+  })
+
+  it('leave out (and count) what doesn’t fit past 30 lanes, rather than misdraw it', () => {
+    const lines = ['sequenceDiagram', ...Array.from({ length: 32 }, (_, k) => `  participant P${k}`), '  P0->>P31: far', '  P0->>P1: near']
+    const r = parseSequence(lines.join('\n'))!
+    expect(r.data.lanes).toHaveLength(30)
+    expect(r.data.steps.map((s) => s.text)).toEqual(['near'])
+    expect(r.skipped).toBe(3)
+  })
+
+  it('read participants named like keywords as participants', () => {
+    const r = parseSequence('sequenceDiagram\n  TitleService->>DB: get\n  Option->>Loop: hi\n  Par-->>Break: back')!
+    expect(r.title).toBe('')
+    expect(r.data.boxes).toBeUndefined()
+    expect(r.data.lanes.map((l) => l.name)).toEqual(['TitleService', 'DB', 'Option', 'Loop', 'Par', 'Break'])
+    expect(r.data.steps).toHaveLength(3)
+    // Front matter at the top doesn't hide what it is.
+    expect(parseSequence('---\ntitle: x\n---\nsequenceDiagram\n  A->>B: hi')!.data.steps).toHaveLength(1)
+  })
+
+  it('keep boxes when numbering is turned off, and check boxes that arrive', () => {
+    let d = addStep(addStep(newSequence(), { from: 'l1', to: 'l2', text: 'a' }).data, { from: 'l2', to: 'l1', text: 'b' }).data
+    d = addBox(d, 'loop', '', 0, 1).data
+    expect(setNumbered(setNumbered(d, true), false)).toEqual(d)
+    const raw = {
+      ...d,
+      boxes: [
+        { id: 'b1', kind: 'loop', label: '', first: 's1', last: 's1', elses: [{ before: 's1', label: 'x' }] },
+        { id: 'b2', kind: 'alt', label: '', first: 's1', last: 's2', elses: [{ before: 's2', label: 'y' }, { before: 's2', label: 'again' }] },
+        { id: 'b3', kind: 'opt', label: '', first: 's2', last: 's2' },
+      ],
+    }
+    const clean = cleanSequence(raw)!
+    // A loop has no dividers; an alt keeps one per message.
+    expect(clean.boxes!.find((b) => b.id === 'b1')!.elses).toBeUndefined()
+    expect(clean.boxes!.find((b) => b.id === 'b2')!.elses).toEqual([{ before: 's2', label: 'y' }])
+    // A box crossing one kept before it goes.
+    const crossing = cleanSequence({ ...d, steps: [...d.steps, { id: 's3', from: 'l1', to: 'l2', text: 'c' }], boxes: [{ id: 'b1', kind: 'loop', label: '', first: 's1', last: 's2' }, { id: 'b2', kind: 'opt', label: '', first: 's2', last: 's3' }] })!
+    expect(crossing.boxes!.map((b) => b.id)).toEqual(['b1'])
   })
 })

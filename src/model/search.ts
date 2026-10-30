@@ -61,7 +61,11 @@ function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
   if (i.sequence) {
     const name = new Map(i.sequence.lanes.map((l) => [l.id, l.name]))
     for (const l of i.sequence.lanes) out.push({ where: 'Lane', text: l.name })
-    i.sequence.steps.forEach((s, k) => out.push({ where: `Message ${k + 1} · ${name.get(s.from) ?? ''} → ${name.get(s.to) ?? ''}`, text: s.text }))
+    i.sequence.steps.forEach((s, k) => out.push({ where: s.style === 'note' ? 'Note' : `Message ${k + 1} · ${name.get(s.from) ?? ''} → ${name.get(s.to) ?? ''}`, text: s.text }))
+    for (const b of i.sequence.boxes ?? []) {
+      out.push({ where: `${b.kind} box`, text: b.label })
+      for (const e of b.elses ?? []) out.push({ where: `${b.kind} box, else`, text: e.label })
+    }
   }
   if (i.timeline) {
     for (const l of i.timeline.lanes) out.push({ where: 'Lane', text: l.name })

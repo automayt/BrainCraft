@@ -184,16 +184,24 @@ Who sends what to whom, in order, built from the keyboard:
 - **→** past the last lane makes a new lane: type its name and press Enter.
   **F2** renames the lane the arrow points at; **Alt ← / →** moves it; a
   lane renamed to nothing is taken out with its messages.
-- **↑ / ↓** go back to earlier messages to change them, **Alt ↑ / ↓** moves
-  one, and **Backspace** on an empty one takes it out. **Esc** when done.
+- Once you've typed, **← / →** at the start or end of the words still move
+  the arrow (a small tag before the box shows Call, Reply, Message or Note).
+- **↑ / ↓** go back to earlier messages (their words are selected, so typing
+  replaces them), **Alt ↑ / ↓** moves one, and **Backspace** on an empty one
+  takes it out. **Esc** when done: a message you typed but didn't add yet is
+  added. A diagram you made with U and left without a message goes again.
 - **Tab** also makes a **note** over the lanes the arrow spans. Bars on the
   lifelines show who is busy answering a call, worked out from calls and
   their replies.
 - **Boxes:** **Shift ↑ / ↓** picks several messages, then type **/loop**,
   **/alt**, **/opt**, **/par**, **/critical** or **/break** (words after it
   label it) and press Enter. **/else** adds a divider in an alt box above the
-  message you're on; **/unbox** and **/unelse** take them away. Typing **/**
-  lists every command, and Tab finishes one. Boxes nest but never cross.
+  message you're on; **/unbox** and **/unelse** take them away; **/note**
+  makes a note, **/actor** draws a lane as a person and **/number** turns
+  numbering on or off. Typing **/** lists every command (↑ ↓ and Tab or a
+  click pick one). Boxes nest but never cross.
+- On a phone or tablet, buttons under the box do the same: From and To,
+  the kind, + Next (for a box around several), / and Add.
 - The mouse works too while writing: click a lane to send there (Shift-click
   to send from it), or click a message to go to it.
 - Select a diagram and press **Enter**, double-click it, or just start
@@ -759,7 +767,7 @@ shares live exactly like a board.
 ### Whiteboard
 
 - An infinite canvas with a dot grid. **Scroll** the mouse wheel to zoom at
-  the pointer (5% to 800%), hold the **middle button** (or Space) and drag to
+  the pointer (5% to 800%), hold the **right** or **middle button** (or Space) and drag to
   pan, and drag on empty space to select with a box. On a trackpad, swipe
   with two fingers to move around and pinch to zoom. Shift+scroll pans
   sideways; zoom to fit, the minimap and pinching on touch screens work too.

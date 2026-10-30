@@ -7,9 +7,10 @@ type Style = SequenceStep['style']
 
 /** Where the keyboard is in a diagram being written: a step (or the next one, at the end) and its arrow. */
 interface Cursor {
-  row: number
-  /** With Shift ↑ ↓: the other end of a run of steps (for a box around them). */
-  anchor: number | null
+  /** The step being changed, by id (null: the next one, after the last). */
+  step: string | null
+  /** With Shift up and down: the step at the other end of a run of steps (for a box around them). */
+  anchor: string | null
   from: string
   to: string
   style: Style
@@ -18,6 +19,8 @@ interface Cursor {
   text: string
   /** Naming a new lane (the arrow points past the last one), or renaming the lane it points at. */
   naming: 'new' | 'rename' | null
+  /** While naming: where the pen was, to go back to. */
+  prior: Cursor | null
 }
 
 const NEW = '#new'
@@ -25,13 +28,18 @@ const NOTE_FILL = FILLS[0][1]
 
 /** The slash commands, typed into the message box. */
 export const COMMANDS: { name: string; does: string }[] = [
-  ...SQ.BOX_KINDS.map((k) => ({ name: k, does: `A ${k} box around the message (Shift ↑ ↓ for several); words after it label it` })),
-  { name: 'else', does: 'A divider above this message, in an alt, par or critical box' },
-  { name: 'unbox', does: 'Takes away the box around this message' },
-  { name: 'unelse', does: 'Takes away the divider above this message' },
-  { name: 'note', does: 'A note over the lanes the arrow spans' },
-  { name: 'actor', does: 'Draws the lane the arrow points at as a person' },
-  { name: 'number', does: 'Numbers the messages (again: not)' },
+  { name: 'loop', does: 'Box: repeated (words after it say how often)' },
+  { name: 'alt', does: 'Box: one way or another (then /else for the other)' },
+  { name: 'opt', does: 'Box: only sometimes (words after it say when)' },
+  { name: 'par', does: 'Box: at the same time' },
+  { name: 'critical', does: 'Box: must happen together' },
+  { name: 'break', does: 'Box: stops here when…' },
+  { name: 'else', does: 'Divider above this message, in an alt, par or critical box' },
+  { name: 'unbox', does: 'Take away the box around this message' },
+  { name: 'unelse', does: 'Take away the divider above this message' },
+  { name: 'note', does: 'Note over the lanes the arrow spans' },
+  { name: 'actor', does: 'Draw the lane the arrow points at as a person (or not)' },
+  { name: 'number', does: 'Turn numbering on or off' },
 ]
 
 /** Words over an arrow or in a box, one line, cut short with … when too long. */
@@ -122,27 +130,13 @@ export function SequenceView({ item, composing }: { item: Item; composing: boole
         const at = layout.boxes.get(b.id)
         if (!at) return null
         const { x1, x2 } = boxEdges(item, at)
-        const top = y + at.top
-        const tagW = 14 + b.kind.length * 8
-        return (
-          <g key={b.id} className="seq-box">
-            <rect x={x1} y={top} width={x2 - x1} height={at.bottom - at.top} rx={4} />
-            <path d={`M${x1} ${top} h ${tagW} v 14 l -7 8 h ${-(tagW - 7)} Z`} className="seq-tag" />
-            <Label x={x1 + 4} y={top} w={tagW - 8} h={22} text={b.kind} className="left seq-tag-text" />
-            {b.label && <Label x={x1 + tagW + 8} y={top} w={x2 - x1 - tagW - 16} h={22} text={`[${b.label}]`} className="left seq-cond" />}
-          </g>
-        )
+        return <rect key={b.id} x={x1} y={y + at.top} width={x2 - x1} height={at.bottom - at.top} rx={4} className="seq-box-edge" />
       })}
       {layout.elses.map((e, k) => {
         const at = layout.boxes.get(e.box)
         if (!at) return null
         const { x1, x2 } = boxEdges(item, at)
-        return (
-          <g key={k} className="seq-box">
-            <line x1={x1} y1={y + e.y + 2} x2={x2} y2={y + e.y + 2} strokeDasharray="6 4" />
-            {e.label && <Label x={x1 + 8} y={y + e.y + 3} w={x2 - x1 - 16} h={22} text={`[${e.label}]`} className="left seq-cond" />}
-          </g>
-        )
+        return <line key={k} x1={x1} y1={y + e.y + 2} x2={x2} y2={y + e.y + 2} strokeDasharray="6 4" className="seq-box-edge" />
       })}
       {d.lanes.map((l, k) => {
         const cx = x + SQ.laneX(k)
@@ -160,6 +154,27 @@ export function SequenceView({ item, composing }: { item: Item; composing: boole
         if (lane < 0) return null
         return <rect key={k} x={x + SQ.laneX(lane) - 5 + a.depth * 5} y={y + layout.rows[a.from]} width={10} height={layout.rows[a.to] - layout.rows[a.from]} className="seq-busy" />
       })}
+      {/* Over the lifelines, so nothing runs through their words. */}
+      {(d.boxes ?? []).map((b) => {
+        const at = layout.boxes.get(b.id)
+        if (!at) return null
+        const { x1, x2 } = boxEdges(item, at)
+        const top = y + at.top
+        const tagW = 14 + b.kind.length * 8
+        return (
+          <g key={b.id} className="seq-box">
+            <path d={`M${x1} ${top} h ${tagW} v 14 l -7 8 h ${-(tagW - 7)} Z`} className="seq-tag" />
+            <Label x={x1 + 4} y={top} w={tagW - 8} h={22} text={b.kind} className="left seq-tag-text" />
+            {b.label && <Label x={x1 + tagW + 8} y={top} w={x2 - x1 - tagW - 16} h={22} text={`[${b.label}]`} className="left seq-cond" />}
+          </g>
+        )
+      })}
+      {layout.elses.map((e, k) => {
+        const at = layout.boxes.get(e.box)
+        if (!at || !e.label) return null
+        const { x1, x2 } = boxEdges(item, at)
+        return <Label key={k} x={x1 + 8} y={y + e.y + 3} w={x2 - x1 - 16} h={22} text={`[${e.label}]`} className="left seq-cond" />
+      })}
       {d.steps.map((s, k) => (
         <Step key={s.id} x={x} y={y + layout.rows[k]} data={d} step={s} k={k} />
       ))}
@@ -174,30 +189,41 @@ function Composer({ item }: { item: Item }) {
   const layout = SQ.sequenceLayout(d)
   const input = useRef<HTMLInputElement>(null)
   const draft = useRef<Cursor | null>(null)
-  const [c, setC] = useState<Cursor>(() => ({ row: d.steps.length, anchor: null, ...fresh(d), text: editor.composing?.seed ?? '' }))
-  useEffect(() => {
-    input.current?.focus({ preventScroll: true })
-  }, [c.row, c.naming])
+  const [c, setC] = useState<Cursor>(() => ({ step: null, anchor: null, ...fresh(d), text: editor.composing?.seed ?? '', prior: null }))
+  const [pick, setPick] = useState(0)
+  const touch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
 
   const lanes = d.lanes.map((l) => l.id)
   const update = (f: (s: SequenceData) => SequenceData, title?: string) => editor.updateSequence(item.id, f, title)
-  const row = Math.min(c.row, d.steps.length)
-  const isNew = row >= d.steps.length
+  // The step being written is found by its id each time, so a friend adding or taking out steps
+  // meanwhile never moves the pen onto theirs. One that's gone leaves the pen on the next step.
+  const at0 = c.step === null ? -1 : d.steps.findIndex((s) => s.id === c.step)
+  const row = at0 < 0 ? d.steps.length : at0
+  const isNew = at0 < 0
+  useEffect(() => {
+    input.current?.focus({ preventScroll: true })
+    if (!isNew || c.naming === 'rename') input.current?.select()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row, c.naming])
   // A peer may have changed the diagram: the cursor stays on something that's there.
   const from = lanes.includes(c.from) ? c.from : (lanes[0] ?? '')
   const to = c.to === NEW || lanes.includes(c.to) ? c.to : (lanes[1] ?? lanes[0] ?? '')
-  const range = c.anchor === null ? null : ([Math.min(c.anchor, row), Math.max(c.anchor, row)] as const)
+  const anchorRow = c.anchor === null ? -1 : d.steps.findIndex((s) => s.id === c.anchor)
+  const range = anchorRow < 0 || isNew ? null : ([Math.min(anchorRow, row), Math.max(anchorRow, row)] as const)
   const command = c.text.startsWith('/') && !c.naming ? c.text.slice(1).split(/\s/)[0].toLowerCase() : null
+  const shown = command !== null && !/\s/.test(c.text) ? COMMANDS.filter((x) => x.name.startsWith(command)) : []
+  const chosen = shown[Math.min(pick, shown.length - 1)]
 
   /** The cursor for step `r` (its own arrow and words), or for the next step after the end. */
   const at = (r: number, data = d): Cursor => {
     const s = data.steps[r]
     // The next step: what was being written there, or (with nothing written) a fresh suggestion.
-    if (!s) return draft.current?.text ? { ...draft.current, row: data.steps.length, anchor: null } : { row: data.steps.length, anchor: null, ...fresh(data), text: '' }
-    return { row: r, anchor: null, from: s.from, to: s.to, style: s.style, styleChosen: true, text: s.text, naming: null }
+    if (!s) return draft.current?.text ? { ...draft.current, step: null, anchor: null, prior: null } : { step: null, anchor: null, ...fresh(data), text: '', prior: null }
+    return { step: s.id, anchor: null, from: s.from, to: s.to, style: s.style, styleChosen: true, text: s.text, naming: null, prior: null }
   }
-  /** Keeps what was typed in an earlier step; the next step's words wait in the draft. */
+  /** Keeps what was typed in an earlier step; the next step's words wait in the draft. Nothing while naming a lane. */
   const leave = () => {
+    if (c.naming || c.anchor !== null) return
     if (isNew) {
       draft.current = c
       return
@@ -212,11 +238,15 @@ function Composer({ item }: { item: Item }) {
       // A run of steps for a box: from where Shift was first held to here (steps only, not the next one).
       const last = d.steps.length - 1
       if (last < 0) return
-      return setC({ ...c, anchor: c.anchor ?? Math.min(row, last), row: Math.min(target, last) })
+      const here = Math.min(row, last)
+      if (c.anchor === null) leave()
+      return setC({ ...c, anchor: c.anchor && anchorRow >= 0 ? c.anchor : d.steps[here].id, step: d.steps[Math.min(target, last)].id, text: c.text.startsWith('/') ? c.text : '' })
     }
     leave()
     setC(at(target))
   }
+  /** Naming a lane: what to come back to afterwards. */
+  const naming = (kind: 'new' | 'rename', next: Partial<Cursor>) => setC({ ...c, ...next, naming: kind, prior: c.naming ? c.prior : c })
   const point = (dir: -1 | 1, which: 'from' | 'to') => {
     if (which === 'from') {
       const k = Math.max(0, Math.min(lanes.length - 1, lanes.indexOf(from) + dir))
@@ -225,57 +255,51 @@ function Composer({ item }: { item: Item }) {
     // One past the last lane is a new one, to name.
     const k = Math.max(0, Math.min(lanes.length, (to === NEW ? lanes.length : lanes.indexOf(to)) + dir))
     const next = k === lanes.length ? NEW : lanes[k]
-    setC({ ...c, to: next, naming: next === NEW ? 'new' : null, ...(c.styleChosen ? {} : { style: undefined }), text: next === NEW || c.naming ? '' : c.text })
+    const style = c.styleChosen ? {} : { style: undefined }
+    if (next === NEW) return naming('new', { to: NEW, text: '', ...style })
+    setC({ ...(c.naming === 'new' && c.prior ? c.prior : c), to: next, naming: null, prior: null, ...style })
   }
   /** Clicking a lane's box: the arrow goes to it (with Shift, comes from it). */
-  const pickLane = (id: string, shift: boolean) => setC(shift ? { ...c, from: id } : { ...c, to: id, naming: null, ...(c.styleChosen ? {} : { style: undefined }) })
+  const pickLane = (id: string, shift: boolean) => setC(shift ? { ...c, from: id } : { ...(c.naming && c.prior ? c.prior : c), to: id, naming: null, prior: null, ...(c.styleChosen ? {} : { style: undefined }) })
 
-  /** A slash command, typed into the box. False when it isn't one. */
-  const run = (cmd: string, rest: string): boolean => {
+  /** A slash command, typed into the box. */
+  const run = (cmd: string, rest: string) => {
     const steps = d.steps
     const here = range ?? ([Math.min(row, steps.length - 1), Math.min(row, steps.length - 1)] as const)
     const say = (m: string) => editor.setStatus(m)
     if ((SQ.BOX_KINDS as string[]).includes(cmd)) {
-      if (!steps.length) return (say('Write a message first, then put a box around it'), true)
+      if (!steps.length) return say('Write a message first, then put a box around it')
       const kind = cmd as SequenceBoxKind
       const there = SQ.boxOver(d, here[0], here[1])
-      if (!there && SQ.crossesBox(d, here[0], here[1])) return (say('Boxes go inside each other, not across: pick messages all inside the other box, or all of it'), true)
+      if (!there && SQ.crossesBox(d, here[0], here[1])) return say('Boxes go inside each other, not across: pick messages all inside the other box, or all of it')
       if (there) update((data) => SQ.updateBox(data, there.id, (b) => ({ ...b, kind, label: rest })))
       else update((data) => SQ.addBox(data, kind, rest, here[0], here[1]).data)
-      return true
+      return
     }
     if (cmd === 'else' || cmd === 'and' || cmd === 'option') {
       const box = isNew ? undefined : SQ.boxesAround(d, row).find((b) => SQ.canDivide(b.kind) && b.first !== steps[row].id)
-      if (!box) return (say('Go to a message inside an alt, par or critical box (not its first) to divide it there'), true)
-      update((data) => SQ.setDivider(data, box.id, steps[row].id, rest))
-      return true
+      if (!box) return say('Go to a message inside an alt, par or critical box (not its first) to divide it there')
+      return update((data) => SQ.setDivider(data, box.id, steps[row].id, rest))
     }
     if (cmd === 'unelse') {
       const box = isNew ? undefined : SQ.boxesAround(d, row).find((b) => b.elses?.some((e) => e.before === steps[row].id))
       if (box) update((data) => SQ.setDivider(data, box.id, steps[row].id, null))
-      return true
+      return
     }
     if (cmd === 'unbox') {
       const box = steps.length ? SQ.boxesAround(d, here[0])[0] : undefined
       if (box) update((data) => SQ.removeBox(data, box.id))
       else say('There’s no box around this message')
-      return true
+      return
     }
-    if (cmd === 'actor' && to !== NEW) {
+    if (cmd === 'actor') {
       const lane = d.lanes.find((l) => l.id === to)
       if (lane) update((data) => SQ.setActor(data, lane.id, !lane.actor))
-      return true
+      return
     }
-    if (cmd === 'number') {
-      update((data) => (data.numbered ? { ...data, numbered: undefined } : { ...data, numbered: true }))
-      return true
-    }
-    if (cmd === 'note') {
-      addOrSave({ style: 'note', text: rest })
-      return true
-    }
+    if (cmd === 'number') return update((data) => SQ.setNumbered(data, !data.numbered))
+    if (cmd === 'note') return addOrSave({ style: 'note', text: rest })
     say(`No /${cmd}: try ${COMMANDS.map((x) => `/${x.name}`).join(', ')}`)
-    return true
   }
 
   /** Adds the next step (or saves this one) and moves on. */
@@ -290,11 +314,24 @@ function Composer({ item }: { item: Item }) {
         return next
       })
       draft.current = null
-      return setC({ row: next.steps.length, anchor: null, ...fresh(next), text: '' })
+      return setC({ step: null, anchor: null, ...fresh(next), text: '', prior: null })
     }
     const s = d.steps[row]
     update((data) => SQ.updateStep(data, s.id, (x) => ({ id: x.id, from, to, text, ...(style ? { style } : {}) })))
     setC(at(row + 1))
+  }
+
+  /** Done writing (Esc, or clicking away): a message typed but not yet added is added. */
+  const finish = () => {
+    if (isNew && !c.naming && c.anchor === null && command === null && c.text.trim() && to !== NEW && from) update((data) => SQ.addStep(data, { from, to, text: c.text.trim(), ...(c.style ? { style: c.style } : {}) }).data)
+    else leave()
+    editor.stopComposing()
+  }
+
+  const complete = (name: string) => {
+    setC({ ...c, text: `/${name} ` })
+    setPick(0)
+    input.current?.focus()
   }
 
   const enter = () => {
@@ -305,7 +342,7 @@ function Composer({ item }: { item: Item }) {
         id = made.id
         return made.data
       })
-      return setC({ ...(draft.current ?? c), anchor: null, to: id, naming: null, text: draft.current?.text ?? '' })
+      return setC({ ...(c.prior ?? c), to: id || lanes[lanes.length - 1] || '', naming: null, prior: null })
     }
     if (c.naming === 'rename') {
       const lane = d.lanes.find((l) => l.id === to)
@@ -313,9 +350,13 @@ function Composer({ item }: { item: Item }) {
         const used = d.steps.filter((s) => s.from === lane.id || s.to === lane.id).length
         if (!used || window.confirm(`Take ${lane.name || 'this lane'} out, with its ${used} message${used === 1 ? '' : 's'}?`)) update((data) => SQ.removeLane(data, lane.id))
       } else if (lane) update((data) => SQ.renameLane(data, lane.id, c.text.trim()))
-      return setC({ ...(draft.current ?? at(row)), naming: null })
+      return setC({ ...(c.prior ?? at(row)), naming: null, prior: null })
     }
+    if (range && command === null) return editor.setStatus('Type /loop, /alt, /opt… to put a box around these messages')
+    if (isNew && command === null && !c.text.trim()) return editor.setStatus('Type what’s sent first (or Esc when you’re done)')
     if (command !== null) {
+      // A command's name half typed: finish it first.
+      if (chosen && chosen.name !== command && !/\s/.test(c.text)) return complete(chosen.name)
       run(command, c.text.slice(1 + command.length).trim())
       // The message keeps its own words; the command is used up.
       return setC({ ...(isNew ? { ...c, text: draft.current?.text ?? '' } : at(row)), anchor: null })
@@ -323,51 +364,59 @@ function Composer({ item }: { item: Item }) {
     addOrSave()
   }
 
+  /** Whether the caret is at the start (for ←) or end (for →) of the words, with nothing selected. */
+  const atEdge = (k: string) => {
+    const el = input.current
+    if (!el || el.selectionStart !== el.selectionEnd) return false
+    return k === 'ArrowLeft' ? el.selectionStart === 0 : el.selectionEnd === el.value.length
+  }
+
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     const k = e.key
+    const ctrl = e.ctrlKey || e.metaKey
     let handled = true
     if (k === 'Enter') enter()
     else if (k === 'Escape') {
-      if (c.naming) setC({ ...(draft.current ?? at(row)), naming: null })
+      if (c.naming) setC({ ...(c.prior ?? at(row)), naming: null, prior: null })
       else if (c.anchor !== null) setC({ ...c, anchor: null })
       else if (command !== null) setC({ ...c, text: '' })
-      else {
-        leave()
-        editor.stopComposing()
-      }
+      else finish()
+    } else if ((k === 'ArrowUp' || k === 'ArrowDown') && shown.length > 1 && !e.altKey && !e.shiftKey) {
+      // Through the list of commands.
+      setPick((Math.min(pick, shown.length - 1) + (k === 'ArrowUp' ? shown.length - 1 : 1)) % shown.length)
     } else if (k === 'Tab' && command !== null) {
-      // Finishes the command's name.
-      const match = COMMANDS.find((x) => x.name.startsWith(command))
-      if (match) setC({ ...c, text: `/${match.name} ` })
+      if (chosen) complete(chosen.name)
     } else if (k === 'Tab' && !c.naming) {
       const i = SQ.STYLES.indexOf(c.style)
       const n = SQ.STYLES.length
       setC({ ...c, style: SQ.STYLES[(i + (e.shiftKey ? n - 1 : 1)) % n], styleChosen: true })
     } else if ((k === 'ArrowLeft' || k === 'ArrowRight') && e.altKey && !c.naming) {
       if (to !== NEW) update((data) => SQ.moveLane(data, to, k === 'ArrowLeft' ? -1 : 1))
-    } else if ((k === 'ArrowLeft' || k === 'ArrowRight') && (!c.text || e.shiftKey || c.naming === 'new') && c.naming !== 'rename' && command === null) {
-      // With words typed, plain arrows move the caret; Shift moves who sends it.
+    } else if ((k === 'ArrowLeft' || k === 'ArrowRight') && (!c.text || e.shiftKey || c.naming === 'new' || atEdge(k)) && c.naming !== 'rename' && command === null) {
+      // Within the words, plain arrows move the caret; at their start or end (or with Shift), they
+      // move the arrow: → past the end of the words points it one lane on.
       point(k === 'ArrowLeft' ? -1 : 1, e.shiftKey ? 'from' : 'to')
-    } else if ((k === 'ArrowUp' || k === 'ArrowDown') && e.altKey && !isNew) {
+    } else if ((k === 'ArrowUp' || k === 'ArrowDown') && e.altKey && !isNew && !c.naming) {
       const s = d.steps[row]
-      const by = k === 'ArrowUp' ? -1 : 1
       leave()
-      update((data) => SQ.moveStep(data, s.id, by))
-      setC({ ...c, row: Math.max(0, Math.min(d.steps.length - 1, row + by)), anchor: null })
+      update((data) => SQ.moveStep(data, s.id, k === 'ArrowUp' ? -1 : 1))
+      // The pen stays on the step that moved.
+      setC({ ...c, anchor: null })
     } else if ((k === 'ArrowUp' || k === 'ArrowDown') && !c.naming) go(row + (k === 'ArrowUp' ? -1 : 1), e.shiftKey)
-    else if (k === 'F2' && to !== NEW) {
+    else if (k === 'F2' && to !== NEW && !c.naming) {
       if (isNew) draft.current = c
-      setC({ ...c, naming: 'rename', text: d.lanes.find((l) => l.id === to)?.name ?? '' })
-    } else if (k === 'Backspace' && !c.text && !isNew && !c.naming) {
+      naming('rename', { text: d.lanes.find((l) => l.id === to)?.name ?? '' })
+    } else if (k === 'Backspace' && !c.text && !isNew && !c.naming && !e.repeat) {
+      // Holding Backspace empties a step's words; only a fresh press takes the empty step out.
       const s = d.steps[row]
       update((data) => SQ.removeStep(data, s.id))
       setC(at(Math.max(0, row - 1), SQ.removeStep(d, s.id)))
-    } else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z' && !c.text) {
+    } else if (ctrl && k.toLowerCase() === 'z' && !c.text) {
       if (e.shiftKey) editor.redo()
       else editor.undo()
     } else handled = false
-    // Everything typed here stays here (the board's own keys wait until Esc).
-    e.stopPropagation()
+    // What's typed here stays here, except shortcuts this box has no use for (Ctrl K, Ctrl S…).
+    if (handled || !ctrl) e.stopPropagation()
     if (handled) e.preventDefault()
   }
 
@@ -377,6 +426,7 @@ function Composer({ item }: { item: Item }) {
     e.preventDefault()
     f()
   }
+  const tap = (f: () => void) => (e: PointerEvent) => keep(e, f)
 
   // The arrow being written: on the step it changes, or below the last.
   const rowY = item.y + layout.rows[row]
@@ -386,16 +436,23 @@ function Composer({ item }: { item: Item }) {
   const left = item.x + SQ.laneX(Math.min(a, b))
   const span = Math.max(SQ.LANE_W * 1.1, Math.abs(b - a) * SQ.LANE_W - 16)
   const boxX = a === b && !note ? left + 54 : left + (Math.abs(b - a) * SQ.LANE_W - span) / 2
-  const boxY = note ? rowY - 14 : rowY - 30
+  const boxY = range ? item.y + layout.rows[range[1]] - 30 : note ? rowY - 14 : rowY - 30
+  const name = (id: string) => (id === NEW ? 'a new lane' : (d.lanes.find((l) => l.id === id)?.name ?? ''))
   const placeholder =
     c.naming === 'new'
-      ? 'Who is this? Type a name, Enter'
+      ? 'Name the new lane, then Enter'
       : c.naming === 'rename'
         ? 'New name (empty takes it out), Enter'
         : range
           ? `${range[1] - range[0] + 1} messages: /loop, /alt, /opt… to box them`
           : `${SQ.styleLabel(c.style)}: what’s ${note ? 'noted' : 'sent'}? Enter ${isNew ? 'adds it' : 'saves'} · / for boxes`
-  const shown = command !== null ? COMMANDS.filter((x) => x.name.startsWith(command)) : []
+  // Said aloud (for screen readers) whenever the arrow changes.
+  const spoken = c.naming ? placeholder : note ? `Note over ${name(from)}${from !== to ? ` to ${name(to)}` : ''}` : `${SQ.styleLabel(c.style)} from ${name(from)} to ${name(to)}${isNew ? '' : `, message ${row + 1}`}`
+  const listId = `seq-cmds-${item.id}`
+  const tools = touch && !c.naming
+  const listH = shown.length ? 8 + shown.length * 24 : 0
+  const extra = tools ? 44 : 0
+  const wide = Math.max(span, shown.length ? 440 : 0)
   return (
     <g className="seq-composer">
       {/* Rows to click (Shift: a run of them), under everything else. */}
@@ -437,31 +494,86 @@ function Composer({ item }: { item: Item }) {
         <rect x={item.x + SQ.laneX(b) - (SQ.LANE_W - 28) / 2} y={item.y + SQ.TOP - 4} width={SQ.LANE_W - 28} height={SQ.HEAD_H} rx={10} className="seq-rename" />
       )}
       {!c.naming && !range && <Step x={item.x} y={rowY} data={d} step={{ from, to, style: c.style, text: '' }} k={row} ghost />}
-      <foreignObject x={boxX} y={range ? item.y + layout.rows[range[1]] - 30 : boxY} width={span} height={28 + (shown.length ? 8 + shown.length * 22 : 0)}>
-        <input
+      <foreignObject x={boxX} y={boxY - listH} width={wide} height={28 + listH + extra}>
+        {shown.length > 0 && (
+          <div className="seq-commands no-canvas" role="listbox" id={listId} aria-label="Commands">
+            {shown.map((x) => (
+              <div
+                key={x.name}
+                id={`${listId}-${x.name}`}
+                role="option"
+                aria-selected={x === chosen}
+                className={x === chosen ? 'on' : ''}
+                onPointerDown={(e) => keep(e, () => complete(x.name))}
+              >
+                <b>/{x.name}</b> <span>{x.does}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="seq-input-row" style={{ width: span }}>
+          {!c.naming && !range && (
+            <span className={`seq-kind${c.style ? ` ${c.style}` : ''}`} aria-hidden="true" title="Tab changes it">
+              {SQ.styleLabel(c.style)}
+            </span>
+          )}
+          <input
           ref={input}
           className="seq-input no-canvas"
           value={c.text}
           aria-label={placeholder}
           placeholder={placeholder}
           spellCheck={false}
-          onChange={(e) => setC({ ...c, text: e.target.value })}
+          role="combobox"
+          aria-expanded={shown.length > 0}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={chosen ? `${listId}-${chosen.name}` : undefined}
+          onChange={(e) => {
+            setC({ ...c, text: e.target.value })
+            setPick(0)
+          }}
           onKeyDown={onKey}
           onPointerDown={(e) => e.stopPropagation()}
           onBlur={(e) => {
             // Clicking elsewhere puts the pen down (what was typed in an earlier step is kept).
             if (e.relatedTarget && (e.currentTarget.closest('.sequence')?.contains(e.relatedTarget as Node) ?? false)) return
-            leave()
-            editor.stopComposing()
+            finish()
           }}
-        />
-        {shown.length > 0 && (
-          <div className="seq-commands no-canvas" role="listbox" aria-label="Commands">
-            {shown.map((x, k) => (
-              <div key={x.name} role="option" aria-selected={k === 0} className={k === 0 ? 'on' : ''}>
-                <b>/{x.name}</b> <span>{x.does}</span>
-              </div>
-            ))}
+          />
+        </div>
+        <div className="sr-only" aria-live="polite">
+          {spoken}
+        </div>
+        {tools && (
+          // Without a keyboard: the same moves as buttons.
+          <div className="seq-tools no-canvas" role="toolbar" aria-label="Message">
+            <button type="button" onPointerDown={tap(() => point(-1, 'from'))} aria-label="Send from the lane to the left">
+              ◂ From
+            </button>
+            <button type="button" onPointerDown={tap(() => point(1, 'from'))} aria-label="Send from the lane to the right">
+              From ▸
+            </button>
+            <button type="button" onPointerDown={tap(() => point(-1, 'to'))} aria-label="Send to the lane to the left">
+              ◂ To
+            </button>
+            <button type="button" onPointerDown={tap(() => point(1, 'to'))} aria-label="Send to the lane to the right (past the last: a new lane)">
+              To ▸
+            </button>
+            <button type="button" onPointerDown={tap(() => setC({ ...c, style: SQ.STYLES[(SQ.STYLES.indexOf(c.style) + 1) % SQ.STYLES.length], styleChosen: true }))}>
+              {SQ.styleLabel(c.style)}
+            </button>
+            {!isNew && (
+              <button type="button" onPointerDown={tap(() => go(row + 1, true))} aria-label="Take in the next message too (for a box)">
+                + Next
+              </button>
+            )}
+            <button type="button" onPointerDown={tap(() => setC({ ...c, text: '/' }))} aria-label="Box, note and other commands">
+              /
+            </button>
+            <button type="button" onPointerDown={tap(() => enter())}>
+              {isNew ? 'Add' : 'Save'}
+            </button>
           </div>
         )}
       </foreignObject>
@@ -470,7 +582,7 @@ function Composer({ item }: { item: Item }) {
 }
 
 /** The next step's arrow, as suggested from what came before. */
-function fresh(d: SequenceData): Omit<Cursor, 'row' | 'text' | 'anchor'> {
+function fresh(d: SequenceData): Omit<Cursor, 'step' | 'text' | 'anchor' | 'prior'> {
   const n = SQ.nextStep(d)
   return { from: n.from, to: n.to, style: n.style, styleChosen: false, naming: null }
 }
