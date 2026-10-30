@@ -266,6 +266,9 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - The next message is suggested: after a call, its answer comes back (dashed). **←** / **→** choose who gets it, **Shift ←** / **→** who sends it, **Tab** switches between a call, a reply and a message that doesn't wait.
 - Press **→** past the last lane for a new one: type its name, **Enter**. **F2** renames the lane the arrow points at, **Alt ←** / **→** moves it.
 - **↑** / **↓** go back to earlier messages to change them; **Alt ↑** / **↓** moves one; **Backspace** on an empty one takes it out. **Esc** when you're done.
+- **Tab** also makes a **note** over the lanes the arrow spans. Bars on the lines show who is busy answering a call; they come by themselves.
+- Boxes: **Shift ↑** / **↓** picks several messages, then type **/loop**, **/alt**, **/opt**, **/par**, **/critical** or **/break**, with words after it for its label, and **Enter**. **/else** divides an alt box above the message you're on; **/unbox** takes a box away. Type **/** to see them all.
+- Click a lane to send the message there (**Shift**-click: from there), or a message to go to it.
 - Select a diagram and press **Enter** or just start typing to carry on. **Numbered** on its toolbar numbers the messages; **Copy Mermaid** copies it for docs elsewhere, and pasting a Mermaid sequence diagram makes one.`,
         },
         {

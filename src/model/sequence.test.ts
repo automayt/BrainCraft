@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addLane, addStep, cleanSequence, looksLikeSequence, MAX_STEPS, moveLane, moveStep, newSequence, nextStep, parseSequence, removeLane, sequenceSize, sequenceText, toMermaidSequence } from './sequence'
+import { activations, addBox, boxesAround, boxOver, removeBox, removeStep, sequenceLayout, setDivider, updateStep, addLane, addStep, cleanSequence, looksLikeSequence, MAX_STEPS, moveLane, moveStep, newSequence, nextStep, parseSequence, removeLane, sequenceSize, sequenceText, toMermaidSequence } from './sequence'
 import { cleanItem } from './sanitize'
 import { addItem, emptyBoard, nearestFree, newItem } from './board'
 import { intersects } from './geom'
@@ -30,7 +30,7 @@ describe('sequence diagrams', () => {
 
   it('grow a row per message and a lane’s width per lane', () => {
     const d = login()
-    expect(sequenceSize(d)).toEqual({ w: 600, h: 40 + 48 + 4 * 56 + 24 })
+    expect(sequenceSize(d)).toEqual({ w: 600, h: 40 + 48 + 8 + 4 * 56 + 24 })
     expect(sequenceSize(newSequence(['Only'])).w).toBe(400)
   })
 
@@ -77,7 +77,8 @@ sequenceDiagram
     expect(looksLikeSequence(text)).toBe(true)
     const r = parseSequence(text)!
     expect(r.title).toBe('Logging in')
-    expect(r.skipped).toBe(3)
+    expect(r.skipped).toBe(0)
+    expect(r.data.boxes).toEqual([{ id: 'b1', kind: 'loop', label: 'every minute', first: 's5', last: 's5' }])
     expect(r.data.numbered).toBe(true)
     expect(r.data.lanes.map((l) => [l.name, !!l.actor])).toEqual([
       ['Ann Smith', true],
@@ -88,6 +89,7 @@ sequenceDiagram
       ['Log in', 'call'],
       ['Check password', 'call'],
       ['OK', 'reply'],
+      ['cached', 'note'],
       ['Ping', 'async'],
       ['Welcome!', 'reply'],
     ])
@@ -124,5 +126,96 @@ sequenceDiagram
     let big = newSequence()
     for (let k = 0; k < MAX_STEPS + 5; k++) big = addStep(big, { from: 'l1', to: 'l2', text: `${k}` }).data
     expect(big.steps).toHaveLength(MAX_STEPS)
+  })
+
+  it('keep boxes around the same messages as messages come and go', () => {
+    let d = login()
+    d = addStep(d, { from: d.lanes[1].id, to: d.lanes[0].id, text: 'Welcome', style: 'reply' }).data
+    // A loop around "Find user" and "User".
+    const made = addBox(d, 'loop', 'retry', 2, 1)
+    d = made.data
+    expect(boxOver(d, 1, 2)?.id).toBe(made.id)
+    expect(boxesAround(d, 1).map((b) => b.kind)).toEqual(['loop'])
+    // Boxes nest, never cross.
+    expect(addBox(d, 'opt', '', 2, 3).data).toBe(d)
+    expect(addBox(d, 'opt', '', 1, 1).data.boxes).toHaveLength(2)
+    // A step put inside the run joins it; one put before it pushes it down.
+    d = addStep(d, { from: d.lanes[1].id, to: d.lanes[2].id, text: 'Again' }, 2).data
+    expect(boxOver(d, 1, 3)?.id).toBe(made.id)
+    d = addStep(d, { from: d.lanes[0].id, to: d.lanes[1].id, text: 'Hello' }, 0).data
+    expect(boxOver(d, 2, 4)?.id).toBe(made.id)
+    // Its first message going takes the next one as its first; all of them going takes the box.
+    d = removeStep(d, d.steps[2].id)
+    expect(boxOver(d, 2, 3)?.id).toBe(made.id)
+    d = removeStep(d, d.steps[2].id)
+    d = removeStep(d, d.steps[2].id)
+    expect(d.boxes).toBeUndefined()
+  })
+
+  it('divide alt boxes, number messages but not notes, and show who is busy', () => {
+    let d = login()
+    const [c, s] = d.lanes.map((l) => l.id)
+    d = addStep(d, { from: s, to: c, text: 'Welcome', style: 'reply' }).data
+    d = addStep(d, { from: c, to: s, text: 'remember me', style: 'note' }, 1).data
+    const alt = addBox(d, 'alt', 'found', 2, 4)
+    d = setDivider(alt.data, alt.id, alt.data.steps[4].id, 'not found')
+    const layout = sequenceLayout(d)
+    expect(layout.elses).toEqual([{ box: alt.id, y: expect.any(Number), label: 'not found' }])
+    // The box's tag and divider take room: rows inside it are further apart.
+    expect(layout.rows[4] - layout.rows[3]).toBeGreaterThan(layout.rows[1] - layout.rows[0])
+    expect(layout.boxes.get(alt.id)!.top).toBeLessThan(layout.rows[2])
+    // Server is busy from the login call to its answer; Database from its query to its answer.
+    expect(activations(d)).toEqual([
+      { lane: d.lanes[2].id, from: 2, to: 3, depth: 0 },
+      { lane: s, from: 0, to: 4, depth: 0 },
+    ])
+    // A divider has to be inside its box, after its first message.
+    expect(setDivider(d, alt.id, d.steps[0].id, 'x')).toBe(d)
+    expect(removeBox(d, alt.id).boxes).toBeUndefined()
+  })
+
+  it('bring notes, loops, alternatives and dividers in from Mermaid, and back out', () => {
+    const text = `sequenceDiagram
+  participant C as Client
+  participant S as Server
+  C->>S: Log in
+  activate S
+  Note over C,S: over TLS
+  loop until it works
+    S->>S: Retry
+    alt found
+      S-->>C: Welcome
+    else not found
+      S-->>C: Who are you?
+    end
+  end
+  rect rgb(200, 200, 255)
+    C-)S: Bye
+  end
+  deactivate S`
+    const r = parseSequence(text)!
+    expect(r.skipped).toBe(0)
+    expect(r.data.steps.map((x) => [x.text, x.style ?? 'call'])).toEqual([
+      ['Log in', 'call'],
+      ['over TLS', 'note'],
+      ['Retry', 'call'],
+      ['Welcome', 'reply'],
+      ['Who are you?', 'reply'],
+      ['Bye', 'async'],
+    ])
+    expect(r.data.boxes!.map((b) => [b.kind, b.label, b.first, b.last, b.elses?.map((e) => e.label)])).toEqual([
+      ['alt', 'found', 's4', 's5', ['not found']],
+      ['loop', 'until it works', 's3', 's5', undefined],
+    ])
+    const out = toMermaidSequence(r.data)
+    expect(out).toContain('Note over P1,P2: over TLS')
+    expect(out).toContain('    else not found')
+    expect(parseSequence(out)!.data).toEqual(r.data)
+    // Checked when it arrives: a box with an unknown kind or step goes; a divider outside its box goes.
+    const odd = cleanSequence({ ...r.data, boxes: [...r.data.boxes!, { id: 'b9', kind: 'weird', label: '', first: 's1', last: 's2' }, { id: 'b8', kind: 'opt', label: '', first: 's2', last: 'nope' }] })!
+    expect(odd.boxes).toHaveLength(2)
+    const out2 = cleanSequence({ ...r.data, boxes: [{ ...r.data.boxes![0], elses: [{ before: 's1', label: 'outside' }] }] })!
+    expect(out2.boxes![0].elses).toBeUndefined()
+    expect(updateStep(r.data, 's2', (x) => ({ ...x, text: 'TLS 1.3' })).steps[1].text).toBe('TLS 1.3')
   })
 })

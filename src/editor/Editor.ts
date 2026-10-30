@@ -3636,7 +3636,7 @@ export class Editor {
 
   /** A one-line reminder of what the keyboard can do right now. */
   get hint(): string | null {
-    if (this.composing) return '← → to  ·  Shift ← → from  ·  Tab call / reply / message  ·  Enter add  ·  ↑ ↓ earlier  ·  F2 rename lane  ·  Esc done'
+    if (this.composing) return '← → to  ·  Shift ← → from  ·  Tab call / reply / message / note  ·  Enter add  ·  ↑ ↓ earlier (Shift: several)  ·  / boxes  ·  Esc done'
     const e = this.editing
     if (e) {
       if (e.connector) return 'Type a label  ·  Esc done'

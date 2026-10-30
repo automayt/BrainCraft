@@ -186,11 +186,22 @@ Who sends what to whom, in order, built from the keyboard:
   lane renamed to nothing is taken out with its messages.
 - **↑ / ↓** go back to earlier messages to change them, **Alt ↑ / ↓** moves
   one, and **Backspace** on an empty one takes it out. **Esc** when done.
+- **Tab** also makes a **note** over the lanes the arrow spans. Bars on the
+  lifelines show who is busy answering a call, worked out from calls and
+  their replies.
+- **Boxes:** **Shift ↑ / ↓** picks several messages, then type **/loop**,
+  **/alt**, **/opt**, **/par**, **/critical** or **/break** (words after it
+  label it) and press Enter. **/else** adds a divider in an alt box above the
+  message you're on; **/unbox** and **/unelse** take them away. Typing **/**
+  lists every command, and Tab finishes one. Boxes nest but never cross.
+- The mouse works too while writing: click a lane to send there (Shift-click
+  to send from it), or click a message to go to it.
 - Select a diagram and press **Enter**, double-click it, or just start
   typing to carry on. Its toolbar has **Numbered** and **Copy Mermaid**.
 - Paste a Mermaid sequence diagram (participants, actors, `->>` calls,
-  `-->>` replies, `-)` messages that don't wait, `title`, `autonumber`) to
-  make one; notes and loops are left out. They're searchable, export to
+  `-->>` replies, `-)` messages that don't wait, notes, loop / alt / opt /
+  par / critical / break boxes with their else lines, `title`,
+  `autonumber`) to make one. They're searchable, export to
   Markdown as Mermaid, show in wiki pages, can be edited there as Mermaid,
   take the hand-drawn look, and assistants can make and change them
   (`createSequence`, `setSequence`).

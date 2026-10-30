@@ -294,8 +294,25 @@ export interface SequenceStep {
   from: string
   to: string
   text: string
-  /** Left out: a call (solid line, filled arrowhead). A reply is dashed; async doesn't wait (open arrowhead). */
-  style?: 'reply' | 'async'
+  /**
+   * Left out: a call (solid line, filled arrowhead). A reply is dashed; async doesn't wait (open
+   * arrowhead); a note is words in a box over the lanes from `from` to `to`.
+   */
+  style?: 'reply' | 'async' | 'note'
+}
+
+/** What a box around messages means: repeated, alternatives, optional, in parallel… */
+export type SequenceBoxKind = 'loop' | 'alt' | 'opt' | 'par' | 'critical' | 'break'
+
+/** A box around the messages from `first` to `last` (step ids), with dividers for alternatives. */
+export interface SequenceBox {
+  id: string
+  kind: SequenceBoxKind
+  label: string
+  first: string
+  last: string
+  /** Dividers (else / and / option) above these steps, inside the box. */
+  elses?: { before: string; label: string }[]
 }
 
 export interface SequenceData {
@@ -303,6 +320,7 @@ export interface SequenceData {
   steps: SequenceStep[]
   /** Steps numbered 1, 2, 3… */
   numbered?: true
+  boxes?: SequenceBox[]
 }
 
 export interface TimelineData {

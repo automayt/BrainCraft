@@ -117,7 +117,8 @@ export function embedMarkdown(b: Board, item: Item | undefined): string {
       const d = item.sequence
       if (!d) return ''
       const name = new Map(d.lanes.map((l) => [l.id, oneLine(l.name)]))
-      return d.steps.map((s, k) => `${k + 1}. ${name.get(s.from)} → ${name.get(s.to)}${s.style === 'reply' ? ' (reply)' : ''}: ${oneLine(s.text)}`).join('\n')
+      let n = 0
+      return d.steps.map((s) => (s.style === 'note' ? `> ${oneLine(s.text)}` : `${++n}. ${name.get(s.from)} → ${name.get(s.to)}${s.style === 'reply' ? ' (reply)' : ''}: ${oneLine(s.text)}`)).join('\n')
     }
     case 'flow': {
       const { steps, next } = flowSteps(b, item)
