@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { itemsWithin } from '../model/board'
 import { HEAVY_BOARD } from '../model/subBoard'
 import { useEditor } from './useEditor'
+import { useUi } from './uiContext'
 import { useWorkspace } from './useWorkspace'
 
 const DISMISSED = 'braincraft-heavy-dismissed:'
@@ -15,12 +16,13 @@ function dismissed(board: string | null): boolean {
 }
 
 /**
- * On a board with thousands of objects: it may feel slow, so suggest moving parts of it to boards
- * of their own (a frame at a time).
+ * On a board with thousands of objects: it may feel slow, so suggest dividing it into child boards,
+ * or show the busiest frame to move on its own.
  */
 export function HeavyBoard() {
   const editor = useEditor()
   const ws = useWorkspace()
+  const ui = useUi()
   const [hidden, setHidden] = useState(() => dismissed(ws.boardId))
   const board = editor.board
   const count = board.items.length
@@ -44,8 +46,11 @@ export function HeavyBoard() {
     <div className="viewer-banner heavy-banner island no-canvas" role="status">
       <span>
         <strong>{count.toLocaleString()} objects</strong> · a board this busy can feel slow.{' '}
-        {hasFrames ? 'Move parts to boards of their own: right-click a frame → Move to its own board.' : 'Put related parts in frames, then move a frame to a board of its own (right-click it).'}
+        Divide it into child boards, by frame, by kind of object or by topic.
       </span>
+      <button className="primary" onClick={ui.openDivide}>
+        Divide it…
+      </button>
       {hasFrames && (
         <button
           onClick={() => {

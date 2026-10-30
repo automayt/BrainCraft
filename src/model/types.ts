@@ -453,6 +453,14 @@ export interface Board {
   sketch?: true
   /** Time people spent, and timers running now (see `timeTracking.ts`). */
   time?: TimeEntry[]
+  /** A child board: the board it was divided from (see `divide.ts`). Set when it's made. */
+  parent?: BoardParent
+}
+
+/** The board a child board came from: the key links to it use, and its title then. */
+export interface BoardParent {
+  key: string
+  title: string
 }
 
 /** What time was spent on: an object, a database record, a wiki page (or, left out, the board). */

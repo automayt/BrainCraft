@@ -32,6 +32,7 @@ import { NotesPanel } from './NotesPanel'
 import { TimesheetDialog } from './TimeTracking'
 import { OutlinePanel } from './OutlinePanel'
 import { CheckDialog } from './CheckDialog'
+import { DivideDialog } from './DivideDialog'
 import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
@@ -50,7 +51,7 @@ const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 /** Excalidraw, loaded only when a drawing is opened. */
 const DrawingEditor = lazy(() => import('./excalidraw/DrawingEditor'))
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | 'check' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | 'check' | 'divide' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -111,6 +112,7 @@ function App({ ws }: { ws: Workspace }) {
     saveFile: (saveAs) => void ws.saveFile(saveAs),
     newBoard: () => void ws.newBoard(),
     moveFrameToBoard: (frame) => void ws.moveFrameToBoard(frame),
+    openDivide: () => setDialog('divide'),
     openBoards: () => {
       void ws.loadServerBoards()
       setDialog('boards')
@@ -501,6 +503,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'ai' && <AiDialog bridge={bridge} onClose={close} />}
           {dialog === 'export' && <ExportDialog onClose={close} />}
           {dialog === 'check' && <CheckDialog onClose={close} />}
+          {dialog === 'divide' && <DivideDialog onClose={close} />}
           <input
             ref={fileInput}
             type="file"

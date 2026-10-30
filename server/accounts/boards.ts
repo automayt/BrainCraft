@@ -200,7 +200,7 @@ export class AccountBoards {
         const level = this.level(me, e)
         if (!level) return []
         const owner = e.owner ? this.store.user(e.owner) : undefined
-        return [{ id, title: e.title, ...(e.kind ? { kind: e.kind } : {}), updated: e.updated, level, owner: owner ? { id: owner.id, name: owner.name } : null }]
+        return [{ id, title: e.title, ...(e.kind ? { kind: e.kind } : {}), ...(e.parent ? { parent: e.parent } : {}), updated: e.updated, level, owner: owner ? { id: owner.id, name: owner.name } : null }]
       })
       return json(res, 200, { boards: boards.sort((a, b) => b.updated - a.updated) }), true
     }
@@ -482,6 +482,7 @@ const boardTarget = (d: RoomData) => ({ kind: 'board' as const, id: d.id, name: 
 const entryOf = (d: RoomData): BoardEntry => ({
   title: d.board.title,
   ...(d.board.kind === 'wiki' ? { kind: 'wiki' as const } : {}),
+  ...(d.board.parent ? { parent: d.board.parent.key } : {}),
   updated: d.updated,
   ...(d.owner ? { owner: d.owner } : {}),
   ...(d.access?.length ? { access: d.access } : {}),

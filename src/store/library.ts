@@ -38,6 +38,8 @@ export interface BoardMeta {
   kind?: 'wiki'
   /** A wiki's pages (not their words), so lists and link pickers needn't load it. */
   outline?: PageOutline[]
+  /** A child board: the link key of the board it was divided from. */
+  parent?: string
 }
 
 /** A page as other boards see it: enough to list it and link to it. */
@@ -158,6 +160,7 @@ export class Library {
       updated: this.now(),
       items: isWiki(board) ? pageOrder(board).length : board.items.length,
       ...thumbnail(board),
+      ...(board.parent ? { parent: board.parent.key } : {}),
       ...(isWiki(board)
         ? {
             kind: 'wiki' as const,

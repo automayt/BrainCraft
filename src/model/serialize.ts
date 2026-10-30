@@ -3,7 +3,7 @@ import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
 import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanRev, cleanSnap } from './sanitize'
 import { MAX_REVS } from './revisions'
-import { type Board, type BoardFile, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type PageRev, type Snap } from './types'
+import { type Board, type BoardFile, type BoardParent, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type PageRev, type Snap } from './types'
 import { MAX_PAGES, MAX_SNAPS } from './wiki'
 import { MAX_FILES, cleanFile } from './files'
 import { cleanTime } from './timeTracking'
@@ -58,6 +58,7 @@ export function fromJson(json: string): Board {
   )
   // Time: valid entries, the first of any repeated id.
   const time = cleanTime(raw.time)
+  const parent = wiki ? undefined : cleanParent(raw.parent)
   const snapKeys = new Set<string>()
   const snaps = (wiki && Array.isArray(raw.snaps) ? raw.snaps.slice(0, MAX_SNAPS).map(cleanSnap) : []).filter(
     (s): s is Snap => !!s && !snapKeys.has(s.key) && !!snapKeys.add(s.key),
@@ -79,7 +80,16 @@ export function fromJson(json: string): Board {
     ...(files.length ? { files } : {}),
     ...(time.length ? { time } : {}),
     ...(raw.sketch === true ? { sketch: true as const } : {}),
+    ...(parent ? { parent } : {}),
   }
+}
+
+/** A child board's parent, checked: a link key and a title. */
+function cleanParent(v: unknown): BoardParent | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const { key, title } = v as Record<string, unknown>
+  if (typeof key !== 'string' || !/^[\w.-]{1,100}$/.test(key)) return undefined
+  return { key, title: typeof title === 'string' ? title.slice(0, 200) : '' }
 }
 
 const CLIP_TAG = 'braincraft/clip'

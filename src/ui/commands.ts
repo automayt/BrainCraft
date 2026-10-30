@@ -99,6 +99,9 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'share', label: 'Share…', group: 'Board', aliases: 'link url send view publish live collaborate together invite team realtime', run: ui.openShare },
     { id: 'assistant', label: 'Ask AI about this board', group: 'Board', keys: 'Ctrl J', aliases: 'assistant claude vllm codex model chat ai summarise cluster', run: ui.toggleAssistant },
     ...(editor.single?.kind === 'mind' ? [{ id: 'outline', label: 'Outline of this mind map', group: 'Board', aliases: 'outline list text indent markdown export edit tree', run: () => editor.openOutline(editor.single!.id) }] : []),
+    ...(!isWiki(editor.board) && !editor.readOnly
+      ? [{ id: 'divide', label: 'Divide into child boards…', group: 'Board', aliases: 'split break up crowded busy slow heavy sub-board child boards topic kind frame tidy organise organize ai', run: ui.openDivide }]
+      : []),
     { id: 'check', label: 'Check board…', group: 'Board', aliases: 'tidy clean lint problems overlap empty stray messy fix tidy up', run: ui.openCheck },
     { id: 'flowstate', label: 'Flowstate: build the board by talking', group: 'Board', keys: 'Ctrl Shift F', aliases: 'voice talk speak dictate microphone live immersive focus full screen', run: () => ui.flow(true) },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },

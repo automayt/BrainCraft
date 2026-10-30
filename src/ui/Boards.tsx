@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LEVEL_LABEL } from '../store/account'
+import { nested } from '../store/nest'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
@@ -78,10 +79,21 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
   const [query, setQuery] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  // Child boards come right after the board they came from.
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return q ? ws.boards.filter((b) => b.title.toLowerCase().includes(q)) : ws.boards
+    return nested(
+      q ? ws.boards.filter((b) => b.title.toLowerCase().includes(q)) : ws.boards,
+      (b) => [b.id, ...(b.live ? [b.live.id] : [])],
+      (b) => b.parent,
+    )
   }, [ws.boards, query])
+  const titleOf = (key: string | undefined) => (key ? (ws.findBoard(key)?.title ?? ws.serverBoards.find((b) => b.id === key)?.title) : undefined)
+  const serverShown = nested(
+    ws.serverBoards.filter((b) => !query.trim() || b.title.toLowerCase().includes(query.trim().toLowerCase())),
+    (b) => [b.id],
+    (b) => b.parent,
+  )
 
   const open = (id: string) => {
     onClose()
@@ -103,7 +115,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && shown[0] && open(shown[0].id)}
+          onKeyDown={(e) => e.key === 'Enter' && shown[0] && open(shown[0].item.id)}
         />
         <button onClick={() => (onClose(), onOpenFile())}>Open file…</button>
         <button className="icon-close" aria-label="Close" onClick={onClose}>
@@ -118,25 +130,24 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
               On this server <small>boards and wikis you can open, yours and shared with you</small>
             </h3>
             <ul className="access-list">
-              {ws.serverBoards
-                .filter((b) => !query.trim() || b.title.toLowerCase().includes(query.trim().toLowerCase()))
-                .map((b) => (
-                  <li key={b.id}>
-                    <button
-                      className="link server-board"
-                      onClick={() => {
-                        onClose()
-                        void ws.openServerBoard(b)
-                      }}
-                    >
-                      {b.kind === 'wiki' ? '📘 ' : ''}
-                      {b.title || 'Untitled'}
-                    </button>
-                    <small className="muted">
-                      {b.owner ? (b.owner.id === ws.account?.user?.id ? 'yours' : b.owner.name) : 'no owner'} · {LEVEL_LABEL[b.level].toLowerCase()} · {timeAgo(b.updated)}
-                    </small>
-                  </li>
-                ))}
+              {serverShown.map(({ item: b, depth }) => (
+                <li key={b.id} className={depth ? 'child-board' : undefined} style={depth ? { paddingLeft: Math.min(depth, 4) * 18 } : undefined}>
+                  <button
+                    className="link server-board"
+                    onClick={() => {
+                      onClose()
+                      void ws.openServerBoard(b)
+                    }}
+                  >
+                    {depth ? '↳ ' : ''}
+                    {b.kind === 'wiki' ? '📘 ' : ''}
+                    {b.title || 'Untitled'}
+                  </button>
+                  <small className="muted">
+                    {b.owner ? (b.owner.id === ws.account?.user?.id ? 'yours' : b.owner.name) : 'no owner'} · {LEVEL_LABEL[b.level].toLowerCase()} · {timeAgo(b.updated)}
+                  </small>
+                </li>
+              ))}
               {!ws.serverBoards.length && <li className="muted">Nothing here yet. New boards you make go to the server.</li>}
             </ul>
             {ws.account.backups && <RecentlyDeleted />}
@@ -145,10 +156,11 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           </section>
         )}
         <div className="board-grid">
-          {shown.map((b) => (
+          {shown.map(({ item: b, depth }) => (
             <BoardCard
               key={b.id}
               meta={b}
+              parentTitle={depth ? titleOf(b.parent) : undefined}
               current={b.id === ws.boardId}
               renaming={renaming === b.id}
               confirming={confirming === b.id}
@@ -272,6 +284,8 @@ function TemplateThumb({ id }: { id: string }) {
 
 function BoardCard(p: {
   meta: BoardMeta
+  /** A child board, shown after the board it came from. */
+  parentTitle?: string
   current: boolean
   renaming: boolean
   confirming: boolean
@@ -285,7 +299,7 @@ function BoardCard(p: {
   const { meta } = p
   return (
     <div
-      className={`board-card${p.current ? ' current' : ''}`}
+      className={`board-card${p.current ? ' current' : ''}${p.parentTitle !== undefined ? ' child-board' : ''}`}
       // The whole card opens the board (its buttons do their own thing).
       onClick={(e) => !p.renaming && !(e.target as Element).closest('button, input') && p.onOpen()}
     >
@@ -313,6 +327,7 @@ function BoardCard(p: {
             {meta.title}
           </button>
         )}
+        {p.parentTitle !== undefined && <small className="board-parent">↳ in {p.parentTitle || 'the board above'}</small>}
         <small>
           {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} {meta.kind === 'wiki' ? 'page' : 'object'}
           {meta.items === 1 ? '' : 's'}

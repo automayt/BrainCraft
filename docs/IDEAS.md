@@ -434,6 +434,9 @@ Admin, next:
   something near them moves, the minimap is painted rather than drawn shape
   by shape, and frames can move to boards of their own (suggested past
   4,000 objects).
+- [x] **Child boards, and dividing a crowded board:** by frame, by kind of
+  object, or by topic with the assistant; child boards show their parent by
+  the title and nest under it in Your boards.
 - [x] **Text that fits its shape:** sized to flowchart shapes, rectangles and
   ellipses by default, and never spilling out of any shape or sticky note.
 - [x] **Fit to content** for shapes, sticky notes, frames, Kanban boards,

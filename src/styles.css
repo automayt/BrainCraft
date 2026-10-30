@@ -450,6 +450,38 @@ button.on,
   padding: 2px 4px;
 }
 
+.parent-crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 150px;
+  padding: 6px 4px 6px 8px;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.parent-crumb:hover,
+.parent-crumb:focus-visible {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.parent-crumb-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .parent-crumb-title {
+    display: none;
+  }
+}
+
 .board-title {
   width: 210px;
   padding: 6px 8px;
@@ -3050,6 +3082,17 @@ button.on,
 
 .board-info .board-name:hover {
   color: var(--accent);
+}
+
+.board-card.child-board {
+  border-left: 3px solid var(--accent-soft);
+}
+
+.board-parent {
+  color: var(--faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .board-card {
@@ -10811,6 +10854,101 @@ button.on,
   display: flex;
   justify-content: flex-end;
   padding: 12px 20px 18px;
+}
+
+/* ----- dividing a board into child boards ----- */
+
+.modal.divide-board {
+  width: min(620px, calc(100% - 32px));
+}
+
+.divide-body {
+  max-height: min(64vh, 600px);
+  padding: 0 20px 4px;
+  overflow: auto;
+}
+
+.divide-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.divide-mode {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.divide-mode.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.divide-mode.disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.divide-mode span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.divide-mode small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.divide-list {
+  margin: 8px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.divide-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.divide-list li.off .divide-what {
+  opacity: 0.55;
+}
+
+.divide-list input[type='checkbox'] {
+  margin-top: 8px;
+}
+
+.divide-what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.divide-what input {
+  padding: 5px 8px;
+  font-weight: 600;
+}
+
+.divide-what small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.divide-foot {
+  gap: 8px;
 }
 
 /* ----- a database record as a page ----- */

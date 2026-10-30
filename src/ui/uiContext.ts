@@ -29,6 +29,8 @@ export interface Ui {
   newBoard: () => void
   /** Moves a frame and what's in it to a board of its own (a card here opens it). */
   moveFrameToBoard: (frame: number) => void
+  /** Divide the open board into child boards (by frame, kind or topic). */
+  openDivide: () => void
   openBoards: () => void
   openVersions: () => void
   openShare: () => void

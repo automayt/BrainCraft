@@ -208,6 +208,7 @@ export function TopLeft() {
         <BoardsIcon />
         <Tip label="Your boards" keys="Ctrl O" />
       </button>
+      {editor.board.parent && <ParentCrumb />}
       <BoardIcon />
       <input
         className="board-title"
@@ -248,6 +249,7 @@ export function TopLeft() {
                     <hr />
                     {/* Everything on the board, and everything added to it, drawn by hand. */}
                     <MenuItem label="Hand-drawn board" checked={!!editor.board.sketch} onClick={run(() => editor.setBoardSketch(!editor.board.sketch))} />
+                    <MenuItem label="Divide into child boards…" onClick={run(ui.openDivide)} />
                   </>
                 )}
                 <hr />
@@ -263,6 +265,21 @@ export function TopLeft() {
         )}
       </div>
     </div>
+  )
+}
+
+/** On a child board: the board it was divided from, to go back up. */
+function ParentCrumb() {
+  const editor = useEditor()
+  const ws = useWorkspace()
+  const parent = editor.board.parent!
+  const title = ws.findBoard(parent.key)?.title ?? (parent.title || 'The board it came from')
+  return (
+    <button className="parent-crumb has-tip" aria-label={`Up to ${title}`} onMouseDown={keepFocus} onClick={() => void ws.openLink({ board: parent.key })}>
+      <span className="parent-crumb-title">{title}</span>
+      <span aria-hidden="true">›</span>
+      <Tip label={`Up to ${title}, the board this came from`} />
+    </button>
   )
 }
 

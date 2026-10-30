@@ -727,12 +727,23 @@ shares live exactly like a board.
   (Enter), a rectangle, ellipse, sticky note or text, or a decision diamond
   or start/end oval, linked from it.
 - Frames carry their contents when you move them.
-- **Boards inside boards:** right-click a frame → **Move to its own board**.
-  The frame and everything in it go to a new board (on the server when
-  you're signed in to one), a card in its place opens it, lines from
-  outside end at that card, and the new board has a card leading back.
-  Boards stay smooth to about 5,000 objects; past 4,000 a banner suggests
-  splitting one up this way.
+- **Child boards:** right-click a frame → **Move to its own board**, or
+  divide a whole board (below). The new board goes on the server when you're
+  signed in to one; a card in its place opens it, lines from outside end at
+  that card, and the child board has a card leading back. A child board shows
+  the board it came from beside its title (click it to go up), and Your
+  boards lists child boards under their parent.
+- **Divide into child boards** (☰ menu or Ctrl+K) splits a crowded board
+  three ways: **by frame** (each frame gets a board), **by kind of object**
+  (flowcharts together, mind maps together, notes together, tables and
+  plans together…), or **by topic, with AI** (the assistant reads the words
+  and suggests topics). Things that belong together move together: a frame
+  with what's in it, a flowchart with its lines, a whole mind map, a vote
+  with its options. You see each child board's name and size first, and can
+  rename or leave any out; each one's contents are laid out in neat rows.
+  Undo brings the objects back (the new boards stay in Your boards).
+  Boards stay smooth to about 5,000 objects; past 4,000 a banner offers to
+  divide one.
 - **Magnets:** drag a shape near another and it snaps one step away and
   connects. Sticky notes snap into neat rows and columns without lines. Hold
   **Alt** to place freely.

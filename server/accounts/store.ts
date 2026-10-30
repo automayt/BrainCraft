@@ -59,6 +59,8 @@ export interface BoardEntry extends BoardAccess {
   title: string
   kind?: 'wiki'
   updated: number
+  /** A child board: the board it was divided from. */
+  parent?: string
 }
 
 export interface Token {

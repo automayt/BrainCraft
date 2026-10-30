@@ -13,6 +13,7 @@ import { type Place, openFromHash, openHash, placeFromParams, placeParams } from
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board, Id } from '../model/types'
 import { boardOfFrame, withoutFrame } from '../model/subBoard'
+import { boardAfter, childBoard, type Group } from '../model/divide'
 import { type KV, openKV } from './kv'
 import { LiveSession } from '../collab/live'
 import { type Patch, diff } from '../collab/patch'
@@ -594,15 +595,45 @@ export class Workspace {
   /** Moves a frame and everything in it to a board of its own, leaving a card here that opens it. */
   async moveFrameToBoard(frameId: Id) {
     const here = this.linkKey
-    const part = boardOfFrame(this.editor.board, frameId, here ? { key: here, title: this.editor.board.title } : undefined)
+    const parent = here ? { key: here, title: this.editor.board.title } : undefined
+    const part = boardOfFrame(this.editor.board, frameId, parent)
     if (!part || this.editor.readOnly) return
     try {
-      const { key } = await this.createAside(part)
+      const { key } = await this.createAside(parent ? { ...part, parent } : part)
       this.editor.edit((b) => withoutFrame(b, frameId, key)?.board ?? b)
       this.editor.setStatus(`Moved “${part.title}” to a board of its own. The card in its place opens it.`)
     } catch (err) {
       this.editor.setStatus(`Couldn’t make the new board: ${(err as Error).message}`)
     }
+  }
+
+  /**
+   * Divides the open board: each group becomes a child board (on the server when signed in to one),
+   * and a card here opens it. One undo step here; the child boards stay in Your boards. Returns how
+   * many were made.
+   */
+  async divideBoard(groups: Group[]): Promise<number> {
+    if (this.editor.readOnly || !groups.length) return 0
+    const here = this.linkKey
+    const parent = here ? { key: here, title: this.editor.board.title || 'Untitled board' } : undefined
+    const keys: (string | null)[] = []
+    for (const g of groups) {
+      // The board as it is now: anything deleted meanwhile is left out.
+      const child = childBoard(this.editor.board, g, parent)
+      if (child.items.length <= (parent ? 1 : 0)) {
+        keys.push(null)
+        continue
+      }
+      try {
+        keys.push((await this.createAside(child)).key)
+      } catch (err) {
+        keys.push(null)
+        this.editor.setStatus(`Couldn’t make “${g.title}”: ${(err as Error).message}`)
+      }
+    }
+    const made = keys.filter((k) => k !== null).length
+    if (made) this.editor.edit((b) => boardAfter(b, groups, keys).board)
+    return made
   }
 
   /**

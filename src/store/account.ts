@@ -44,6 +44,8 @@ export interface ServerBoard {
   updated: number
   level: Level
   owner: { id: string; name: string } | null
+  /** A child board: the board it was divided from. */
+  parent?: string
 }
 
 /** Where someone was @mentioned: a comment or description on an object, or a wiki page. */
