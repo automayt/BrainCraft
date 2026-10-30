@@ -1895,6 +1895,13 @@ button.on,
   font-size: 13px;
 }
 
+.dialog-foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .modal.help {
   width: 960px;
   max-height: 80vh;

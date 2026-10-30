@@ -1,24 +1,42 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useDialog } from './useDialog'
-import { looksLikeMermaid, parseMermaid } from '../model/mermaid'
+import { addDrawing, addDrawingFiles, addMermaidDrawing, isDrawingFile } from './excalidraw/addDrawing'
+import { sceneFromText } from '../model/excalidraw'
+import { looksLikeMermaid, otherMermaid, parseMermaid } from '../model/mermaid'
 import { parseOutline } from '../model/mindmap'
 import { listLines } from '../model/stickyGrid'
 import { toJson } from '../model/serialize'
+import type { ExcalidrawScene } from '../model/types'
 import { useEditor } from './useEditor'
 
 type Tab = 'import' | 'export'
 
-/** What pasted text will become, or why it can't be used. */
-function detect(text: string): { label: string; ok: boolean } {
-  if (!text.trim()) return { label: 'Type or paste a list (one sticky note per line), an indented list, Mermaid or BrainCraft JSON', ok: false }
+/**
+ * What pasted text will become, or why it can't be used. `scene` is an Excalidraw drawing to add;
+ * `drawable` is Mermaid that Excalidraw can draw, and `flowchart` Mermaid BrainCraft reads itself.
+ */
+interface Found {
+  label: string
+  ok: boolean
+  scene?: ExcalidrawScene
+  drawable?: boolean
+  flowchart?: boolean
+}
+
+function detect(text: string): Found {
+  if (!text.trim()) return { label: 'Type or paste a list (one sticky note per line), an indented list, Mermaid, an Excalidraw drawing or BrainCraft JSON', ok: false }
   if (looksLikeMermaid(text)) {
     try {
       const g = parseMermaid(text)
-      return { label: `Mermaid flowchart · ${g.nodes.length} shapes, ${g.edges.length} links`, ok: true }
+      return { label: `Mermaid flowchart · ${g.nodes.length} shapes, ${g.edges.length} ${g.edges.length === 1 ? 'link' : 'links'}`, ok: true, drawable: true, flowchart: true }
     } catch (err) {
-      return { label: (err as Error).message, ok: false }
+      return { label: (err as Error).message, ok: false, drawable: true }
     }
   }
+  const other = otherMermaid(text)
+  if (other) return { label: `Mermaid ${other} → an Excalidraw drawing`, ok: true, drawable: true }
+  const scene = sceneFromText(text)
+  if (scene) return { label: `Excalidraw drawing · ${scene.elements.length} ${scene.elements.length === 1 ? 'element' : 'elements'}`, ok: true, scene }
   try {
     const raw = JSON.parse(text)
     if (raw?.type === 'braincraft/clip') return { label: 'BrainCraft objects', ok: true }
@@ -41,7 +59,8 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
   const [text, setText] = useState('')
   const [format, setFormat] = useState<'mermaid' | 'json'>('mermaid')
   const [copied, setCopied] = useState(false)
-  const found = detect(text)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const found = useMemo(() => detect(text), [text])
   const exported = format === 'mermaid' ? editor.exportMermaid() : toJson(editor.board)
   const empty = format === 'mermaid' && exported.split('\n').length === 1
 
@@ -78,16 +97,51 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
             />
             <div className="dialog-foot">
               <span className={found.ok || !text.trim() ? 'muted' : 'error'}>{found.label}</span>
-              <button
-                className="primary"
-                disabled={!found.ok}
-                onClick={() => {
-                  editor.pasteText(text)
-                  onClose()
+              <span className="dialog-foot-actions">
+                <button onClick={() => fileInput.current?.click()} title="An .excalidraw drawing, or Mermaid, Markdown or text">
+                  Open a file…
+                </button>
+                {found.drawable && (
+                  <button
+                    className={found.flowchart ? '' : 'primary'}
+                    onClick={() => {
+                      void addMermaidDrawing(editor, text)
+                      onClose()
+                    }}
+                  >
+                    Add as Excalidraw drawing
+                  </button>
+                )}
+                {(found.flowchart || !found.drawable) && (
+                  <button
+                    className="primary"
+                    disabled={!found.ok}
+                    onClick={() => {
+                      if (found.scene) void addDrawing(editor, found.scene)
+                      else editor.pasteText(text)
+                      onClose()
+                    }}
+                  >
+                    {found.flowchart ? 'Add as flowchart' : 'Add to board'}
+                  </button>
+                )}
+              </span>
+              <input
+                ref={fileInput}
+                type="file"
+                hidden
+                accept=".excalidraw,.mmd,.mermaid,.md,.markdown,.txt,.json,.csv,.tsv"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  if (isDrawingFile(f)) {
+                    onClose()
+                    return addDrawingFiles(editor, [f])
+                  }
+                  setText(await f.text())
                 }}
-              >
-                Add to board
-              </button>
+              />
             </div>
           </>
         ) : (

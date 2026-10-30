@@ -35,9 +35,43 @@ export interface MermaidGraph {
 
 const HEADER = /^\s*(?:flowchart|graph)(?:\s+(TB|TD|BT|LR|RL))?\s*;?\s*$/i
 
+const firstLine = (text: string) => text.split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith('%%'))
+
 export function looksLikeMermaid(text: string): boolean {
-  const first = text.split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith('%%'))
+  const first = firstLine(text)
   return !!first && HEADER.test(first)
+}
+
+/** Mermaid diagrams other than flowcharts, by the word they start with, as people call them. */
+const OTHER_DIAGRAMS = new Map(
+  Object.entries({
+    sequencediagram: 'sequence diagram',
+    classdiagram: 'class diagram',
+    'classdiagram-v2': 'class diagram',
+    statediagram: 'state diagram',
+    'statediagram-v2': 'state diagram',
+    erdiagram: 'entity relationship diagram',
+    journey: 'user journey',
+    gantt: 'Gantt chart',
+    pie: 'pie chart',
+    gitgraph: 'git graph',
+    mindmap: 'mind map',
+    timeline: 'timeline',
+    quadrantchart: 'quadrant chart',
+    requirementdiagram: 'requirement diagram',
+    'xychart-beta': 'chart',
+    'sankey-beta': 'Sankey diagram',
+    'block-beta': 'block diagram',
+  }),
+)
+
+/**
+ * The kind of a Mermaid diagram that isn't a flowchart ("sequence diagram"), or null. BrainCraft
+ * reads only flowcharts itself; these can still come in as a drawing.
+ */
+export function otherMermaid(text: string): string | null {
+  const word = firstLine(text)?.trim().split(/[\s:;]/)[0].toLowerCase()
+  return (word && OTHER_DIAGRAMS.get(word)) || null
 }
 
 /** Shape tokens after a node id, most specific first. */

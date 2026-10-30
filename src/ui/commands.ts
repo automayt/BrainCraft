@@ -8,6 +8,7 @@ import { KIND_LABELS } from '../model/types'
 import { isWiki } from '../model/wiki'
 import { canSketch } from '../model/sketch'
 import { canFitToContent } from '../model/fitText'
+import { chooseDrawingFiles } from './excalidraw/addDrawing'
 import { sketchIt } from './excalidraw/sketchIt'
 import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { describeTarget, peopleOn, sameTarget } from '../model/timeTracking'
@@ -106,9 +107,11 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       ? { id: 'clean-board', label: 'Clean lines for the whole board', group: 'Board', aliases: 'sketch hand drawn rough clean tidy neat style board-wide', run: () => editor.setBoardSketch(false) }
       : { id: 'sketch-board', label: 'Hand-drawn board (everything, and everything new)', group: 'Board', aliases: 'sketch hand drawn rough sketchy excalidraw style pencil handwriting whiteboard board-wide', run: () => editor.setBoardSketch(true) },
     { id: 'excalidraw', label: 'Add an Excalidraw drawing', group: 'Create', aliases: 'excalidraw draw drawing sketch hand-drawn diagram whiteboard doodle', run: () => editor.openDrawing() },
+    { id: 'mermaid-excalidraw', label: 'Mermaid to Excalidraw…', group: 'Create', aliases: 'mermaid excalidraw convert sequence class diagram hand-drawn drawing sketch', run: () => editor.openDrawing(undefined, undefined, undefined, true) },
+    { id: 'import-excalidraw', label: 'Import an Excalidraw file…', group: 'Board', aliases: 'excalidraw open load file drawing .excalidraw', run: () => chooseDrawingFiles(editor) },
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
-    { id: 'import', label: 'Import Mermaid, outline or JSON…', group: 'Board', aliases: 'paste api operations ai', run: ui.openImport },
+    { id: 'import', label: 'Import Mermaid, outline, Excalidraw or JSON…', group: 'Board', aliases: 'paste api operations ai file', run: ui.openImport },
     { id: 'export', label: 'Export as Mermaid…', group: 'Board', aliases: 'flowchart copy', run: () => ui.openImport('export') },
     { id: 'help', label: 'Help and shortcuts', group: 'Help', keys: '?', aliases: 'hotkeys keys keyboard shortcuts touch help', run: ui.openHelp },
     { id: 'credits', label: 'Credits and open-source licences', group: 'Help', aliases: 'credits licences licenses open source about thanks attribution notices', run: ui.openCredits },

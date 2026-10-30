@@ -136,9 +136,20 @@ whatever you have selected.
 - **Double-click a drawing** (or **Edit drawing** on its toolbar) to open it in
   Excalidraw again; it keeps its size and place, and the change is one undo
   step. In a live session everyone sees the new version.
-- **Paste from Excalidraw** (copy shapes there, paste here) or **drop an
-  `.excalidraw` file** on the board to bring a drawing in; right-click a
-  drawing → **Download as .excalidraw** to take it back out.
+- **Bring in `.excalidraw` files:** drop one on the board, or ☰ → **Open
+  file…**, or Ctrl+K → "Import an Excalidraw file", or **Open a file…** in
+  the Import dialog; it goes on the board as a drawing. **Paste from
+  Excalidraw** works too (copy shapes there, paste here). Right-click a
+  drawing → **Download as .excalidraw** to take it back out. Inside the
+  drawing editor, Excalidraw's own **Open** loads a file into the drawing.
+- **Mermaid to Excalidraw:** right-click empty space → **Mermaid to
+  Excalidraw…** (or Ctrl+K) opens a new drawing with Excalidraw's converter
+  already up: paste Mermaid, see the preview, press **Insert**, then **Put on
+  the board**. Flowcharts and sequence diagrams become shapes you can change;
+  other kinds (class, state, Gantt…) come in as a picture. In ☰ → **Import…**, pasted
+  Mermaid gets **Add as Excalidraw drawing** beside **Add as flowchart**, and
+  pasting a sequence, class or other non-flowchart diagram straight onto the
+  board draws it the same way.
 - **Sketch a flowchart:** right-click any flowchart shape → **Sketch in
   Excalidraw** draws the whole flowchart again, hand-drawn, as a drawing
   beside it (through its Mermaid and Excalidraw's converter); the flowchart

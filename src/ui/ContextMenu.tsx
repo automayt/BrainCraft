@@ -208,12 +208,13 @@ export function ContextMenu() {
       { label: 'Timeline', keys: 'I', run: place('timeline') },
       { label: 'Code block', run: () => editor.addCode('', undefined, editor.pointer ?? undefined) },
       { label: 'Excalidraw drawing', run: () => editor.openDrawing(undefined, undefined, editor.pointer ?? undefined) },
+      { label: 'Mermaid to Excalidraw…', run: () => editor.openDrawing(undefined, undefined, editor.pointer ?? undefined, true) },
       { label: 'Private brainstorm', run: () => editor.startBrainstorm() },
       { label: 'Spinner wheel', run: () => editor.addWheel() },
       'sep',
       { label: 'Select all', keys: 'Ctrl A', run: () => editor.selectAll() },
       { label: 'Zoom to fit', keys: 'Shift 1', run: () => editor.zoomToFit() },
-      { label: 'Import Mermaid / outline…', run: ui.openImport },
+      { label: 'Import Mermaid, outline or Excalidraw…', run: ui.openImport },
     )
   }
   // Touch has no Shift: a mode where taps add to the selection instead.

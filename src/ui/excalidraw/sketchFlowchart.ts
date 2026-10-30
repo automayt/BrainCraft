@@ -4,25 +4,18 @@
  * flowchart itself stays as it was: the one to change, run and export.
  */
 
-import './assetPath'
-import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
-import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw'
 import type { Editor } from '../../editor/Editor'
 import * as B from '../../model/board'
-import { cleanExcalidraw } from '../../model/excalidraw'
 import { toMermaid } from '../../model/mermaid'
 import { flowComponent } from '../../model/sketch'
 import type { Id } from '../../model/types'
+import { mermaidScene } from './mermaidDrawing'
 import { pictureOf } from './picture'
 
 export async function sketchFlowchart(editor: Editor, id: Id): Promise<Id | null> {
   const ids = flowComponent(editor.board, id)
   if (!ids.size) return null
-  const mermaid = toMermaid(editor.board, ids)
-  const { elements, files } = await parseMermaidToExcalidraw(mermaid, { themeVariables: { fontSize: '18px' } })
-  const drawn = convertToExcalidrawElements(elements, { regenerateIds: true })
-  const scene = cleanExcalidraw(JSON.parse(JSON.stringify({ elements: drawn, files: files ?? {} })))
-  if (!scene?.elements.length) throw new Error('Excalidraw couldn’t read this flowchart')
+  const scene = await mermaidScene(toMermaid(editor.board, ids))
   const picture = await pictureOf(scene)
   // Beside the flowchart, on its right, level with its top.
   const box = B.bounds(editor.board, ids)!

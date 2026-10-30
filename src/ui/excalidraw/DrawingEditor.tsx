@@ -83,7 +83,13 @@ export default function DrawingEditor() {
     >
       <header className="drawing-editor-bar">
         <strong>{item ? 'Drawing' : 'New drawing'}</strong>
-        <span className="muted drawing-editor-hint">{readOnly ? 'View only' : 'Drawn with Excalidraw. It goes on the board with no background of its own; double-click it to come back.'}</span>
+        <span className="muted drawing-editor-hint">
+          {readOnly
+            ? 'View only'
+            : open.mermaid && !item
+              ? 'Write or paste Mermaid, press Insert, then put it on the board. Double-click it there to change it later.'
+              : 'Drawn with Excalidraw. It goes on the board with no background of its own; double-click it to come back.'}
+        </span>
         {error && (
           <span className="drawing-editor-error" role="alert">
             {error}
@@ -98,14 +104,18 @@ export default function DrawingEditor() {
       </header>
       <div className="drawing-editor-body">
         <Excalidraw
-          excalidrawAPI={(a) => (api.current = a)}
+          excalidrawAPI={(a) => {
+            api.current = a
+            // "Mermaid to Excalidraw": its converter, open over the new drawing.
+            if (open.mermaid && !readOnly) setTimeout(() => a.updateScene({ appState: { openDialog: { name: 'ttd', tab: 'mermaid' } } }))
+          }}
           initialData={initial}
           theme={dark ? 'dark' : 'light'}
           viewModeEnabled={readOnly}
           // Its hotkeys (1–0 and the letters for tools) work at once, without clicking in first.
           autoFocus
           handleKeyboardGlobally
-          UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, toggleTheme: false, changeViewBackgroundColor: false } }}
+          UIOptions={{ canvasActions: { loadScene: !readOnly, saveToActiveFile: false, toggleTheme: false, changeViewBackgroundColor: false } }}
         />
       </div>
     </div>

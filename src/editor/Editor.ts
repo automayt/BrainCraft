@@ -393,7 +393,7 @@ export class Editor {
    * The Excalidraw drawing open for editing: an existing one (`id`), or a new one to put at `at`
    * (or a scene brought in from a file or the clipboard, `scene`).
    */
-  drawing: { id: Id | null; at: Vec; scene?: ExcalidrawScene } | null = null
+  drawing: { id: Id | null; at: Vec; scene?: ExcalidrawScene; mermaid?: boolean } | null = null
   /** Typing a line of cursor chat. */
   chatting = false
   myColor = '#7048e8'
@@ -2036,12 +2036,15 @@ export class Editor {
     this.select([id])
   }
 
-  /** Opens a drawing in Excalidraw: the one with `id`, or a new one (in the middle of the view). */
-  openDrawing(id?: Id, scene?: ExcalidrawScene, at: Vec = this.pointer ?? center(this.visibleWorld)) {
+  /**
+   * Opens a drawing in Excalidraw: the one with `id`, or a new one (in the middle of the view). With
+   * `mermaid`, Excalidraw's Mermaid converter opens straight away.
+   */
+  openDrawing(id?: Id, scene?: ExcalidrawScene, at: Vec = this.pointer ?? center(this.visibleWorld), mermaid = false) {
     const item = id === undefined ? undefined : B.getItem(this.board, id)
     if (id !== undefined && !isDrawing(item)) return
     if (id === undefined && this.readOnly) return
-    this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}) }
+    this.drawing = { id: id ?? null, at: item ? { x: item.x + item.w / 2, y: item.y + item.h / 2 } : at, ...(scene ? { scene } : {}), ...(mermaid ? { mermaid } : {}) }
     this.emit()
   }
 

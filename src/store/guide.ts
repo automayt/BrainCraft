@@ -232,7 +232,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention someone or another object, and **[[** to link a board. On a server with accounts, the people you mention see it under **Mentions of you** in their account menu.
 - **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar.
 - **Lock** (**Ctrl+Shift+L**) a background so it can't be moved by accident; **group** (**Ctrl+G**) objects to move them as one.
-- **Excalidraw drawings:** right-click empty space → **Excalidraw drawing** for Excalidraw's hand-drawn sketching, right on the board. Double-click a drawing to change it.`,
+- **Excalidraw drawings:** right-click empty space → **Excalidraw drawing** for Excalidraw's hand-drawn sketching, right on the board. Double-click a drawing to change it. **Mermaid to Excalidraw…** (right-click empty space, or Ctrl K) opens Excalidraw's converter: paste Mermaid, press Insert, and put it on the board. To bring in an .excalidraw file, drop it on the board, or use ☰ → **Open file…**.`,
         },
         {
           title: 'Mind maps',
@@ -294,7 +294,7 @@ Paste almost anything:
 | A web address | A link card; YouTube, Vimeo and Spotify play on it |
 | A fenced code block | Code with colours, in its language |
 | An image | The picture |
-| Mermaid | A flowchart |
+| Mermaid | A flowchart (other Mermaid diagrams, such as sequence diagrams, become an Excalidraw drawing) |
 | Shapes copied in Excalidraw, or an .excalidraw file | An Excalidraw drawing |
 | JSON operations | Whatever they describe (see [[The API]]) |`,
         },

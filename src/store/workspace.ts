@@ -85,6 +85,8 @@ type FsWindow = Window & {
   showOpenFilePicker?: (o: PickerOptions) => Promise<FileHandle[]>
 }
 const PICKER_TYPES = [{ description: 'BrainCraft board', accept: { 'application/json': [FILE_EXT, '.json'] } }]
+/** Opening also takes Excalidraw drawings, which go on the open board. */
+const OPEN_TYPES = [{ description: 'BrainCraft board or Excalidraw drawing', accept: { 'application/json': [FILE_EXT, '.json', '.excalidraw'] } }]
 
 const fsWindow = () => (typeof window === 'undefined' ? undefined : (window as FsWindow))
 
@@ -856,7 +858,7 @@ export class Workspace {
     const picker = fsWindow()?.showOpenFilePicker
     if (!picker) return false
     try {
-      const [h] = await picker({ types: PICKER_TYPES })
+      const [h] = await picker({ types: OPEN_TYPES })
       await this.openFile(await h.getFile(), h)
     } catch (err) {
       if (!isAbort(err)) this.editor.setStatus(`Could not open the file: ${(err as Error).message}`)
@@ -864,8 +866,12 @@ export class Workspace {
     return true
   }
 
-  /** Opens a board file as a new board in the library. */
+  /** Opens a board file as a new board in the library; an Excalidraw drawing goes on the open board. */
   async openFile(file: File, handle?: FileHandle) {
+    if (/\.excalidraw$/i.test(file.name)) {
+      const { addDrawingFiles } = await import('../ui/excalidraw/addDrawing')
+      return addDrawingFiles(this.editor, [file])
+    }
     try {
       const board = fromJson(await file.text())
       const id = await this.newBoard(board)

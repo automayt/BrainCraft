@@ -1,6 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
-import { sceneFromText } from '../model/excalidraw'
-import { addDrawing } from './excalidraw/addDrawing'
+import { addDrawingFiles, isDrawingFile } from './excalidraw/addDrawing'
 import { newWheelMemo, wheelHow } from './wheelHow'
 import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
@@ -261,15 +260,10 @@ export function Canvas() {
       onDrop={async (e) => {
         const at = toWorld(editor.camera, local(e))
         // Excalidraw files become drawings on the board.
-        const drawings = Array.from(e.dataTransfer.files).filter((f) => /\.excalidraw$/i.test(f.name))
+        const drawings = Array.from(e.dataTransfer.files).filter(isDrawingFile)
         if (drawings.length) {
           e.preventDefault()
-          for (const [k, f] of drawings.entries()) {
-            const scene = sceneFromText(await f.text())
-            if (scene) await addDrawing(editor, scene, { x: at.x + k * 40, y: at.y + k * 40 })
-            else editor.setStatus(`${f.name} isn’t an Excalidraw drawing`)
-          }
-          return
+          return addDrawingFiles(editor, drawings, at)
         }
         const files = imageFiles(e.dataTransfer.files)
         if (!files.length) return
@@ -860,7 +854,7 @@ function EmptyBoard() {
         ))}
       </div>
       <button className="link" onClick={() => ui.openImport()}>
-        Import Mermaid, an outline or AI-generated JSON…
+        Import Mermaid, an outline, an Excalidraw file or AI-generated JSON…
       </button>
       <button className="flow-start" onClick={() => ui.flow(true)} title="Ctrl Shift F">
         <strong>Or talk it through</strong>

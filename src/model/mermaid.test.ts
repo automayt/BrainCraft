@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyBoard, getItem } from './board'
-import { insertMermaid, looksLikeMermaid, parseMermaid, rankNodes, toMermaid } from './mermaid'
+import { insertMermaid, looksLikeMermaid, otherMermaid, parseMermaid, rankNodes, toMermaid } from './mermaid'
 
 const SAMPLE = `%% order flow
 flowchart TD
@@ -89,5 +89,19 @@ describe('mermaid export', () => {
     const withText = { ...b, items: b.items.map((i, k) => (k === 0 ? { ...i, text: 'Say "hi"\nnow' } : i)) }
     expect(toMermaid(withText)).toContain('["Say #quot;hi#quot;<br>now"]')
     expect(toMermaid(withText).split('\n')[0]).toBe('flowchart LR')
+  })
+})
+
+describe('other Mermaid diagrams', () => {
+  it('are known by their first word, so they can come in as drawings', () => {
+    expect(otherMermaid('sequenceDiagram\n  Ann->>Bob: Hi')).toBe('sequence diagram')
+    expect(otherMermaid('%% a comment\n\n  classDiagram\n  Animal <|-- Duck')).toBe('class diagram')
+    expect(otherMermaid('stateDiagram-v2\n  [*] --> Still')).toBe('state diagram')
+    expect(otherMermaid('pie title Pets\n "Dogs" : 386')).toBe('pie chart')
+    // Flowcharts are BrainCraft's own; anything else isn't Mermaid.
+    expect(otherMermaid('flowchart TD\n  A --> B')).toBeNull()
+    expect(otherMermaid('constructor')).toBeNull()
+    expect(otherMermaid('Sequence of events for the trip')).toBeNull()
+    expect(otherMermaid('')).toBeNull()
   })
 })

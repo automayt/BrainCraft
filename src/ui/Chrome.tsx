@@ -251,7 +251,7 @@ export function TopLeft() {
                   </>
                 )}
                 <hr />
-                {!ws.viewOnly && <MenuItem label="Import Mermaid / outline / JSON…" onClick={run(ui.openImport)} />}
+                {!ws.viewOnly && <MenuItem label="Import Mermaid, outline, Excalidraw or JSON…" onClick={run(ui.openImport)} />}
                 <MenuItem label="Export: image, PDF or Markdown…" keys="Ctrl Shift E" onClick={run(ui.openExport)} />
                 <MenuItem label="Export as Mermaid…" onClick={run(() => ui.openImport('export'))} />
               </>

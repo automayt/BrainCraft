@@ -163,6 +163,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['A fenced block (three backticks)', 'A code block in its language'],
       ['Images · spreadsheet cells', 'Pictures · a table'],
       ['Shapes copied in Excalidraw · an .excalidraw file', 'An Excalidraw drawing (double-click it to edit)'],
+      ['A Mermaid sequence, class or other diagram', 'An Excalidraw drawing of it'],
     ],
   ],
   [

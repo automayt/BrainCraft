@@ -44,6 +44,23 @@ describe('Excalidraw scenes', () => {
     expect(sceneFromText(excalidrawFile({ elements: [rect('a')] }))).not.toBeNull()
   })
 
+  it('reads a file saved by Excalidraw, pen strokes and all', () => {
+    const file = {
+      type: 'excalidraw',
+      version: 2,
+      source: 'https://excalidraw.com',
+      elements: [
+        { id: 'AR9q', type: 'freedraw', x: 212.75, y: 601.07, width: 112.3, height: 299.8, angle: 0, strokeColor: '#1e1e1e', points: [[0, 0], [8.05, 0.38], [-27.98, -269.48]], pressures: [0.15, 0.31, 0.46], simulatePressure: false, isDeleted: false },
+        { id: 'gone', type: 'rectangle', x: 0, y: 0, width: 10, height: 10, isDeleted: true },
+      ],
+      appState: { gridSize: 20, viewBackgroundColor: '#ffffff' },
+      files: {},
+    }
+    const scene = sceneFromText(JSON.stringify(file, null, 2))!
+    expect(scene.elements).toEqual([file.elements[0]])
+    expect(scene.files).toBeUndefined()
+  })
+
   it('finds the words in a drawing', () => {
     expect(sceneText({ elements: [rect('a'), text('t1', ' Big idea '), text('t2', 'Next')] })).toBe('Big idea\nNext')
   })

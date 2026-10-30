@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { sceneFromText } from '../model/excalidraw'
-import { addDrawing } from './excalidraw/addDrawing'
+import { addDrawing, addMermaidDrawing, isDrawingFile } from './excalidraw/addDrawing'
+import { otherMermaid } from '../model/mermaid'
 import { CreditsDialog } from './Credits'
 import { AccessDialog } from './accounts/AccessDialog'
 import { AdminDialog } from './accounts/AdminDialog'
@@ -394,6 +395,8 @@ function App({ ws }: { ws: Workspace }) {
         // Copied from Excalidraw (or an .excalidraw file's text): a drawing.
         const scene = sceneFromText(text)
         if (scene) void addDrawing(editor, scene)
+        // Mermaid that isn't a flowchart (a sequence diagram, say): Excalidraw draws it.
+        else if (otherMermaid(text)) void addMermaidDrawing(editor, text)
         else if (to?.page !== undefined) void ws.addPageCard(to, text.trim())
         else editor.pasteText(text)
       }
@@ -431,8 +434,10 @@ function App({ ws }: { ws: Workspace }) {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
           onDrop={(e) => {
-            // Images are handled by the canvas; board files open as new boards.
-            const files = Array.from(e.dataTransfer.files).filter(isBoardFile)
+            // Images and drawings dropped on the canvas are handled there; board files open as new
+            // boards, and drawings dropped anywhere else go on the board.
+            if (e.defaultPrevented) return
+            const files = Array.from(e.dataTransfer.files).filter((f) => isBoardFile(f) || isDrawingFile(f))
             if (!files.length) return
             e.preventDefault()
             for (const f of files) void ws.openFile(f)
@@ -499,7 +504,7 @@ function App({ ws }: { ws: Workspace }) {
           <input
             ref={fileInput}
             type="file"
-            accept={`${FILE_EXT},.json,application/json`}
+            accept={`${FILE_EXT},.json,application/json,.excalidraw`}
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0]
