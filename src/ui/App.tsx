@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState, useSyncExternalStore } fro
 import { sceneFromText } from '../model/excalidraw'
 import { addDrawing, addMermaidDrawing, isDrawingFile } from './excalidraw/addDrawing'
 import { otherMermaid } from '../model/mermaid'
+import { looksLikeSequence } from '../model/sequence'
 import { CreditsDialog } from './Credits'
 import { AccessDialog } from './accounts/AccessDialog'
 import { AdminDialog } from './accounts/AdminDialog'
@@ -398,7 +399,7 @@ function App({ ws }: { ws: Workspace }) {
         const scene = sceneFromText(text)
         if (scene) void addDrawing(editor, scene)
         // Mermaid that isn't a flowchart (a sequence diagram, say): Excalidraw draws it.
-        else if (otherMermaid(text)) void addMermaidDrawing(editor, text)
+        else if (otherMermaid(text) && !looksLikeSequence(text)) void addMermaidDrawing(editor, text)
         else if (to?.page !== undefined) void ws.addPageCard(to, text.trim())
         else editor.pasteText(text)
       }

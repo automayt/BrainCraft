@@ -12,6 +12,7 @@ import { toOutline } from './mindmap'
 import { plainNote } from './notes'
 import { STATUSES } from './status'
 import { toCsv } from './table'
+import { toMermaidSequence } from './sequence'
 import type { Board, Id, Item } from './types'
 
 /** Markdown-safe text on one line (a table cell, a list item's first line). */
@@ -81,6 +82,8 @@ function itemMarkdown(b: Board, i: Item): string {
             ...i.kanban.columns.flatMap((c) => [`**${c.title}**`, '', ...(c.cards.length ? c.cards.map((card) => `- ${card.title}${card.due ? ` (due ${card.due})` : card.start ? ` (from ${card.start})` : ''}`) : ['- (empty)']), '']),
           ].join('\n')
         : ''
+    case 'sequence':
+      return i.sequence ? [`### ${i.text || 'Sequence diagram'}`, '', '```mermaid', toMermaidSequence(i.sequence), '```'].join('\n') : ''
     case 'timeline':
       return i.timeline
         ? [

@@ -179,6 +179,15 @@ export const CodeToolIcon = () => (
   </Svg>
 )
 
+/** A sequence diagram: two boxes, their lines down, and arrows across. */
+export const SequenceIcon = () => (
+  <Svg>
+    <rect x="2.5" y="3" width="7" height="4" rx="1" />
+    <rect x="14.5" y="3" width="7" height="4" rx="1" />
+    <path d="M6 7v14M18 7v14M6 11.5h11M15 9.5l2 2-2 2M18 16.5H7M9 14.5l-2 2 2 2" />
+  </Svg>
+)
+
 /** More tools: tables, plans and data, behind one button. */
 export const MoreToolsIcon = () => (
   <Svg>

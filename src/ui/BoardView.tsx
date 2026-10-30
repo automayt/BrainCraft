@@ -13,6 +13,7 @@ import { frameFill, ink, mindRootFill, mindRootText } from './paint'
 import { KanbanView } from './widgets/KanbanView'
 import { TableView } from './widgets/TableView'
 import { TimelineView } from './widgets/TimelineView'
+import { SequenceView } from './widgets/SequenceView'
 import { DataViewWidget } from './widgets/DataView'
 import { type Board, type Connector, type Id, type Item, type Status, TEXT_ON_FILL, isWidget, usesInk } from '../model/types'
 import { LinkCardView } from './LinkCardView'
@@ -172,6 +173,8 @@ export const ItemShape = memo(function ItemShape({ item, depth, editing, live = 
       return <LinkCardView item={item} live={live} />
     case 'code':
       return <CodeBlockView item={item} live={live} editing={editing} />
+    case 'sequence':
+      return item.sequence ? <SequenceView item={item} composing={editing} /> : null
     default:
       return null
   }

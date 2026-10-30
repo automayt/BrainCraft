@@ -637,3 +637,22 @@ export function paste(b: Board, clip: Clip, dx: number, dy: number): [Board, Set
     new Set(items.map((i) => i.id)),
   ]
 }
+
+/**
+ * Where `r` can go without covering anything: `r` itself if it's clear, else the clear spot nearest
+ * to it, looked for in rings of `step` around it. Gives up (returns `r`) after a dozen rings.
+ */
+export function nearestFree(b: Board, r: Rect, step = 80): Rect {
+  const reach = step * 12
+  const near = b.items.filter((i) => i.kind !== 'frame' && intersects({ x: r.x - reach, y: r.y - reach, w: r.w + 2 * reach, h: r.h + 2 * reach }, itemBounds(i))).map(itemBounds)
+  const clear = (c: Rect) => !near.some((n) => intersects(c, n))
+  for (let ring = 0; ring <= 12; ring++) {
+    for (let i = -ring; i <= ring; i++)
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue
+        const c = { ...r, x: r.x + i * step, y: r.y + j * step }
+        if (clear(c)) return c
+      }
+  }
+  return r
+}

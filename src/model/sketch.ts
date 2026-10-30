@@ -7,7 +7,7 @@ import { getItem } from './board'
 import type { Board, Id, Item, Kind } from './types'
 
 /** Objects drawn by hand when marked: shapes and flowcharts get wobbly outlines, anything with words a handwriting face. */
-export const SKETCH_KINDS: ReadonlySet<Kind> = new Set<Kind>(['rect', 'ellipse', 'flow', 'sticky', 'text', 'frame', 'mind', 'comment'])
+export const SKETCH_KINDS: ReadonlySet<Kind> = new Set<Kind>(['rect', 'ellipse', 'flow', 'sticky', 'text', 'frame', 'mind', 'comment', 'sequence'])
 
 export const canSketch = (kind: Kind) => SKETCH_KINDS.has(kind)
 

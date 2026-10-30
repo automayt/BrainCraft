@@ -19,6 +19,8 @@ import { useWorkspace } from './useWorkspace'
 import { followLink } from './followLink'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { copyText } from './copyText'
+import { toMermaidSequence } from '../model/sequence'
 
 /** A toolbar too wide for the screen scrolls sideways with an ordinary mouse wheel. */
 const scrollSideways = (e: React.WheelEvent<HTMLElement>) => {
@@ -124,7 +126,7 @@ export function SelectionToolbar() {
   const fitsBelow = below !== null && below + size.h < editor.viewport.h - bottomLimit
   const useBelow = fitsBelow && (aboveTop < topLimit || (width > 0 && covered(below!) < covered(aboveTop) * 0.5))
   const y = useBelow ? below! : Math.max(anchor.y, topLimit + size.h)
-  const plain = (i: (typeof items)[number]) => i.kind !== 'image' && i.kind !== 'link' && i.kind !== 'code' && !isWidget(i.kind)
+  const plain = (i: (typeof items)[number]) => i.kind !== 'image' && i.kind !== 'link' && i.kind !== 'code' && i.kind !== 'sequence' && !isWidget(i.kind)
   const hasFontSize = items.some((i) => i.kind !== 'mind' && i.kind !== 'pen' && plain(i))
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
@@ -238,6 +240,32 @@ export function SelectionToolbar() {
         >
           ✎ Hand-drawn
         </button>
+      )}
+      {items.length === 1 && items[0].sequence && (
+        <>
+          <span className="sep" />
+          {!editor.readOnly && (
+            <button title="Write the next message from the keyboard (Enter, or just type)" onClick={() => editor.composeSequence(items[0].id)}>
+              + Message
+            </button>
+          )}
+          {!editor.readOnly && (
+            <button
+              className={items[0].sequence.numbered ? 'on' : ''}
+              aria-pressed={!!items[0].sequence.numbered}
+              title="Number the messages 1, 2, 3…"
+              onClick={() => editor.updateSequence(items[0].id, (d) => (d.numbered ? { lanes: d.lanes, steps: d.steps } : { ...d, numbered: true }))}
+            >
+              Numbered
+            </button>
+          )}
+          <button
+            title="Copy it as Mermaid, for docs and wikis that draw it"
+            onClick={() => void copyText(toMermaidSequence(items[0].sequence!, items[0].text)).then(() => editor.setStatus('Copied as Mermaid'))}
+          >
+            Copy Mermaid
+          </button>
+        </>
       )}
       {mind && (
         <>

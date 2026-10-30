@@ -13,6 +13,7 @@ import {
   BoardsIcon,
   CheckIcon,
   CodeToolIcon,
+  SequenceIcon,
   CommentsIcon,
   DrawingIcon,
   HandDrawnIcon,
@@ -523,6 +524,14 @@ function MoreFlyout({ onClose, onImage }: { onClose: () => void; onImage: () => 
           Code block
           <small>Code with colours; or paste a fenced block</small>
         </span>
+      </button>
+      <button role="menuitem" className="flyout-option" onMouseDown={keepFocus} onClick={pick(() => editor.addSequence())}>
+        <SequenceIcon />
+        <span>
+          Sequence diagram
+          <small>Who sends what to whom, in order; built from the keyboard</small>
+        </span>
+        <kbd>U</kbd>
       </button>
     </div>
   )

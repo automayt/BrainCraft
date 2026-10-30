@@ -296,7 +296,7 @@ export function Canvas() {
           <BoardView
             board={editor.viewBoard}
             hidden={editor.hidden}
-            editingId={editor.editing && !editor.editing.connector ? editor.editing.id : null}
+            editingId={editor.editing && !editor.editing.connector ? editor.editing.id : (editor.composing?.id ?? null)}
             editingLabel={editor.editing?.connector ? editor.editing.id : null}
             selectedConnector={editor.selectedConnector}
             selection={editor.selection}

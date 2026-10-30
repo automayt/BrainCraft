@@ -77,6 +77,8 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     },
     required: ['after', 'steps'],
   },
+  createSequence: { summary: 'A sequence diagram from Mermaid: lanes side by side and the messages between them, top to bottom', properties: { mermaid: str('A Mermaid sequence diagram (sequenceDiagram …)'), ...placed }, required: ['mermaid'] },
+  setSequence: { summary: 'Replaces a sequence diagram’s lanes and messages, where it is', properties: { id: ref, mermaid: str('The whole new diagram in Mermaid') }, required: ['id', 'mermaid'] },
   setFlowchart: { summary: 'Replaces the whole flowchart a step belongs to, where it is', properties: { id: ref, mermaid: str('The new flowchart in Mermaid') }, required: ['id', 'mermaid'] },
   createTable: { summary: 'A table', properties: { title: str(), columns: list(str()), rows: list(list(oneOf(str(), num()))), ...placed }, required: ['columns'] },
   createKanban: {

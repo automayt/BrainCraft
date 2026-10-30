@@ -308,7 +308,7 @@ function escapeLabel(text: string): string {
  */
 export function toMermaid(b: Board, ids?: ReadonlySet<Id>): string {
   const include = (i: Item) =>
-    ids ? ids.has(i.id) && !['pen', 'frame', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code'].includes(i.kind) && !i.poll && !i.brainstorm && !i.wheel : i.kind === 'flow'
+    ids ? ids.has(i.id) && !['pen', 'frame', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code', 'sequence'].includes(i.kind) && !i.poll && !i.brainstorm && !i.wheel : i.kind === 'flow'
   const items = b.items.filter(include)
   const set = new Set(items.map((i) => i.id))
   const links = b.connectors.filter((c) => set.has(c.from) && set.has(c.to))

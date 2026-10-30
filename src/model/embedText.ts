@@ -12,6 +12,7 @@ import * as D from './dataset'
 import { embedBoard, getSnap, snapBoard, snapKey } from './embed'
 import { embedLine } from './markdown'
 import { toMermaid } from './mermaid'
+import { parseSequence, toMermaidSequence } from './sequence'
 import { markdownOf, outlineOf } from './outlineSync'
 import type { Board, Id, Item } from './types'
 
@@ -112,6 +113,12 @@ export function embedMarkdown(b: Board, item: Item | undefined): string {
       const fields = D.shownFields(ds, item.view)
       return [`| ${fields.map((f) => cell(f.name)).join(' | ')} |`, `| ${fields.map(() => '---').join(' | ')} |`, ...D.viewRecords(ds, item.view).map((r) => `| ${fields.map((f) => cell(D.display(ds, f, r.values[f.id]))).join(' | ')} |`)].join('\n')
     }
+    case 'sequence': {
+      const d = item.sequence
+      if (!d) return ''
+      const name = new Map(d.lanes.map((l) => [l.id, oneLine(l.name)]))
+      return d.steps.map((s, k) => `${k + 1}. ${name.get(s.from)} → ${name.get(s.to)}${s.style === 'reply' ? ' (reply)' : ''}: ${oneLine(s.text)}`).join('\n')
+    }
     case 'flow': {
       const { steps, next } = flowSteps(b, item)
       const number = new Map(steps.map((s, k) => [s.id, k + 1]))
@@ -146,6 +153,7 @@ export function editable(item: Item | undefined): 'outline' | 'columns' | 'table
     case 'timeline':
       return 'lanes'
     case 'flow':
+    case 'sequence':
       return 'mermaid'
     default:
       return null
@@ -170,6 +178,8 @@ export function editText(b: Board, item: Item): string {
       const { steps } = flowSteps(b, item)
       return toMermaid(b, new Set(steps.map((s) => s.id)))
     }
+    case 'sequence':
+      return item.sequence ? toMermaidSequence(item.sequence, item.text) : ''
     default:
       return ''
   }
@@ -240,6 +250,9 @@ export function editOps(item: Item, text: string): Op[] | string {
     case 'flow':
       if (!/^\s*(flowchart|graph)\b/i.test(text)) return 'Keep it as a Mermaid flowchart, starting with "flowchart TD".'
       return [{ op: 'setFlowchart', id: item.id, mermaid: text }]
+    case 'sequence':
+      if (!parseSequence(text)) return 'Keep it as a Mermaid sequence diagram, starting with "sequenceDiagram".'
+      return [{ op: 'setSequence', id: item.id, mermaid: text }]
     default:
       return 'This can’t be edited as text.'
   }

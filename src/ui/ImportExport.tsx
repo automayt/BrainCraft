@@ -3,6 +3,7 @@ import { useDialog } from './useDialog'
 import { addDrawing, addDrawingFiles, addMermaidDrawing, isDrawingFile } from './excalidraw/addDrawing'
 import { sceneFromText } from '../model/excalidraw'
 import { looksLikeMermaid, otherMermaid, parseMermaid } from '../model/mermaid'
+import { parseSequence } from '../model/sequence'
 import { parseOutline } from '../model/mindmap'
 import { listLines } from '../model/stickyGrid'
 import { toJson } from '../model/serialize'
@@ -21,6 +22,8 @@ interface Found {
   scene?: ExcalidrawScene
   drawable?: boolean
   flowchart?: boolean
+  /** What the main button makes, when it isn't "Add to board". */
+  as?: string
 }
 
 function detect(text: string): Found {
@@ -28,10 +31,15 @@ function detect(text: string): Found {
   if (looksLikeMermaid(text)) {
     try {
       const g = parseMermaid(text)
-      return { label: `Mermaid flowchart · ${g.nodes.length} shapes, ${g.edges.length} ${g.edges.length === 1 ? 'link' : 'links'}`, ok: true, drawable: true, flowchart: true }
+      return { label: `Mermaid flowchart · ${g.nodes.length} shapes, ${g.edges.length} ${g.edges.length === 1 ? 'link' : 'links'}`, ok: true, drawable: true, flowchart: true, as: 'Add as flowchart' }
     } catch (err) {
       return { label: (err as Error).message, ok: false, drawable: true }
     }
+  }
+  const seq = parseSequence(text)
+  if (seq) {
+    const { lanes, steps } = seq.data
+    return { label: `Mermaid sequence diagram · ${lanes.length} ${lanes.length === 1 ? 'lane' : 'lanes'}, ${steps.length} ${steps.length === 1 ? 'message' : 'messages'}${seq.skipped ? ` (${seq.skipped} other ${seq.skipped === 1 ? 'line' : 'lines'} left out)` : ''}`, ok: true, drawable: true, flowchart: true, as: 'Add as sequence diagram' }
   }
   const other = otherMermaid(text)
   if (other) return { label: `Mermaid ${other} → an Excalidraw drawing`, ok: true, drawable: true }
@@ -122,7 +130,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
                       onClose()
                     }}
                   >
-                    {found.flowchart ? 'Add as flowchart' : 'Add to board'}
+                    {found.as ?? 'Add to board'}
                   </button>
                 )}
               </span>

@@ -112,6 +112,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'excalidraw', label: 'Add an Excalidraw drawing', group: 'Create', aliases: 'excalidraw draw drawing sketch hand-drawn diagram whiteboard doodle', run: () => editor.openDrawing() },
     { id: 'mermaid-excalidraw', label: 'Mermaid to Excalidraw…', group: 'Create', aliases: 'mermaid excalidraw convert sequence class diagram hand-drawn drawing sketch', run: () => editor.openDrawing(undefined, undefined, undefined, true) },
     { id: 'import-excalidraw', label: 'Import an Excalidraw file…', group: 'Board', aliases: 'excalidraw open load file drawing .excalidraw', run: () => chooseDrawingFiles(editor) },
+    { id: 'sequence', label: 'Add a sequence diagram', group: 'Create', keys: 'U', aliases: 'sequence uml diagram lanes lifelines messages calls participants actors protocol api interaction', run: () => editor.addSequence() },
     { id: 'code', label: 'Add code block', group: 'Create', aliases: 'code snippet programming syntax monospace script', run: () => editor.addCode() },
     { id: 'many-notes', label: 'Add many sticky notes (one per line)…', group: 'Create', aliases: 'bulk stickies list lines paste many notes several', run: ui.openImport },
     { id: 'import', label: 'Import Mermaid, outline, Excalidraw or JSON…', group: 'Board', aliases: 'paste api operations ai file', run: ui.openImport },

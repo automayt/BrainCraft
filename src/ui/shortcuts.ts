@@ -110,6 +110,20 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     ],
   ],
   [
+    'Sequence diagrams',
+    [
+      ['U', 'A new sequence diagram, ready to write its first message'],
+      ['Enter · double-click · type', 'Write the next message in the selected diagram'],
+      ['← / →', 'Who the message goes to (past the last lane: a new lane to name)'],
+      ['Shift ← / →', 'Who sends it'],
+      ['Tab', 'Call, reply (dashed) or a message that doesn’t wait'],
+      ['Enter', 'Add it; the next one is suggested (a call’s answer comes back)'],
+      ['↑ / ↓ · Alt ↑ / ↓', 'Go to an earlier message to change it · move it up or down'],
+      ['F2 · Alt ← / →', 'Rename the lane the arrow points at · move that lane'],
+      ['Backspace on an empty message · Esc', 'Take the message out · done'],
+    ],
+  ],
+  [
     'Tables, Kanban, timelines',
     [
       ['Click once', 'Select it; then it works inside'],
@@ -164,7 +178,8 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['A fenced block (three backticks)', 'A code block in its language'],
       ['Images · spreadsheet cells', 'Pictures · a table'],
       ['Shapes copied in Excalidraw · an .excalidraw file', 'An Excalidraw drawing (double-click it to edit)'],
-      ['A Mermaid sequence, class or other diagram', 'An Excalidraw drawing of it'],
+      ['A Mermaid sequence diagram', 'A sequence diagram, to carry on writing'],
+      ['A Mermaid class, state or other diagram', 'An Excalidraw drawing of it'],
     ],
   ],
   [

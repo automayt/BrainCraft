@@ -207,6 +207,7 @@ export function ContextMenu() {
       { label: 'Kanban board', keys: 'K', run: place('kanban') },
       { label: 'Timeline', keys: 'I', run: place('timeline') },
       { label: 'Code block', run: () => editor.addCode('', undefined, editor.pointer ?? undefined) },
+      { label: 'Sequence diagram', keys: 'U', run: () => editor.addSequence(undefined, '', editor.pointer ?? undefined) },
       { label: 'Excalidraw drawing', run: () => editor.openDrawing(undefined, undefined, editor.pointer ?? undefined) },
       { label: 'Mermaid to Excalidraw…', run: () => editor.openDrawing(undefined, undefined, editor.pointer ?? undefined, true) },
       { label: 'Private brainstorm', run: () => editor.startBrainstorm() },

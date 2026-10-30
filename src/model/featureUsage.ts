@@ -26,6 +26,7 @@ export const FEATURES = {
   table: ['Diagrams', 'Tables'],
   kanban: ['Diagrams', 'Kanban boards'],
   timeline: ['Diagrams', 'Timelines'],
+  sequence: ['Diagrams', 'Sequence diagrams'],
   status: ['Diagrams', 'Statuses on objects'],
   // Databases
   database: ['Databases', 'Databases'],
@@ -97,6 +98,7 @@ export function featuresOf(b: Board): Partial<Record<Feature, number>> {
       case 'table':
       case 'kanban':
       case 'timeline':
+      case 'sequence':
         add(i.kind)
         break
     }

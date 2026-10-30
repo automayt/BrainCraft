@@ -54,6 +54,7 @@ const KIND_OF: Record<Kind, UnitKind> = {
   data: 'planning',
   link: 'links',
   code: 'code',
+  sequence: 'shapes',
 }
 
 /** The child boards dividing by kind makes, in this order. */

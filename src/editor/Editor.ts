@@ -8,7 +8,7 @@ import * as B from '../model/board'
 import { isDrawing, sceneText } from '../model/excalidraw'
 import { canSketch, flowComponent, setBoardSketch, setSketch, sketchNew } from '../model/sketch'
 import { type ItemLink, setItemLink } from '../model/itemLink'
-import type { BoardFile, ExcalidrawScene, TimeEntry, TimeTarget } from '../model/types'
+import type { BoardFile, ExcalidrawScene, SequenceData, TimeEntry, TimeTarget } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { History } from '../model/history'
@@ -26,6 +26,7 @@ import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
 import { looksTabular, newTable, tableFromText, tableSize } from '../model/table'
 import * as TL from '../model/timeline'
+import * as SQ from '../model/sequence'
 import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
 import { clipFromText, clipToText } from '../model/serialize'
 import * as S from '../model/slides'
@@ -563,6 +564,7 @@ export class Editor {
     this.selection.clear()
     this.selectedConnector = null
     this.editing = null
+    this.composing = null
     this.drag = { type: 'none' }
     this.history.clear()
     // AI changes and catch-up news belong to the board they were made on.
@@ -1287,6 +1289,7 @@ export class Editor {
     if (this.readOnly) return
     if (this.editing?.id !== id) this.finishEditing()
     const item = B.getItem(this.board, id)
+    if (item?.kind === 'sequence') return this.composeSequence(id)
     if (!item || !hasText(item.kind)) return
     if (item.locked) return this.setStatus('Locked — unlock it to edit')
     if (BS.isMasked(item, this.me, BS.openRound(this.board))) return this.setStatus(`That's ${item.hiddenBy}'s note — hidden until the brainstorm is revealed`)
@@ -1528,6 +1531,57 @@ export class Editor {
     this.select([id])
     if (!code) this.startEditing(id, { before: this.board, created: true })
     return id
+  }
+
+  /**
+   * Adds a sequence diagram (two lanes to start, or `data`, say from Mermaid) at the pointer or the
+   * middle of the view, and starts writing its first message.
+   */
+  addSequence(data: SequenceData = SQ.newSequence(), title = '', at: Vec = this.pointer ?? center(this.visibleWorld)) {
+    if (this.readOnly) return -1
+    const { w, h } = SQ.sequenceSize(data)
+    let id: Id = -1
+    this.edit((b) => {
+      // Near where it was asked for, but on nothing else.
+      const [next, newId] = B.addItem(b, B.newItem('sequence', B.nearestFree(b, rectFromCenter(at, w, h)), { text: title, sequence: data }))
+      id = newId
+      return next
+    })
+    this.tool = 'select'
+    this.select([id])
+    this.keepInView(id)
+    this.composeSequence(id)
+    return id
+  }
+
+  /** The sequence diagram being written with the keyboard, and the first key typed into it. */
+  composing: { id: Id; seed: string } | null = null
+
+  /** Starts writing in a sequence diagram: its next message (`seed`, a key just typed, starts the words). */
+  composeSequence(id: Id, seed = '') {
+    const item = B.getItem(this.board, id)
+    if (this.readOnly || item?.kind !== 'sequence') return
+    if (item.locked) return this.setStatus('Locked — unlock it to edit')
+    this.finishEditing()
+    this.selection = new Set([id])
+    this.composing = { id, seed }
+    this.emit()
+  }
+
+  stopComposing() {
+    if (!this.composing) return
+    this.composing = null
+    this.emit()
+  }
+
+  /** Changes a sequence diagram as one undo step; its size follows (its top left stays put). */
+  updateSequence(id: Id, f: (d: SequenceData) => SequenceData, title?: string) {
+    this.updateItem(id, (i) => {
+      if (!i.sequence) return i
+      const sequence = f(i.sequence)
+      if (sequence === i.sequence && (title === undefined || title === i.text)) return i
+      return { ...i, sequence, ...SQ.sequenceSize(sequence), ...(title !== undefined ? { text: title } : {}) }
+    })
   }
 
   /** Sets a code block's language (for its colouring and label). */
@@ -2759,6 +2813,12 @@ export class Editor {
    */
   pasteText(text: string) {
     const at = this.pointer ?? center(this.visibleWorld)
+    // A Mermaid sequence diagram becomes one here, to carry on writing.
+    const seq = SQ.parseSequence(text)
+    if (seq) {
+      this.addSequence(seq.data, seq.title, at)
+      return
+    }
     const ops = opsFromText(text)
     if (ops) {
       try {
@@ -3550,9 +3610,18 @@ export class Editor {
     }
     // Typing on a selected object renames it, as in other whiteboards: the first key replaces the text.
     if (node && this.typesInto(key, mods)) {
+      // In a sequence diagram, typing starts its next message.
+      if (node.kind === 'sequence') {
+        this.composeSequence(node.id, key)
+        return true
+      }
       this.startEditing(node.id)
       if (this.editing) this.editing.replaced = true
       this.setEditingText(key)
+      return true
+    }
+    if (!mods.alt && !mods.ctrl && k === 'u' && !this.readOnly) {
+      this.addSequence()
       return true
     }
     if (!mods.alt) {
@@ -3567,6 +3636,7 @@ export class Editor {
 
   /** A one-line reminder of what the keyboard can do right now. */
   get hint(): string | null {
+    if (this.composing) return '← → to  ·  Shift ← → from  ·  Tab call / reply / message  ·  Enter add  ·  ↑ ↓ earlier  ·  F2 rename lane  ·  Esc done'
     const e = this.editing
     if (e) {
       if (e.connector) return 'Type a label  ·  Esc done'

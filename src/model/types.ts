@@ -20,6 +20,7 @@ export type Kind =
   | 'data'
   | 'link'
   | 'code'
+  | 'sequence'
 
 /** A web address shown as a card. The preview fields come from the page, when a server could read it. */
 export interface LinkCard {
@@ -279,6 +280,31 @@ export interface TimelineEntry {
   after?: string[]
 }
 
+/** Someone or something in a sequence diagram: a lane, left to right. */
+export interface SequenceLane {
+  id: string
+  name: string
+  /** A person, drawn as a stick figure rather than a box. */
+  actor?: true
+}
+
+/** A message in a sequence diagram, from one lane to another (or itself), top to bottom. */
+export interface SequenceStep {
+  id: string
+  from: string
+  to: string
+  text: string
+  /** Left out: a call (solid line, filled arrowhead). A reply is dashed; async doesn't wait (open arrowhead). */
+  style?: 'reply' | 'async'
+}
+
+export interface SequenceData {
+  lanes: SequenceLane[]
+  steps: SequenceStep[]
+  /** Steps numbered 1, 2, 3… */
+  numbered?: true
+}
+
 export interface TimelineData {
   lanes: TimelineLane[]
   entries: TimelineEntry[]
@@ -364,6 +390,8 @@ export interface Item extends Rect {
   view?: DataView
   kanban?: KanbanData
   timeline?: TimelineData
+  /** A sequence diagram's lanes and messages (see `sequence.ts`). */
+  sequence?: SequenceData
   /** The web address and preview of a `link` card. */
   link?: LinkCard
   /** A link card for a wiki page (its title and opening words), opened beside the board. */
@@ -551,7 +579,7 @@ export const TEXT_ON_FILL = '#1e1e24'
 /** Whether the item's colour is an ink (text/line) colour rather than a fill. */
 export const usesInk = (k: Kind) => k === 'text' || k === 'pen'
 export const hasText = (k: Kind) => k !== 'pen' && k !== 'image' && k !== 'link'
-export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table'
+export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table' && k !== 'sequence'
 /** Objects with their own interactive content (live once selected). */
 export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline' || k === 'data'
 /** Height of the draggable title strip on widgets. */
@@ -589,6 +617,8 @@ export function defaultSize(k: Kind): { w: number; h: number } {
       return { w: 360, h: 120 }
     case 'code':
       return { w: 460, h: 240 }
+    case 'sequence':
+      return { w: 400, h: 200 }
     case 'pen':
       return { w: 1, h: 1 }
   }
@@ -619,6 +649,8 @@ export function defaultColor(k: Kind): string {
       return '#ffffff'
     case 'code':
       return '#16181d'
+    case 'sequence':
+      return '#ffffff'
     case 'text':
     case 'pen':
       return INKS[0][1]
@@ -676,4 +708,5 @@ export const KIND_LABELS: Record<Kind, string> = {
   data: 'Database view',
   link: 'Link card',
   code: 'Code block',
+  sequence: 'Sequence diagram',
 }

@@ -16,6 +16,7 @@ import { askable } from '../model/forms'
 import * as TT from '../model/timeTracking'
 import { KANBAN_TEMPLATES, kanbanWidth, newKanban } from '../model/kanban'
 import { insertMermaid, parseMermaid, stepSize } from '../model/mermaid'
+import * as SQ from '../model/sequence'
 import { type Measure, type OutlineNode, addChild, createMapFromOutline, layoutAll, parseOutline, reparent } from '../model/mindmap'
 import * as F from '../model/flowchart'
 import { applyOutline } from '../model/outlineSync'
@@ -118,6 +119,10 @@ export type Op =
   /** Replaces a whole mind map (the one `id` is in), where it is. */
   | { op: 'setMindMap'; id: Ref; outline?: string; tree?: OutlineNode; branch?: boolean }
   | ({ op: 'createFlowchart'; mermaid: string } & Placed)
+  /** A sequence diagram from Mermaid (`sequenceDiagram`): lanes and the messages between them. */
+  | ({ op: 'createSequence'; mermaid: string } & Placed)
+  /** Replaces a sequence diagram's lanes and messages (and title), where it is. */
+  | { op: 'setSequence'; id: Ref; mermaid: string }
   /** Grows a flowchart: a chain of steps after `after`. */
   | { op: 'addSteps'; after: Ref; steps: (string | { text: string; shape?: string; label?: string })[]; direction?: F.FlowDir; ref?: string }
   /** Replaces a whole flowchart (the one `id` is in), where it is. */
@@ -729,6 +734,24 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id: ids[0], ids })
         break
       }
+      case 'createSequence':
+      case 'setSequence': {
+        const parsed = SQ.parseSequence(text(op.mermaid, 'mermaid'))
+        if (!parsed) fail(index, op, '"mermaid" should be a Mermaid sequence diagram: "sequenceDiagram", then lines like "Ann->>Bob: Hello" (-->> for a reply)')
+        const { data, title } = parsed!
+        if (op.op === 'setSequence') {
+          const id = resolve(op.id, 'id')
+          if (B.getItem(b, id)?.kind !== 'sequence') fail(index, op, '"id" should be a sequence diagram')
+          b = B.updateItem(b, id, (i) => ({ ...i, sequence: data, ...SQ.sequenceSize(data), ...(title ? { text: title } : {}) }))
+          done({ id })
+          break
+        }
+        const size = SQ.sequenceSize(data)
+        const id = add(B.newItem('sequence', r0(size.w, size.h), { text: title, sequence: data }))
+        place([id], op.at)
+        done({ id })
+        break
+      }
       case 'createTable': {
         const table: TableData = tableOf(op.columns, op.rows)
         const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: text(op.title, 'title', false) || 'Table', table }))
@@ -1235,6 +1258,8 @@ export const OPS: Op['op'][] = [
   'moveIdea',
   'setMindMap',
   'createFlowchart',
+  'createSequence',
+  'setSequence',
   'addSteps',
   'setFlowchart',
   'setKanban',

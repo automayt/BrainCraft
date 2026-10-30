@@ -8,6 +8,7 @@
 import { type Rect, intersects } from '../model/geom'
 import { objectLabel } from '../model/notes'
 import * as TT from '../model/timeTracking'
+import { toMermaidSequence } from '../model/sequence'
 import type { Board, Id, Item, Kind } from '../model/types'
 
 /** Above this many objects, the board is summarised instead of listed in full. */
@@ -39,6 +40,7 @@ export function objectLine(i: Item): string {
     const cols = i.table.columns
     parts.push(`rows:${quote(clip([cols.map((c) => c.name).join('|'), ...i.table.rows.map((r) => cols.map((c) => r.cells[c.id] ?? '').join('|'))].join('; ')))}`)
   }
+  if (i.kind === 'sequence' && i.sequence) parts.push(`mermaid:${quote(clip(toMermaidSequence(i.sequence)))}`)
   if (i.kind === 'timeline' && i.timeline) {
     const t = i.timeline
     parts.push(`lanes:${quote(clip(t.lanes.map((l) => `${l.name}[${t.entries.filter((e) => e.lane === l.id).map((e) => `${e.title} ${e.start}${e.end ? `..${e.end}` : ''}`).join('; ')}]`).join(' | ')))}`)

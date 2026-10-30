@@ -147,9 +147,11 @@ whatever you have selected.
   already up: paste Mermaid, see the preview, press **Insert**, then **Put on
   the board**. Flowcharts and sequence diagrams become shapes you can change;
   other kinds (class, state, Gantt…) come in as a picture. In ☰ → **Import…**, pasted
-  Mermaid gets **Add as Excalidraw drawing** beside **Add as flowchart**, and
-  pasting a sequence, class or other non-flowchart diagram straight onto the
-  board draws it the same way.
+  Mermaid gets **Add as Excalidraw drawing** beside **Add as flowchart** (or
+  **Add as sequence diagram**), and pasting a class, state or other kind of
+  diagram BrainCraft doesn't make itself straight onto the board draws it the
+  same way. A pasted sequence diagram becomes a
+  [sequence diagram](#sequence-diagrams) to carry on writing.
 - **Sketch a flowchart:** right-click any flowchart shape → **Sketch in
   Excalidraw** draws the whole flowchart again, hand-drawn, as a drawing
   beside it (through its Mermaid and Excalidraw's converter); the flowchart
@@ -167,6 +169,31 @@ whatever you have selected.
 - The words in a drawing are searchable, and drawings show in wiki pages like
   any other object. Excalidraw and its fonts load only when you open a
   drawing, from the app itself.
+
+### Sequence diagrams
+
+Who sends what to whom, in order, built from the keyboard:
+
+- **U** (or the last button in the tool rail → **Sequence diagram**, or
+  right-click → **Sequence diagram**) makes one with two lanes and a box for
+  the first message. Type what's sent and press **Enter**.
+- The next message is suggested: after a call its answer comes back
+  (dashed), and after an answer, the answer to whoever is still waiting.
+  **← / →** choose who gets it, **Shift ← / →** who sends it, and **Tab**
+  switches between a call, a reply and a message that doesn't wait.
+- **→** past the last lane makes a new lane: type its name and press Enter.
+  **F2** renames the lane the arrow points at; **Alt ← / →** moves it; a
+  lane renamed to nothing is taken out with its messages.
+- **↑ / ↓** go back to earlier messages to change them, **Alt ↑ / ↓** moves
+  one, and **Backspace** on an empty one takes it out. **Esc** when done.
+- Select a diagram and press **Enter**, double-click it, or just start
+  typing to carry on. Its toolbar has **Numbered** and **Copy Mermaid**.
+- Paste a Mermaid sequence diagram (participants, actors, `->>` calls,
+  `-->>` replies, `-)` messages that don't wait, `title`, `autonumber`) to
+  make one; notes and loops are left out. They're searchable, export to
+  Markdown as Mermaid, show in wiki pages, can be edited there as Mermaid,
+  take the hand-drawn look, and assistants can make and change them
+  (`createSequence`, `setSequence`).
 
 ### Tables, Kanban boards and timelines
 

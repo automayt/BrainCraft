@@ -434,6 +434,9 @@ Admin, next:
   something near them moves, the minimap is painted rather than drawn shape
   by shape, and frames can move to boards of their own (suggested past
   4,000 objects).
+- [x] **Sequence diagrams** on the canvas, written from the keyboard (U,
+  arrows for who sends and who gets it, Tab for call, reply or a message
+  that doesn't wait, the next message suggested), in and out as Mermaid.
 - [x] **Child boards, and dividing a crowded board:** by frame, by kind of
   object, or by topic with the assistant; child boards show their parent by
   the title and nest under it in Your boards.

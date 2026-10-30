@@ -21,6 +21,7 @@ const FILTERS: Filter[] = [
   { label: 'Tables', kinds: ['table'] },
   { label: 'Kanban', kinds: ['kanban'] },
   { label: 'Timelines', kinds: ['timeline'] },
+  { label: 'Sequence diagrams', kinds: ['sequence'] },
   { label: 'Databases', kinds: ['data'] },
   { label: 'Comment blocks', kinds: ['comment'] },
   { label: 'Shapes', kinds: ['rect', 'ellipse'] },

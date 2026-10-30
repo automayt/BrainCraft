@@ -38,8 +38,9 @@ import { canLink, cleanItemLink } from './itemLink'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
 import { canSketch } from './sketch'
+import { cleanSequence, sequenceSize } from './sequence'
 
-export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code']
+export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code', 'sequence']
 const STATUSES: readonly Status[] = ['todo', 'doing', 'waiting', 'undecided', 'done', 'dropped']
 const FLOW_SHAPES = ['process', 'decision', 'terminator', 'data', 'document', 'database', 'subroutine']
 const VIEW_TYPES = ['table', 'board', 'timeline', 'calendar', 'gallery', 'form']
@@ -300,6 +301,12 @@ export function cleanItem(raw: unknown): Item | null {
   if (kind === 'timeline') {
     const timeline = cleanTimeline(raw.timeline)
     if (timeline) out.timeline = timeline
+  }
+  if (kind === 'sequence') {
+    const sequence = cleanSequence(raw.sequence)
+    if (!sequence) return null
+    // Its size follows from what's in it.
+    Object.assign(out, { sequence }, sequenceSize(sequence))
   }
   if (kind === 'link') {
     const link = cleanLink(raw.link)

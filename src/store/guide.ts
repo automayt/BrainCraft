@@ -258,6 +258,17 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Hand-drawn:** select objects and press **Alt H** (or **✎ Hand-drawn** on the toolbar) to draw just those by hand; the whole flowchart changes, and new steps follow. The squiggle in the tool rail also offers **New objects** (what you add from now on, just for you) and **The whole board** (everything, for everyone). Or right-click → **Sketch in Excalidraw** for a hand-drawn copy beside it.`,
         },
         {
+          title: 'Sequence diagrams',
+          icon: '↔️',
+          text: `Who sends what to whom, in order: people and systems side by side, messages top to bottom. Built from the keyboard.
+
+- Press **U** (or the last button in the tool rail → **Sequence diagram**). It starts with two lanes and a box for the first message: type what's sent, press **Enter**.
+- The next message is suggested: after a call, its answer comes back (dashed). **←** / **→** choose who gets it, **Shift ←** / **→** who sends it, **Tab** switches between a call, a reply and a message that doesn't wait.
+- Press **→** past the last lane for a new one: type its name, **Enter**. **F2** renames the lane the arrow points at, **Alt ←** / **→** moves it.
+- **↑** / **↓** go back to earlier messages to change them; **Alt ↑** / **↓** moves one; **Backspace** on an empty one takes it out. **Esc** when you're done.
+- Select a diagram and press **Enter** or just start typing to carry on. **Numbered** on its toolbar numbers the messages; **Copy Mermaid** copies it for docs elsewhere, and pasting a Mermaid sequence diagram makes one.`,
+        },
+        {
           title: 'Kanban boards and timelines',
           icon: '🗂',
           text: `${embed('Kanban and timeline', 'plan', 480)}
@@ -294,7 +305,7 @@ Paste almost anything:
 | A web address | A link card; YouTube, Vimeo and Spotify play on it |
 | A fenced code block | Code with colours, in its language |
 | An image | The picture |
-| Mermaid | A flowchart (other Mermaid diagrams, such as sequence diagrams, become an Excalidraw drawing) |
+| Mermaid | A flowchart, or a sequence diagram (class, state and other Mermaid diagrams become an Excalidraw drawing) |
 | Shapes copied in Excalidraw, or an .excalidraw file | An Excalidraw drawing |
 | JSON operations | Whatever they describe (see [[The API]]) |`,
         },
