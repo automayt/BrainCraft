@@ -121,8 +121,8 @@ whatever you have selected.
 (This board is in [examples/Weekend away.braincraft](examples/Weekend%20away.braincraft): drop it on BrainCraft to open it.)
 
 - **A hand-drawn board, with BrainCraft's own tools:** the **Hand-drawn
-  board** switch (the squiggle in the Draw group of the tool rail, or the ☰
-  menu, or Ctrl+K) draws everything on the board by hand, and everything you
+  board** switch (the squiggle in the Draw group of the tool rail → **The
+  whole board**, or the ☰ menu, or Ctrl+K) draws everything on the board by hand, and everything you
   add after: shapes, notes, text, frames, flowcharts and mind maps get wobbly
   pencil outlines, hatched fills and handwriting, and lines get pencil
   arrowheads. They're ordinary board objects, so they select, move, connect,
@@ -154,9 +154,13 @@ whatever you have selected.
   Excalidraw** draws the whole flowchart again, hand-drawn, as a drawing
   beside it (through its Mermaid and Excalidraw's converter); the flowchart
   stays the one to change and run.
-- **Hand-drawn look for some objects:** **✎ Hand-drawn** on the
-  selection toolbar draws the selection by hand (or back with clean lines,
-  on a hand-drawn board): shapes, flowcharts, frames, notes and mind maps with wobbly pencil
+- **Hand-drawn look for some objects:** select them and press **Alt H**,
+  or **✎ Hand-drawn** on the selection toolbar, or the squiggle in the tool
+  rail → **The selected objects**. That draws just those by hand (again for
+  clean lines). The squiggle's **New objects** draws what you add from then
+  on by hand, just for you (Alt H with nothing selected), and **The whole
+  board** does everything, for everyone. Hand-drawn objects are
+  shapes, flowcharts, frames, notes and mind maps with wobbly pencil
   outlines, hatched fills and handwriting, while they keep working as before:
   Tab adds the next step (hand-drawn too), runs, Mermaid, exports. A
   flowchart switches all at once, and lines follow what they join.

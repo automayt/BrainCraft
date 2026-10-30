@@ -38,6 +38,7 @@ import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { isWiki } from '../model/wiki'
 import { focusFirst, moveFocus } from './menuKeys'
+import { canSketch } from '../model/sketch'
 import { useWorkspace } from './useWorkspace'
 import { AiChip } from './AiConnect'
 import { LiveBar } from './Live'
@@ -397,6 +398,7 @@ export function ToolRail() {
   const editor = useEditor()
   const ui = useUi()
   const [more, setMore] = useState(false)
+  const [hand, setHand] = useState(false)
   const hidden = MORE.find((m) => m.tool === editor.tool)
   // On a phone the rail is a sideways-scrolling bar, which would clip its panels: they go above it, on the page.
   const place = (node: ReactNode) => (node && typeof matchMedia !== 'undefined' && matchMedia('(max-width: 720px)').matches ? createPortal(node, document.body) : node)
@@ -440,14 +442,18 @@ export function ToolRail() {
           )}
           {group.label === 'Draw' && !editor.readOnly && (
             <button
-              className={`tool has-tip${editor.board.sketch ? ' active' : ''}`}
-              aria-label="Hand-drawn board"
-              aria-pressed={!!editor.board.sketch}
+              className={`tool has-tip${editor.board.sketch || editor.drawByHand || hand ? ' active' : ''}`}
+              aria-label="Hand-drawn"
+              aria-haspopup="true"
+              aria-expanded={hand}
               onMouseDown={keepFocus}
-              onClick={() => editor.setBoardSketch(!editor.board.sketch)}
+              onClick={() => {
+                setMore(false)
+                setHand(!hand)
+              }}
             >
               <HandDrawnIcon />
-              <Tip label={editor.board.sketch ? 'Hand-drawn board (on): click for clean lines' : 'Hand-drawn board: everything drawn by hand'} />
+              {!hand && <Tip label="Hand-drawn: the selection, new objects or the whole board" keys="Alt H" />}
             </button>
           )}
         </div>
@@ -466,6 +472,7 @@ export function ToolRail() {
         </button>
       </div>
       {place(more && <MoreFlyout onClose={() => setMore(false)} onImage={ui.openImage} />)}
+      {place(hand && !more && <HandFlyout onClose={() => setHand(false)} />)}
       {place(!more && editor.flowPalette && <FlowFlyout />)}
       {place(!more && editor.tool === 'pen' && <PenFlyout />)}
     </nav>
@@ -599,6 +606,45 @@ function FlowFlyout() {
           </div>,
           document.body,
         )}
+    </div>
+  )
+}
+
+/** What to draw by hand: the selection, new objects (just for this person), or the whole board. */
+function HandFlyout({ onClose }: { onClose: () => void }) {
+  const editor = useEditor()
+  const ref = useRef<HTMLDivElement>(null)
+  useEscape(onClose)
+  useEffect(() => {
+    focusFirst(ref.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useClickAway(ref, onClose, () => document.querySelector('.tool-rail [aria-haspopup][aria-expanded="true"]'))
+  const sketchable = editor.selectedItems.filter((i) => canSketch(i.kind)).length
+  const option = (label: string, hint: string, on: boolean, run: () => void, keys?: string) => (
+    <button role="menuitemcheckbox" aria-checked={on} className={`flyout-option${on ? ' on' : ''}`} onMouseDown={keepFocus} onClick={run}>
+      <span className="check">{on && <CheckIcon />}</span>
+      <span>
+        {label}
+        <small>{hint}</small>
+      </span>
+      {keys && <kbd>{keys}</kbd>}
+    </button>
+  )
+  return (
+    <div className="flyout island hand-flyout" ref={ref} role="menu" aria-label="Hand-drawn" onKeyDown={moveFocus}>
+      <div className="popover-title">Draw by hand</div>
+      {sketchable > 0 &&
+        option(
+          sketchable === 1 ? 'The selected object' : `The ${sketchable} selected objects`,
+          'Wobbly outlines and handwriting, just for these',
+          editor.selectionSketched,
+          () => editor.setSketch(!editor.selectionSketched),
+          'Alt H',
+        )}
+      {option('New objects', 'What you add from now on (just you, in this browser)', editor.drawByHand, () => editor.setDrawByHand(!editor.drawByHand), sketchable ? undefined : 'Alt H')}
+      {option('The whole board', 'Everything here and everything added, for everyone', !!editor.board.sketch, () => editor.setBoardSketch(!editor.board.sketch))}
+      {!sketchable && <p className="flyout-tip">Select objects first to draw just those by hand.</p>}
     </div>
   )
 }

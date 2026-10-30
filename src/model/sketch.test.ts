@@ -127,6 +127,12 @@ describe('a hand-drawn board', () => {
     expect(sketchNew(marked, marked)).toBe(marked)
     // Not a hand-drawn board: nothing changes.
     expect(sketchNew(board(), applyOps(board(), [{ op: 'createNote', text: 'x' }], { measure: fakeMeasure }).board).items.at(-1)!.sketch).toBeUndefined()
+    // Unless this person draws new objects by hand: then just the new one is, and the board isn't.
+    const plain = board()
+    const mine = sketchNew(plain, applyOps(plain, [{ op: 'createNote', text: 'x' }], { measure: fakeMeasure }).board, true)
+    expect(mine.items.at(-1)!.sketch).toBe(true)
+    expect(mine.items.slice(0, -1).every((i) => !i.sketch)).toBe(true)
+    expect(mine.sketch).toBeUndefined()
   })
 
   it('reaches friends in a live session, and is saved with the board', () => {

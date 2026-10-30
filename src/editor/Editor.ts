@@ -258,6 +258,16 @@ export interface AiChange {
 }
 
 /** Slides can zoom in this far, so small frames fill the screen. */
+/** Where this browser keeps whether new objects come out drawn by hand. */
+const DRAW_BY_HAND = 'braincraft:draw-by-hand'
+function readDrawByHand(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(DRAW_BY_HAND) === '1'
+  } catch {
+    return false
+  }
+}
+
 const SLIDE_MAX_ZOOM = 4
 const EMOTE_MS = 2200
 const CHAT_MS = 6000
@@ -330,6 +340,8 @@ export class Editor {
   }
   penColor = INKS[0][1]
   penWidth = 4
+  /** This person draws new objects by hand, whatever the board does (kept in this browser). */
+  drawByHand = readDrawByHand()
   /** The symbol the flowchart tool places. */
   flowShape: FlowShape = 'process'
   /** The flowchart shape panel stays open while building a flowchart, until closed or another tool is picked. */
@@ -511,7 +523,7 @@ export class Editor {
     if (this.readOnly) return
     // During a private brainstorm, notes written here are marked as this person's.
     // On a hand-drawn board, what's new comes out drawn by hand.
-    const next = M.layoutAll(sketchNew(this.board, BS.stampNew(this.board, b, this.me)), this.measure)
+    const next = M.layoutAll(sketchNew(this.board, BS.stampNew(this.board, b, this.me), this.drawByHand), this.measure)
     if (next === this.board) return
     this.board = next
     this.onBoardChange?.(next)
@@ -2681,6 +2693,19 @@ export class Editor {
   }
 
   /** Whether everything selected that can be drawn by hand is. */
+  /** New objects drawn by hand (just for this person), or not. */
+  setDrawByHand(on: boolean) {
+    this.drawByHand = on
+    try {
+      if (on) localStorage.setItem(DRAW_BY_HAND, '1')
+      else localStorage.removeItem(DRAW_BY_HAND)
+    } catch {
+      // Not kept between visits.
+    }
+    this.setStatus(on ? 'New objects come out drawn by hand (Alt H with nothing selected switches this off)' : 'New objects come out with clean lines')
+    this.emit()
+  }
+
   get selectionSketched(): boolean {
     const items = this.selectedItems.filter((i) => canSketch(i.kind))
     return items.length > 0 && items.every((i) => i.sketch)
@@ -3424,6 +3449,12 @@ export class Editor {
     }
     if (mods.alt && k === 't' && !this.readOnly) {
       this.toggleTracking()
+      return true
+    }
+    if (mods.alt && k === 'h' && !this.readOnly) {
+      // The selection drawn by hand (or not); with nothing selected, new objects.
+      if (this.selectedItems.some((i) => canSketch(i.kind))) this.setSketch(!this.selectionSketched)
+      else this.setDrawByHand(!this.drawByHand)
       return true
     }
     if (mods.alt && k === 'r' && this.single?.kind === 'flow') {

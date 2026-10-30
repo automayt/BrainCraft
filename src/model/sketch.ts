@@ -37,11 +37,12 @@ export function setBoardSketch(b: Board, on: boolean): Board {
 }
 
 /**
- * On a hand-drawn board, objects made since `before` come out drawn by hand. New objects are the
- * ones with ids handed out since then (an undone delete brings back an old id, and keeps its look).
+ * On a hand-drawn board, or for someone drawing new objects by hand (`mine`), objects made since
+ * `before` come out drawn by hand. New objects are the ones with ids handed out since then (an
+ * undone delete brings back an old id, and keeps its look).
  */
-export function sketchNew(before: Board, after: Board): Board {
-  if (!after.sketch || after.nextId === before.nextId) return after
+export function sketchNew(before: Board, after: Board, mine = false): Board {
+  if ((!after.sketch && !mine) || after.nextId === before.nextId) return after
   let changed = false
   const items = after.items.map((i): Item => {
     if (i.id < before.nextId || i.sketch !== undefined || !canSketch(i.kind)) return i

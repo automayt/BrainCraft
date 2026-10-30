@@ -31,6 +31,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Type', 'With one object selected, typing replaces its text (? and Shift P type too: press Esc first)'],
       ['Right-click · Shift F10', 'Actions for whatever is under the pointer (or the selection)'],
       ['Alt C', 'Comments on the selected object'],
+      ['Alt H', 'Draw the selected objects by hand (again: clean lines); with nothing selected, new objects you add'],
       ['Ctrl Enter', 'Mark the selection done: its words are crossed out (again: not done)'],
       ['Alt T', 'Start a timer on the selected object (or the open wiki page, or the board); again to stop it'],
       ['🔗 Link (selection toolbar)', 'Make the object lead to a wiki page, a board, an object or a web address; click its badge to follow'],
