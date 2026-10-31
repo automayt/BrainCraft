@@ -19,6 +19,9 @@ export function moveFocus(e: React.KeyboardEvent<HTMLElement>) {
   items[to].focus()
 }
 
+/** Set by a menu so another menu can open it (the toolbar's More menu opens Link, Assign and Time). */
+export type MenuOpener = React.MutableRefObject<((el: HTMLElement, keyboard: boolean) => void) | null>
+
 /** Puts the keyboard on a menu's first item. */
 export function focusFirst(menu: HTMLElement | null) {
   menu?.querySelector<HTMLElement>(ITEMS)?.focus()
@@ -45,11 +48,16 @@ export function useButtonMenu() {
   useEffect(() => {
     if (at?.keyboard) focusFirst(menu.current)
   }, [at])
+  /** Opens it under another element (a button in another menu that leads here). */
+  const openFrom = useCallback((el: HTMLElement, keyboard: boolean) => {
+    const r = el.getBoundingClientRect()
+    trigger.current = el
+    setAt({ x: r.left + r.width / 2, y: r.bottom + 8, keyboard })
+  }, [])
   const toggle = (e: React.MouseEvent<HTMLElement>) => {
     // The toolbar scrolls sideways on small screens, so the menu lives outside it.
-    const r = e.currentTarget.getBoundingClientRect()
-    trigger.current = e.currentTarget
-    setAt(at ? null : { x: r.left + r.width / 2, y: r.bottom + 8, keyboard: e.detail === 0 })
+    if (at) return setAt(null)
+    openFrom(e.currentTarget, e.detail === 0)
   }
-  return { at, close, toggle, menuProps: { ref: menu, onKeyDown: moveFocus } }
+  return { at, close, toggle, openFrom, menuProps: { ref: menu, onKeyDown: moveFocus } }
 }

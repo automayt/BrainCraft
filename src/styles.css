@@ -1604,20 +1604,93 @@ button.on,
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: 2px;
-  /* One row, scrolling sideways if it must: never squeezed into a column near an edge. */
+  /* One row: never squeezed into a column near an edge. */
   width: max-content;
   max-width: calc(100vw - 24px);
   padding: 5px 6px;
-  overflow-x: auto;
   white-space: nowrap;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   transform: translate(-50%, -100%);
+}
+
+/* Everything but ⋯ and Delete, scrolling sideways if it must, so those two are always in view. */
+.selection-toolbar .stb-main {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
   /* A thin bar shows when some buttons are out of sight (the mouse wheel scrolls it too). */
   scrollbar-width: thin;
+}
+
+.selection-toolbar .stb-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-strong);
+}
+
+/* Nothing else for this selection (a widget has no colours or sizes): just ⋯ and Delete. */
+.selection-toolbar .stb-main:not(:has(> :not(.sep):not(:empty))) {
+  display: none;
+}
+
+.selection-toolbar .stb-main:not(:has(> :not(.sep):not(:empty))) + .stb-end {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+/* A menu whose button is in ⋯ for now takes no room. */
+.selection-toolbar .align-anchor:empty {
+  display: none;
+}
+
+.align-menu.more-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 210px;
+}
+
+.align-menu.more-menu > button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 10px 0 6px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.align-menu.more-menu .more-check {
+  width: 14px;
+  color: var(--accent);
+  text-align: center;
+}
+
+.align-menu.more-menu kbd {
+  margin-left: auto;
+}
+
+.align-menu.more-menu .more-react {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.align-menu.more-menu .more-react button {
+  width: 32px;
+  font-size: 16px;
 }
 
 .selection-toolbar .swatches {
@@ -5948,8 +6021,9 @@ button.on,
   transform: translate(-50%, 0);
 }
 
-/* No colours for this selection (widgets): don't start with a divider. */
-.selection-toolbar > .sep:first-child {
+/* No colours for this selection (widgets): don't start or end with a divider. */
+.selection-toolbar .stb-main > .sep:first-child,
+.selection-toolbar .stb-main > .sep:last-child {
   display: none;
 }
 
@@ -5957,9 +6031,14 @@ button.on,
   .selection-toolbar {
     flex-wrap: wrap;
     justify-content: center;
-    row-gap: 4px;
+    gap: 4px 2px;
     white-space: normal;
     max-width: calc(100% - 24px);
+  }
+  /* On a phone everything wraps as one, ⋯ and Delete last, rather than scroll. */
+  .selection-toolbar .stb-main:has(> :not(.sep):not(:empty)),
+  .selection-toolbar .stb-end {
+    display: contents;
   }
   .selection-toolbar .swatches {
     flex-wrap: wrap;

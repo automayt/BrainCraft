@@ -432,7 +432,7 @@ Admin, next:
   assigned to them.
 - [ ] **Sequence diagrams step by step in Present,** one message at a time.
 - [ ] **Divide by person:** one child board for each person's assigned things.
-- [ ] **A ⋯ menu on the selection toolbar** for Lock, To front, To back,
+- [x] **A ⋯ menu on the selection toolbar** for Lock, To front, To back,
   Duplicate and React, so a crowded toolbar keeps Delete in view.
 - [ ] **The guide refreshes itself** (or says a newer one is there), and uses
   the server's own app name throughout.

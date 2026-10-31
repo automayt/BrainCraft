@@ -18,7 +18,7 @@ import type { Board, TimeEntry, TimeTarget } from '../model/types'
 import { isWiki, pageOrder } from '../model/wiki'
 import { Dialog } from './Boards'
 import { copyText } from './copyText'
-import { useButtonMenu } from './menuKeys'
+import { type MenuOpener, useButtonMenu } from './menuKeys'
 import { useClickAway } from './useClickAway'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
@@ -789,10 +789,13 @@ export function TimeMarks({ editor, board = editor.board, zoom = editor.camera.z
 // ----- the selection toolbar -------------------------------------------------------------------
 
 /** Who the selection is assigned to: tick people, or add a name. */
-export function AssignMenu() {
+export function AssignMenu({ hidden, opener }: { hidden?: boolean; opener?: MenuOpener } = {}) {
   const editor = useEditor()
   const people = usePeople()
-  const { at, close, toggle, menuProps } = useButtonMenu()
+  const { at, close, toggle, openFrom, menuProps } = useButtonMenu()
+  useEffect(() => {
+    if (opener) opener.current = openFrom
+  }, [opener, openFrom])
   const [name, setName] = useState('')
   const items = editor.selectedItems.filter((i) => canHaveStatus(i.kind))
   const has = (n: string) => items.length > 0 && items.every((i) => i.assignees?.some((a) => a.toLowerCase() === n.toLowerCase()))
@@ -801,7 +804,7 @@ export function AssignMenu() {
   const names = [...new Map([...assigned, ...people.map((p) => p.name)].map((n) => [n.toLowerCase(), n])).values()]
   return (
     <span className="align-anchor">
-      <button title="Who it's assigned to" aria-label="Assign" aria-expanded={!!at} aria-haspopup="menu" className={`assign-button${at ? ' on' : ''}`} onClick={toggle}>
+      {!hidden && <button title="Who it's assigned to" aria-label="Assign" aria-expanded={!!at} aria-haspopup="menu" className={`assign-button${at ? ' on' : ''}`} onClick={toggle}>
         {assigned.length ? (
           <span className="time-avatars">
             {assigned.slice(0, 3).map((n) => (
@@ -817,7 +820,7 @@ export function AssignMenu() {
           </svg>
         )}
         Assign
-      </button>
+      </button>}
       {at &&
         createPortal(
           <div className="align-menu assign-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
@@ -880,9 +883,12 @@ export function AssignMenu() {
 }
 
 /** The selection's timer, estimate and time so far. */
-export function TrackMenu() {
+export function TrackMenu({ hidden, opener }: { hidden?: boolean; opener?: MenuOpener } = {}) {
   const editor = useEditor()
-  const { at, close, toggle, menuProps } = useButtonMenu()
+  const { at, close, toggle, openFrom, menuProps } = useButtonMenu()
+  useEffect(() => {
+    if (opener) opener.current = openFrom
+  }, [opener, openFrom])
   const one = editor.single
   const items = editor.selectedItems.filter((i) => canHaveStatus(i.kind))
   const mine = editor.myTimer
@@ -899,7 +905,7 @@ export function TrackMenu() {
   }
   return (
     <span className="align-anchor">
-      <button
+      {!hidden && <button
         title={here ? 'Timing this now' : 'Time on this'}
         aria-label="Time"
         aria-expanded={!!at}
@@ -912,7 +918,7 @@ export function TrackMenu() {
           <path d="M12 9v4l2.5 2.5M9 2h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
         {here ? TT.formatClock(TT.durationOf(mine!, now)) : spent ? TT.formatDuration(spent) : 'Time'}
-      </button>
+      </button>}
       {at &&
         createPortal(
           <div className="align-menu track-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>

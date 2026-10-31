@@ -230,7 +230,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - **Fit to content** (right-click or **Ctrl+K**) sizes a shape to its text, a frame around what's inside, or a Kanban board, table or database view to show everything. **Same size** makes several shapes alike.
 - **Status marks** (*to do*, *in progress*, *waiting*, *undecided*, *done*, *dropped*): pick one on the toolbar. The key along the bottom counts them and filters the board. ${link('This note', 'n4')} has one.
 - **Comments:** every object has them (**Alt+C**), plus a description at the top for context. Type **@** to mention someone or another object, and **[[** to link a board. On a server with accounts, the people you mention see it under **Mentions of you** in their account menu.
-- **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar.
+- **Reactions:** 👍 ❤️ 😂 🎉 🤔 ⭐ from the toolbar's **⋯** menu.
 - **Lock** (**Ctrl+Shift+L**) a background so it can't be moved by accident; **group** (**Ctrl+G**) objects to move them as one.
 - **Excalidraw drawings:** right-click empty space → **Excalidraw drawing** for Excalidraw's hand-drawn sketching, right on the board. Double-click a drawing to change it. **Mermaid to Excalidraw…** (right-click empty space, or Ctrl K) opens Excalidraw's converter: paste Mermaid, press Insert, and put it on the board. To bring in an .excalidraw file, drop it on the board, or use ☰ → **Open file…**.`,
         },
@@ -255,7 +255,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - Drag a blue arrow to empty space and BrainCraft suggests the next shape.
 - **Mermaid:** paste a Mermaid flowchart to build it, or export one for docs elsewhere. ${link('This one', 'flow')} came from Mermaid.
 - **Run it** (**Alt+R**): a flowchart becomes a step-by-step checklist, and each run is kept with its timing.
-- **Hand-drawn:** select objects and press **Alt H** (or **✎ Hand-drawn** on the toolbar) to draw just those by hand; the whole flowchart changes, and new steps follow. The squiggle in the tool rail also offers **New objects** (what you add from now on, just for you) and **The whole board** (everything, for everyone). Or right-click → **Sketch in Excalidraw** for a hand-drawn copy beside it.`,
+- **Hand-drawn:** select objects and press **Alt H** (or **Hand-drawn** in the toolbar's **⋯** menu) to draw just those by hand; the whole flowchart changes, and new steps follow. The squiggle in the tool rail also offers **New objects** (what you add from now on, just for you) and **The whole board** (everything, for everyone). Or right-click → **Sketch in Excalidraw** for a hand-drawn copy beside it.`,
         },
         {
           title: 'Sequence diagrams',
@@ -270,7 +270,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
 - Boxes: **Shift ↑** / **↓** picks several messages, then type **/loop**, **/alt**, **/opt**, **/par**, **/critical** or **/break**, with words after it for its label, and **Enter**. **/else** divides an alt box above the message you're on; **/unbox** takes a box away. Type **/** to see them all.
 - Click a lane to send the message there (**Shift**-click: from there), or a message to go to it. On a phone, buttons under the box do the same.
 - **Esc** when you're done keeps what you typed.
-- Select a diagram and press **Enter** or just start typing to carry on. **Numbered** on its toolbar numbers the messages; **Copy Mermaid** copies it for docs elsewhere, and pasting a Mermaid sequence diagram makes one.`,
+- Select a diagram and press **Enter** or just start typing to carry on. **Numbered** in its toolbar's **⋯** menu numbers the messages; **Copy as Mermaid** copies it for docs elsewhere, and pasting a Mermaid sequence diagram makes one.`,
         },
         {
           title: 'Kanban boards and timelines',

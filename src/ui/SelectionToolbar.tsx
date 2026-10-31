@@ -8,9 +8,9 @@ import * as RX from '../model/reactions'
 import { canHaveStatus, STATUSES, statusInfo } from '../model/status'
 import { hasSketch, sketchToBoard } from './sketch'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, type Kind, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useButtonMenu } from './menuKeys'
+import { type MenuOpener, useButtonMenu } from './menuKeys'
 import { AssignMenu, TrackMenu } from './TimeTracking'
 import { canLink, describeLink, type ItemLink } from '../model/itemLink'
 import { mentionCandidates, objectLabel } from '../model/notes'
@@ -56,6 +56,10 @@ export function SelectionToolbar() {
     })
     observer.current.observe(el)
   }, [])
+  // How the ⋯ menu opens Link, Assign and Time while their buttons are off the bar.
+  const linkOpener: MenuOpener = useRef(null)
+  const assignOpener: MenuOpener = useRef(null)
+  const timeOpener: MenuOpener = useRef(null)
   if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker || ui.menu) return null
   const { board } = editor
   let anchor: { x: number; y: number }
@@ -131,248 +135,316 @@ export function SelectionToolbar() {
   const colorable = !items.length || items.some(plain)
   const current = items[0]?.color
 
+  const one = editor.single
+  const sequence = items.length === 1 ? items[0].sequence : undefined
+  const locked = items.length > 0 && items.every((i) => i.locked)
+  const statusable = items.some((i) => canHaveStatus(i.kind))
+  const linkable = !editor.readOnly && items.length > 0 && items.every((i) => canLink(i.kind))
+  // Link, Assign and Time sit on the bar once they have something to show; until then they're in More.
+  const linked = items.some((i) => i.linkTo)
+  const assigned = items.some((i) => i.assignees?.length)
+  const timer = editor.myTimer?.on
+  const timed = !!one && (!!one.estimate || (!!timer && 'item' in timer && timer.item === one.id) || (board.time ?? []).some((e) => !!e.on && 'item' in e.on && e.on.item === one.id))
+  const opens = (menu: MenuOpener) => (from: HTMLElement, keyboard: boolean) => menu.current?.(from, keyboard)
+
+  // The rarer actions, in the ⋯ menu so the bar stays short and Delete stays in view.
+  const more: MoreEntry[] = []
+  if (items.length > 0) more.push({ label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() })
+  if (items.length > 0 && !locked) more.push({ label: 'Lock', keys: 'Ctrl Shift L', title: 'Can’t be moved or changed by accident', run: () => editor.setLocked(true) })
+  if (items.length > 0 && !mind) {
+    more.push({ label: 'Bring to front', title: 'Draw on top of everything', run: () => editor.bringToFront() })
+    more.push({ label: 'Send to back', title: 'Draw under everything', run: () => editor.sendToBack() })
+  }
+  if (!editor.readOnly && items.some((i) => canSketch(i.kind)))
+    more.push({
+      label: 'Hand-drawn',
+      keys: 'Alt H',
+      title: 'Wobbly outlines and handwriting for just these (a flowchart goes all at once)',
+      checked: editor.selectionSketched,
+      run: () => editor.setSketch(!editor.selectionSketched),
+    })
+  if (hasFontSize && items.some((i) => i.fontFixed)) more.push({ label: 'Fit the text to the shape', run: () => editor.fitText() })
+  if (!editor.readOnly && items.some((i) => FIT_BUTTON.has(i.kind) && canFitToContent(i))) more.push({ label: 'Fit to content', title: 'The size that shows everything in it', run: () => editor.fitToContent() })
+  if (items.length > 0 && items.every((i) => i.kind === 'sticky') && !items.every((i) => typeof i.back === 'string'))
+    more.push({ label: 'Add a back', title: 'Give this note a back to write on: a flip card', run: () => editor.setFlipCards(true) })
+  if (sequence) {
+    if (!editor.readOnly) more.push({ label: 'Numbered', title: 'Number the messages 1, 2, 3…', checked: !!sequence.numbered, run: () => editor.updateSequence(items[0].id, (d) => setNumbered(d, !d.numbered)) })
+    more.push({
+      label: 'Copy as Mermaid',
+      title: 'For docs and wikis that draw it',
+      run: () => void copyText(toMermaidSequence(sequence, items[0].text)).then(() => editor.setStatus('Copied as Mermaid')),
+    })
+  }
+  if (linkable && !linked) more.push({ label: 'Link…', title: 'Make this lead to a wiki page, a board, an object or a web address', run: opens(linkOpener) })
+  if (!editor.readOnly && statusable && !assigned) more.push({ label: 'Assign…', title: 'Who it’s assigned to', run: opens(assignOpener) })
+  if (statusable && !timed) more.push({ label: 'Time…', keys: one ? 'Alt T' : undefined, title: 'A timer, logged time and an estimate', run: opens(timeOpener) })
+
   return (
-    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys} onWheel={scrollSideways}>
-      {colorable && (
-      <div className="swatches">
-        {palette.map(([name, color]) => (
-          <button
-            key={name + color}
-            className={`swatch${current === color ? ' active' : ''}`}
-            style={{ background: color }}
-            title={name}
-            aria-label={name}
-            aria-pressed={current === color}
-            onClick={() => editor.setColor(color)}
-          />
-        ))}
-      </div>
-      )}
-      {connector && (
-        <>
-          <span className="sep" />
-          {(['straight', 'elbow', 'curved'] as const).map((style) => (
-            <button
-              key={style}
-              className={(connector.style ?? 'straight') === style ? 'on' : ''}
-              title={`${style[0].toUpperCase()}${style.slice(1)} line`}
-              aria-label={`${style[0].toUpperCase()}${style.slice(1)} line`}
-              aria-pressed={(connector.style ?? 'straight') === style}
-              onClick={() => editor.setConnectorStyle(style)}
-            >
-              <LineStyleIcon style={style} />
-            </button>
-          ))}
-          <span className="sep" />
-          {(
-            [
-              ['end', '→', 'Arrow at the end'],
-              ['both', '↔', 'Arrows at both ends'],
-              ['none', '—', 'No arrows'],
-            ] as const
-          ).map(([arrows, glyph, title]) => (
-            <button
-              key={arrows}
-              className={(connector.arrows ?? 'end') === arrows ? 'on' : ''}
-              title={title}
-              aria-label={title}
-              aria-pressed={(connector.arrows ?? 'end') === arrows}
-              onClick={() => editor.setArrowheads(arrows)}
-            >
-              {glyph}
-            </button>
-          ))}
- <button
-            className={connector.dashed ? 'on' : ''}
-            title="Dashed line"
-            aria-label="Dashed line"
-            aria-pressed={!!connector.dashed}
-            onClick={() => editor.setDashed(!connector.dashed)}
-          >
-            ┅
-          </button>
-          <span className="sep" />
-          <button title="Label this line (or double-click it)" onClick={() => editor.startEditingLabel(connector.id)}>
-            Label
-          </button>
-        </>
-      )}
-      {flows.length > 0 && (
-        <>
-          <span className="sep" />
-          <select
-            aria-label="Shape"
-            title="Change shape"
-            value={flows.every((f) => f.shape === flows[0].shape) ? (flows[0].shape ?? 'process') : ''}
-            onChange={(e) => editor.setShape(e.target.value as FlowShape)}
-          >
-            {flows.some((f) => f.shape !== flows[0].shape) && <option value="">Mixed</option>}
-            {FLOW_SHAPES.map((f) => (
-              <option key={f.shape} value={f.shape}>
-                {f.label}
-              </option>
+    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+      <div className="stb-main" onWheel={scrollSideways}>
+        {colorable && (
+          <div className="swatches">
+            {palette.map(([name, color]) => (
+              <button
+                key={name + color}
+                className={`swatch${current === color ? ' active' : ''}`}
+                style={{ background: color }}
+                title={name}
+                aria-label={name}
+                aria-pressed={current === color}
+                onClick={() => editor.setColor(color)}
+              />
             ))}
-          </select>
-        </>
-      )}
-      {hasFontSize && (
-        <>
-          <span className="sep" />
-          <button title="Smaller text" aria-label="Smaller text" onClick={() => editor.scaleFont(1 / 1.2)}>
-            A−
-          </button>
-          <button title="Larger text" aria-label="Larger text" onClick={() => editor.scaleFont(1.2)}>
-            A+
-          </button>
-          {items.some((i) => i.fontFixed) && (
-            <button title="Size the text to fit the shape again" onClick={() => editor.fitText()}>
-              Fit text
+          </div>
+        )}
+        {connector && (
+          <>
+            <span className="sep" />
+            {(['straight', 'elbow', 'curved'] as const).map((style) => (
+              <button
+                key={style}
+                className={(connector.style ?? 'straight') === style ? 'on' : ''}
+                title={`${style[0].toUpperCase()}${style.slice(1)} line`}
+                aria-label={`${style[0].toUpperCase()}${style.slice(1)} line`}
+                aria-pressed={(connector.style ?? 'straight') === style}
+                onClick={() => editor.setConnectorStyle(style)}
+              >
+                <LineStyleIcon style={style} />
+              </button>
+            ))}
+            <span className="sep" />
+            {(
+              [
+                ['end', '→', 'Arrow at the end'],
+                ['both', '↔', 'Arrows at both ends'],
+                ['none', '—', 'No arrows'],
+              ] as const
+            ).map(([arrows, glyph, title]) => (
+              <button
+                key={arrows}
+                className={(connector.arrows ?? 'end') === arrows ? 'on' : ''}
+                title={title}
+                aria-label={title}
+                aria-pressed={(connector.arrows ?? 'end') === arrows}
+                onClick={() => editor.setArrowheads(arrows)}
+              >
+                {glyph}
+              </button>
+            ))}
+            <button className={connector.dashed ? 'on' : ''} title="Dashed line" aria-label="Dashed line" aria-pressed={!!connector.dashed} onClick={() => editor.setDashed(!connector.dashed)}>
+              ┅
             </button>
-          )}
-        </>
-      )}
-      {!editor.readOnly && items.some((i) => canSketch(i.kind)) && (
-        <button
-          className={editor.selectionSketched ? 'on' : ''}
-          aria-pressed={editor.selectionSketched}
-          title={editor.selectionSketched ? 'Draw with clean lines again (Alt H)' : 'Draw just these by hand: wobbly outlines and handwriting (Alt H; a flowchart goes all at once)'}
-          onClick={() => editor.setSketch(!editor.selectionSketched)}
-        >
-          ✎ Hand-drawn
-        </button>
-      )}
-      {items.length === 1 && items[0].sequence && (
-        <>
-          <span className="sep" />
-          {!editor.readOnly && (
+            <span className="sep" />
+            <button title="Label this line (or double-click it)" onClick={() => editor.startEditingLabel(connector.id)}>
+              Label
+            </button>
+          </>
+        )}
+        {flows.length > 0 && (
+          <>
+            <span className="sep" />
+            <select
+              aria-label="Shape"
+              title="Change shape"
+              value={flows.every((f) => f.shape === flows[0].shape) ? (flows[0].shape ?? 'process') : ''}
+              onChange={(e) => editor.setShape(e.target.value as FlowShape)}
+            >
+              {flows.some((f) => f.shape !== flows[0].shape) && <option value="">Mixed</option>}
+              {FLOW_SHAPES.map((f) => (
+                <option key={f.shape} value={f.shape}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {hasFontSize && (
+          <>
+            <span className="sep" />
+            <button title="Smaller text" aria-label="Smaller text" onClick={() => editor.scaleFont(1 / 1.2)}>
+              A−
+            </button>
+            <button title="Larger text" aria-label="Larger text" onClick={() => editor.scaleFont(1.2)}>
+              A+
+            </button>
+          </>
+        )}
+        {sequence && !editor.readOnly && (
+          <>
+            <span className="sep" />
             <button title="Write the next message from the keyboard (Enter, or just type)" onClick={() => editor.composeSequence(items[0].id)}>
               + Message
             </button>
-          )}
-          {!editor.readOnly && (
-            <button
-              className={items[0].sequence.numbered ? 'on' : ''}
-              aria-pressed={!!items[0].sequence.numbered}
-              title="Number the messages 1, 2, 3…"
-              onClick={() => editor.updateSequence(items[0].id, (d) => setNumbered(d, !d.numbered))}
-            >
-              Numbered
+          </>
+        )}
+        {mind && (
+          <>
+            <span className="sep" />
+            <button title="Add a sub-idea (Tab)" onClick={() => editor.addMindNode(mind.id, 'child')}>
+              + Sub-idea
             </button>
-          )}
-          <button
-            title="Copy it as Mermaid, for docs and wikis that draw it"
-            onClick={() => void copyText(toMermaidSequence(items[0].sequence!, items[0].text)).then(() => editor.setStatus('Copied as Mermaid'))}
-          >
-            Copy Mermaid
-          </button>
-        </>
-      )}
-      {mind && (
-        <>
-          <span className="sep" />
-          <button title="Add a sub-idea (Tab)" onClick={() => editor.addMindNode(mind.id, 'child')}>
-            + Sub-idea
-          </button>
-          {mind.parent !== undefined && (
-            <button title="Add an idea below this one (Enter)" onClick={() => editor.addMindNode(mind.id, 'sibling')}>
-              + Idea below
+            {mind.parent !== undefined && (
+              <button title="Add an idea below this one (Enter)" onClick={() => editor.addMindNode(mind.id, 'sibling')}>
+                + Idea below
+              </button>
+            )}
+            {board.items.some((i) => i.parent === mind.id) && (
+              <button title="Collapse or expand (/)" onClick={() => editor.toggleCollapsed(mind.id)}>
+                {mind.collapsed ? 'Expand' : 'Collapse'}
+              </button>
+            )}
+            <button title="Edit the whole map as an outline beside the board, or copy it as Markdown" onClick={() => editor.openOutline(mind.id)}>
+              Outline
             </button>
-          )}
-          {board.items.some((i) => i.parent === mind.id) && (
-            <button title="Collapse or expand (/)" onClick={() => editor.toggleCollapsed(mind.id)}>
-              {mind.collapsed ? 'Expand' : 'Collapse'}
-            </button>
-          )}
-          <button title="Edit the whole map as an outline beside the board, or copy it as Markdown" onClick={() => editor.openOutline(mind.id)}>
-            Outline
+          </>
+        )}
+        <span className="sep" />
+        {items.length > 1 && <AlignMenu count={items.length} />}
+        {items.length > 1 && items.every((i) => i.kind === 'mind' && i.parent !== undefined) && new Set(items.map((i) => i.parent)).size === 1 && (
+          <button title="Put these ideas under a new idea (Ctrl G)" onClick={() => editor.groupIdeas()}>
+            Group
           </button>
-        </>
-      )}
-      <span className="sep" />
-      {items.length > 1 && <AlignMenu count={items.length} />}
-      {items.length > 1 && items.every((i) => i.kind === 'mind' && i.parent !== undefined) && new Set(items.map((i) => i.parent)).size === 1 && (
-        <button title="Put these ideas under a new idea (Ctrl G)" onClick={() => editor.groupIdeas()}>
-          Group
-        </button>
-      )}
-      {items.length > 1 && !items.every((i) => i.kind === 'mind') && !(items.every((i) => i.group) && new Set(items.map((i) => i.group)).size === 1) && (
-        <button title="Group: select and move these as one (Ctrl G)" onClick={() => editor.group()}>
-          Group
-        </button>
-      )}
-      {items.some((i) => i.group) && (
-        <button title="Ungroup (Ctrl Shift G)" onClick={() => editor.ungroup()}>
-          Ungroup
-        </button>
-      )}
-      {items.length > 0 && (
-        <button
-          title={items.every((i) => i.locked) ? 'Unlock (Ctrl Shift L)' : 'Lock: can’t be moved or changed by accident (Ctrl Shift L)'}
-          aria-pressed={items.every((i) => i.locked)}
-          onClick={() => editor.setLocked(!items.every((i) => i.locked))}
-        >
-          {items.every((i) => i.locked) ? 'Unlock' : 'Lock'}
-        </button>
-      )}
-      {!editor.readOnly && items.some((i) => FIT_BUTTON.has(i.kind) && canFitToContent(i)) && (
-        <button title="Fit to content: the size that shows everything in it" onClick={() => editor.fitToContent()}>
-          Fit
-        </button>
-      )}
-      {items.length > 0 && !mind && (
-        <>
-          <button title="Bring to front (draw on top of everything)" onClick={() => editor.bringToFront()}>
-            To front
+        )}
+        {items.length > 1 && !items.every((i) => i.kind === 'mind') && !(items.every((i) => i.group) && new Set(items.map((i) => i.group)).size === 1) && (
+          <button title="Group: select and move these as one (Ctrl G)" onClick={() => editor.group()}>
+            Group
           </button>
-          <button title="Send to back (draw under everything)" onClick={() => editor.sendToBack()}>
-            To back
+        )}
+        {items.some((i) => i.group) && (
+          <button title="Ungroup (Ctrl Shift G)" onClick={() => editor.ungroup()}>
+            Ungroup
           </button>
-        </>
-      )}
-      {items.length > 0 && items.every((i) => i.kind === 'sticky') &&
-        (items.every((i) => typeof i.back === 'string') ? (
+        )}
+        {/* Locked things say so here; locking is in More. */}
+        {locked && (
+          <button className="on" title="Unlock (Ctrl Shift L)" aria-pressed onClick={() => editor.setLocked(false)}>
+            🔒 Unlock
+          </button>
+        )}
+        {items.length > 0 && items.every((i) => i.kind === 'sticky' && typeof i.back === 'string') && (
           <button title="Turn over (or click ↻ on the card)" onClick={() => editor.flipCards()}>
             ↻ Turn over
           </button>
-        ) : (
-          <button title="Give this note a back to write on: a flip card" onClick={() => editor.setFlipCards(true)}>
-            Add a back
+        )}
+        {items.length === 1 && isDrawing(items[0]) && (
+          <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
+            {editor.readOnly ? 'Open drawing' : 'Edit drawing'}
           </button>
-        ))}
-      {items.some((i) => canHaveStatus(i.kind)) && <StatusMenu />}
-      {!editor.readOnly && items.some((i) => canHaveStatus(i.kind)) && <AssignMenu />}
-      {items.some((i) => canHaveStatus(i.kind)) && <TrackMenu />}
-      {!editor.readOnly && items.length > 0 && items.every((i) => canLink(i.kind)) && <LinkMenu />}
-      {items.length > 0 && <ReactMenu />}
-      {items.length === 1 && isDrawing(items[0]) && (
-        <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
-          {editor.readOnly ? 'Open drawing' : 'Edit drawing'}
+        )}
+        {hasSketch(editor) && !items.some(isDrawing) && (
+          <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
+            ✦ To board
+          </button>
+        )}
+        {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && !items.every((i) => isWidget(i.kind)) && (
+          <button title="Start a dot vote on these: everyone gets a few votes, counts hidden until revealed" onClick={() => editor.startVote()}>
+            Vote
+          </button>
+        )}
+        {statusable && <StatusMenu />}
+        {!editor.readOnly && statusable && <AssignMenu hidden={!assigned} opener={assignOpener} />}
+        {statusable && <TrackMenu hidden={!timed} opener={timeOpener} />}
+        {linkable && <LinkMenu hidden={!linked} opener={linkOpener} />}
+        {one && (
+          <button title="Comments (Alt C)" onClick={() => editor.toggleNotes(true)}>
+            Comments{one.notes?.length ? ` (${one.notes.length})` : ''}
+          </button>
+        )}
+      </div>
+      <div className="stb-end">
+        {(more.length > 0 || items.length > 0) && <MoreMenu entries={more} react={items.length > 0} />}
+        <button className="danger" title="Delete (Del)" onClick={() => editor.deleteSelection()}>
+          Delete
         </button>
-      )}
-      {hasSketch(editor) && !items.some(isDrawing) && (
-        <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
-          ✦ To board
-        </button>
-      )}
-      {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && !items.every((i) => isWidget(i.kind)) && (
-        <button title="Start a dot vote on these: everyone gets a few votes, counts hidden until revealed" onClick={() => editor.startVote()}>
-          Vote
-        </button>
-      )}
-      {items.length > 0 && (
-        <button title="Duplicate (Ctrl D)" onClick={() => editor.duplicate()}>
-          Duplicate
-        </button>
-      )}
-      {editor.single && (
-        <button title="Comments (Alt C)" onClick={() => editor.toggleNotes(true)}>
-          Comments{editor.single.notes?.length ? ` (${editor.single.notes.length})` : ''}
-        </button>
-      )}
-      <button className="danger" title="Delete (Del)" onClick={() => editor.deleteSelection()}>
-        Delete
-      </button>
+      </div>
     </div>
+  )
+}
+
+/** One action in the toolbar's ⋯ menu. Link, Assign and Time open their own menus from there. */
+interface MoreEntry {
+  label: string
+  keys?: string
+  title?: string
+  /** On or off, for the ones that toggle. */
+  checked?: boolean
+  run: (from: HTMLElement, keyboard: boolean) => void
+}
+
+/** The ⋯ menu: the rarer actions, and reactions. */
+function MoreMenu({ entries, react }: { entries: MoreEntry[]; react: boolean }) {
+  const editor = useEditor()
+  const { at, close, toggle, menuProps } = useButtonMenu()
+  const button = useRef<HTMLButtonElement>(null)
+  const me = editor.me
+  // ⋯ is at the bar's end, often near the window's edge: keep the menu on screen, above the bar
+  // when there's no room below it.
+  const room = (entries.length + (react ? 2 : 0)) * 34 + 16
+  const up = !!at && at.y + room > window.innerHeight - 8 && button.current
+  const place = at && {
+    left: Math.min(Math.max(at.x, 118), window.innerWidth - 118),
+    top: up ? button.current!.getBoundingClientRect().top - 8 : at.y,
+    transform: up ? 'translate(-50%, -100%)' : undefined,
+  }
+  return (
+    <span className="align-anchor">
+      <button ref={button} className={`more-button${at ? ' on' : ''}`} title="More: duplicate, lock, layer order, reactions…" aria-label="More" aria-expanded={!!at} aria-haspopup="menu" onClick={toggle}>
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <circle cx="4" cy="9" r="1.6" fill="currentColor" />
+          <circle cx="9" cy="9" r="1.6" fill="currentColor" />
+          <circle cx="14" cy="9" r="1.6" fill="currentColor" />
+        </svg>
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu more-menu no-canvas" role="menu" aria-label="More" {...menuProps} style={place ?? undefined} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+            {entries.map((m) => (
+              <button
+                key={m.label}
+                role={m.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={m.checked}
+                title={m.title}
+                onClick={(e) => {
+                  const keyboard = e.detail === 0
+                  close()
+                  // A menu this one leads to opens under ⋯ once this one has gone.
+                  setTimeout(() => button.current && m.run(button.current, keyboard))
+                }}
+              >
+                <span className="more-check" aria-hidden="true">
+                  {m.checked ? '✓' : ''}
+                </span>
+                {m.label}
+                {m.keys && <kbd>{m.keys}</kbd>}
+              </button>
+            ))}
+            {react && (
+              <div className="more-react" role="group" aria-label="React">
+                {RX.REACTIONS.map((emoji) => {
+                  const on = editor.selectedItems.length > 0 && editor.selectedItems.every((i) => i.reactions?.[emoji]?.includes(me))
+                  return (
+                    <button
+                      key={emoji}
+                      role="menuitemcheckbox"
+                      aria-checked={on}
+                      aria-label={`React ${emoji}`}
+                      className={on ? 'on' : ''}
+                      title={on ? 'Take your reaction off' : 'React'}
+                      onClick={() => {
+                        editor.toggleReaction(emoji)
+                        close()
+                      }}
+                    >
+                      {emoji}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
+    </span>
   )
 }
 
@@ -461,10 +533,13 @@ interface LinkChoice {
 }
 
 /** Make the selection lead somewhere: a wiki page, a board, an object, or a web address. */
-function LinkMenu() {
+function LinkMenu({ hidden, opener }: { hidden?: boolean; opener?: MenuOpener }) {
   const editor = useEditor()
   const ws = useWorkspace()
-  const { at, close, toggle, menuProps } = useButtonMenu()
+  const { at, close, toggle, openFrom, menuProps } = useButtonMenu()
+  useEffect(() => {
+    if (opener) opener.current = openFrom
+  }, [opener, openFrom])
   const [query, setQuery] = useState('')
   const items = editor.selectedItems
   const current = items.length === 1 ? items[0].linkTo : undefined
@@ -502,9 +577,11 @@ function LinkMenu() {
   }
   return (
     <span className="align-anchor">
-      <button title="Link: make this lead to a wiki page, a board, an object or a web address" aria-label="Link" aria-expanded={!!at} className={`${current ? 'linked-button ' : ''}${at ? 'on' : ''}`} aria-haspopup="menu" onClick={toggle}>
-        🔗 {current ? 'Linked' : 'Link'}
-      </button>
+      {!hidden && (
+        <button title="Link: make this lead to a wiki page, a board, an object or a web address" aria-label="Link" aria-expanded={!!at} className={`${current ? 'linked-button ' : ''}${at ? 'on' : ''}`} aria-haspopup="menu" onClick={toggle}>
+          🔗 {current ? 'Linked' : 'Link'}
+        </button>
+      )}
       {at &&
         createPortal(
           <div className="align-menu link-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
@@ -609,56 +686,6 @@ function StatusMenu() {
                 No status
               </button>
             )}
-          </div>,
-          document.body,
-        )}
-    </span>
-  )
-}
-
-/** Emoji reactions for the selection. */
-function ReactMenu() {
-  const editor = useEditor()
-  const { at, close, toggle, menuProps } = useButtonMenu()
-  const me = editor.me
-  return (
-    <span className="align-anchor">
-      <button
-        title="React"
-        aria-label="React"
-        aria-expanded={!!at}
-        className={at ? 'on' : ''}
-        aria-haspopup="menu"
-        onClick={toggle}
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M6 10.5c.8 1.2 1.8 1.8 3 1.8s2.2-.6 3-1.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          <circle cx="6.6" cy="7" r="1" fill="currentColor" />
-          <circle cx="11.4" cy="7" r="1" fill="currentColor" />
-        </svg>
-      </button>
-      {at &&
-        createPortal(
-          <div className="align-menu react-menu no-canvas" role="menu" {...menuProps} style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
-            {RX.REACTIONS.map((emoji) => {
-              const on = editor.selectedItems.length > 0 && editor.selectedItems.every((i) => i.reactions?.[emoji]?.includes(me))
-              return (
-                <button
-                  key={emoji}
-                  role="menuitemcheckbox"
-                  aria-checked={on}
-                  className={on ? 'on' : ''}
-                  title={on ? 'Take your reaction off' : 'React'}
-                  onClick={() => {
-                    editor.toggleReaction(emoji)
-                    close()
-                  }}
-                >
-                  {emoji}
-                </button>
-              )
-            })}
           </div>,
           document.body,
         )}

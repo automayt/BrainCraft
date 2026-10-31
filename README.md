@@ -157,7 +157,7 @@ whatever you have selected.
   beside it (through its Mermaid and Excalidraw's converter); the flowchart
   stays the one to change and run.
 - **Hand-drawn look for some objects:** select them and press **Alt H**,
-  or **✎ Hand-drawn** on the selection toolbar, or the squiggle in the tool
+  or **Hand-drawn** in the selection toolbar's **⋯** menu, or the squiggle in the tool
   rail → **The selected objects**. That draws just those by hand (again for
   clean lines). The squiggle's **New objects** draws what you add from then
   on by hand, just for you (Alt H with nothing selected), and **The whole
@@ -205,7 +205,7 @@ Who sends what to whom, in order, built from the keyboard:
 - The mouse works too while writing: click a lane to send there (Shift-click
   to send from it), or click a message to go to it.
 - Select a diagram and press **Enter**, double-click it, or just start
-  typing to carry on. Its toolbar has **Numbered** and **Copy Mermaid**.
+  typing to carry on. Its toolbar's **⋯** menu has **Numbered** and **Copy as Mermaid**.
 - Paste a Mermaid sequence diagram (participants, actors, `->>` calls,
   `-->>` replies, `-)` messages that don't wait, notes, loop / alt / opt /
   par / critical / break boxes with their else lines, `title`,
@@ -243,7 +243,7 @@ These become interactive once selected; drag them by their title strip.
 ### Comments and search
 
 - **Link any object to a wiki page:** select text, a note, a shape or a frame
-  and press **🔗 Link** on its toolbar, then pick a page from your wikis (or a
+  and choose **Link…** in its toolbar's **⋯** menu (once linked, **🔗 Linked** shows on the toolbar), then pick a page from your wikis (or a
   board, an object, or paste a page's link or any web address). The object
   gets a link badge on its corner, and linked text is underlined; click the
   badge and a wiki page opens beside the board, the same way a wiki page jumps
@@ -278,7 +278,7 @@ These become interactive once selected; drag them by their title strip.
 ### Time tracking, assignees and estimates
 
 - **A timer on anything:** select an object and press **Alt+T** (or the clock
-  in the top bar, or **Time** on the selection toolbar) to start timing it.
+  in the top bar, or **Time…** in the selection toolbar's **⋯** menu) to start timing it.
   With nothing selected it times the board, or the open page in a wiki.
   Database records have their own **Start a timer** on their page.
   - Each person has one timer at a time on a board: starting another stops
@@ -291,8 +291,10 @@ These become interactive once selected; drag them by their title strip.
 - **Log time by hand**, for yourself or for someone else: how long ("1h 30m",
   "90m", "1.5h", "1:30"), when it ended, what it was on, and a note. Time
   logged for someone else says who logged it.
-- **Assign** objects to people (**Assign** on the selection toolbar, **Assign
-  to me** on the right-click menu). Give them an **estimate** under **Time**.
+- **Assign** objects to people (**Assign…** in the selection toolbar's **⋯**
+  menu, **Assign to me** on the right-click menu). Give them an **estimate**
+  under **Time…**. Once an object has people or time on it, **Assign** and
+  **Time** show on its toolbar.
   - Under each object: who it's assigned to, the time spent against its
     estimate (red once over it), and who's timing it now.
   - A mind map's ideas count the time on the ideas under them.
@@ -332,7 +334,7 @@ These become interactive once selected; drag them by their title strip.
 
 ### Reactions and dot voting
 
-- **React** to anything with 👍 ❤️ 😂 🎉 🤔 ⭐ from the selection toolbar.
+- **React** to anything with 👍 ❤️ 😂 🎉 🤔 ⭐ from the selection toolbar's **⋯** menu.
   Reactions show under the object with a count; hover to see who, click to
   add or take back yours.
 - **Vote:** select the options (stickies, cards, shapes…) and press **Vote**.
@@ -802,13 +804,15 @@ shares live exactly like a board.
 - **Ctrl + arrow** nudges anything by 10 (Shift for 50), mind-map ideas
   included.
 - Select with a click, shift-click or a drag box. Resize from the corners,
-  and use the floating toolbar for color, text size, layer order, duplicate
-  and delete.
+  and use the floating toolbar for color, text size and delete. Its **⋯**
+  menu has the rest: duplicate, lock, layer order, hand-drawn, link, assign,
+  time and reactions. **⋯** and **Delete** stay at the end of the toolbar
+  even when it's too wide for the screen.
 - **Text always fits its shape:** in flowchart shapes, rectangles and
   ellipses it grows and shrinks with the shape; **A−/A+** set a size instead
   (**Fit text** goes back), and it still shrinks rather than spill out.
   Sticky notes keep their size until the text would overflow.
-- **Fit to content** (right-click, Ctrl+K, or **Fit** on the toolbar) sizes
+- **Fit to content** (right-click, Ctrl+K, or the toolbar's **⋯** menu) sizes
   an object to what's in it: a shape or sticky note to its text (an empty one
   back to its usual size), a frame around what's inside, a Kanban board,
   database view, table, code block or text box to show everything.
