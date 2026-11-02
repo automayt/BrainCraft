@@ -1,3 +1,4 @@
+import { ChangesIcon, PaperclipIcon, TrashIcon } from '../icons'
 import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { Page } from '../../model/types'
 import * as W from '../../model/wiki'
@@ -243,17 +244,17 @@ export function PageTree({ current }: { current: Page | undefined }) {
       )}
       <div className="page-recent">
         <button className="link" onClick={() => setRecent(true)}>
-          🕘 Recent changes
+          <ChangesIcon size={15} /> Recent changes
         </button>
         <button className="link" onClick={() => editor.openFiles()} title="PDFs, documents, slides and spreadsheets kept with this wiki">
-          📎 Files{filesOf(board).length ? ` (${filesOf(board).length})` : ''}
+          <PaperclipIcon size={15} /> Files{filesOf(board).length ? ` (${filesOf(board).length})` : ''}
         </button>
       </div>
       {recent && <RecentChanges onClose={() => setRecent(false)} />}
       {trash.length > 0 && (
         <div className="page-trash">
           <button className="link" aria-expanded={showTrash} onClick={() => setShowTrash(!showTrash)}>
-            🗑 Trash ({trash.length})
+            <TrashIcon size={15} /> Trash ({trash.length})
           </button>
           {showTrash && (
             <ul>

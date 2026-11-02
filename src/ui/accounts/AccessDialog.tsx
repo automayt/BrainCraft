@@ -1,3 +1,4 @@
+import { GroupIcon } from '../icons'
 import { useEffect, useState } from 'react'
 import { type BoardAccessInfo, call, can, type Grant, LEVEL_LABEL, type Level } from '../../store/account'
 import { Dialog } from '../Boards'
@@ -51,6 +52,7 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
             ×
           </button>
         </header>
+        <div className="access-body">
         <p className="muted">This board is only in this browser. Put it on the server to share it with people and groups there.</p>
         {msg && <p className="signin-error">{msg}</p>}
         <button
@@ -68,6 +70,7 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
           Put it on the server
         </button>
         {!can(ws.account, 'boards.create') && <p className="muted">You can’t make boards on this server. Ask an admin.</p>}
+        </div>
       </Dialog>
     )
   }
@@ -127,7 +130,7 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
               <li key={`${g.who}:${g.id}`}>
                 <span>
                   <strong>
-                    {g.who === 'group' ? '👥 ' : ''}
+                    {g.who === 'group' && <GroupIcon size={15} />}{' '}
                     {g.name ?? g.id}
                   </strong>
                   {g.email && <small className="muted"> {g.email}</small>}
@@ -172,7 +175,9 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
                 <ul className="access-found">
                   {found.groups.map((g) => (
                     <li key={g.id}>
-                      <button onClick={() => add('group', g.id, g.name)}>👥 {g.name}</button>
+                      <button onClick={() => add('group', g.id, g.name)}>
+                        <GroupIcon size={15} /> {g.name}
+                      </button>
                     </li>
                   ))}
                   {found.people

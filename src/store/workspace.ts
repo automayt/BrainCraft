@@ -91,7 +91,7 @@ const OPEN_TYPES = [{ description: 'BrainCraft board or Excalidraw drawing', acc
 
 const fsWindow = () => (typeof window === 'undefined' ? undefined : (window as FsWindow))
 
-function safeStorage(): Storage | null {
+export function safeStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null
   } catch {
@@ -533,6 +533,7 @@ export class Workspace {
     this.post({ t: 'want', board: id, from: this.tabId })
     this.saveState = 'saved'
     this.clearShareHash()
+    await this.library.markOpened(id)
     const meta = await this.library.meta(id)
     if (meta?.live) this.connectLive(meta.live)
     else void this.checkCatchUp()

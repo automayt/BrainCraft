@@ -437,6 +437,37 @@ Admin, next:
 - [ ] **The guide refreshes itself** (or says a newer one is there), and uses
   the server's own app name throughout.
 
+## From the design review (November 2026)
+
+Done this round: Your boards rebuilt (Recent, one list, New, a bigger window),
+line icons for the sparkle and emoji in menus and messages, one main-action
+colour, three shadow levels, four corner sizes, whole-pixel text, quieter
+toasts and badges, boards in Ctrl K. Still to decide or do:
+
+- [ ] **A palette of BrainCraft's own:** a slightly tinted wall (for example
+  green-graphite `#1c1f1e` in dark, pale sage `#e9ece8` in light) instead of
+  the usual blue-grey, with sticky yellow used only as paper and people's
+  colours as the second source of colour. Changes how every board looks, so
+  it wants trying on real boards first.
+- [ ] **A typeface for the controls** that isn't the one every app uses (the
+  candidates: Instrument Sans, Schibsted Grotesk, Recursive). Words on the
+  board stay as they are, since text is fitted to shapes in that face.
+- [ ] **Colours in one button** on the selection toolbar (a swatch that opens
+  the ten), so the bar is about 500px instead of 800.
+- [ ] **Pin boards** to the top of Your boards, and "Edited by Sam" on a
+  board's line (needs who edited last from the server).
+- [ ] **Search wiki page titles** from Your boards ("in Team wiki").
+- [ ] **Help with a filter** and a list of sections down the side.
+- [ ] **Phones:** the top-right controls in one ⋯ under 480px, and a fade on
+  the edges of the tool rail where it scrolls.
+- [ ] **Board pictures in true colours,** notes with a thin darker edge, so
+  yellow notes show in the light theme.
+- [ ] **One name for the assistant** everywhere ("Ask AI", "Assistant",
+  "Summarise with AI"), and "Connect an AI assistant" renamed to say it lets
+  another app use the board.
+- [ ] **Import… and Export…** as the only two menu entries, with the formats
+  inside the dialogs.
+
 ## From the earlier list
 
 - [x] **More database views:** calendar and gallery.

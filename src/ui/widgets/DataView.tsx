@@ -4,6 +4,7 @@
  * Every view of the same dataset edits the same records, so changes show up everywhere.
  */
 
+import { BoltIcon } from '../icons'
 import { type PointerEvent, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as D from '../../model/dataset'
@@ -1473,7 +1474,7 @@ export function DataViewWidget({ item, live, editingTitle }: { item: Item; live:
       )}
       {c.live && (
         <button title="When something happens in this database, set fields automatically" onClick={() => setRulesOpen(true)}>
-          ⚡ Automations{ds.automations?.length ? ` (${ds.automations.length})` : ''}
+          <BoltIcon size={15} /> Automations{ds.automations?.length ? ` (${ds.automations.length})` : ''}
         </button>
       )}
       <button

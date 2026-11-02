@@ -113,3 +113,19 @@ dialog, in dark and light themes, at desktop width.
    tool, that button shows it. Every key works as before. The rail went from
    18 buttons to 14, so it fits shorter windows in one column; on a phone its
    panels open above it instead of being clipped by it.
+
+**Phase D — fewer generated-looking habits (done)**
+
+1. **Line icons, not sparkles or emoji,** in buttons, menus and messages: the
+   assistant is a speech bubble, Unlock a padlock, Trash a bin. Emoji stay
+   where people chose them (a board's or page's icon).
+2. **Tokens for the shape of things:** corners in four sizes by what a thing
+   is (`--r-sm` 6px tags, `--r-ctl` 8px controls, `--r-md` 10px menus and
+   cards, `--r-lg` 16px panels and dialogs); shadows in three steps (`--shadow`
+   for bars on the board, `--shadow-md` for menus, `--shadow-lg` for dialogs);
+   text in whole pixels, small print never under 12px.
+3. **One main-action colour:** sticky yellow, the assistant's Send included.
+   Toasts are quiet (the page's own ink, reversed), not a blue pill.
+4. **Your boards** is a big window: the five you opened last as pictures,
+   then one list of everything (in this browser and on the server, each
+   once), with New at the top.

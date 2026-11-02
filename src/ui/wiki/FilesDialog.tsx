@@ -4,6 +4,7 @@
  * make a wiki page from one.
  */
 
+import { TrashIcon } from '../icons'
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FILE_ICON, FILE_KIND_LABEL, filesOf, formatSize, kindOf } from '../../model/files'
@@ -157,7 +158,7 @@ export function FilesDialog() {
             )}
             {(filesOf(board, true).length > 0 || trash) && (
               <button className="link files-trash-toggle" onClick={() => setTrash(!trash)}>
-                {trash ? '← Back to the files' : `🗑 Trash (${filesOf(board, true).length})`}
+                {trash ? '← Back to the files' : <><TrashIcon size={15} /> Trash ({filesOf(board, true).length})</>}
               </button>
             )}
           </section>

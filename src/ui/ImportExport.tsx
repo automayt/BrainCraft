@@ -186,7 +186,7 @@ export function ImportExport({ onClose, initialTab = 'import' }: { onClose: () =
                 onClick={() =>
                   navigator.clipboard?.writeText(exported).then(
                     () => setCopied(true),
-                    () => editor.setStatus('Clipboard unavailable — select the text and copy it'),
+                    () => editor.setStatus('The clipboard isn’t available here. Select the text and copy it'),
                   )
                 }
               >

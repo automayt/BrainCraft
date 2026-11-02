@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { boardEntries } from '../store/boardList'
 import { lookup, search } from '../model/search'
 import { type Board, type Id, type Kind, KIND_LABELS } from '../model/types'
 import { commands, matchCommands } from './commands'
@@ -10,6 +11,8 @@ import { isWiki, pageOrder, pagePath, searchPages } from '../model/wiki'
 type Filter = { label: string; kinds?: (Kind | 'connector')[] }
 
 /** Other wikis searched alongside the open board, and the matches shown from each. */
+/** Other boards shown for a search. */
+const BOARDS = 5
 const OTHER_WIKIS = 10
 const PER_WIKI = 4
 
@@ -102,6 +105,20 @@ export function SearchPalette() {
           .slice(0, commandOnly ? 40 : 5)
           .map((c) => ({ key: `cmd:${c.id}`, run: c.run, title: c.label, kind: c.group, keys: c.keys }))
       : []
+  // Your other boards and wikis by name (on the server too), so Ctrl K can switch to one.
+  const q = query.trim().toLowerCase()
+  const boards: Row[] =
+    commandOnly || filter !== 0 || !q
+      ? []
+      : boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined)
+          .filter((b) => b.local?.id !== ws.boardId && b.title.toLowerCase().includes(q))
+          .slice(0, BOARDS)
+          .map((b) => ({
+            key: `b:${b.key}`,
+            run: () => void (b.local ? ws.switchTo(b.local.id) : b.server && ws.openServerBoard(b.server)),
+            title: `${b.icon ? `${b.icon} ` : ''}${b.title || 'Untitled'}`,
+            kind: b.kind === 'wiki' ? 'Wiki' : 'Board',
+          }))
   const wiki = isWiki(editor.board)
   // In a wiki, the search is over its pages.
   const pages: Row[] =
@@ -155,7 +172,7 @@ export function SearchPalette() {
             detail: h.snippet ? <span>{highlight(h.snippet, query)}</span> : undefined,
           })),
         )
-  const rows = [...cmds, ...pages, ...objects, ...elsewhere]
+  const rows = [...cmds, ...boards, ...pages, ...objects, ...elsewhere]
 
   const close = () => editor.setSearchOpen(false)
   const go = (row: Row | undefined) => {
@@ -210,7 +227,7 @@ export function SearchPalette() {
           {commandOnly
             ? 'Commands'
             : query.trim()
-              ? `${objects.length + pages.length + elsewhere.length} match${objects.length + pages.length + elsewhere.length === 1 ? '' : 'es'}${elsewhere.length ? ` (${elsewhere.length} in other wikis)` : ''}${cmds.length ? ` · ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}`
+              ? `${objects.length + pages.length + elsewhere.length} match${objects.length + pages.length + elsewhere.length === 1 ? '' : 'es'}${elsewhere.length ? ` (${elsewhere.length} in other wikis)` : ''}${boards.length ? `, ${boards.length} board${boards.length === 1 ? '' : 's'}` : ''}${cmds.length ? `, ${cmds.length} command${cmds.length === 1 ? '' : 's'}` : ''}`
               : `All ${wiki ? 'pages' : 'objects'} (${rows.length}) · type > for commands`}
           <span>↑↓ choose · Enter go · Tab filter · Esc close</span>
         </div>

@@ -145,7 +145,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
         <>
           <div className="menu-scrim" onPointerDown={() => setSourcesOpen(false)} />
           <div className="widget-menu sources">
-            {kanbans.length === 0 && <p className="muted">Add a Kanban board (K) and give its cards dates — they'll show up here.</p>}
+            {kanbans.length === 0 && <p className="muted">Add a Kanban (K) and give its cards dates: they'll show up here.</p>}
             {kanbans.map((kb) => (
               <label key={kb.id}>
                 <input type="checkbox" checked={t.sources?.includes(kb.id) ?? false} onChange={() => update((x) => TL.toggleSource(x, kb.id))} />

@@ -1,5 +1,6 @@
 /** The AI assistant panel: chat about the board, previewed changes, and the history of AI changes. */
 
+import { AssistantIcon, MicIcon } from './icons'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeBackend } from '../ai/assistant'
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
@@ -332,10 +333,10 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   const provider = serverProvider(settings, server)
   /** The server's choices as one list: Claude models, its model server's models, its agent. */
   const serverChoices: { value: string; label: string }[] = [
-    ...(server.providers.includes('anthropic') ? AI_MODELS.map((m) => ({ value: `anthropic:${m.id}`, label: `${m.label} — ${m.hint}` })) : []),
-    ...(server.providers.includes('openai') ? (server.openaiModels.length ? server.openaiModels : ['']).map((m) => ({ value: `openai:${m}`, label: `${m || 'The model server'} — on this server’s model server` })) : []),
+    ...(server.providers.includes('anthropic') ? AI_MODELS.map((m) => ({ value: `anthropic:${m.id}`, label: `${m.label}: ${m.hint}` })) : []),
+    ...(server.providers.includes('openai') ? (server.openaiModels.length ? server.openaiModels : ['']).map((m) => ({ value: `openai:${m}`, label: `${m || 'The model server'}, on this server’s model server` })) : []),
     ...(server.providers.includes('command')
-      ? server.agents.map((a) => ({ value: `command:${a.id}`, label: `${a.label} — signed in on the server's computer (slower: each step starts it afresh)` }))
+      ? server.agents.map((a) => ({ value: `command:${a.id}`, label: `${a.label}, signed in on the server's computer (slower: each step starts it afresh)` }))
       : []),
   ]
   const agent = server.agents.find((a) => a.id === settings.agent) ?? server.agents[0]
@@ -494,8 +495,8 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   return (
     <aside className="ai-panel no-canvas" aria-label="AI assistant" onPointerDown={(e) => e.stopPropagation()}>
       <header className="ai-head">
-        <span className="ai-spark" aria-hidden="true">
-          ✦
+        <span className="ai-spark">
+          <AssistantIcon size={18} />
         </span>
         <div className="ai-tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>
@@ -579,7 +580,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 <select value={settings.model} onChange={(e) => update({ ...settings, model: e.target.value as AiModel })}>
                   {AI_MODELS.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.label} — {m.hint}
+                      {m.label}: {m.hint}
                     </option>
                   ))}
                 </select>
@@ -819,7 +820,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   }
                   onClick={() => void talk.start()}
                 >
-                  🎙 Talk
+                  <MicIcon size={15} /> Talk
                 </button>
               )}
               {running && !talk.on ? (

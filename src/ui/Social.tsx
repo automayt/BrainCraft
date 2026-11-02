@@ -24,7 +24,7 @@ function Reactions({ item, me, k }: { item: Item; me: string; k: number }) {
         const mine = who.includes(me)
         return (
           <g key={emoji} data-handle="react" data-id={item.id} data-emoji={emoji} className={`reaction${mine ? ' mine' : ''}`}>
-            <title>{`${who.join(', ')} — click to ${mine ? 'take yours off' : 'add yours'}`}</title>
+            <title>{`${who.join(', ')}. Click to ${mine ? 'take yours off' : 'add yours'}`}</title>
             <rect x={left} y={y} width={w} height={24 * k} rx={12 * k} strokeWidth={1.5 * k} />
             <text x={left + 8 * k} y={y + 16.5 * k} fontSize={13 * k}>
               {emoji}
@@ -59,7 +59,7 @@ function VoteBadges({ poll, editor, k }: { poll: Item & { poll: NonNullable<Item
         return (
           <g key={id}>
             <g data-handle={open ? 'vote' : undefined} data-id={id} data-poll={poll.id} data-delta="1" className={`vote-dot${mine ? ' mine' : ''}${winner ? ' winner' : ''}${open ? '' : ' closed'}`}>
-              <title>{open ? `Vote for this (you've put ${mine} here)${shown ? ` — ${total} in all` : ''}. Alt-click takes one back.` : `${total} vote${total === 1 ? '' : 's'}`}</title>
+              <title>{open ? `Vote for this (you've put ${mine} here)${shown ? `, ${total} in all` : ''}. Alt-click takes one back.` : `${total} vote${total === 1 ? '' : 's'}`}</title>
               <circle cx={cx} cy={cy} r={r} strokeWidth={2 * k} />
               <text x={cx} y={cy} dy="0.35em" textAnchor="middle" fontSize={13 * k}>
                 {shown ? total : mine ? `${mine}` : '+'}
@@ -219,7 +219,7 @@ function LocksAndGroups({ editor, k }: { editor: Editor; k: number }) {
     <g>
       {locked.map((i) => (
         <g key={i.id} className="lock-badge" transform={`translate(${i.x + i.w - 22 * k} ${i.y + 4 * k}) scale(${k})`}>
-          <title>Locked — right-click or Alt-click to unlock</title>
+          <title>Locked. Right-click or Alt-click to unlock</title>
           <rect width="18" height="18" rx="5" />
           <path d="M5.5 8V6.5a3.5 3.5 0 0 1 7 0V8M5 8h8v6H5z" fill="none" strokeWidth="1.5" strokeLinejoin="round" />
         </g>

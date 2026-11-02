@@ -1,3 +1,4 @@
+import { LockIcon } from './icons'
 import * as B from '../model/board'
 import { isDrawing } from '../model/excalidraw'
 import { canSketch } from '../model/sketch'
@@ -149,35 +150,37 @@ export function SelectionToolbar() {
 
   // The rarer actions, in the ⋯ menu so the bar stays short and Delete stays in view.
   const more: MoreEntry[] = []
-  if (items.length > 0) more.push({ label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() })
-  if (items.length > 0 && !locked) more.push({ label: 'Lock', keys: 'Ctrl Shift L', title: 'Can’t be moved or changed by accident', run: () => editor.setLocked(true) })
+  if (items.length > 0) more.push({ group: 'edit', label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() })
+  if (items.length > 0 && !locked) more.push({ group: 'edit', label: 'Lock', keys: 'Ctrl Shift L', title: 'Can’t be moved or changed by accident', run: () => editor.setLocked(true) })
   if (items.length > 0 && !mind) {
-    more.push({ label: 'Bring to front', title: 'Draw on top of everything', run: () => editor.bringToFront() })
-    more.push({ label: 'Send to back', title: 'Draw under everything', run: () => editor.sendToBack() })
+    more.push({ group: 'layer', label: 'Bring to front', title: 'Draw on top of everything', run: () => editor.bringToFront() })
+    more.push({ group: 'layer', label: 'Send to back', title: 'Draw under everything', run: () => editor.sendToBack() })
   }
   if (!editor.readOnly && items.some((i) => canSketch(i.kind)))
     more.push({
+      group: 'look',
       label: 'Hand-drawn',
       keys: 'Alt H',
       title: 'Wobbly outlines and handwriting for just these (a flowchart goes all at once)',
       checked: editor.selectionSketched,
       run: () => editor.setSketch(!editor.selectionSketched),
     })
-  if (hasFontSize && items.some((i) => i.fontFixed)) more.push({ label: 'Fit the text to the shape', run: () => editor.fitText() })
-  if (!editor.readOnly && items.some((i) => FIT_BUTTON.has(i.kind) && canFitToContent(i))) more.push({ label: 'Fit to content', title: 'The size that shows everything in it', run: () => editor.fitToContent() })
+  if (hasFontSize && items.some((i) => i.fontFixed)) more.push({ group: 'look', label: 'Fit the text to the shape', run: () => editor.fitText() })
+  if (!editor.readOnly && items.some((i) => FIT_BUTTON.has(i.kind) && canFitToContent(i))) more.push({ group: 'look', label: 'Fit to content', title: 'The size that shows everything in it', run: () => editor.fitToContent() })
   if (items.length > 0 && items.every((i) => i.kind === 'sticky') && !items.every((i) => typeof i.back === 'string'))
-    more.push({ label: 'Add a back', title: 'Give this note a back to write on: a flip card', run: () => editor.setFlipCards(true) })
+    more.push({ group: 'look', label: 'Add a back', title: 'Give this note a back to write on: a flip card', run: () => editor.setFlipCards(true) })
   if (sequence) {
-    if (!editor.readOnly) more.push({ label: 'Numbered', title: 'Number the messages 1, 2, 3…', checked: !!sequence.numbered, run: () => editor.updateSequence(items[0].id, (d) => setNumbered(d, !d.numbered)) })
+    if (!editor.readOnly) more.push({ group: 'look', label: 'Numbered', title: 'Number the messages 1, 2, 3…', checked: !!sequence.numbered, run: () => editor.updateSequence(items[0].id, (d) => setNumbered(d, !d.numbered)) })
     more.push({
+      group: 'more',
       label: 'Copy as Mermaid',
       title: 'For docs and wikis that draw it',
       run: () => void copyText(toMermaidSequence(sequence, items[0].text)).then(() => editor.setStatus('Copied as Mermaid')),
     })
   }
-  if (linkable && !linked) more.push({ label: 'Link…', title: 'Make this lead to a wiki page, a board, an object or a web address', run: opens(linkOpener) })
-  if (!editor.readOnly && statusable && !assigned) more.push({ label: 'Assign…', title: 'Who it’s assigned to', run: opens(assignOpener) })
-  if (statusable && !timed) more.push({ label: 'Time…', keys: one ? 'Alt T' : undefined, title: 'A timer, logged time and an estimate', run: opens(timeOpener) })
+  if (linkable && !linked) more.push({ group: 'more', label: 'Link…', title: 'Make this lead to a wiki page, a board, an object or a web address', run: opens(linkOpener) })
+  if (!editor.readOnly && statusable && !assigned) more.push({ group: 'more', label: 'Assign…', title: 'Who it’s assigned to', run: opens(assignOpener) })
+  if (statusable && !timed) more.push({ group: 'more', label: 'Time…', keys: one ? 'Alt T' : undefined, title: 'A timer, logged time and an estimate', run: opens(timeOpener) })
 
   return (
     <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
@@ -318,7 +321,7 @@ export function SelectionToolbar() {
         {/* Locked things say so here; locking is in More. */}
         {locked && (
           <button className="on" title="Unlock (Ctrl Shift L)" aria-pressed onClick={() => editor.setLocked(false)}>
-            🔒 Unlock
+            <LockIcon size={15} /> Unlock
           </button>
         )}
         {items.length > 0 && items.every((i) => i.kind === 'sticky' && typeof i.back === 'string') && (
@@ -333,7 +336,7 @@ export function SelectionToolbar() {
         )}
         {hasSketch(editor) && !items.some(isDrawing) && (
           <button title="Turn this drawing or photo into real objects with the AI assistant (previewed first)" onClick={() => void sketchToBoard(editor)}>
-            ✦ To board
+            Make into objects
           </button>
         )}
         {items.length > 1 && !items.some((i) => i.poll || i.kind === 'frame') && !items.every((i) => isWidget(i.kind)) && (
@@ -368,6 +371,8 @@ interface MoreEntry {
   title?: string
   /** On or off, for the ones that toggle. */
   checked?: boolean
+  /** Entries of a group sit together, with a line between groups. */
+  group: 'edit' | 'layer' | 'look' | 'more'
   run: (from: HTMLElement, keyboard: boolean) => void
 }
 
@@ -398,7 +403,8 @@ function MoreMenu({ entries, react }: { entries: MoreEntry[]; react: boolean }) 
       {at &&
         createPortal(
           <div className="align-menu more-menu no-canvas" role="menu" aria-label="More" {...menuProps} style={place ?? undefined} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
-            {entries.map((m) => (
+            {entries.map((m, k) => [
+              k > 0 && entries[k - 1].group !== m.group && <hr key={`${m.label}-line`} />,
               <button
                 key={m.label}
                 role={m.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
@@ -416,8 +422,9 @@ function MoreMenu({ entries, react }: { entries: MoreEntry[]; react: boolean }) 
                 </span>
                 {m.label}
                 {m.keys && <kbd>{m.keys}</kbd>}
-              </button>
-            ))}
+              </button>,
+            ])}
+            {react && entries.length > 0 && <hr />}
             {react && (
               <div className="more-react" role="group" aria-label="React">
                 {RX.REACTIONS.map((emoji) => {

@@ -21,7 +21,7 @@ export async function copyImage(editor: Editor, ids?: ReadonlySet<Id>) {
     const pic = await m.boardSvg(editor, { ids })
     if (!pic) return editor.setStatus('Nothing to copy')
     await m.copyPng(pic)
-    editor.setStatus('Copied as an image — paste it into a chat or document')
+    editor.setStatus('Copied as an image. Paste it into a chat or document')
   } catch (err) {
     editor.setStatus((err as Error).message || 'Could not copy the image')
   }
@@ -108,7 +108,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               </button>
               <button disabled={!!busy} onClick={act('copy', async (m) => {
                 await m.copyPng(await picture(m))
-                editor.setStatus('Copied as an image — paste it into a chat or document')
+                editor.setStatus('Copied as an image. Paste it into a chat or document')
                 onClose()
               })}>
                 {busy === 'copy' ? 'Copying…' : 'Copy image'}
@@ -124,7 +124,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 {busy === 'pdf' ? 'Making PDF…' : `Download PDF of all frames (${pages} page${pages === 1 ? '' : 's'})`}
               </button>
             </div>
-            <p className="muted small">The PDF has one page per frame, in slide order — a handout of the presentation.</p>
+            <p className="muted small">The PDF has one page per frame, in slide order: a handout of the presentation.</p>
             <h3 className="export-sub">As text</h3>
             <div className="export-actions">
               <button disabled={!!busy} onClick={act('md', async (m) => m.download(new Blob([boardMarkdown(editor.board)], { type: 'text/markdown' }), name('md')))}>

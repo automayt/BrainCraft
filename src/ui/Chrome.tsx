@@ -9,29 +9,7 @@ import { createPortal } from 'react-dom'
 import { TOOLS, type Tool } from '../editor/Editor'
 import { SHORTCUTS } from './shortcuts'
 import { FLOW_SHAPES, type FlowShape, INKS } from '../model/types'
-import {
-  BoardsIcon,
-  CheckIcon,
-  CodeToolIcon,
-  SequenceIcon,
-  CommentsIcon,
-  DrawingIcon,
-  HandDrawnIcon,
-  FitIcon,
-  FlowShapeIcon,
-  HelpIcon,
-  ImageIcon,
-  MenuIcon,
-  MinusIcon,
-  MoreToolsIcon,
-  PlayIcon,
-  PlusIcon,
-  RedoIcon,
-  SearchIcon,
-  TOOL_ICONS,
-  ThemeIcon,
-  UndoIcon,
-} from './icons'
+import { BoardsIcon, CheckIcon, CodeToolIcon, SequenceIcon, CommentsIcon, DrawingIcon, HandDrawnIcon, FitIcon, FlowShapeIcon, HelpIcon, ImageIcon, MenuIcon, MinusIcon, MoreToolsIcon, PlayIcon, PlusIcon, RedoIcon, SearchIcon, TOOL_ICONS, ThemeIcon, UndoIcon, AssistantIcon } from './icons'
 import { ink } from './paint'
 import { THEMES } from './theme'
 import { useUi } from './uiContext'
@@ -168,7 +146,7 @@ function SaveState() {
   if (ws.readOnly) return null
   const tip = ws.persistent
     ? `${SAVE_LABELS[ws.saveState]} in this browser${ws.fileName ? ` · file: ${ws.fileName}` : ''}`
-    : 'Not kept in this browser (it doesn’t keep data here) — save to a file to keep it'
+    : 'Not kept in this browser (it doesn’t keep data here). Save to a file to keep it'
   return (
     <span className={`save-state has-tip ${ws.persistent ? ws.saveState : 'error'}`}>
       <i aria-hidden="true" />
@@ -310,7 +288,7 @@ export function TopRight() {
         onMouseDown={keepFocus}
         onClick={ui.toggleAssistant}
       >
-        <span aria-hidden="true">✦</span>
+        <AssistantIcon />
         <span>Ask AI</span>
         <Tip label="Chat with this board" keys="Ctrl J" />
       </button>
@@ -565,7 +543,7 @@ function FlowFlyout() {
           role="option"
           aria-selected={editor.tool === 'flow' && editor.flowShape === f.shape}
           className={`flyout-option${editor.tool === 'flow' && editor.flowShape === f.shape ? ' on' : ''}`}
-          title="Click, then click the board — or drag it onto the board"
+          title="Click, then click the board, or drag it onto the board"
           onMouseDown={keepFocus}
           onPointerDown={(e) => {
             if (e.button !== 0) return

@@ -220,7 +220,7 @@ function App({ ws }: { ws: Workspace }) {
     if (pairing) {
       history.replaceState(null, '', location.pathname + location.search)
       bridge.connect(pairing)
-      editor.setStatus('Paired with your AI assistant — it can now work on this board')
+      editor.setStatus('Paired with your AI assistant. It can work on this board now')
     } else {
       const stored = Bridge.stored()
       if (stored) bridge.connect(stored)

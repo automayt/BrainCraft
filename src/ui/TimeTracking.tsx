@@ -5,6 +5,7 @@
  * and the selection toolbar's Assign and Time menus.
  */
 
+import { TimerIcon } from './icons'
 import { type FormEvent, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '../editor/Editor'
@@ -768,7 +769,7 @@ export function TimeMarks({ editor, board = editor.board, zoom = editor.camera.z
               {(i.assignees?.length ?? 0) > 4 && <span className="time-avatar more">+{i.assignees!.length - 4}</span>}
               {(ms > 0 || i.estimate) && (
                 <span className={`time-spent${over ? ' over' : ''}`} title={i.estimate ? `${TT.formatDuration(ms)} of ${TT.formatDuration(i.estimate * MIN)} estimated` : `${TT.formatDuration(ms)} tracked`}>
-                  ⏱ {TT.formatDuration(ms)}
+                  <TimerIcon size={14} /> {TT.formatDuration(ms)}
                   {i.estimate ? ` / ${TT.formatDuration(i.estimate * MIN)}` : ''}
                 </span>
               )}
@@ -1018,7 +1019,8 @@ export function RecordTime({ dataset, record }: { dataset: string; record: strin
   const spent = TT.recordTime(editor.board, dataset, record, now)
   return (
     <div className="record-time">
-      <span className="muted">⏱ {spent ? TT.formatDuration(spent) : 'No time yet'}</span>
+      <span className="muted">
+        <TimerIcon size={14} /> {spent ? TT.formatDuration(spent) : 'No time yet'}</span>
       {!editor.readOnly &&
         (here ? (
           <button onClick={() => editor.stopTracking()}>■ Stop {TT.formatClock(TT.durationOf(mine!, now))}</button>

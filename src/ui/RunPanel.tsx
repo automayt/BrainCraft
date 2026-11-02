@@ -106,7 +106,7 @@ function Running({ now }: { now: number }) {
         ) : (
           opts.map((o, k) => (
             <button key={o.connector} className={`run-go${isDecision ? '' : ' primary'}`} onClick={() => editor.runChoose(k)}>
-              <span>{isDecision ? o.label : <>Done — next: {o.label}</>}</span>
+              <span>{isDecision ? o.label : <>Done, next: {o.label}</>}</span>
               <kbd>{isDecision ? k + 1 : 'Enter'}</kbd>
             </button>
           ))

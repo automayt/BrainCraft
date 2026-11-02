@@ -512,7 +512,7 @@ Every object has comments and a description (**Alt+C**). Comment blocks (**C**) 
 - **Changes are previewed, never just made:** new objects outlined in green, removed ones crossed out. **Apply** or **Discard**.
 - Every applied change has its own **Undo**, even after other edits.
 - Quick actions: Summarise, Find gaps, Decision log; with a selection, Cluster into themes, Make a mind map, Make a flowchart.
-- **Sketch to board:** draw a rough chart with the pen, or drop in a photo of a whiteboard, select it and press **✦ To board**.
+- **Sketch to board:** draw a rough chart with the pen, or drop in a photo of a whiteboard, select it and press **Make into objects** on its toolbar.
 - The model can be Claude through an API key, your own model server (such as vLLM), or **Claude Code** (\`claude -p\`) or **Codex** (\`codex exec\`) on the computer your BrainCraft server runs on: when they're installed there, they're in the list, signed in as whoever uses them there.
 
 > [!tip] Assistants outside the app

@@ -1,3 +1,4 @@
+import { NoticeIcon } from './icons'
 import { useState } from 'react'
 import { useWorkspace } from './useWorkspace'
 
@@ -28,8 +29,8 @@ export function ServerNotice() {
   }
   return (
     <div className="whats-new server-notice no-canvas" role="status">
-      <span className="whats-new-icon" aria-hidden="true">
-        📣
+      <span className="whats-new-icon">
+        <NoticeIcon size={18} />
       </span>
       <span className="whats-new-msg">{notice}</span>
       <span className="whats-new-actions">

@@ -40,6 +40,8 @@ export interface BoardMeta {
   outline?: PageOutline[]
   /** A child board: the link key of the board it was divided from. */
   parent?: string
+  /** When it was last opened in this browser (Recent in Your boards goes by this). */
+  opened?: number
 }
 
 /** A page as other boards see it: enough to list it and link to it. */
@@ -143,13 +145,13 @@ export class Library {
   async save(id: string, board: Board): Promise<void> {
     const prev = await this.meta(id)
     const now = this.now()
-    await this.write(id, board, prev?.created ?? now, prev?.live)
+    await this.write(id, board, prev?.created ?? now, prev?.live, prev?.opened)
     const versions = await this.versions(id)
     const lastAuto = versions.find((v) => !v.name)
     if (!lastAuto || now - lastAuto.at >= AUTO_VERSION_EVERY) await this.addVersion(id, board)
   }
 
-  private async write(id: string, board: Board, created: number, live?: LiveInfo) {
+  private async write(id: string, board: Board, created: number, live?: LiveInfo, opened?: number) {
     const json = toJson(board)
     const meta: BoardMeta = {
       id,
@@ -158,6 +160,7 @@ export class Library {
       ...(board.icon ? { icon: board.icon } : {}),
       created,
       updated: this.now(),
+      ...(opened ? { opened } : {}),
       items: isWiki(board) ? pageOrder(board).length : board.items.length,
       ...thumbnail(board),
       ...(board.parent ? { parent: board.parent.key } : {}),
@@ -179,6 +182,12 @@ export class Library {
     if (live) next.live = live
     else delete next.live
     await this.kv.set(metaKey(id), next)
+  }
+
+  /** Notes that the board was just opened here. */
+  async markOpened(id: string) {
+    const meta = await this.meta(id)
+    if (meta) await this.kv.set(metaKey(id), { ...meta, opened: this.now() })
   }
 
   /** The board in this browser that is a copy of live board `liveId` on `server`. */

@@ -132,14 +132,14 @@ export function ContextMenu() {
               label: 'Copy link to this object',
               run: () =>
                 void copyText(ws.webLink({ item: single.id })!).then((ok) =>
-                  editor.setStatus(ok ? 'Copied a link — paste it in a chat, a wiki page or a comment' : 'Couldn’t copy the link'),
+                  editor.setStatus(ok ? 'Copied a link. Paste it in a chat, a wiki page or a comment' : 'Couldn’t copy the link'),
                 ),
             },
             {
               label: 'Copy embed for a wiki page',
               run: () =>
                 void copyText(embedToken(objectLabel(single), ws.linkKey!, single.id, TEXT_FIRST.has(single.kind))).then((ok) =>
-                  editor.setStatus(ok ? 'Copied — paste it on a line of its own in a wiki page to show this there' : 'Couldn’t copy it'),
+                  editor.setStatus(ok ? 'Copied. Paste it on a line of its own in a wiki page to show this there' : 'Couldn’t copy it'),
                 ),
             },
           ]

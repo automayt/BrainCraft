@@ -1,8 +1,9 @@
 /** The board library, version history, share links and the read-only banner. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { LEVEL_LABEL } from '../store/account'
-import { nested } from '../store/nest'
+import { type BoardEntry, type BoardFilter, type BoardSort, boardEntries, byOpened, keysOf, sharedWithMe, shownEntries } from '../store/boardList'
+import { createPortal } from 'react-dom'
+import { useButtonMenu } from './menuKeys'
 import { useDialog } from './useDialog'
 import { TEMPLATES, boardFromTemplate } from '../model/templates'
 import { WIKI_TEMPLATES } from '../model/wikiTemplates'
@@ -15,6 +16,7 @@ import { ink, mindRootFill } from './paint'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
+import { safeStorage } from '../store/workspace'
 import { LiveSection } from './Live'
 import { copyText } from './copyText'
 import { useUi } from './uiContext'
@@ -73,118 +75,181 @@ export function Dialog({ label, onClose, className = '', children }: { label: st
 
 // ----- board library ---------------------------------------------------------------
 
+/** How many recent boards show at first, and how many more each "Show more" adds. */
+const RECENT = 5
+const MORE = 10
+
 export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onOpenFile: () => void }) {
   const ws = useWorkspace()
   const editor = useEditor()
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<BoardFilter>('all')
+  // By name unless you chose otherwise: Recent above already has the latest.
+  const [sort, setSort] = useState<BoardSort>(() => (safeStorage()?.getItem(SORT_KEY) === 'recent' ? 'recent' : 'name'))
+  const [recent, setRecent] = useState(RECENT)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
-  // Child boards come right after the board they came from.
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return nested(
-      q ? ws.boards.filter((b) => b.title.toLowerCase().includes(q)) : ws.boards,
-      (b) => [b.id, ...(b.live ? [b.live.id] : [])],
-      (b) => b.parent,
-    )
-  }, [ws.boards, query])
-  const titleOf = (key: string | undefined) => (key ? (ws.findBoard(key)?.title ?? ws.serverBoards.find((b) => b.id === key)?.title) : undefined)
-  const serverShown = nested(
-    ws.serverBoards.filter((b) => !query.trim() || b.title.toLowerCase().includes(query.trim().toLowerCase())),
-    (b) => [b.id],
-    (b) => b.parent,
-  )
+  const me = ws.account?.user?.id
+  const all = useMemo(() => boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined), [ws.boards, ws.serverBoards, ws.account, ws.server])
+  const shown = useMemo(() => shownEntries(all, { query, filter, sort, me }), [all, query, filter, sort, me])
+  const recentList = useMemo(() => byOpened(all), [all])
+  const titleOf = (key: string | undefined) => (key === undefined ? undefined : all.find((e) => keysOf(e).includes(key))?.title)
+  const shared = all.some((e) => sharedWithMe(e, me))
+  const wikis = all.some((e) => e.kind === 'wiki')
+  const searching = !!query.trim()
 
-  const open = (id: string) => {
+  const open = (e: BoardEntry) => {
     onClose()
-    if (id !== ws.boardId) void ws.switchTo(id)
+    if (e.local) {
+      if (e.local.id !== ws.boardId) void ws.switchTo(e.local.id)
+    } else if (e.server) void ws.openServerBoard(e.server)
   }
-  const create = (t: (typeof TEMPLATES)[number]) => {
+  const create = (t: (typeof TEMPLATES)[number], title?: string) => {
     onClose()
-    void ws.newBoard(boardFromTemplate(t, editor.measure))
+    const b = boardFromTemplate(t, editor.measure)
+    void ws.newBoard(title ? { ...b, title } : b)
   }
+  const newWiki = (template: string, title?: string) => {
+    onClose()
+    void ws.newWiki(title, template)
+  }
+  const list = useRef<HTMLUListElement>(null)
+  // ↓ from the search goes into the list; ↑ and ↓ move along it; ↑ at the top goes back.
+  const moveIn = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    const names = [...(list.current?.querySelectorAll<HTMLElement>('.board-name') ?? [])]
+    const at = names.indexOf(document.activeElement as HTMLElement)
+    const to = e.key === 'ArrowDown' ? at + 1 : at - 1
+    e.preventDefault()
+    if (to < 0) search.current?.focus()
+    else names[Math.min(to, names.length - 1)]?.focus()
+  }
+  const search = useRef<HTMLInputElement>(null)
+  // On a phone the keyboard would cover the list before you've looked at it.
+  const typing = typeof matchMedia === 'undefined' || matchMedia('(pointer: fine)').matches
+  const choose = (s: BoardSort) => {
+    setSort(s)
+    try {
+      safeStorage()?.setItem(SORT_KEY, s)
+    } catch {
+      // Storage full or blocked: the order just isn't remembered.
+    }
+  }
+  const row = (e: BoardEntry, depth = 0) => (
+    <BoardRow
+      key={e.key}
+      entry={e}
+      depth={depth}
+      me={me}
+      parentTitle={e.parent !== undefined && (sort !== 'name' || !depth) ? titleOf(e.parent) : undefined}
+      current={!!e.local && e.local.id === ws.boardId}
+      renaming={renaming === e.key}
+      confirming={confirming === e.key}
+      onOpen={() => open(e)}
+      onRename={(title) => {
+        setRenaming(null)
+        if (e.local && title.trim() && title !== e.title) void ws.rename(e.local.id, title.trim())
+      }}
+      onStartRename={() => setRenaming(e.key)}
+      onDuplicate={() => e.local && void ws.duplicate(e.local.id)}
+      onDelete={() => (confirming === e.key ? (setConfirming(null), e.local && void ws.remove(e.local.id)) : setConfirming(e.key))}
+      onCancelDelete={() => setConfirming(null)}
+    />
+  )
 
   return (
     <Dialog label="Your boards" onClose={onClose} className="boards">
       <header>
         <h2>Your boards</h2>
         <input
+          ref={search}
           className="boards-search"
-          aria-label="Find a board"
-          placeholder="Find a board"
-          autoFocus
+          type="search"
+          aria-label="Find a board or wiki"
+          placeholder={`Find among ${all.length} board${all.length === 1 ? '' : 's'} and wikis`}
+          autoFocus={typing}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && shown[0] && open(shown[0].item.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && shown[0]) open(shown[0].entry)
+            else moveIn(e)
+          }}
         />
-        <button onClick={() => (onClose(), onOpenFile())}>Open file…</button>
+        <button className="boards-open-file" onClick={() => (onClose(), onOpenFile())}>
+          Open a file…
+        </button>
+        <NewMenu onBoard={(t) => create(t)} onWiki={(t) => newWiki(t)} onGuide={() => (onClose(), void ws.openGuide())} onFile={() => (onClose(), onOpenFile())} />
         <button className="icon-close" aria-label="Close" onClick={onClose}>
           ×
         </button>
       </header>
       <div className="boards-body">
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
-        {ws.account?.user && (
-          <section className="server-boards" aria-labelledby="server-boards-title">
-            <h3 className="templates-title" id="server-boards-title">
-              On this server <small>boards and wikis you can open, yours and shared with you</small>
-            </h3>
-            <ul className="access-list">
-              {serverShown.map(({ item: b, depth }) => (
-                <li key={b.id} className={depth ? 'child-board' : undefined} style={depth ? { paddingLeft: Math.min(depth, 4) * 18 } : undefined}>
-                  <button
-                    className="link server-board"
-                    onClick={() => {
-                      onClose()
-                      void ws.openServerBoard(b)
-                    }}
-                  >
-                    {depth ? '↳ ' : ''}
-                    {b.kind === 'wiki' ? '📘 ' : ''}
-                    {b.title || 'Untitled'}
-                  </button>
-                  <small className="muted">
-                    {b.owner ? (b.owner.id === ws.account?.user?.id ? 'yours' : b.owner.name) : 'no owner'} · {LEVEL_LABEL[b.level].toLowerCase()} · {timeAgo(b.updated)}
-                  </small>
-                </li>
+        {!searching && all.length > 0 && (
+          <section className="boards-recent" aria-labelledby="boards-recent-title">
+            <h3 id="boards-recent-title">Recent</h3>
+            <div className="recent-grid">
+              {recentList.slice(0, recent).map((e) => (
+                <BoardTile key={e.key} entry={e} me={me} parentTitle={titleOf(e.parent)} current={!!e.local && e.local.id === ws.boardId} onOpen={() => open(e)} />
               ))}
-              {!ws.serverBoards.length && <li className="muted">Nothing here yet. New boards you make go to the server.</li>}
-            </ul>
-            {ws.account.backups && <RecentlyDeleted />}
-
-            <h3 className="templates-title">In this browser</h3>
+            </div>
+            {all.length > RECENT && (
+              <div className="recent-more">
+                {recent < all.length && <button onClick={() => setRecent((n) => n + MORE)}>Show {Math.min(MORE, all.length - recent)} more</button>}
+                {recent > RECENT && <button onClick={() => setRecent(RECENT)}>Show fewer</button>}
+              </div>
+            )}
           </section>
         )}
-        <div className="board-grid">
-          {shown.map(({ item: b, depth }) => (
-            <BoardCard
-              key={b.id}
-              meta={b}
-              parentTitle={depth ? titleOf(b.parent) : undefined}
-              current={b.id === ws.boardId}
-              renaming={renaming === b.id}
-              confirming={confirming === b.id}
-              onOpen={() => open(b.id)}
-              onRename={(title) => {
-                setRenaming(null)
-                if (title.trim() && title !== b.title) void ws.rename(b.id, title.trim())
-              }}
-              onStartRename={() => setRenaming(b.id)}
-              onDuplicate={() => void ws.duplicate(b.id)}
-              onDelete={() => (confirming === b.id ? (setConfirming(null), void ws.remove(b.id)) : setConfirming(b.id))}
-              onCancelDelete={() => setConfirming(null)}
-            />
-          ))}
-          {!shown.length && <p className="muted empty">No boards match “{query}”.</p>}
-        </div>
-        {!query && (
+        <section className="boards-all" aria-labelledby="boards-all-title">
+          <div className="boards-all-head">
+            <h3 id="boards-all-title">{searching ? `Found ${shown.length}` : 'All boards and wikis'}</h3>
+            {(wikis || shared) && (
+              <div className="boards-filter" role="radiogroup" aria-label="Show">
+                {(
+                  [
+                    ['all', 'All'],
+                    ['boards', 'Boards'],
+                    ...(wikis ? [['wikis', 'Wikis']] : []),
+                    ...(shared ? [['shared', 'Shared with me']] : []),
+                  ] as [BoardFilter, string][]
+                ).map(([f, label]) => (
+                  <button key={f} role="radio" aria-checked={filter === f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className="boards-sort">
+              Order
+              <select value={sort} onChange={(e) => choose(e.target.value as BoardSort)}>
+                <option value="recent">Last edited</option>
+                <option value="name">Name</option>
+              </select>
+            </label>
+          </div>
+          {shown.length ? (
+            <ul className="board-rows" ref={list} onKeyDown={moveIn}>
+              {shown.map(({ entry, depth }) => row(entry, depth))}
+            </ul>
+          ) : searching ? (
+            <div className="boards-none">
+              <p>Nothing called “{query.trim()}”{filter !== 'all' ? ' here. Try All.' : '.'}</p>
+              <button className="primary" onClick={() => create(TEMPLATES[0], query.trim())}>
+                New board called “{query.trim()}”
+              </button>
+              <button onClick={() => newWiki('wiki', query.trim())}>New wiki called “{query.trim()}”</button>
+            </div>
+          ) : (
+            <p className="muted boards-none">{filter === 'shared' ? 'Nobody has shared a board with you yet.' : 'Nothing here yet.'}</p>
+          )}
+          {ws.account?.user && ws.account.backups && <RecentlyDeleted />}
+        </section>
+        {!searching && (
           <section className="start-new" aria-label="Start something new">
-          {!query && (
             <h3 className="templates-title" id="new-board-title">
               New board <small>a canvas to draw and brainstorm on</small>
             </h3>
-          )}
-          {!query && (
             <section className="templates" aria-labelledby="new-board-title">
               {TEMPLATES.map((t) => (
                 <button key={t.id} className="template" onClick={() => create(t)}>
@@ -194,13 +259,9 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                 </button>
               ))}
             </section>
-          )}
-          {!query && (
             <h3 className="templates-title" id="new-wiki-title">
               New wiki <small>pages to write things down: plans, lists, notes</small>
             </h3>
-          )}
-          {!query && (
             <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
               <button
                 className="template guide-template"
@@ -246,11 +307,187 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
                 </button>
               ))}
             </section>
-          )}
           </section>
         )}
       </div>
     </Dialog>
+  )
+}
+
+const SORT_KEY = 'braincraft:boards-sort'
+
+/** New: a blank board or wiki, or one from a template. */
+function NewMenu({ onBoard, onWiki, onGuide, onFile }: { onBoard: (t: (typeof TEMPLATES)[number]) => void; onWiki: (template: string) => void; onGuide: () => void; onFile: () => void }) {
+  const { at, close, toggle, menuProps } = useButtonMenu()
+  const pick = (run: () => void) => () => (close(), run())
+  return (
+    <span className="align-anchor">
+      <button className={`primary new-button${at ? ' on' : ''}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>
+        New
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu more-menu new-menu no-canvas" role="menu" aria-label="New" {...menuProps} style={{ left: Math.min(at.x, window.innerWidth - 130), top: at.y }}>
+            <p className="menu-heading">Board</p>
+            {TEMPLATES.map((t) => (
+              <button key={t.id} role="menuitem" onClick={pick(() => onBoard(t))}>
+                {t.label}
+                <small>{t.hint}</small>
+              </button>
+            ))}
+            <p className="menu-heading">Wiki</p>
+            {WIKI_TEMPLATES.map((t) => (
+              <button key={t.id} role="menuitem" onClick={pick(() => onWiki(t.id))}>
+                {t.id === 'wiki' ? 'Blank wiki' : `${t.label} wiki`}
+                <small>{t.hint}</small>
+              </button>
+            ))}
+            <button role="menuitem" onClick={pick(onGuide)}>
+              {appName()} guide
+              <small>How everything works, with a practice board</small>
+            </button>
+            {/* On phones Open a file… isn't in the header, so it's here. */}
+            <button role="menuitem" className="new-menu-file" onClick={pick(onFile)}>
+              Open a file…
+              <small>A board, Excalidraw drawing, Markdown or Mermaid file</small>
+            </button>
+          </div>,
+          document.body,
+        )}
+    </span>
+  )
+}
+
+/** Whose it is and where it lives, when that's not the usual (yours, to edit): nothing otherwise. */
+function whereOf(e: BoardEntry, me: string | undefined): string {
+  // Signed in, a board in this browser alone is the odd one out; without accounts, they all are.
+  if (!e.server) return e.local?.live ? 'Shared by link' : me ? 'Only in this browser' : ''
+  const owner = e.server.owner
+  const whose = !owner ? 'No owner yet' : owner.id === me ? '' : `${owner.name}’s`
+  if (e.server.level !== 'view') return whose
+  return whose ? `${whose}, view only` : 'View only'
+}
+
+/** A board's picture: its objects in miniature, a wiki's first pages, or (not opened here yet) its initial. */
+function EntryThumb({ entry }: { entry: BoardEntry }) {
+  if (entry.local) return entry.kind === 'wiki' ? <WikiOutline meta={entry.local} /> : <Thumb thumb={entry.local.thumb} aspect={entry.local.aspect} />
+  return (
+    <span className={`thumb unseen-thumb${entry.kind === 'wiki' ? ' unseen-wiki' : ''}`} aria-hidden="true">
+      {entry.icon ?? (entry.title.trim()[0] ?? '·').toUpperCase()}
+    </span>
+  )
+}
+
+/** A recent board: big enough to recognise by its picture. */
+function BoardTile({ entry: e, me, parentTitle, current, onOpen }: { entry: BoardEntry; me: string | undefined; parentTitle?: string; current: boolean; onOpen: () => void }) {
+  return (
+    <button className={`board-tile${current ? ' current' : ''}`} onClick={onOpen} aria-label={`Open ${e.title || 'Untitled'}`}>
+      <EntryThumb entry={e} />
+      <span className="board-tile-name">
+        {e.icon && e.local && <span className="board-name-icon">{e.icon}</span>}
+        {e.title || 'Untitled'}
+      </span>
+      <small>
+        {current ? 'Open now' : `Edited ${timeAgo(e.updated)}`}
+        {parentTitle !== undefined ? `, in ${parentTitle || 'another board'}` : e.server && whereOf(e, me) ? `, ${whereOf(e, me)}` : ''}
+      </small>
+    </button>
+  )
+}
+
+/** A line in the full list, with Rename, Duplicate and Delete behind ⋯. */
+function BoardRow(p: {
+  entry: BoardEntry
+  depth: number
+  me: string | undefined
+  /** A child board, said in words when it isn't right under its parent. */
+  parentTitle?: string
+  current: boolean
+  renaming: boolean
+  confirming: boolean
+  onOpen: () => void
+  onRename: (title: string) => void
+  onStartRename: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+  onCancelDelete: () => void
+}) {
+  const { entry: e } = p
+  const { at, close, toggle, menuProps } = useButtonMenu()
+  const items = e.local?.items
+  // A board on the server is deleted there by whoever manages it, not from this list.
+  const deletable = !!e.local && !e.server
+  return (
+    <li className={`board-row${p.current ? ' current' : ''}${p.depth ? ' child-board' : ''}`} style={p.depth ? { paddingLeft: 8 + Math.min(p.depth, 4) * 22 } : undefined}>
+      <button className="board-row-open" onClick={p.onOpen} tabIndex={-1} aria-hidden="true">
+        <EntryThumb entry={e} />
+      </button>
+      <div className="board-row-name">
+        {p.renaming ? (
+          <input
+            autoFocus
+            defaultValue={e.title}
+            aria-label={e.kind === 'wiki' ? 'Wiki name' : 'Board name'}
+            onBlur={(ev) => p.onRename(ev.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur()
+              if (ev.key === 'Escape') {
+                ev.stopPropagation()
+                p.onRename(e.title)
+              }
+            }}
+          />
+        ) : (
+          <button className="board-name" onClick={p.onOpen}>
+            {p.depth > 0 && <span className="board-child-mark" aria-label="Child board of the one above">↳</span>}
+            {e.icon && <span className="board-name-icon">{e.icon}</span>}
+            <span className="board-title-text">{e.title || 'Untitled'}</span>
+            {e.kind === 'wiki' && <span className="board-kind">Wiki</span>}
+            {p.current && <span className="board-kind now">Open now</span>}
+          </button>
+        )}
+        {p.parentTitle !== undefined && <small className="board-parent">Divided from {p.parentTitle || 'another board'}</small>}
+      </div>
+      <span className="board-row-where">{whereOf(e, p.me)}</span>
+      <span className="board-row-size">{items === undefined ? '' : `${items} ${e.kind === 'wiki' ? 'page' : 'object'}${items === 1 ? '' : 's'}`}</span>
+      <span className="board-row-when">{timeAgo(e.updated)}</span>
+      {p.confirming ? (
+        <span className="board-row-confirm">
+          <button className="danger confirm" onClick={p.onDelete}>
+            Delete forever
+          </button>
+          <button onClick={p.onCancelDelete}>Keep</button>
+        </span>
+      ) : e.local ? (
+        <span className="align-anchor">
+          <button className={`board-row-more${at ? ' on' : ''}`} aria-label={`More for ${e.title || 'Untitled'}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>
+            ⋯
+          </button>
+          {at &&
+            createPortal(
+              <div className="align-menu more-menu no-canvas" role="menu" {...menuProps} style={{ left: Math.min(at.x, window.innerWidth - 118), top: at.y }}>
+                <button role="menuitem" onClick={() => (close(), p.onStartRename())}>
+                  Rename
+                </button>
+                <button role="menuitem" onClick={() => (close(), p.onDuplicate())}>
+                  Duplicate
+                </button>
+                {deletable && (
+                  <button role="menuitem" className="danger-quiet" onClick={() => (close(), p.onDelete())}>
+                    Delete…
+                  </button>
+                )}
+              </div>,
+              document.body,
+            )}
+        </span>
+      ) : (
+        <span />
+      )}
+    </li>
   )
 }
 
@@ -280,79 +517,6 @@ function TemplateThumb({ id }: { id: string }) {
   if (!templateThumbs.has(id)) templateThumbs.set(id, thumbnail(boardFromTemplate(TEMPLATES.find((t) => t.id === id)!, editor.measure)))
   const t = templateThumbs.get(id)!
   return t.thumb.length ? <Thumb {...t} /> : <span className="thumb blank-thumb">+</span>
-}
-
-function BoardCard(p: {
-  meta: BoardMeta
-  /** A child board, shown after the board it came from. */
-  parentTitle?: string
-  current: boolean
-  renaming: boolean
-  confirming: boolean
-  onOpen: () => void
-  onRename: (title: string) => void
-  onStartRename: () => void
-  onDuplicate: () => void
-  onDelete: () => void
-  onCancelDelete: () => void
-}) {
-  const { meta } = p
-  return (
-    <div
-      className={`board-card${p.current ? ' current' : ''}${p.parentTitle !== undefined ? ' child-board' : ''}`}
-      // The whole card opens the board (its buttons do their own thing).
-      onClick={(e) => !p.renaming && !(e.target as Element).closest('button, input') && p.onOpen()}
-    >
-      <button className="board-open" onClick={p.onOpen} aria-label={`Open ${meta.title}`}>
-        {meta.kind === 'wiki' ? <WikiOutline meta={meta} /> : <Thumb thumb={meta.thumb} aspect={meta.aspect} />}
-      </button>
-      <div className="board-info">
-        {p.renaming ? (
-          <input
-            autoFocus
-            defaultValue={meta.title}
-            aria-label={meta.kind === 'wiki' ? 'Wiki name' : 'Board name'}
-            onBlur={(e) => p.onRename(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              if (e.key === 'Escape') {
-                e.stopPropagation()
-                p.onRename(meta.title)
-              }
-            }}
-          />
-        ) : (
-          <button className="board-name" title={`Open ${meta.title}`} onClick={p.onOpen}>
-            {meta.icon && <span className="board-name-icon">{meta.icon}</span>}
-            {meta.title}
-          </button>
-        )}
-        {p.parentTitle !== undefined && <small className="board-parent">↳ in {p.parentTitle || 'the board above'}</small>}
-        <small>
-          {p.current ? 'Open now' : `Edited ${timeAgo(meta.updated)}`} · {meta.items} {meta.kind === 'wiki' ? 'page' : 'object'}
-          {meta.items === 1 ? '' : 's'}
-        </small>
-      </div>
-      <div className="board-actions">
-        {p.confirming ? (
-          <>
-            <button className="danger confirm" onClick={p.onDelete}>
-              Delete forever
-            </button>
-            <button onClick={p.onCancelDelete}>Keep</button>
-          </>
-        ) : (
-          <>
-            <button onClick={p.onStartRename}>Rename</button>
-            <button onClick={p.onDuplicate}>Duplicate</button>
-            <button className="danger" onClick={p.onDelete}>
-              Delete
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
 }
 
 /** Boards deleted from the server in the last 90 days that you managed (admins: all), to put back. */
@@ -499,7 +663,7 @@ export function VersionsDialog({ onClose }: { onClose: () => void }) {
               </button>
             </li>
           ))}
-          {versions && !versions.length && <li className="muted empty">Versions appear here as you work — one every ten minutes, plus any you name.</li>}
+          {versions && !versions.length && <li className="muted empty">Versions appear here as you work: one every ten minutes, plus any you name.</li>}
         </ol>
         <div className="version-preview">
           {preview ? (
@@ -717,7 +881,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
         )}
         {link && (
           <p className={kb * 1024 > LONG_LINK ? 'warning' : 'muted'}>
-            {kb} KB link.{kb * 1024 > LONG_LINK ? ' Some apps cut links this long — send it as a file instead if it doesn’t open.' : ''}
+            {kb} KB link.{kb * 1024 > LONG_LINK ? ' Some apps cut links this long. If it doesn’t open, send it as a file instead.' : ''}
           </p>
         )}
       </div>

@@ -219,7 +219,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                   </div>
                 )
               })}
-              {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">{live || editor.readOnly ? 'No cards yet' : 'No cards yet — select the board to add one'}</p>}
+              {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">{live || editor.readOnly ? 'No cards yet' : 'No cards yet. Select the Kanban to add one'}</p>}
               {drag?.moved && drag.target?.column === col.id && drag.target.index >= col.cards.filter((c) => c.id !== drag.card).length && (
                 <div className="drop-line" />
               )}
@@ -229,7 +229,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                     className="add-card-input"
                     autoFocus
                     rows={2}
-                    placeholder="Card title — Enter to add another, Esc to cancel"
+                    placeholder="Card title (Enter adds another, Esc cancels)"
                     onBlur={(e) => {
                       // Clicking away keeps what was typed, as a card.
                       const title = e.target.value.trim()

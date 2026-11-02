@@ -1,3 +1,4 @@
+import { LockIcon } from '../icons'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { applyPageWidth, loadPageWidth, PAGE_WIDTHS, type PageWidth } from './pageWidth'
 import { isProtected } from '../../model/protection'
@@ -293,7 +294,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
         </p>
       ) : locked ? (
         <p className="wiki-protected" role="status">
-          <span aria-hidden="true">🔒 </span>
+          <LockIcon size={15} />{' '}
           {ownLock ? 'Protected' : `Protected along with “${W.pagePath(board, page.id).find((p) => p.protected)?.title || 'a page above'}”`}
           {': '}
           {!ro
@@ -509,9 +510,9 @@ function copyPlace(ws: Workspace, editor: Editor, label: string, place: { page: 
   const web = live ?? ws.webLink(place)
   const key = ws.linkKey ?? undefined
   const message = live
-    ? 'Copied a link to the live wiki at this page — anyone you send it to can open it'
+    ? 'Copied a link to the live wiki at this page. Anyone you send it to can open it'
     : web
-      ? 'Copied — it opens for friends who already have this wiki; paste it into a page or comment for a link'
+      ? 'Copied. It opens for friends who already have this wiki; paste it into a page or comment for a link'
       : 'Copied a link to paste into a page or comment'
   void copyText(web ?? linkToken(label, { ...(key ? { board: key } : {}), ...place })).then((ok) => editor.setStatus(ok ? message : 'Couldn’t copy the link'))
 }

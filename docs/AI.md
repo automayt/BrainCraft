@@ -39,8 +39,8 @@ your BrainCraft server.
 - One-click actions sit above the message box: Summarise, Find gaps and
   Decision log always, plus Cluster into themes, Make a mind map and Make a
   flowchart when something is selected.
-- **Sketch to board:** select a pen drawing or a photo and press **✦ To
-  board** (or right-click → Turn sketch into a board). The picture is sent to
+- **Sketch to board:** select a pen drawing or a photo and press **Make into
+  objects** (or right-click → Turn sketch into a board). The picture is sent to
   Claude, which proposes flowcharts, mind maps, notes, tables or Kanban boards
   beside it, as a preview.
 - Other parts of the app can ask the assistant too: the "Since you were

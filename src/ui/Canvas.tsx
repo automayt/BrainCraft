@@ -518,7 +518,7 @@ function Overlays({ editor }: { editor: Editor }) {
     if (r.x > editor.viewport.w || r.y > editor.viewport.h || r.x + r.w < 0 || r.y + r.h < 0) continue
     out.push(
       <g key={`notes${i.id}`} data-handle="notes" data-id={i.id} className="notes-badge" transform={`translate(${r.x + r.w + 14} ${r.y - 4})`}>
-        <title>{`${i.notes.length} comment${i.notes.length === 1 ? '' : 's'} — click to open`}</title>
+        <title>{`${i.notes.length} comment${i.notes.length === 1 ? '' : 's'}. Click to open`}</title>
         <path d="M-10 -12h20a4 4 0 0 1 4 4v9a4 4 0 0 1 -4 4h-11l-5 4v-4h-4a4 4 0 0 1 -4 -4v-9a4 4 0 0 1 4 -4z" />
         <text x={0} y={-3} dy="0.35em" textAnchor="middle">
           {i.notes.length > 99 ? '99+' : i.notes.length}

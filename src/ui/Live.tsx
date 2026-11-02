@@ -36,7 +36,7 @@ export function LiveBar({ onOpen }: { onOpen: () => void }) {
             key={p.id}
             className={`avatar${live.following === p.id ? ' following' : ''}`}
             style={{ background: p.color }}
-            title={live.following === p.id ? `Following ${p.name} — click to stop` : `${p.name}${p.role === 'view' ? ' (viewing)' : ''} — click to follow`}
+            title={live.following === p.id ? `Following ${p.name}. Click to stop` : `${p.name}${p.role === 'view' ? ' (viewing)' : ''}. Click to follow`}
             aria-label={live.following === p.id ? `Stop following ${p.name}` : `Follow ${p.name}`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => live.follow(live.following === p.id ? null : p.id)}

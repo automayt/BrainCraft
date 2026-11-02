@@ -347,9 +347,19 @@ These become interactive once selected; drag them by their title strip.
 
 ### Boards, files and sharing
 
-- **Your boards (Ctrl+O)** lists every board in this browser with a live
-  thumbnail. Rename, duplicate or delete them, or start a new one from a
-  template: blank, brainstorm, process map, sprint plan or retrospective.
+- **Your boards (Ctrl+O)** opens big, with **Recent** at the top: the five
+  boards and wikis you opened last, with their pictures (**Show 10 more**
+  for more). Below is everything in one list, boards in this browser and,
+  when you're signed in, the ones on the server, each once: by name or by
+  last edited, filtered to Boards, Wikis or **Shared with me**, child boards
+  under the board they came from. ⋯ on a line renames, duplicates or deletes
+  it. ↓ from the search goes down the list and Enter opens; a search that
+  finds nothing offers a new board or wiki of that name.
+- **New** (top right of Your boards) starts a blank board or wiki, or one
+  from a template: brainstorm, process map, Kanban, sprint plan,
+  retrospective, a trip, moving house, a party or a club handbook.
+- **Ctrl K finds boards too:** type part of a board's or wiki's name and it
+  is among the results; Enter switches to it.
 - **Board icons:** click the face next to the board's title to give it an
   emoji. It shows in the board list, the browser tab and links to the board,
   and travels with the board in live sessions.
@@ -478,7 +488,7 @@ shares live exactly like a board.
     on all of them. Search and exports include it on each page.
   - The trip, move and party templates use them: open tasks on the home page,
     a countdown to fill in, a status column for bookings.
-- **Templates:** Your boards has a row of wikis to start from: blank, a trip,
+- **Templates:** Your boards → **New** has wikis to start from: blank, a trip,
   moving house, a party and a club handbook.
 - **Versions of a page:** a version is saved each time someone finishes
   writing on a page (with their note, if they wrote one in **What did you
@@ -704,7 +714,7 @@ shares live exactly like a board.
   works, and the board grows and changes as you speak. Esc to leave.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
-  **✦ To board**. Claude reads the picture and proposes real shapes, ideas or
+  **Make into objects**. Claude reads the picture and proposes real shapes, ideas or
   notes beside it — previewed first, like every AI change.
 - **Pick where the model runs:** Claude (the BrainCraft server's key, or your
   own, which stays in your browser; Opus 5.5 by default, Sonnet 5.5 and Haiku

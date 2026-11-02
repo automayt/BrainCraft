@@ -1,5 +1,6 @@
 /** "Since you were here": the news banner, and the changes highlighted on the board. */
 
+import { ChangesIcon } from './icons'
 import type { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { catchUpPeople, catchUpSummary, catchUpText, listNames } from '../model/catchup'
@@ -20,8 +21,8 @@ export function CatchUpBanner() {
   return (
     <div className="catchup no-canvas" role="status">
       <div className="catchup-head">
-        <span className="catchup-spark" aria-hidden="true">
-          ✦
+        <span className="catchup-spark">
+          <ChangesIcon />
         </span>
         <span className="catchup-msg">
           <strong>Since you were here</strong> <small>({timeAgo(c.since)})</small>: {catchUpSummary(c)}

@@ -1,5 +1,6 @@
 /** "Since you were here" in a wiki: which pages are new, rewritten or gone since this person last looked. */
 
+import { ChangesIcon } from '../icons'
 import { useState } from 'react'
 import { catchUpPeople, catchUpSummary, catchUpText, listNames } from '../../model/catchup'
 import * as W from '../../model/wiki'
@@ -56,8 +57,8 @@ export function WikiCatchUp({ onShowChanges }: { onShowChanges: (page: string) =
   return (
     <section className="wiki-catchup" aria-label="Since you were here">
       <div className="wiki-catchup-head">
-        <span className="catchup-spark" aria-hidden="true">
-          ✦
+        <span className="catchup-spark">
+          <ChangesIcon />
         </span>
         <span role="status">
           <strong>Since you were here</strong> <small>({timeAgo(c.since)})</small>: {catchUpSummary(c)}

@@ -281,3 +281,79 @@ export const PlayIcon = () => (
     <path d="M8 5.5v13l10-6.5z" />
   </Svg>
 )
+
+/** Small line icons that sit beside a word in a button or message (16px by default). */
+const Small = ({ size = 16, children }: { size?: number; children: ReactNode }) => (
+  <svg className="line-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {children}
+  </svg>
+)
+
+/** The assistant: a speech bubble, not a sparkle. */
+export const AssistantIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5z" />
+    <path d="M8.5 8.5h7M8.5 11.5h4.5" />
+  </Small>
+)
+
+export const LockIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <rect x="5" y="11" width="14" height="9.5" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </Small>
+)
+
+export const TrashIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M4 7h16M10 3.5h4M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" />
+  </Small>
+)
+
+export const PaperclipIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.1-8.1a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />
+  </Small>
+)
+
+export const MicIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+  </Small>
+)
+
+export const GroupIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M16 4.8a3.2 3.2 0 0 1 0 6.4M17.5 14.7c2.1.6 3.5 2.6 3.5 5.3" />
+  </Small>
+)
+
+export const TimerIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <circle cx="12" cy="13.5" r="7.5" />
+    <path d="M12 9.5v4l2.5 2M9.5 2.5h5" />
+  </Small>
+)
+
+export const BoltIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z" />
+  </Small>
+)
+
+/** Changes since you were last here: a clock turning back. */
+export const ChangesIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6" />
+    <path d="M4 4v4.6h4.6M12 8v4.5l3 2" />
+  </Small>
+)
+
+/** A notice from whoever runs the server. */
+export const NoticeIcon = ({ size }: { size?: number }) => (
+  <Small size={size}>
+    <path d="M4 10v4h3l7 4.5V5.5L7 10zM17.5 9a4 4 0 0 1 0 6" />
+  </Small>
+)

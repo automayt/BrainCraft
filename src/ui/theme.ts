@@ -3,10 +3,10 @@
 export type Theme = 'dark' | 'light' | 'hc-dark' | 'hc-light'
 
 export const THEMES: { id: Theme; label: string; hint: string }[] = [
-  { id: 'dark', label: 'Dark', hint: 'Easy on the eyes (default)' },
-  { id: 'light', label: 'Light', hint: 'Bright and airy' },
-  { id: 'hc-dark', label: 'High contrast dark', hint: 'Maximum contrast on black' },
-  { id: 'hc-light', label: 'High contrast light', hint: 'Maximum contrast on white' },
+  { id: 'dark', label: 'Dark', hint: 'The default' },
+  { id: 'light', label: 'Light', hint: 'For bright rooms and printing' },
+  { id: 'hc-dark', label: 'High contrast dark', hint: 'White on black, thicker lines' },
+  { id: 'hc-light', label: 'High contrast light', hint: 'Black on white, thicker lines' },
 ]
 
 const KEY = 'braincraft:theme'
