@@ -177,3 +177,13 @@ describe('fitting a Kanban board', () => {
     expect(kanbanFit(addColumn(k)[0], approxMeasure).w).toBe(empty.w + KANBAN_COL_W + 12)
   })
 })
+
+describe('growing text', () => {
+  it('grows a short word only a little in a shape of the usual size', () => {
+    const go = item('rect', 'Go')
+    const ask = item('rect', 'Ask everyone')
+    const big = itemFontSize(go, approxMeasure)
+    expect(big).toBeLessThanOrEqual(Math.round(go.fontSize * 1.3 * Math.max(1, Math.min(textRect(go).w / 160, textRect(go).h / 80))))
+    expect(big / itemFontSize(ask, approxMeasure)).toBeLessThan(1.6)
+  })
+})

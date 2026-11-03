@@ -9,6 +9,7 @@ import { diff } from '../collab/patch'
 import { BrainCraftAPI } from '../api/api'
 import { applyOps } from '../api/ops'
 import { FLOW_SHAPES } from '../model/types'
+import { FLOW_GAP } from '../model/flowchart'
 
 function editor() {
   const e = new Editor(emptyBoard(), fakeMeasure)
@@ -1071,7 +1072,7 @@ describe('typing on a selected note', () => {
     expect(e.notesOpen).toBe(true)
   })
 
-  it('says how to get text back after typing over a note', () => {
+  it('puts the text back on Esc after typing over a note, and says how to get it back otherwise', () => {
     const e = editor()
     let id = 0
     e.edit((b) => {
@@ -1081,10 +1082,28 @@ describe('typing on a selected note', () => {
     e.select([id])
     e.keyDown('P', { shift: true })
     e.editingKey('Escape', {})
+    expect(B.getItem(e.board, id)!.text).toBe('Book the cabin')
+    expect(e.editing).toBeNull()
+    // Typed over and then left by clicking elsewhere: kept, with a way back.
+    e.keyDown('P', { shift: true })
+    e.finishEditing()
     expect(B.getItem(e.board, id)!.text).toBe('P')
     expect(e.status).toMatch(/Ctrl Z/)
     e.undo()
     expect(B.getItem(e.board, id)!.text).toBe('Book the cabin')
+  })
+
+  it("doesn't type ? or / over a selected note", () => {
+    const e = editor()
+    let id = 0
+    e.edit((b) => {
+      ;[b, id] = B.addItem(b, B.newItem('sticky', { x: 0, y: 0, w: 100, h: 100 }, { text: 'Cabin' }))
+      return b
+    })
+    e.select([id])
+    expect(e.typesInto('?')).toBe(false)
+    expect(e.typesInto('/')).toBe(false)
+    expect(e.typesInto('r')).toBe(true)
   })
 })
 
@@ -1345,5 +1364,70 @@ describe('time tracking from the keyboard', () => {
     expect(e.logTime({ who: { name: 'Bo' }, on: { item: a }, start: 1_800_000_000_000, end: 1_800_000_000_000 + 3_600_000 })).toBeNull()
     expect(e.board.time![2]).toMatchObject({ who: 'Bo', by: 'Ann' })
     expect(e.logTime({ start: 1_800_000_000_000, end: 1_800_000_000_000 })).toMatch(/after the start/)
+  })
+})
+
+describe('moving shapes', () => {
+  it('snaps a moved box beside another but never draws a line between them', () => {
+    const e = editor()
+    let b = e.board
+    let a: number, z: number
+    ;[b, a] = B.addItem(b, B.newItem('rect', { x: 0, y: 0, w: 160, h: 80 }))
+    ;[b, z] = B.addItem(b, B.newItem('rect', { x: 600, y: 300, w: 160, h: 80 }))
+    e.load(b)
+    e.setTool('select')
+    // Its centre to just short of the slot one step right of the first box.
+    const from = screenCenter(e, z)
+    const slot = { x: 160 + FLOW_GAP + 80, y: 40 }
+    const to = toScreen(e.camera, { x: slot.x + 6, y: slot.y + 4 })
+    e.select([z])
+    e.pointerDown(from, 0, {})
+    e.pointerMove(to)
+    e.pointerUp(to)
+    expect(B.getItem(e.board, z)).toMatchObject({ x: slot.x - 80, y: 0 })
+    expect(e.board.connectors).toHaveLength(0)
+    expect(a).toBeDefined()
+  })
+})
+
+describe('frames', () => {
+  it('draws a selection box from inside a frame, and a click there picks the frame', () => {
+    const e = editor()
+    let b = e.board
+    let f: number, n: number
+    ;[b, f] = B.addItem(b, B.newItem('frame', { x: 0, y: 0, w: 800, h: 600 }))
+    ;[b, n] = B.addItem(b, B.newItem('sticky', { x: 300, y: 200, w: 100, h: 100 }))
+    e.load(b)
+    e.setTool('select')
+    const at = (x: number, y: number) => toScreen(e.camera, { x, y })
+    e.pointerDown(at(100, 100), 0, {})
+    e.pointerMove(at(500, 400))
+    e.pointerUp(at(500, 400))
+    expect(e.selection).toEqual(new Set([n]))
+    expect(B.getItem(e.board, f)).toMatchObject({ x: 0, y: 0 })
+    e.pointerDown(at(100, 100), 0, {})
+    e.pointerUp(at(100, 100))
+    expect(e.selection).toEqual(new Set([f]))
+    // Picked, it moves from anywhere on it.
+    e.pointerDown(at(100, 100), 0, {})
+    e.pointerMove(at(150, 100))
+    e.pointerUp(at(150, 100))
+    expect(B.getItem(e.board, f)!.x).toBeCloseTo(50, 0)
+  })
+})
+
+describe('empty new notes', () => {
+  it('drops a note made by double-click and left empty', () => {
+    const e = editor()
+    e.setTool('select')
+    e.doubleClick({ x: 300, y: 300 })
+    expect(e.board.items).toHaveLength(1)
+    expect(e.editing).not.toBeNull()
+    e.editingKey('Escape', {})
+    expect(e.board.items).toHaveLength(0)
+    e.doubleClick({ x: 300, y: 300 })
+    e.setEditingText('Keep me')
+    e.editingKey('Escape', {})
+    expect(e.board.items.map((i) => i.text)).toEqual(['Keep me'])
   })
 })

@@ -223,6 +223,13 @@ function blocks(list: Block[], x: Ctx): string {
           const body = src && /^(data:image\/|https?:)/.test(src) ? `<img src="${esc(src)}" alt="${label}">` : `<div class="embed-missing">${label}</div>`
           return `<figure class="embed">${body}<figcaption>${linkHtml({ board: b.board, ...(b.item !== undefined ? { item: b.item } : {}) }, b.label || 'Open on its board', x)}</figcaption></figure>`
         }
+        case 'image': {
+          // A picture from the wiki's files, carried in the page as data (`pictures` under "file:ID").
+          const src = x.o.pictures?.get(`file:${b.file}`)
+          const alt = esc(b.alt)
+          const body = src?.startsWith('data:image/') ?`<img src="${esc(src)}" alt="${alt}">` : `<div class="embed-missing">${alt || 'A picture'}</div>`
+          return `<figure class="embed">${body}${b.alt ? `<figcaption>${alt}</figcaption>` : ''}</figure>`
+        }
       }
     })
     .join('\n')

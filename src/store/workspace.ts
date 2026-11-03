@@ -282,7 +282,19 @@ export class Workspace {
    * Opens what a link's hash points at: a live session (and maybe a page or object in it), a
    * snapshot, or a place on a board in this browser. Returns whether it opened anything.
    */
+  /** Opening what the address says (a link, Back or Forward): the address isn't updated meanwhile. */
+  private openingAddress = 0
+
   async openHash(hash: string): Promise<boolean> {
+    this.openingAddress++
+    try {
+      return await this.openHashNow(hash)
+    } finally {
+      this.openingAddress--
+    }
+  }
+
+  private async openHashNow(hash: string): Promise<boolean> {
     const live = liveFromHash(hash)
     if (live) {
       const server = live.server ?? this.server
@@ -749,6 +761,25 @@ export class Workspace {
     return copy
   }
 
+  /**
+   * Deletes a board from the server with accounts, for everyone (admins and its manager can put it
+   * back from Recently deleted when backups are on), and this browser's copy with it.
+   */
+  async removeFromServer(serverId: string, localId?: string) {
+    if (!this.server) return
+    try {
+      await call(this.server, `api/boards/${encodeURIComponent(serverId)}`, 'DELETE')
+    } catch (err) {
+      this.editor.setStatus(`Couldn’t delete it: ${(err as Error).message}`)
+      return
+    }
+    if (this.liveInfo?.id === serverId) await this.leaveLive()
+    if (localId) await this.remove(localId)
+    await this.loadServerBoards()
+    await this.refresh()
+    this.editor.setStatus(this.account?.backups ? 'Deleted for everyone. It can be put back from Recently deleted for 90 days' : 'Deleted from the server for everyone')
+  }
+
   async remove(id: string) {
     // Unsaved work on a deleted board goes with it (and never lands on another board).
     this.removed.add(id)
@@ -768,12 +799,23 @@ export class Workspace {
     } else await this.refresh()
   }
 
-  async rename(id: string, title: string) {
-    if (id === this.boardId) this.editor.setTitle(title)
-    else {
-      await this.library.rename(id, title)
-      await this.refresh()
+  /**
+   * Renames a board: `id` in this browser (if it's here) and, for one on a server with accounts,
+   * `serverId` there, for everyone (the open board renames through its live session).
+   */
+  async rename(id: string | undefined, title: string, serverId?: string) {
+    if (id && id === this.boardId) return this.editor.setTitle(title)
+    if (serverId && this.server && this.account?.user) {
+      try {
+        await call(this.server, `api/boards/${encodeURIComponent(serverId)}/ops`, 'POST', { ops: [{ op: 'renameBoard', title }] })
+      } catch (err) {
+        this.editor.setStatus(`Couldn’t rename it on the server: ${(err as Error).message}`)
+        return
+      }
     }
+    if (id) await this.library.rename(id, title)
+    if (serverId) await this.loadServerBoards()
+    await this.refresh()
   }
 
   // ----- autosave ----------------------------------------------------------------
@@ -1503,10 +1545,33 @@ export class Workspace {
     return shareUrl(b, base)
   }
 
+  /** Takes a share or live link out of the address bar once opened: they carry keys. */
   private clearShareHash() {
-    if (typeof location !== 'undefined' && (sharedFromHash(location.hash) || liveFromHash(location.hash) || openFromHash(location.hash))) {
+    if (typeof location !== 'undefined' && (sharedFromHash(location.hash) || liveFromHash(location.hash))) {
       history.replaceState(null, '', location.pathname + location.search)
     }
+  }
+
+  /**
+   * The address bar follows what's open: `#open=KEY` for a board, `&page=ID` for a wiki's page. It
+   * can be bookmarked or copied, and Back and Forward go between boards and pages (the app opens
+   * the address when it changes). Never a live session's key. A new board or page is a new entry
+   * in the browser's history; the same place again (an object or heading on it) replaces it, and so
+   * does everything when `replace` (an address that couldn't be opened goes back to what's open).
+   */
+  syncAddress(replace = false) {
+    if (typeof location === 'undefined' || typeof history === 'undefined') return
+    const key = this.linkKey
+    if (!key || sharedFromHash(location.hash) || liveFromHash(location.hash)) return
+    if (this.openingAddress) return
+    const page = this.editor.board.kind === 'wiki' ? (this.editor.page ?? undefined) : undefined
+    const want = `#${openHash(key, page !== undefined ? { page } : {})}`
+    if (location.hash === want) return
+    const was = openFromHash(location.hash)
+    const same = was && this.selfKeys.includes(was.board!) && was.page === page
+    const url = location.pathname + location.search + want
+    if (!was || same || replace) history.replaceState(null, '', url)
+    else history.pushState(null, '', url)
   }
 }
 

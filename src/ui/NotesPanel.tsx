@@ -538,6 +538,12 @@ export function NotesPanel() {
       </div>
 
       <footer>
+        {ws.account?.user ? (
+          // Signed in: comments are posted under the account's name, which others see as such.
+          <span className="muted">
+            Posting as <strong>{ws.account.user.name}</strong>
+          </span>
+        ) : (
         <label>
           Posting as
           <input
@@ -551,6 +557,7 @@ export function NotesPanel() {
             }}
           />
         </label>
+        )}
       </footer>
     </aside>
   )

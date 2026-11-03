@@ -202,8 +202,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     list.push(
       { id: 'duplicate', label: 'Duplicate selection', group: 'Edit', keys: 'Ctrl D', run: () => editor.duplicate() },
       { id: 'delete', label: 'Delete selection', group: 'Edit', keys: 'Del', aliases: 'remove', run: () => editor.deleteSelection() },
-      { id: 'front', label: 'Bring to front', group: 'Edit', run: () => editor.bringToFront() },
-      { id: 'back', label: 'Send to back', group: 'Edit', run: () => editor.sendToBack() },
+      { id: 'front', label: 'Bring to front', group: 'Edit', keys: 'Ctrl ]', aliases: 'layer top above', run: () => editor.bringToFront() },
+      { id: 'back', label: 'Send to back', group: 'Edit', keys: 'Ctrl [', aliases: 'layer bottom below behind', run: () => editor.sendToBack() },
     )
   }
   // A wiki has no canvas: its own commands, and the board-wide ones that make sense for it.

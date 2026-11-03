@@ -17,7 +17,7 @@
   --border-strong: rgba(255, 255, 255, 0.16);
   --text: #eceef4;
   --muted: #9ba2b4;
-  --faint: #808799;
+  --faint: #868d9f;
   --accent: #7ea6ff;
   /* The app's name: a purple-to-yellow gradient with a faint glow. */
   --brand-from: #a66bff;
@@ -77,7 +77,7 @@
   --border-strong: rgba(20, 22, 30, 0.16);
   --text: #14161c;
   --muted: #5f6676;
-  --faint: #6b7280;
+  --faint: #646b78;
   --accent: #2f62e0;
   --brand-from: #7a3ff2;
   --brand-to: #c99400;
@@ -305,9 +305,16 @@ button:disabled {
   cursor: default;
 }
 
-:focus-visible {
+/* Above any class that sets its own shadow (a primary button's edge, say), so the ring always shows. */
+:root :focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+/* Hints in empty fields: the secondary text colour, not the browser's paler default. */
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 
 input,
@@ -1346,6 +1353,14 @@ button.on,
   pointer-events: none;
 }
 
+.hover-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.45;
+  stroke-width: 1px;
+  pointer-events: none;
+}
+
 .sel-bounds {
   fill: none;
   stroke: var(--accent);
@@ -1483,6 +1498,11 @@ button.on,
   transform: translate(-50%, -50%);
   text-align: center;
   animation: pop 0.25s var(--ease);
+  pointer-events: none;
+}
+
+.empty-board :is(button, a) {
+  pointer-events: auto;
 }
 
 .empty-board h1 {
@@ -1600,6 +1620,27 @@ button.on,
 .toast.show {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* Something went wrong: it waits to be read, with a way to close it. */
+.toast.problem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 6px;
+  color: #fff;
+  background: var(--danger-strong, #b4233f);
+}
+
+.toast.problem.show {
+  pointer-events: auto;
+}
+
+.toast-close {
+  padding: 0 8px;
+  font-size: 18px;
+  line-height: 1.4;
+  color: inherit;
 }
 
 /* ----- minimap ----- */
@@ -4130,10 +4171,18 @@ button.on,
 /* ----- presenting ----- */
 
 /* Share sits beside Ask AI and Present at the same height. */
+/* The top bar's one filled button: sharing is what a board is for. Ask AI and Present stay quiet. */
 .share-btn {
   height: 34px;
-  padding: 0 12px;
+  padding: 0 14px;
   font-weight: 600;
+  color: var(--on-brand);
+  background: var(--brand);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.share-btn:hover:not(:disabled) {
+  background: var(--brand-strong);
 }
 
 .access-body {
@@ -4158,6 +4207,7 @@ button.on,
   font-weight: 600;
   color: var(--text);
   background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-ctl);
 }
 
@@ -7983,6 +8033,29 @@ button.on,
   .hint-bar {
     display: none;
   }
+
+  /* Phones zoom the whole page into any text box under 16px. (Above the classes that size boxes;
+     a size set on the element itself, like a note being edited on the board, still wins.) */
+  :root :is(input, textarea, select) {
+    font-size: max(16px, 1em);
+  }
+
+  /* Keyboard shortcuts mean nothing without a keyboard. */
+  .context-menu kbd,
+  .menu-item kbd {
+    display: none;
+  }
+
+  /* Finger-sized: page rows, the editor's buttons, the pages button. */
+  .page-row {
+    min-height: 40px;
+  }
+
+  .page-editor-tools button,
+  .wiki-drawer-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
 }
 
 
@@ -8215,6 +8288,8 @@ button.on,
 .wiki-page {
   /* The reader's choice (Narrow, Normal, Wide, Full width), set from the page's ↔ picker. */
   max-width: var(--wiki-width, 860px);
+  /* Writing shows its preview beside the text only when the page is wide enough for two columns. */
+  container: page / inline-size;
   margin: 0 auto;
   padding: 18px 40px 80px;
 }
@@ -8579,14 +8654,31 @@ button.on,
 
 /* ----- writing a page ----- */
 
+/* Writing a page: in the page's own column, with Write and Preview tabs; side by side on a wide page. */
 .page-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-areas: 'write preview' 'foot foot';
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'tabs' 'write' 'foot';
   gap: 12px 18px;
 }
 
+.page-editor.tab-preview {
+  grid-template-areas: 'tabs' 'preview' 'foot';
+}
+
 .page-editor-tabs {
+  grid-area: tabs;
+  display: flex;
+  gap: 4px;
+}
+
+.page-editor-tabs .on {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+}
+
+.page-editor.tab-write .page-editor-preview,
+.page-editor.tab-preview .page-editor-write {
   display: none;
 }
 
@@ -8616,13 +8708,14 @@ button.on,
   font-size: 12px;
 }
 
+/* Written in the face and size it's read in, so writing looks like the page it makes. */
 .page-text {
   width: 100%;
   min-height: 60vh;
-  padding: 12px 14px;
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  padding: 14px 18px;
+  font-family: var(--font-read);
+  font-size: 17px;
+  line-height: 1.7;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -8681,6 +8774,11 @@ button.on,
   border-top: 1px solid var(--border);
 }
 
+.page-picker-none {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 .page-picker-group {
   padding: 8px 8px 2px;
   font-size: 12px;
@@ -8695,10 +8793,6 @@ button.on,
 .page-editor-preview {
   grid-area: preview;
   min-width: 0;
-  max-height: calc(60vh + 40px);
-  padding: 4px 4px 4px 18px;
-  overflow-y: auto;
-  border-left: 1px solid var(--border);
 }
 
 .page-editor-foot {
@@ -8710,31 +8804,27 @@ button.on,
   font-size: 13px;
 }
 
-@media (max-width: 1100px) {
-  .page-editor {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'tabs' 'write' 'foot';
-  }
+@container page (min-width: 1200px) {
+  .page-editor,
   .page-editor.tab-preview {
-    grid-template-areas: 'tabs' 'preview' 'foot';
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'write preview' 'foot foot';
   }
   .page-editor-tabs {
-    grid-area: tabs;
-    display: flex;
-    gap: 4px;
-  }
-  .page-editor-tabs .on {
-    color: var(--on-accent);
-    background: var(--accent-strong);
+    display: none;
   }
   .page-editor.tab-write .page-editor-preview,
   .page-editor.tab-preview .page-editor-write {
-    display: none;
+    display: flex;
+  }
+  .page-editor.tab-write .page-editor-preview {
+    display: block;
   }
   .page-editor-preview {
-    max-height: none;
-    padding-left: 0;
-    border-left: none;
+    max-height: calc(60vh + 40px);
+    padding: 4px 4px 4px 18px;
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
   }
 }
 
@@ -9076,6 +9166,13 @@ button.on,
 .move-page-hint {
   margin: 0 16px 8px;
   font-size: 13px;
+}
+
+.export-group {
+  margin: 12px 16px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .embed-choices button:disabled {
@@ -10289,6 +10386,20 @@ button.on,
 
 .access-add {
   position: relative;
+}
+
+.access-live {
+  align-items: stretch;
+}
+
+.access-add-row {
+  display: flex;
+  gap: 8px;
+}
+
+.access-add-row input {
+  flex: 1;
+  min-width: 0;
 }
 
 .access-add input {
@@ -13070,7 +13181,7 @@ button.on,
   --border-strong: rgba(236, 233, 225, 0.17);
   --text: #ece9e1;
   --muted: #a3a89f;
-  --faint: #8e938b;
+  --faint: #969b93;
   --accent: #79a6f2;
   --accent-soft: rgba(121, 166, 242, 0.16);
   --ink: #ece9e1;
@@ -13108,4 +13219,75 @@ button.on,
   --widget-col: #edf0ec;
   --card: #ffffff;
   --backdrop: rgba(28, 31, 30, 0.28);
+}
+
+/* Following someone: their colour round the view, with their name and Stop at the top. */
+.follow-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 3px solid;
+  pointer-events: none;
+}
+
+.follow-label {
+  position: absolute;
+  /* Under the top bars. */
+  top: 64px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+  border-radius: var(--r-md);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.follow-label button {
+  padding: 1px 8px;
+  font-size: 12px;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* A picture in a wiki page: the reading column's width, its caption under it. */
+.md-image {
+  margin: 1.2em 0;
+}
+
+.md-image-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: zoom-in;
+}
+
+.md-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  border-radius: var(--r-md);
+}
+
+.md-image figcaption {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.md-image-missing {
+  padding: 20px;
+  font-size: 14px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
 }

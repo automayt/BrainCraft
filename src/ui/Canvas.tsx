@@ -27,7 +27,7 @@ import { CODE_FONT, codeBodyRect } from './CodeBlockView'
 import { TOOL_ICONS } from './icons'
 import { imageFiles, readImage } from './images'
 import { SelectionToolbar } from './SelectionToolbar'
-import { PeerLayer } from './Live'
+import { FollowFrame, PeerLayer } from './Live'
 import { Moments } from './Moments'
 import { ShapePicker } from './ShapePicker'
 import { useUi } from './uiContext'
@@ -185,7 +185,7 @@ export function Canvas() {
       clearTimeout(longPress.current.timer)
       longPress.current = null
     }
-    editor.pointerMove(p, { alt: e.altKey })
+    editor.pointerMove(p, { alt: e.altKey, touch: e.pointerType === 'touch' })
   }
 
   const onPointerUp = (e: RPointerEvent) => {
@@ -214,19 +214,29 @@ export function Canvas() {
   const { camera, board } = editor
   const step = gridStep(camera.zoom)
   const cull = cullArea(editor)
+  const hover = editor.hover
   const cursor =
     editor.drag.type === 'pan'
       ? 'grabbing'
       : editor.tool === 'hand' || editor.spaceDown
         ? 'grab'
-        : editor.tool === 'select'
-          ? 'default'
-          : 'crosshair'
+        : editor.drag.type === 'move'
+          ? 'move'
+          : editor.tool === 'select'
+            ? hover?.type === 'item' && editor.selection.has(hover.id)
+              ? 'move'
+              : hover?.type === 'connector'
+                ? 'pointer'
+                : 'default'
+            : 'crosshair'
 
   return (
     <div
       ref={ref}
       className="canvas"
+      role="application"
+      aria-roledescription="board"
+      aria-label={`${board.title || 'Untitled board'}: ${board.items.length} object${board.items.length === 1 ? '' : 's'}. Ctrl K finds them; Tab reaches the tools`}
       style={{ cursor }}
       onPointerDown={onPointerDown}
       // Holding the middle button pans the board, not the browser's autoscroll.
@@ -321,6 +331,7 @@ export function Canvas() {
       {editor.editing && <TextEditor key={`${editor.editing.connector ? 'c' : 'i'}${editor.editing.id}`} editor={editor} />}
       {editor.hint && <div className="hint-bar">{editor.hint}</div>}
       <PeerLayer />
+      <FollowFrame />
       <Moments />
       <SelectionToolbar />
       <ShapePicker />
@@ -497,6 +508,12 @@ const xywh = (r: Rect) => ({ x: r.x, y: r.y, width: Math.max(r.w, 0), height: Ma
 /** Selection outlines and handles, in screen space so they stay the same size at any zoom. */
 function Overlays({ editor }: { editor: Editor }) {
   const out: ReactNode[] = []
+  // What a click would pick: a faint outline, until it's picked.
+  const hover = editor.hover?.type === 'item' && !editor.selection.has(editor.hover.id) && editor.drag.type === 'none' ? B.getItem(editor.board, editor.hover.id) : undefined
+  if (hover && hover.kind !== 'frame' && hover.kind !== 'pen') {
+    const r = editor.screenRect(hover)
+    out.push(<rect key="hover" {...xywh({ x: r.x - 3, y: r.y - 3, w: r.w + 6, h: r.h + 6 })} className="hover-outline" rx={hover.kind === 'mind' ? 12 : 2} />)
+  }
   for (const i of editor.selectedItems) {
     const r = editor.screenRect(i)
     const pad = i.kind === 'mind' ? 4 : 3
@@ -664,7 +681,10 @@ function TextEditor({ editor }: { editor: Editor }) {
     const el = ref.current
     if (!el) return
     el.focus({ preventScroll: true })
-    el.setSelectionRange(el.value.length, el.value.length)
+    // A new frame's "Frame 2" is there to be typed over; otherwise the caret goes at the end.
+    if (e.created && item?.kind === 'frame') el.select()
+    else el.setSelectionRange(el.value.length, el.value.length)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e.id])
 
   // Grow to fit the text, and keep vertically centred items centred. Only when something that
@@ -832,7 +852,8 @@ function EmptyBoard() {
     editor.pointerUp(c)
   }
   return (
-    <div className="empty-board no-canvas" onPointerDown={(e) => e.stopPropagation()}>
+    // Clicks between its buttons go through to the board, so double-clicking anywhere makes a note.
+    <div className="empty-board no-canvas">
       <h1>Start with an idea</h1>
       <p className="muted">Pick a starting point, double-click (or double-tap) anywhere for a sticky note, or paste a list of ideas, a link, Mermaid, an outline or a spreadsheet. Your boards (Ctrl O) has templates.</p>
       <div className="starters">

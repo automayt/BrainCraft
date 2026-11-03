@@ -100,6 +100,12 @@ export type Tool =
   | 'timeline'
   | 'data'
 
+/** A tool's name after "a" or "an", lower case except for names (a Kanban board). */
+const aName = (label: string) => {
+  const words = label === 'Text' ? 'text box' : label.startsWith('Kanban') ? label : label[0]!.toLowerCase() + label.slice(1)
+  return `${/^[aeiou]/i.test(words) ? 'an' : 'a'} ${words}`
+}
+
 export const TOOLS: { tool: Tool; key: string; label: string }[] = [
   { tool: 'select', key: 'v', label: 'Select' },
   { tool: 'hand', key: 'h', label: 'Hand' },
@@ -173,7 +179,8 @@ export type Drag =
     }
   | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board; at?: Board }
   | { type: 'resize'; id: Id; anchor: Vec; before: Board; at?: Board }
-  | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id> }
+  /** `frame`: begun inside a frame, which a click there (no drag) selects. */
+  | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id>; frame?: Id }
   | { type: 'create'; kind: Kind; start: Vec; current: Vec }
   | { type: 'draw'; points: Vec[] }
   | { type: 'connect'; from: Id; current: Vec; origin: Vec; quick?: F.FlowDir; choose?: boolean }
@@ -297,6 +304,8 @@ export class Editor {
   selectedConnector: Id | null = null
   editing: Editing | null = null
   drag: Drag = { type: 'none' }
+  /** What the pointer is over (with the select tool, nothing being dragged): outlined, so you see what you'd grab. */
+  hover: B.Hit | null = null
   viewport = { w: 1200, h: 800 }
   /** Pixels on the right covered by a side panel (comments, assistant); framing keeps clear of them. */
   rightInset = 0
@@ -304,7 +313,21 @@ export class Editor {
   /** Room taken on the right by the comments panel or assistant; floating bars keep clear of it. */
   setRightInset(px: number) {
     if (px === this.rightInset) return
+    const grew = px > this.rightInset
     this.rightInset = px
+    // A panel opening over what's selected (often the very note it's about): slide the board so the
+    // selection sits in the room that's left.
+    const box = grew && (this.selection.size ? B.bounds(this.board, this.selection) : null)
+    if (box) {
+      const right = toScreen(this.camera, { x: box.x + box.w, y: box.y }).x
+      const room = this.viewport.w - px - 24
+      if (right > room) {
+        const left = toScreen(this.camera, { x: box.x, y: box.y }).x
+        // As far left as needed, but never pushing its left edge under the tool rail.
+        const shift = Math.min(right - room, Math.max(0, left - 80))
+        if (shift > 0) this.flyTo({ ...this.camera, x: this.camera.x - shift })
+      }
+    }
     this.emit()
   }
 
@@ -578,7 +601,7 @@ export class Editor {
     this.lastTyping = null
     this.peek = null
     this.status = status
-    this.zoomToFit()
+    this.zoomToFit(true)
     this.onBoardChange?.(this.board)
     this.emit()
   }
@@ -679,6 +702,10 @@ export class Editor {
 
   pointerLeave() {
     this.onPointer?.(null)
+    if (this.hover) {
+      this.hover = null
+      this.emit()
+    }
   }
 
   // ----- live sessions ---------------------------------------------------------------
@@ -725,7 +752,7 @@ export class Editor {
     // (one undo step, credited to you); it ends here, and its work is replayed with the rest.
     this.drag = { type: 'none' }
     this.onBoardChange?.(this.board)
-    if (first) this.zoomToFit()
+    if (first) this.zoomToFit(true)
     else this.emit()
   }
 
@@ -1267,11 +1294,12 @@ export class Editor {
     return false
   }
 
-  zoomToFit() {
+  /** Frames the selection, or the whole board; `opening` a board, its first frame when all of it would be too small to read. */
+  zoomToFit(opening = false) {
     const phone = this.viewport.w <= 720
     let target = B.bounds(this.board, this.selection.size ? this.selection : undefined)
-    // On a phone a whole board is often unreadably small: start at its first frame instead.
-    if (phone && target && !this.selection.size && fit(target, this.viewport, 24).zoom < 0.3) {
+    // A whole board is often unreadably small (always, on a phone): start at its first frame instead.
+    if ((phone || opening) && target && !this.selection.size && fit(target, this.viewport, 24).zoom < (phone ? 0.3 : 0.5)) {
       const frames = this.board.items.filter((i) => i.kind === 'frame').sort((a, z) => a.y - z.y || a.x - z.x)
       if (frames.length) target = B.itemBounds(frames[0])
     }
@@ -1343,9 +1371,10 @@ export class Editor {
       return
     }
     const item = B.getItem(this.board, e.id)
-    // A new mind-map branch left empty is discarded, as if never added.
-    if (e.created && item?.kind === 'mind' && item.parent !== undefined && !item.text.trim()) {
-      this.apply(e.before)
+    // A new mind-map branch, sticky note or text left empty is discarded, as if never added.
+    if (e.created && item && !item.text.trim() && ((item.kind === 'mind' && item.parent !== undefined) || item.kind === 'sticky' || item.kind === 'text')) {
+      // Just that object (and its lines) goes: anything a friend changed meanwhile stays.
+      this.apply(B.remove(this.board, new Set([item.id]), new Set(this.board.connectors.filter((c) => c.from === item.id || c.to === item.id).map((c) => c.id))))
       this.selection = new Set([...this.selection].filter((id) => B.getItem(this.board, id)))
       if (!this.selection.size && item.parent !== undefined) this.selection = new Set([item.parent])
     } else {
@@ -1363,6 +1392,15 @@ export class Editor {
     if (!e) return false
     const item = B.getItem(this.board, e.id)
     if (key === 'Escape') {
+      // Typing over a selected object by accident: Esc puts its words back.
+      const was = e.replaced && !e.connector ? B.getItem(e.before, e.id)?.text : undefined
+      if (was !== undefined && item && item.text !== was) {
+        this.apply(B.updateItem(this.board, e.id, (i) => ({ ...i, text: was })))
+        this.editing = null
+        this.setStatus('Kept the text as it was')
+        this.emit()
+        return true
+      }
       this.finishEditing()
       return true
     }
@@ -2015,6 +2053,11 @@ export class Editor {
     return 70 / this.camera.zoom
   }
 
+  /** The same for something already on the board being moved: only when it's nearly there. */
+  private get moveMagnetReach() {
+    return 24 / this.camera.zoom
+  }
+
   /** A shape from the panel is being dragged over the board (screen point, or null when off it). */
   paletteDragMove(shape: FlowShape, screen: Vec | null) {
     if (!screen) {
@@ -2359,15 +2402,16 @@ export class Editor {
     if (id !== null) this.edit((b) => B.updateConnector(b, id, (c) => ({ ...c, arrows })))
   }
 
-  /** Pans just enough to bring item `id` into view. */
   /** Pans (or zooms out) so item `id` is fully visible, clear of the toolbars and side panels. */
   keepInView(id: Id) {
     const i = B.getItem(this.board, id)
     if (!i) return
     const r = this.screenRect(i)
-    // Room taken by the chrome: top bars, the tool rail (bottom on phones), the zoom bar and status key, side panels.
+    // Room taken by the chrome: top bars, the tool rail (bottom on phones) and the flowchart shape
+    // panel beside it, the zoom bar and status key, side panels.
     const phone = this.viewport.w <= 720
-    const pad = { left: phone ? 16 : 76, top: phone ? 116 : 72, right: 16 + this.rightInset, bottom: phone ? 132 : 104 }
+    const left = phone ? 16 : this.flowPalette ? 76 + 282 : 76
+    const pad = { left, top: phone ? 116 : 72, right: 16 + this.rightInset, bottom: phone ? 132 : 104 }
     const w = this.viewport.w - pad.left - pad.right
     const h = this.viewport.h - pad.top - pad.bottom
     if (r.w > w || r.h > h) {
@@ -3059,6 +3103,32 @@ export class Editor {
       if (this.tapToAdd) mods = { ...mods, shift: true }
       // Alt-click reaches locked objects (to select and unlock them).
       const hit = this.hitAt(screen, mods.alt)
+      // Inside a frame (away from its title and edges) is like the board itself: a drag there draws
+      // a selection box (or pans, with a finger), and a click picks the frame. One already picked
+      // moves from anywhere on it.
+      const frame = hit?.type === 'item' ? B.getItem(this.board, hit.id) : undefined
+      const edge = 10 / this.camera.zoom
+      const inFrame =
+        frame?.kind === 'frame' &&
+        !this.selection.has(frame.id) &&
+        world.x > frame.x + edge &&
+        world.x < frame.x + frame.w - edge &&
+        world.y > frame.y + edge &&
+        world.y < frame.y + frame.h - edge
+      if (inFrame && mods.touch && !mods.shift) {
+        this.selection = new Set()
+        this.selectedConnector = null
+        this.drag = { type: 'pan', last: screen, tap: { id: frame.id, at: screen } }
+        this.emit()
+        return
+      }
+      if (inFrame && !mods.shift) {
+        this.selection = new Set()
+        this.selectedConnector = null
+        this.drag = { type: 'marquee', start: world, current: world, base: new Set(), frame: frame.id }
+        this.emit()
+        return
+      }
       // A finger on empty space (or anywhere, on a board that can't be changed) moves the board,
       // as on any map; a tap there still clears the selection.
       if (mods.touch && !mods.shift && (!hit || this.readOnly)) {
@@ -3152,8 +3222,14 @@ export class Editor {
     this.onPointer?.(world)
     const d = this.drag
     switch (d.type) {
-      case 'none':
+      case 'none': {
+        const h = this.tool === 'select' && !this.spaceDown && !mods.touch ? this.hitAt(screen) : null
+        if (h?.type !== this.hover?.type || h?.id !== this.hover?.id) {
+          this.hover = h
+          this.emit()
+        }
         return
+      }
       case 'pan':
         // A right press only pans once it moves: held still, it's a right-click (the menu).
         if (d.right && !d.right.moved) {
@@ -3167,12 +3243,13 @@ export class Editor {
         let delta = { x: world.x - d.start.x, y: world.y - d.start.y }
         d.guides = {}
         d.magnet = null
-        // A lone shape or sticky note snaps beside a nearby one (shapes also connect on release).
+        // A lone shape or sticky note snaps beside a nearby one, without connecting: tidying a board
+        // never draws lines (a new shape from the panel or Tab is what connects).
         const lone = d.ids.size === 1 ? B.getItem(d.before, [...d.ids][0]) : undefined
         const rule = lone && F.MAGNET_RULES[lone.kind]
         if (lone && rule && !mods.alt) {
           const c = { x: lone.x + lone.w / 2 + delta.x, y: lone.y + lone.h / 2 + delta.y }
-          d.magnet = F.findMagnet(this.board, c, lone, d.ids, this.magnetReach, rule)
+          d.magnet = F.findMagnet(this.board, c, lone, d.ids, this.moveMagnetReach, rule)
           if (d.magnet) delta = { x: d.magnet.at.x - lone.x - lone.w / 2, y: d.magnet.at.y - lone.y - lone.h / 2 }
         }
         // Alt moves freely; otherwise line up with nearby items.
@@ -3246,14 +3323,9 @@ export class Editor {
         // A still tap on a board that can't change selects (to read comments, copy, follow a run).
         if (d.tap && dist(d.tap.at, screen) < 8) this.select(B.withGroups(this.board, [d.tap.id]))
         break
-      case 'move': {
-        const m = d.magnet
-        const id = [...d.ids][0]
-        const rule = F.MAGNET_RULES[B.getItem(this.board, id)?.kind ?? 'text']
-        if (m && rule?.connect && !F.linked(this.board, m.target, id)) this.apply(B.connect(this.board, m.target, id, { style: 'elbow' })[0])
+      case 'move':
         this.commit(d.before)
         break
-      }
       case 'resize':
         this.commit(d.before)
         break
@@ -3261,6 +3333,10 @@ export class Editor {
         this.dropBranch(d, world)
         break
       case 'marquee': {
+        if (d.frame !== undefined && dist(d.start, d.current) * this.camera.zoom < 4) {
+          this.selection = B.withGroups(this.board, [d.frame])
+          break
+        }
         const hits = [...B.itemsWithin(this.board, rectFromPoints(d.start, d.current), this.hidden)].filter((id) => !B.getItem(this.board, id)?.locked)
         this.selection = B.withGroups(this.board, [...d.base, ...hits])
         break
@@ -3375,11 +3451,12 @@ export class Editor {
       this.apply(b)
     }
     this.tool = 'select'
-    if (kind === 'frame' || isWidget(kind)) {
+    if (isWidget(kind)) {
       this.commit(before)
       this.select([id])
-      if (isWidget(kind)) this.keepInView(id)
+      this.keepInView(id)
     } else {
+      // (A new frame's title too, ready to name.)
       this.startEditing(id, { before, created: true })
     }
   }
@@ -3432,6 +3509,13 @@ export class Editor {
     } else if (hit?.type === 'connector') {
       this.startEditingLabel(hit.id)
     } else if (!hit && this.tool === 'select') {
+      // A locked object isn't empty board: say how to unlock it rather than putting a note on it.
+      const locked = this.hitAt(screen, true)
+      const under = locked?.type === 'item' ? B.getItem(this.board, locked.id) : undefined
+      if (under?.locked && under.kind !== 'frame') {
+        this.setStatus(UNLOCK_HINT())
+        return
+      }
       const before = this.board
       const [b, id] = B.addItem(this.board, B.newItem('sticky', rectFromCenter(toWorld(this.camera, screen), 200, 200)))
       this.apply(b)
@@ -3457,7 +3541,8 @@ export class Editor {
   /** Whether `key` would start typing into the one selected object (replacing its text). */
   typesInto(key: string, mods: Modifiers = {}): boolean {
     const node = this.single
-    return !!node && !mods.alt && !mods.ctrl && key.length === 1 && key !== ' ' && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly
+    // Not ? (help) or / (search), which nobody starts a note with.
+    return !!node && !mods.alt && !mods.ctrl && key.length === 1 && !' ?/'.includes(key) && hasText(node.kind) && !isWidget(node.kind) && !this.readOnly
   }
 
   /** Keyboard shortcuts on the canvas (not while typing). */
@@ -3504,6 +3589,8 @@ export class Editor {
       else if (k === 'g' && mods.shift) this.ungroup()
       else if (k === 'g' && this.selection.size > 1) this.group()
       else if (k === 'l' && mods.shift && this.selection.size) this.setLocked(!this.selectedItems.every((i) => i.locked))
+      else if (k === ']' && this.selection.size) this.bringToFront()
+      else if (k === '[' && this.selection.size) this.sendToBack()
       else if (ARROWS[k] && this.selection.size) {
         // Ctrl + arrow nudges anything, mind-map ideas included (Shift for bigger steps).
         const step = mods.shift ? 50 : 10
@@ -3665,11 +3752,12 @@ export class Editor {
       return 'Esc done'
     }
     if (this.tool === 'mind') return 'Click to place the central idea'
-    if (this.tool === 'flow') return `Click to place a ${flowShapeInfo(this.flowShape).label.toLowerCase()} (near a shape it snaps on and connects), or drag one from the panel`
+    if (this.tool === 'flow') return `Click to place ${aName(flowShapeInfo(this.flowShape).label)} (near a shape it snaps on and connects), or drag one from the panel`
     if (this.tool === 'connector') return 'Drag from one item to another'
     if (this.tool === 'pen') return 'Draw on the board  ·  Esc done'
     const armed = TOOLS.find((t) => t.tool === this.tool)
-    if (armed && CREATES[this.tool]) return `Click to place a ${armed.label.toLowerCase()} (or drag to size it)  ·  Enter puts one in the middle  ·  Esc cancel`
+    if (armed && CREATES[this.tool]) return `Click to place ${aName(armed.label)} (or drag to size it)  ·  Enter puts one in the middle  ·  Esc cancel`
+    if (this.tool === 'hand') return 'Drag to move around the board  ·  V to select'
     if (this.selectedConnector !== null) return 'Double-click the line to label it'
     const node = this.single
     if (node?.kind === 'mind')

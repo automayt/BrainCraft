@@ -113,6 +113,7 @@ timeline.
 | `updateRecord` | `id` (any view), `record` (record id or title), `values?`, `body?` | Sets fields by name (`null` or `""` clears one); `body` is the record's page in Markdown (notes, a checklist, a spec), shown under its fields when it's opened (`""` removes it). |
 | `deleteRecords` | `id` (any view), `records` (ids or titles) | — |
 | `react` | `ids`, `emoji`, `by?` | Puts an emoji reaction on the objects (`by` defaults to "AI"). |
+| `renameBoard` | `title` | Renames the board or wiki itself. |
 | `createVote` | `options` (ids/refs), `question?`, `each?` | A dot vote: a card above the options. Each person spreads `each` votes; counts stay hidden until someone reveals them. |
 
 **Wikis.** A wiki is a board with pages instead of a canvas; only these

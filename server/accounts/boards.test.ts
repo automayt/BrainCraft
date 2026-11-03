@@ -3,7 +3,7 @@ import { Room, type RoomData } from '../../src/collab/room'
 import { emptyBoard } from '../../src/model/board'
 import { emptyWiki } from '../../src/model/wiki'
 import { fakeMeasure } from '../../src/model/test-helpers'
-import { AccountBoards, type RoomHost } from './boards'
+import { AccountBoards, CLOSE_CHANGED, CLOSE_REMOVED, type RoomHost } from './boards'
 import { cookieOf, req, res, tempDir } from './fakes'
 import { Accounts } from './service'
 
@@ -23,6 +23,7 @@ async function server() {
     remove: (id) => rooms.delete(id),
     ids: () => [...rooms.keys()],
     peek: (id) => rooms.get(id)?.data ?? null,
+    loaded: (id) => rooms.get(id) ?? null,
   }
   const boards = new AccountBoards(accounts, host)
   const call = async (method: string, path: string, cookie: string, body?: unknown, headers: Record<string, string> = {}) => {
@@ -33,6 +34,8 @@ async function server() {
     return r.reply
   }
   const ann = cookieOf(await call('POST', '/api/auth/setup', '', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
+  // Stricter than a new server, so these tests see what each permission allows.
+  accounts.store.groups.find((g) => g.everyone)!.permissions = ['boards.create', 'ai.use']
   const person = async (email: string, name: string, groups: string[] = []) => {
     const made = await call('POST', '/api/admin/users', ann, { email, name, groups })
     const cookie = cookieOf(await call('POST', '/api/auth/reset', '', { token: String(made.body.link).split('#reset=')[1], password: `${name} long password` }))
@@ -123,6 +126,32 @@ describe('boards on a server with accounts', () => {
     expect(inbox.find((m) => m.t === 'presence')?.peer).toMatchObject({ name: 'Sam', user: s.sam.id })
     room.receive('c2', { t: 'presence', presence: { name: 'Kim', color: '#123456', cursor: null, selection: [], view: null, user: s.sam.id } })
     expect(inbox.filter((m) => m.t === 'presence')[1]?.peer?.user).toBeUndefined()
+  })
+
+  it('takes a live session away when access is taken away, and reconnects someone whose level changed', async () => {
+    const s = await server()
+    const id = String((await s.call('POST', '/api/boards', s.sam.cookie, { board: emptyBoard('Live') })).body.id)
+    const room = s.rooms.get(id)!
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'edit' }] })
+    const closed: number[] = []
+    // As the server does: a closed connection leaves the room.
+    const close = (id: string) => (code: number) => {
+      closed.push(code)
+      room.leave(id)
+    }
+    room.join({ id: 'lee', role: 'edit', send: () => {}, user: { id: s.lee.id, name: 'Lee' }, manages: false, close: close('lee') })
+    room.join({ id: 'sam', role: 'edit', send: () => {}, user: { id: s.sam.id, name: 'Sam' }, manages: true, close: close('sam') })
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'view' }] })
+    expect(closed).toEqual([CLOSE_CHANGED])
+    room.join({ id: 'lee1', role: 'view', send: () => {}, user: { id: s.lee.id, name: 'Lee' }, manages: false, close: close('lee1') })
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [] })
+    expect(closed).toEqual([CLOSE_CHANGED, CLOSE_REMOVED])
+    // An admin disabling someone ends their sessions too.
+    room.join({ id: 'lee2', role: 'view', send: () => {}, user: { id: s.lee.id, name: 'Lee' }, manages: false, close: close('lee2') })
+    await s.call('PUT', `/api/boards/${id}/access`, s.sam.cookie, { access: [{ who: 'user', id: s.lee.id, level: 'view' }] })
+    s.accounts.store.user(s.lee.id)!.disabled = true
+    s.boards.recheckAll()
+    expect(closed.at(-1)).toBe(CLOSE_REMOVED)
   })
 })
 

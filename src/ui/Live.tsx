@@ -16,7 +16,13 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join('') || '?'
 
-const STATE_LABEL = { connecting: 'Connecting…', live: 'Live', offline: 'Reconnecting…', denied: 'Can’t reach this board' } as const
+const STATE_LABEL = { connecting: 'Connecting…', live: 'Live', offline: 'Offline', denied: 'No access' } as const
+const STATE_HINT = {
+  connecting: 'Connecting to the server…',
+  live: 'Changes reach everyone here as you make them',
+  offline: 'Offline: your changes are kept here and go to everyone when the connection is back',
+  denied: 'The server won’t open this board for you. Ask whoever manages it',
+} as const
 
 /** The people here, as avatars; click one to follow their view. */
 export function LiveBar({ onOpen }: { onOpen: () => void }) {
@@ -24,12 +30,16 @@ export function LiveBar({ onOpen }: { onOpen: () => void }) {
   const live = ws.live
   if (!live) return null
   const peers = [...live.peers.values()]
+  // On a server with accounts boards are always live: say so only when it isn't (or you can only view).
+  const quiet = !!ws.liveInfo?.account && live.state === 'live' && live.role !== 'view'
   return (
     <div className={`live-bar ${live.state}`}>
-      <button className="live-state" onMouseDown={(e) => e.preventDefault()} onClick={onOpen} title={`${STATE_LABEL[live.state]}${live.role === 'view' ? ' · view only' : ''}`}>
-        <i aria-hidden="true" />
-        {live.state === 'live' ? (live.role === 'view' ? 'Viewing' : 'Live') : STATE_LABEL[live.state]}
-      </button>
+      {!quiet && (
+        <button className="live-state" onMouseDown={(e) => e.preventDefault()} onClick={onOpen} title={`${STATE_HINT[live.state]}${live.role === 'view' ? ' · you can view, not change' : ''}`}>
+          <i aria-hidden="true" />
+          {live.state === 'live' ? (live.role === 'view' ? 'Viewing' : 'Live') : STATE_LABEL[live.state]}
+        </button>
+      )}
       <div className="avatars">
         {peers.slice(0, 5).map((p) => (
           <button
@@ -46,6 +56,24 @@ export function LiveBar({ onOpen }: { onOpen: () => void }) {
         ))}
         {peers.length > 5 && <span className="avatar more">+{peers.length - 5}</span>}
       </div>
+    </div>
+  )
+}
+
+/** Following someone: their colour round the view, and how to stop. */
+export function FollowFrame() {
+  const ws = useWorkspace()
+  const live = ws.live
+  const who = live?.following ? live.peers.get(live.following) : undefined
+  if (!live || !who) return null
+  return (
+    <div className="follow-frame no-canvas" style={{ borderColor: who.color }} aria-live="polite">
+      <span className="follow-label" style={{ background: who.color }}>
+        Following {who.name}
+        <button onMouseDown={(e) => e.preventDefault()} onClick={() => live.follow(null)} aria-label={`Stop following ${who.name}`}>
+          Stop
+        </button>
+      </span>
     </div>
   )
 }

@@ -18,6 +18,10 @@ import { type ClientMessage, type LiveLink, type PeerInfo, type Presence, type R
 
 export type LiveState = 'connecting' | 'live' | 'offline' | 'denied'
 
+/** How the server closes a session whose access was taken away, or changed (see server/accounts/boards.ts). */
+const CLOSE_REMOVED = 4403
+const CLOSE_CHANGED = 4409
+
 const SEND_DELAY = 40
 /** Patches per message, under the server's limit (a select-all move on a huge board goes in parts). */
 const BATCH = 2000
@@ -75,6 +79,8 @@ export class LiveSession {
   private presenceTimer: ReturnType<typeof setTimeout> | undefined
   private lastPresence = 0
   private retries = 0
+  /** Connected at least once: failing to reconnect after that is being offline, not being refused. */
+  private wasLive = false
   private closed = false
   private cursor: Vec | null = null
 
@@ -117,6 +123,7 @@ export class LiveSession {
     let opened = false
     ws.onopen = () => {
       opened = true
+      this.wasLive = true
       this.retries = 0
     }
     ws.onmessage = (e) => {
@@ -137,8 +144,24 @@ export class LiveSession {
       }
       this.pending.clear()
       this.peers.clear()
+      // Whoever manages the board took this person off it: stop, and stop trying.
+      if (e?.code === CLOSE_REMOVED) {
+        this.inflight.clear()
+        this.editor.readOnly = true
+        this.editor.setStatus('You no longer have access to this board. Ask whoever manages it if that’s a mistake.')
+        this.set('denied')
+        return
+      }
+      // A different level now (view only, or more): straight back in with it.
+      if (e?.code === CLOSE_CHANGED) {
+        this.editor.setStatus('Your access to this board changed')
+        this.retries = 0
+        this.set('connecting')
+        setTimeout(() => this.connect(), 100)
+        return
+      }
       // Closed before opening: the key was refused (or the server is down; retry either way, slowly).
-      if (!opened && this.retries >= 2) this.set('denied')
+      if (!opened && !this.wasLive && this.retries >= 2) this.set('denied')
       else this.set('offline')
       this.retry()
     }

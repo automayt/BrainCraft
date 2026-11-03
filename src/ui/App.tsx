@@ -174,6 +174,18 @@ function App({ ws }: { ws: Workspace }) {
     }
   }, [editor, editor.pendingAiPrompt, assistant])
 
+  // The address bar follows the open board and wiki page (see Workspace.syncAddress).
+  useEffect(() => {
+    const sync = () => ws.syncAddress()
+    sync()
+    const a = editor.subscribe(sync)
+    const b = ws.subscribe(sync)
+    return () => {
+      a()
+      b()
+    }
+  }, [editor, ws])
+
   // Link cards get their title and picture from the server, when there is one.
   useEffect(() => watchLinkPreviews(editor, () => ws.server, ws.subscribe), [editor, ws])
 
@@ -209,7 +221,7 @@ function App({ ws }: { ws: Workspace }) {
     document.fonts?.ready.then(() => {
       editor.relayout()
       // Frame the board again now that text has its real size.
-      if (!editor.selection.size) editor.zoomToFit()
+      if (!editor.selection.size) editor.zoomToFit(true)
     })
   }, [editor])
 
@@ -238,14 +250,14 @@ function App({ ws }: { ws: Workspace }) {
     }
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.
-    const onHash = () => void ws.openHash(location.hash)
+    const onHash = () => void ws.openHash(location.hash).then((opened) => !opened && ws.syncAddress(true))
     window.addEventListener('hashchange', onHash)
     window.addEventListener('pagehide', onHide)
     document.addEventListener('visibilitychange', onVisibility)
     // Scripts and AI assistants drive the board through window.BrainCraft (see docs/API.md).
     ;(window as unknown as { BrainCraft: BrainCraftAPI }).BrainCraft = new BrainCraftAPI(editor)
     // Frame the board once the canvas has its size.
-    requestAnimationFrame(() => editor.zoomToFit())
+    requestAnimationFrame(() => editor.zoomToFit(true))
 
     const onKeyDown = (e: KeyboardEvent) => {
       // An open drawing has the keyboard to itself.
@@ -299,7 +311,8 @@ function App({ ws }: { ws: Workspace }) {
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
         e.preventDefault()
-        setDialog('boards')
+        // As the button does: with the server's latest list (boards shared with you since).
+        uiRef.current.openBoards()
         return
       }
       // Keys already handled inside a panel or a live table/board/timeline stay there.

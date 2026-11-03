@@ -49,6 +49,8 @@ export interface Member {
    * off limits to them; left out (shared by key), nobody manages and protection is the app's guard.
    */
   manages?: boolean
+  /** Ends their connection (with a WebSocket close code), when what they may do here has changed. */
+  close?: (code: number, reason: string) => void
 }
 
 const SIGNALS_PER_5S = 15

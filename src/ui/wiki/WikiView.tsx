@@ -11,10 +11,13 @@ import { PageMenu } from './PageMenu'
 import { download } from '../imageExport'
 import { fileNameFor, pageMarkdown, pagesFromFiles, wikiZip } from '../../model/wikiFiles'
 import { useEscape } from '../useEscape'
+import { useMedia } from '../useMedia'
+import { ExportPage } from './ExportPage'
 import { headings, parseMarkdown } from '../../model/markdown'
 import { type LinkTarget, linkToken, parseNote } from '../../model/notes'
 import type { Page, PageBody } from '../../model/types'
 import * as W from '../../model/wiki'
+import { getFile } from '../../model/files'
 import { formatTime } from '../BoardView'
 import { copyText } from '../copyText'
 import type { CrossLink } from '../../store/links'
@@ -127,7 +130,12 @@ export function WikiView() {
         aria-expanded={drawer}
         onClick={() => {
           setDrawer(!drawer)
-          if (!drawer) requestAnimationFrame(() => document.querySelector<HTMLElement>('.page-filter')?.focus())
+          // Ready to type a page's name with a keyboard; on a touch screen, at the page you're on
+          // (the on-screen keyboard would cover the list).
+          if (!drawer)
+            requestAnimationFrame(() =>
+              document.querySelector<HTMLElement>(matchMedia('(pointer: fine)').matches ? '.page-filter' : '.page-row.on [data-page], .page-tree [data-page]')?.focus(),
+            )
         }}
       >
         ☰ Pages
@@ -200,6 +208,12 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
   useEffect(() => setTitle(page.title), [page.title])
   const [moving, setMoving] = useState(false)
   const [history, setHistory] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  // On a phone, Copy link and + Sub-page move into ⋯ and the width picker goes.
+  const narrow = useMedia('(max-width: 600px)')
+  const parent = W.parentOf(board, page)
+  const sibs = W.childrenOf(board, parent)
+  const at = sibs.findIndex((p) => p.id === page.id)
   const fileInput = useRef<HTMLInputElement>(null)
   /** These pages (or all) as a web page: downloaded when named, else printed. */
   const exportPage = async (pages?: string[], file?: string) => {
@@ -273,6 +287,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     toggle: ro ? undefined : (line) => editor.tickTask(page.id, line),
     children: () => <SubPages pages={kids} />,
     embed: (block) => <ObjectEmbed block={block} page={ro ? undefined : page.id} />,
+    image: (block) => <PageImage file={block.file} alt={block.alt} />,
     macro: (block) => <WikiMacro block={block} page={page} actions={actions} />,
     headings: heads,
     copyHeading: (slug, words) => copyPlace(ws, editor, `${page.title || 'Untitled'} › ${words}`, { page: page.id, heading: slug }),
@@ -286,11 +301,28 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     <article className="wiki-page" aria-labelledby="wiki-page-title">
       {moving && <MovePage page={page} onClose={() => setMoving(false)} />}
       {history && <PageHistory page={page} onClose={() => setHistory(false)} />}
+      {exporting && (
+        <ExportPage
+          page={page}
+          onClose={() => setExporting(false)}
+          onPick={(what) => {
+            setExporting(false)
+            if (what === 'page-md') download(new Blob([pageMarkdown(board, page.id, (to) => ws.linkTo(to))], { type: 'text/markdown' }), `${fileNameFor(page.title)}.md`)
+            else if (what === 'page-html') void exportPage([page.id], `${fileNameFor(page.title)}.html`)
+            else if (what === 'page-print') void exportPage([page.id])
+            else if (what === 'wiki-html') void exportPage(undefined, `${fileNameFor(board.title)}.html`)
+            else if (what === 'wiki-print') void exportPage()
+            else download(new Blob([wikiZip(board, (to) => ws.linkTo(to)) as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), `${fileNameFor(board.title)}.zip`)
+          }}
+        />
+      )}
       {editor.changesOf === page.id && editor.catchUp && <ChangesSince page={page} before={editor.catchUp.before} since={editor.catchUp.since} onClose={() => editor.showChanges(null)} />}
       <WikiCatchUp onShowChanges={(id) => editor.showChanges(id)} />
       {editor.readOnly ? (
         <p className="wiki-readonly muted" role="status">
-          {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : 'You’re reading this wiki. Ask for the edit link to write in it.'}
+          {ws.readOnly ? 'A shared copy of this wiki: read it here, or save your own copy to write in it.' : ws.liveInfo?.account
+              ? 'You’re reading this wiki. Ask whoever manages it for edit access to write in it.'
+              : 'You’re reading this wiki. Ask for the edit link to write in it.'}
         </p>
       ) : locked ? (
         <p className="wiki-protected" role="status">
@@ -317,6 +349,8 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
         </nav>
       )}
       <header className="wiki-page-head">
+        {/* The page's heading for screen readers; on screen the title is the text box below. */}
+        <h1 className="sr-only">{page.title || 'Untitled'}</h1>
         {/* A text box that grows onto more lines, so a long title shows in full. */}
         <textarea
           ref={titleRef}
@@ -349,25 +383,35 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
               Done
             </button>
           )}
-          <button
-            onClick={() => copyPlace(ws, editor, page.title || 'Untitled', { page: page.id })}
-            title="Copy a link to this page, for a chat (in a live session), a page or a comment"
-          >
-            Copy link
-          </button>
-          {!ro && (
-            <>
-              <button title="Add a page under this one" onClick={() => editor.addWikiPage({ parent: page.id })}>
-                + Sub-page
-              </button>
-            </>
+          {!narrow && (
+            <button
+              onClick={() => copyPlace(ws, editor, page.title || 'Untitled', { page: page.id })}
+              title="Copy a link to this page, for a chat (in a live session), a page or a comment"
+            >
+              Copy link
+            </button>
           )}
-          <PageWidthPicker />
+          {!ro && !narrow && (
+            <button title="Add a page under this one" onClick={() => editor.addWikiPage({ parent: page.id })}>
+              + Sub-page
+            </button>
+          )}
+          {!narrow && <PageWidthPicker />}
           <PageMenu
             label="More for this page"
             items={[
+              ...(narrow
+                ? [
+                    { label: 'Copy link', hint: 'A link to this page, for a chat, a page or a comment', run: () => copyPlace(ws, editor, page.title || 'Untitled', { page: page.id }) },
+                    ...(ro ? [] : [{ label: 'Add a sub-page', hint: 'A new page under this one', run: () => editor.addWikiPage({ parent: page.id }) }]),
+                  ]
+                : []),
               { label: 'Page history', hint: 'Earlier versions of this page, what changed, and putting one back', run: () => setHistory(true) },
-              ...(ro ? [] : [{ label: 'Move…', hint: 'Put this page somewhere else in the wiki', run: () => setMoving(true) }]),
+              ...(ro ? [] : [{ label: 'Move…', hint: 'Put this page under another page', run: () => setMoving(true) }]),
+              ...(!ro && at > 0 ? [{ label: 'Move up', hint: `Before “${sibs[at - 1].title || 'Untitled'}” (Alt Shift ↑ in the page list)`, run: () => editor.movePageTo(page.id, parent, sibs[at - 1].id) }] : []),
+              ...(!ro && at >= 0 && at < sibs.length - 1
+                ? [{ label: 'Move down', hint: `After “${sibs[at + 1].title || 'Untitled'}” (Alt Shift ↓ in the page list)`, run: () => editor.movePageTo(page.id, parent, sibs[at + 2]?.id) }]
+                : []),
               ...(canProtect && (ownLock || !locked)
                 ? [
                     ownLock
@@ -379,32 +423,7 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
                         },
                   ]
                 : []),
-              { label: 'Download page (.md)', hint: 'This page as a Markdown file', run: () => download(new Blob([pageMarkdown(board, page.id, (to) => ws.linkTo(to))], { type: 'text/markdown' }), `${fileNameFor(page.title)}.md`) },
-              {
-                label: 'Download page as a web page (.html)',
-                hint: 'This page with its pictures, to open in any browser',
-                run: () => void exportPage([page.id], `${fileNameFor(page.title)}.html`),
-              },
-              {
-                label: 'Print or save page as PDF',
-                hint: 'This page, ready to print; choose “Save as PDF” in the print dialog',
-                run: () => void exportPage([page.id]),
-              },
-              {
-                label: 'Download wiki as a web page (.html)',
-                hint: 'Every page in one file, with a contents list and pictures; prints as a handbook',
-                run: () => void exportPage(undefined, `${fileNameFor(board.title)}.html`),
-              },
-              {
-                label: 'Print or save wiki as PDF',
-                hint: 'Every page, each on its own sheet',
-                run: () => void exportPage(),
-              },
-              {
-                label: 'Download wiki (.zip)',
-                hint: 'Every page as a Markdown file, sub-pages in folders',
-                run: () => download(new Blob([wikiZip(board, (to) => ws.linkTo(to)) as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), `${fileNameFor(board.title)}.zip`),
-              },
+              { label: 'Export…', hint: 'This page or the whole wiki, as Markdown, a web page or a PDF', run: () => setExporting(true) },
               ...(ro ? [] : [{ label: 'Add Markdown files…', hint: 'Each .md file becomes a page (you can also drop them on the wiki)', run: () => fileInput.current?.click() }]),
               ...(ro
                 ? []
@@ -551,36 +570,38 @@ function PageLink({ to, label, from }: { to: LinkTarget | null; label: string; f
   if (to?.page !== undefined && self) {
     const p = W.getPage(board, to.page)
     const gone = !p || !!p.trashed
+    if (gone)
+      return (
+        <span className="md-link missing" title={p ? 'That page is in the trash' : 'That page was deleted'}>
+          {label}
+        </span>
+      )
     return (
-      <button
-        className={`md-link${gone ? ' missing' : ''}`}
-        title={gone ? (p ? 'That page is in the trash' : 'That page was deleted') : undefined}
-        disabled={gone}
-        onClick={() => editor.openPage(to.page!, to.heading ?? null)}
-      >
-        {p && !gone ? `${p.title || 'Untitled'}${to.heading ? ` › ${label.split(' › ').at(-1)}` : ''}` : label}
-      </button>
+      <WebLink href={ws.webLink({ page: to.page, ...(to.heading ? { heading: to.heading } : {}) })} className="md-link" onOpen={() => editor.openPage(to.page!, to.heading ?? null)}>
+        {`${p.title || 'Untitled'}${to.heading ? ` › ${label.split(' › ').at(-1)}` : ''}`}
+      </WebLink>
     )
   }
   if (to) {
     const elsewhere = to.board ? ws.findBoard(to.board) : undefined
     return (
-      <button
+      <WebLink
+        href={ws.linkTo(to)}
         className={`md-link other${to.board && !elsewhere ? ' missing' : ''}`}
         title={to.board && !elsewhere ? 'That board isn’t in this browser' : `On ${elsewhere?.title ?? 'another board'}`}
-        onClick={() => void ws.openLink(to)}
+        onOpen={() => void ws.openLink(to)}
       >
         {label}
-      </button>
+      </WebLink>
     )
   }
   // Typed by hand: a page with that title, else a board, else a page to make.
   const p = W.pageByTitle(board, label)
   if (p)
     return (
-      <button className="md-link" onClick={() => editor.openPage(p.id)}>
+      <WebLink href={ws.webLink({ page: p.id })} className="md-link" onOpen={() => editor.openPage(p.id)}>
         {p.title}
-      </button>
+      </WebLink>
     )
   const other = ws.otherBoards.find((b) => b.title.trim().toLowerCase() === label.trim().toLowerCase())
   if (other)
@@ -595,5 +616,70 @@ function PageLink({ to, label, from }: { to: LinkTarget | null; label: string; f
     <button className="md-link new" title={`Make a page called “${label}” under this one`} onClick={() => editor.addWikiPage({ title: label, parent: from.id })}>
       {label}
     </button>
+  )
+}
+
+/**
+ * A link inside BrainCraft as a real link: a plain click opens it here, while a middle click, Ctrl
+ * click or a long press does what a browser does with any link (a new tab, copy the address).
+ */
+function WebLink({ href, className, title, onOpen, children }: { href: string | null; className: string; title?: string; onOpen: () => void; children: ReactNode }) {
+  return (
+    <a
+      href={href ?? undefined}
+      className={className}
+      title={title}
+      role={href ? undefined : 'link'}
+      tabIndex={href ? undefined : 0}
+      onClick={(e) => {
+        if (href && (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0)) return
+        e.preventDefault()
+        onOpen()
+      }}
+      onKeyDown={(e) => {
+        if (!href && e.key === 'Enter') onOpen()
+      }}
+    >
+      {children}
+    </a>
+  )
+}
+
+/** A picture from the wiki's files, at the width of the reading column; a click opens it in Files. */
+export function PageImage({ file, alt }: { file: string; alt: string }) {
+  const editor = useEditor()
+  const ws = useWorkspace()
+  const f = getFile(editor.board, file)
+  const [url, setUrl] = useState<string | null>(null)
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
+    if (!f) return setMissing(true)
+    let live = true
+    let made: string | null = null
+    void ws.fileBlob(f).then(
+      (blob) => {
+        if (!live) return
+        if (!blob) return setMissing(true)
+        made = URL.createObjectURL(blob)
+        setUrl(made)
+      },
+      () => live && setMissing(true),
+    )
+    return () => {
+      live = false
+      if (made) URL.revokeObjectURL(made)
+    }
+  }, [ws, f])
+  return (
+    <figure className="md-image">
+      {url ? (
+        <button className="md-image-open" title="Open it in Files" onClick={() => editor.openFiles(file)}>
+          <img src={url} alt={alt || f?.name || 'A picture'} />
+        </button>
+      ) : (
+        <div className="md-image-missing muted">{missing ? (f?.local ? 'This picture is only in the browser that added it' : 'This picture isn’t in the wiki’s files any more') : 'Loading the picture…'}</div>
+      )}
+      {alt && <figcaption>{alt}</figcaption>}
+    </figure>
   )
 }

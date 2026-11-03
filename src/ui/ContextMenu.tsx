@@ -175,8 +175,8 @@ export function ContextMenu() {
       ...(single?.kind === 'sticky' ? [typeof single.back === 'string' ? { label: 'Remove the back (plain sticky note)', run: () => editor.setFlipCards(false) } : { label: 'Make a flip card', run: () => editor.setFlipCards(true) }] : []),
       ...(editor.selectedItems.some((i) => i.group) ? [{ label: 'Ungroup', keys: 'Ctrl Shift G', run: () => editor.ungroup() }] : []),
       'sep',
-      { label: 'Bring to front', run: () => editor.bringToFront() },
-      { label: 'Send to back', run: () => editor.sendToBack() },
+      { label: 'Bring to front', keys: 'Ctrl ]', run: () => editor.bringToFront() },
+      { label: 'Send to back', keys: 'Ctrl [', run: () => editor.sendToBack() },
     )
     if (editor.selectedItems.some((i) => i.kind === 'flow'))
       entries.push({ label: 'Copy as Mermaid', run: () => navigator.clipboard?.writeText(editor.exportMermaid()).then(() => editor.setStatus('Copied Mermaid')) })

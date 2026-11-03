@@ -56,6 +56,8 @@ export type Block =
   | { t: 'macro'; name: string; args: MacroArgs; children?: Block[]; columns?: Block[][]; line: number }
   /** `![[Label|height]](board:KEY#ID)`: a canvas object (or a whole board) shown in the page. */
   | { t: 'embed'; label: string; board: string; item?: Id; height?: number; line: number; asText?: true }
+  /** `![Caption](file:ID)` on a line of its own: a picture from the wiki's files. */
+  | { t: 'image'; file: string; alt: string; line: number }
 
 export type CalloutKind = 'note' | 'tip' | 'warning' | 'danger'
 const CALLOUTS: readonly CalloutKind[] = ['note', 'tip', 'warning', 'danger']
@@ -322,6 +324,11 @@ function macroEnds(lines: string[]): Map<number, number> {
 }
 const EMBED = /^\s*!\[\[([^[\]\n|]*)(?:\|(\d{2,4}|text))?\]\]\(board:([\w-]{1,64})(?:#(\d{1,16}))?\)\s*$/
 
+const IMAGE_LINE = /^!\[([^\]\n]{0,300})\]\(file:([\w-]{1,64})\)$/
+
+/** How a picture from the wiki's files is written in a page. */
+export const imageToken = (caption: string, file: string) => `![${caption.replace(/[[\]\n]/g, ' ').trim()}](file:${file})`
+
 /** An embed line's parts: its label, board, object, height, and whether it's shown as text. */
 export function embedLine(line: string): { label: string; board: string; item?: Id; height?: number; asText?: true } | null {
   const m = EMBED.exec(line)
@@ -359,6 +366,7 @@ const cells = (line: string) => {
 
 const startsBlock = (line: string, next: string | undefined) =>
   EMBED.test(line) ||
+  IMAGE_LINE.test(line.trim()) ||
   FENCE.test(line) || HEADING.test(line) || HR.test(line) || LIST.test(line) || QUOTE.test(line) || !!blockMacro(line) || MACRO_END.test(line) || (line.includes('|') && next !== undefined && TABLE_RULE.test(next) && next.includes('-'))
 
 /** Parses a page's Markdown. `offset` is the line the text starts on (for nested blocks). */
@@ -393,6 +401,12 @@ export function parseMarkdown(text: string, offset = 0, depth = 0): Block[] {
     }
     if (HR.test(line)) {
       out.push({ t: 'hr', line: at })
+      i++
+      continue
+    }
+    const image = IMAGE_LINE.exec(line.trim())
+    if (image) {
+      out.push({ t: 'image', alt: image[1].trim(), file: image[2], line: at })
       i++
       continue
     }

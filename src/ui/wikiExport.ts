@@ -8,6 +8,7 @@ import type { Editor as EditorType } from '../editor/Editor'
 import { maskFor } from '../model/brainstorm'
 import { embedBoard, getSnap, snapBoard } from '../model/embed'
 import { embedKeys } from '../model/markdown'
+import { getFile } from '../model/files'
 import type { Board } from '../model/types'
 import { wikiHtml } from '../model/wikiHtml'
 import type { Workspace } from '../store/workspace'
@@ -42,6 +43,13 @@ async function pictures(ws: Workspace, editor: EditorType, wiki: Board, pages?: 
     } catch {
       // That picture is left out; the page still says what was there.
     }
+  }
+  // Pictures from the wiki's own files.
+  const files = new Set((wiki.bodies ?? []).filter((x) => !wanted || wanted.has(x.id)).flatMap((x) => [...x.text.matchAll(/^\s*!\[[^\]\n]*\]\(file:([\w-]{1,64})\)\s*$/gm)].map((m) => m[1])))
+  for (const id of files) {
+    const f = getFile(wiki, id)
+    const blob = f && f.type.startsWith('image/') ? await ws.fileBlob(f).catch(() => null) : null
+    if (blob) out.set(`file:${id}`, await dataUrl(blob))
   }
   return out
 }

@@ -20,6 +20,9 @@ export const MIN_FONT = 6
 export const MAX_FIT_FONT = 72
 /** How much of its shape growing text fills, so it doesn't touch the edges. */
 const GROW_FILL = 0.8
+/** Growing text in a shape of about this text area goes up to this much of its size. */
+const GROW_BASE = { w: 160, h: 80 }
+const GROW_MAX = 1.3
 
 /** Objects whose text is sized to the shape unless given a size. */
 const GROWS = new Set<Kind>(['flow', 'rect', 'ellipse'])
@@ -60,8 +63,11 @@ export function itemFontSize(i: Item, measure: Measure): number {
   const hand = !!i.sketch
   const fitted = fitFontSize(measure, i.text, box, i.fontSize, { hand })
   if (!growsText(i) || i.fontFixed || fitted < i.fontSize) return fitted
-  // Room to spare: grow, leaving a margin. Text too long for that keeps its size, as it fits.
-  return Math.max(fitted, fitFontSize(measure, i.text, { w: box.w * GROW_FILL, h: box.h * GROW_FILL }, MAX_FIT_FONT, { hand }))
+  // Room to spare: grow, leaving a margin. Text too long for that keeps its size, as it fits. Only a
+  // little in a shape of the usual size (so "Go" isn't three times "Ask everyone" beside it); more
+  // as the shape is made bigger.
+  const cap = Math.min(MAX_FIT_FONT, Math.round(i.fontSize * GROW_MAX * Math.max(1, Math.min(box.w / GROW_BASE.w, box.h / GROW_BASE.h))))
+  return Math.max(fitted, fitFontSize(measure, i.text, { w: box.w * GROW_FILL, h: box.h * GROW_FILL }, cap, { hand }))
 }
 
 // ----- fitting objects to what's in them -----------------------------------------

@@ -1,5 +1,5 @@
 import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { continueList, parseMarkdown, toggleTask } from '../../model/markdown'
+import { continueList, imageToken, parseMarkdown, toggleTask } from '../../model/markdown'
 import { merge3 } from '../../model/merge'
 import { linkToken, personCandidates, personToken } from '../../model/notes'
 import { targetFromUrl } from '../../store/deepLink'
@@ -24,7 +24,7 @@ interface SlashItem {
   select?: number
   /** Goes where the caret is, inside a sentence, rather than on a line of its own. */
   inline?: boolean
-  action?: 'link' | 'subpage' | 'embed'
+  action?: 'link' | 'subpage' | 'embed' | 'image'
   /** The heading it's listed under. */
   group: string
 }
@@ -43,6 +43,7 @@ const SLASH: SlashItem[] = [
   { group: 'Write', label: 'Code', hint: '```', text: '```\n\n```\n', caret: 4 },
   { group: 'Write', label: 'Divider', hint: '---', text: '---\n' },
   { group: 'Links and embeds', label: 'Link to a page', hint: '[[', text: '[[', action: 'link' },
+  { group: 'Links and embeds', label: 'Picture…', hint: 'A photo or image, shown on the page (or paste or drop one)', action: 'image' },
   { group: 'Links and embeds', label: 'Embed from a board…', hint: 'A frame, mind map, table… shown here', action: 'embed' },
   { group: 'Links and embeds', label: 'New sub-page', hint: 'Adds a page under this one, linked here', action: 'subpage' },
   // Every macro: its own words say what it does.
@@ -74,6 +75,9 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   /** Where an embed being picked goes. */
   const [embedAt, setEmbedAt] = useState<number | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
+  /** The picture chooser, and where its pictures go in the text. */
+  const pictureInput = useRef<HTMLInputElement>(null)
+  const pictureAt = useRef(0)
   const preview = useRef<HTMLDivElement>(null)
   const ids = useId()
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -198,6 +202,12 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
       setEmbedAt(from)
       return
     }
+    if (item.action === 'image') {
+      change(before + after, from)
+      pictureAt.current = from
+      pictureInput.current?.click()
+      return
+    }
     if (item.action === 'subpage') {
       const id = editor.addWikiPage({ title: 'Untitled', parent: page.id })
       editor.openPage(page.id)
@@ -252,7 +262,29 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     requestAnimationFrame(() => el.setSelectionRange(Math.max(start, a + shift), z + (next.length - draft.length)))
   }
 
+  /** Keeps pictures in the wiki's files and puts them in the text at `at`, each on a line of its own. */
+  const addPictures = async (files: File[], at: number) => {
+    if (!files.length) return
+    const ids = await ws.addFiles(files)
+    if (!ids.length) return
+    const cur = draftRef.current
+    const lead = at > 0 && cur[at - 1] !== '\n' ? '\n' : ''
+    const text = `${lead}${ids.map((id, k) => imageToken(files[k]?.name.replace(/\.[^.]+$/, '') ?? '', id)).join('\n')}\n`
+    const next = cur.slice(0, at) + text + cur.slice(at)
+    change(next, at + text.length)
+    push(next)
+    editor.setStatus(ids.length === 1 ? 'Added the picture (it’s in the wiki’s Files too)' : `Added ${ids.length} pictures (they’re in the wiki’s Files too)`)
+  }
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Escape while a `/`, `[[` or `@` is being typed only puts that away, even when nothing matches.
+    if (e.key === 'Escape' && (slash || pick)) {
+      e.preventDefault()
+      e.stopPropagation()
+      setSlash(null)
+      setPick(null)
+      return
+    }
     if (slash && slashItems.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
@@ -321,16 +353,28 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const menu = slash && slashItems.length > 0 ? 'slash' : pick && picks.length > 0 ? 'pick' : null
   const active = menu === 'slash' ? slash!.k : menu === 'pick' ? pick!.k : -1
   const count = menu === 'slash' ? slashItems.length : menu === 'pick' ? picks.length : 0
+  // Typing after `/`, `[[` or `@` with nothing to offer: say so, rather than showing nothing.
+  const nothing = menu
+    ? null
+    : slash
+      ? 'Nothing to insert called that. Esc to keep typing'
+      : pick?.person
+        ? ws.peopleToMention.length
+          ? 'No one here is called that'
+          : 'No one to mention here yet'
+        : pick
+          ? 'No page is called that. Finish with ]] to link a page you’ll write later'
+          : null
   const [place, setPlace] = useState<CSSProperties>({})
   useLayoutEffect(() => {
     const el = area.current
-    if (!menu || !el) return
+    if ((!menu && !nothing) || !el) return
     const c = caretPoint(el)
     const top = el.offsetTop + Math.min(Math.max(c.top, 0), el.clientHeight - c.height)
     const left = Math.max(8, Math.min(el.offsetLeft + c.left, el.offsetLeft + el.clientWidth - 330))
     const below = window.innerHeight - (el.getBoundingClientRect().top + c.top + c.height) > 300
     setPlace(below ? { top: top + c.height + 4, left, right: 'auto' } : { top: top - 4, left, right: 'auto', transform: 'translateY(-100%)' })
-  }, [menu, slash?.from, pick?.from, draft])
+  }, [menu, nothing, slash?.from, pick?.from, draft])
   useEffect(() => {
     if (active >= 0) document.getElementById(`${ids}-opt-${active}`)?.scrollIntoView({ block: 'nearest' })
   }, [active, ids])
@@ -390,7 +434,21 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
             if (v && v.offsetParent && t.scrollHeight > t.clientHeight) v.scrollTop = (t.scrollTop / (t.scrollHeight - t.clientHeight)) * (v.scrollHeight - v.clientHeight)
           }}
           onKeyDown={onKeyDown}
+          onDrop={(e) => {
+            const pics = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
+            if (!pics.length) return
+            // Here, not in the wiki's files only: the page shows them where they were dropped.
+            e.preventDefault()
+            e.stopPropagation()
+            void addPictures(pics, e.currentTarget.selectionStart)
+          }}
           onPaste={(e) => {
+            const pics = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
+            if (pics.length) {
+              e.preventDefault()
+              void addPictures(pics, e.currentTarget.selectionStart)
+              return
+            }
             // A BrainCraft web link (a page, a heading, a canvas object) goes in as a named link.
             const to = targetFromUrl(e.clipboardData.getData('text/plain'))
             if (!to) return
@@ -405,6 +463,17 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
             })
           }}
           onBlur={() => push()}
+        />
+        <input
+          ref={pictureInput}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            void addPictures(Array.from(e.target.files ?? []), pictureAt.current)
+            e.target.value = ''
+          }}
         />
         <span className="sr-only" aria-live="polite">
           {menu ? `${count} ${count === 1 ? 'choice' : 'choices'}, arrows to move, Enter to pick` : ''}
@@ -468,6 +537,11 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
               </li>
             ))}
           </ul>
+        )}
+        {nothing && (
+          <p className="page-picker page-picker-none muted" style={place} role="status">
+            {nothing}
+          </p>
         )}
       </div>
       <div ref={preview} className="page-editor-preview" aria-label="Preview">

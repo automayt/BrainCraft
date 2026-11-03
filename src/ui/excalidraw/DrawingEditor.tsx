@@ -79,6 +79,9 @@ export default function DrawingEditor() {
       // every key, wherever the focus is; Ctrl Enter is Done.
       onKeyDown={(e) => {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void done()
+        // Nothing drawn yet (and none of Excalidraw's own dialogs open): Esc leaves, as it would any dialog.
+        const a = api.current
+        if (e.key === 'Escape' && a && !a.getSceneElements().length && !a.getAppState().openDialog) cancel()
       }}
     >
       <header className="drawing-editor-bar">

@@ -537,7 +537,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // Accounts: sign-in, admin, people, and boards by access instead of keys.
   if (accounts) {
     const body = () => readBody(req)
-    if (await accounts.handle(req, res, url, body)) return
+    if (await accounts.handle(req, res, url, body)) {
+      // People, groups or roles changed: those connected to boards keep only what they may still do.
+      if (req.method !== 'GET' && /^\/api\/(admin|team)\//.test(url.pathname)) accountBoards!.recheckAll()
+      return
+    }
     if (await accountBoards!.handle(req, res, url, body)) return
     if (await assistantThreads!.handle(req, res, url, body)) return
   }
@@ -772,7 +776,7 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
     const id = randomBytes(6).toString('base64url')
     const sendTo = (msg: ServerMessage) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg))
-    room.join({ id, role, send: sendTo, ...(user ? { user } : {}), ...(manages !== undefined ? { manages } : {}) })
+    room.join({ id, role, send: sendTo, close: (code, reason) => ws.close(code, reason), ...(user ? { user } : {}), ...(manages !== undefined ? { manages } : {}) })
     usage.count('board.open')
     if (user) usage.seen(user.id)
     log('joined', room.data.id, id, role, `(${room.members.size} here)`)

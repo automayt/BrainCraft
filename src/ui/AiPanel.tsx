@@ -728,6 +728,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   <i />
                 </span>
                 {status}
+                <Elapsed />
               </div>
             )}
           </div>
@@ -899,5 +900,25 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
         </div>
       )}
     </aside>
+  )
+}
+
+/** How long the assistant has been at it, and a word of patience once that's a while. */
+function Elapsed() {
+  const [start] = useState(() => Date.now())
+  const [now, setNow] = useState(start)
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const s = Math.round((now - start) / 1000)
+  if (s < 3) return null
+  const time = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  return (
+    <span className="ai-elapsed muted">
+      {' '}
+      · {time}
+      {s >= 30 && <small> Bigger requests can take a few minutes.</small>}
+    </span>
   )
 }

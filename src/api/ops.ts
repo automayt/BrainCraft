@@ -169,6 +169,7 @@ export type Op =
   | { op: 'setForm'; id: Ref; title?: string; intro?: string; thanks?: string; ask?: string[]; required?: string[]; shared?: boolean }
   | { op: 'deleteRecords'; id: Ref; records: string[] }
   | { op: 'react'; ids: Ref[]; emoji: string; by?: string }
+  | { op: 'renameBoard'; title: string }
   | { op: 'createVote'; options: Ref[]; question?: string; each?: number; ref?: string }
   | { op: 'connect'; from: Ref; to: Ref; label?: string; style?: ConnectorStyle; arrows?: Arrowheads; dashed?: boolean; ref?: string; freeform?: boolean }
   | {
@@ -1163,6 +1164,13 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         done({ id })
         break
       }
+      case 'renameBoard': {
+        const title = text(op.title, 'title').trim().slice(0, 200)
+        if (!title) fail(index, op, '"title" should be the board’s new name')
+        b = { ...b, title }
+        done({})
+        break
+      }
       case 'react': {
         if (!Array.isArray(op.ids) || !op.ids.length) fail(index, op, '"ids" should be a list of objects')
         const emoji = text(op.emoji, 'emoji', false)
@@ -1288,6 +1296,7 @@ export const OPS: Op['op'][] = [
   'updateRecord',
   'deleteRecords',
   'react',
+  'renameBoard',
   'createVote',
   'createPage',
   'updatePage',

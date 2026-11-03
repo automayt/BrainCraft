@@ -444,14 +444,8 @@ line icons for the sparkle and emoji in menus and messages, one main-action
 colour, three shadow levels, four corner sizes, whole-pixel text, quieter
 toasts and badges, boards in Ctrl K. Still to decide or do:
 
-- [ ] **A palette of BrainCraft's own:** a slightly tinted wall (for example
-  green-graphite `#1c1f1e` in dark, pale sage `#e9ece8` in light) instead of
-  the usual blue-grey, with sticky yellow used only as paper and people's
-  colours as the second source of colour. Changes how every board looks, so
-  it wants trying on real boards first.
-- [ ] **A typeface for the controls** that isn't the one every app uses (the
-  candidates: Instrument Sans, Schibsted Grotesk, Recursive). Words on the
-  board stay as they are, since text is fitted to shapes in that face.
+- [x] **A palette of BrainCraft's own:** the Wall dark and Wall light themes.
+- [x] **A typeface for the controls:** Instrument Sans.
 - [ ] **Colours in one button** on the selection toolbar (a swatch that opens
   the ten), so the bar is about 500px instead of 800.
 - [ ] **Pin boards** to the top of Your boards, and "Edited by Sam" on a
@@ -467,6 +461,71 @@ toasts and badges, boards in Ctrl K. Still to decide or do:
   another app use the board.
 - [ ] **Import… and Export…** as the only two menu entries, with the formats
   inside the dialogs.
+
+## From the UI/UX review (November 2026)
+
+Three reviewers used BrainCraft with a real mouse, keyboard and touch: the
+board, everything around it, and wikis, phones and accessibility. Done this
+round:
+
+- **Instrument Sans** for the controls, and **Wall dark / Wall light** themes.
+- **The board:** right-click opens the menu again; moving a shape never draws
+  a line (only new shapes connect); a drag inside a frame draws a selection
+  box; a panel opening over the selection slides the board; Esc puts back a
+  note typed over by accident, and ? and / never type over one; empty new
+  notes are dropped; a double-click on a locked object says how to unlock it;
+  objects outline under the pointer, with a move cursor over the selection;
+  short words in shapes grow only a little; the ⋯ menu stays on screen; the
+  toolbar keeps clear of lines; a new frame's title is ready to type; Esc
+  leaves an empty drawing; big boards open at their first frame; Ctrl ] and
+  Ctrl [ for front and back; Share is the one filled button; a frame and a
+  Stop button while following someone.
+- **Around the board:** an address per board and page, with Back; access
+  changes reach people already on the board (removed people are taken off it,
+  a new level reconnects them); Everyone can share and find people on a new
+  server; Share always shows for managers; the access dialog saves as you go;
+  Ctrl O fetches the list; renaming and deleting server boards from Your
+  boards; offline is "Offline", not "Can't reach"; problems stay until closed;
+  the assistant shows how long it has been thinking.
+- **Wikis, phones, access:** pictures on pages; writing in the reading face;
+  one Export… dialog; Move up and Move down; real links between pages; a page
+  heading for screen readers, headings named by their words; Escape in the
+  `@`, `[[` and `/` pickers only closes the picker, with a word when nothing
+  matches; no keyboard popping up over the page list; 16px fields on touch,
+  bigger targets, no shortcut chips in touch menus; focus rings on yellow
+  buttons; placeholder and faint text at 4.5:1 or better; the selection
+  toolbar is one Tab stop with arrow keys between colours.
+
+Still to do, biggest first:
+
+- [ ] **Write where you read:** type straight into the page, Markdown
+  shortcuts turning into formatting as you go, links and embeds as named
+  chips; Markdown stays the stored format and a toggle for those who want it.
+- [ ] **A touch-sized selection bar:** under 480px, one row docked at the
+  bottom (colour behind one swatch, Delete always there), never over the
+  selection.
+- [ ] **Handles on lines:** drag an end onto another object to reattach it,
+  the middle to move its label or bend it; edge handles to resize one side.
+- [ ] **A rail with tools only:** Hand-drawn to the board menu and Ctrl K, Pen
+  and Excalidraw as one Draw button, shapes in one menu with number keys.
+- [ ] **Frames as real containers:** the frame you'd drop into lights up
+  ("Add to Trip ideas"), and can grow to fit.
+- [ ] **The board by keyboard:** Tab or arrows between objects in reading
+  order, the selection read out, an Objects list as an alternative.
+- [ ] **A home page and an inbox:** Your boards as a page of its own, with
+  Shared with you first; shares, mentions, replies and access requests in one
+  list, sent over the live connection; "Ask for access" on a board you can't
+  open.
+- [ ] **A calmer top bar:** fold the rarer buttons into ⋯ by the room there is
+  (it collides at 820px), timer and theme into the account menu.
+- [ ] **Joining:** "Robin added you" and a name on the set-your-password
+  screen; a name field in the account menu; boards made on the server at the
+  first change, not on New.
+- [ ] **Admin for non-technical people:** People and groups apart from Server,
+  a line on what each permission allows, a "Friends and family" setup.
+- [ ] **Phone wiki:** one slim bar, a bottom bar while writing (Done, /, [[,
+  checklist, photo), the caret kept above the on-screen keyboard.
+- [ ] **The assistant:** a clear error and Try again when it times out.
 
 ## From the earlier list
 

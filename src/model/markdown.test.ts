@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Block, continueList, headings, inlineText, parseInline, parseMarkdown, plainMarkdown, safeHref, slugify, toggleTask } from './markdown'
+import { type Block, continueList, headings, imageToken, inlineText, parseInline, parseMarkdown, plainMarkdown, safeHref, slugify, toggleTask } from './markdown'
 
 const kinds = (blocks: Block[]) => blocks.map((b) => b.t)
 
@@ -155,5 +155,16 @@ describe('markdown', () => {
     parseInline('['.repeat(5000) + ']]')
     parseMarkdown('| a |\n| - |\n' + '| x |\n'.repeat(5000))
     expect(performance.now() - start).toBeLessThan(3000)
+  })
+})
+
+describe('pictures', () => {
+  it('reads a picture from the wiki’s files on a line of its own, and leaves other images as text', () => {
+    const [pic, para] = parseMarkdown('![The flat](file:abc-123)\n\nSee ![x](https://example.org/a.png) inline')
+    expect(pic).toMatchObject({ t: 'image', file: 'abc-123', alt: 'The flat' })
+    expect(para.t).toBe('p')
+    // Straight under a line of text, not swallowed into its paragraph.
+    expect(parseMarkdown('We stayed here:\n![The flat](file:f2)').map((x) => x.t)).toEqual(['p', 'image'])
+    expect(parseMarkdown(imageToken('Day [1]\nbeach', 'f1'))[0]).toMatchObject({ t: 'image', file: 'f1', alt: 'Day  1  beach' })
   })
 })

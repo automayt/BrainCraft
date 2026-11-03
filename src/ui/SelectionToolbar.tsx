@@ -8,6 +8,7 @@ import { intersects } from '../model/geom'
 import * as RX from '../model/reactions'
 import { canHaveStatus, STATUSES, statusInfo } from '../model/status'
 import { hasSketch, sketchToBoard } from './sketch'
+import { ink } from './paint'
 import { BRANCHES, FILLS, FLOW_SHAPES, type FlowShape, INKS, type Kind, MIND_ROOT_COLOR, isWidget, usesInk } from '../model/types'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -111,10 +112,20 @@ export function SelectionToolbar() {
   const covered = (top: number) => {
     const box = rectToWorld(editor.camera, { x: x - width / 2, y: top, w: width, h: size.h })
     let area = 0
-    for (const i of board.items) {
-      if (editor.selection.has(i.id) || !intersects(box, i)) continue
-      area += (Math.min(box.x + box.w, i.x + i.w) - Math.max(box.x, i.x)) * (Math.min(box.y + box.h, i.y + i.h) - Math.max(box.y, i.y))
+    const overlap = (r: { x: number; y: number; w: number; h: number }) =>
+      intersects(box, r) ? (Math.min(box.x + box.w, r.x + r.w) - Math.max(box.x, r.x)) * (Math.min(box.y + box.h, r.y + r.h) - Math.max(box.y, r.y)) : 0
+    for (const i of board.items) if (!editor.selection.has(i.id)) area += overlap(i)
+    // Lines count too (each stretch as a thin box), and the selection's own handles just around it.
+    const pad = 8 / editor.camera.zoom
+    for (const c of board.connectors) {
+      const pts = B.connectorRoute(board, c)?.points ?? []
+      for (let k = 1; k < pts.length; k++) {
+        const [p, q] = [pts[k - 1], pts[k]]
+        area += overlap({ x: Math.min(p.x, q.x) - pad, y: Math.min(p.y, q.y) - pad, w: Math.abs(p.x - q.x) + 2 * pad, h: Math.abs(p.y - q.y) + 2 * pad })
+      }
     }
+    const sel = B.bounds(board, editor.selection)
+    if (sel) area += overlap({ x: sel.x - 4 * pad, y: sel.y - 4 * pad, w: sel.w + 8 * pad, h: sel.h + 8 * pad }) * 0.5
     return area
   }
   // Below the top bar, and below whatever stacks under it: "Since you were here", the timer, the
@@ -153,8 +164,8 @@ export function SelectionToolbar() {
   if (items.length > 0) more.push({ group: 'edit', label: 'Duplicate', keys: 'Ctrl D', run: () => editor.duplicate() })
   if (items.length > 0 && !locked) more.push({ group: 'edit', label: 'Lock', keys: 'Ctrl Shift L', title: 'Can’t be moved or changed by accident', run: () => editor.setLocked(true) })
   if (items.length > 0 && !mind) {
-    more.push({ group: 'layer', label: 'Bring to front', title: 'Draw on top of everything', run: () => editor.bringToFront() })
-    more.push({ group: 'layer', label: 'Send to back', title: 'Draw under everything', run: () => editor.sendToBack() })
+    more.push({ group: 'layer', label: 'Bring to front', keys: 'Ctrl ]', title: 'Draw on top of everything', run: () => editor.bringToFront() })
+    more.push({ group: 'layer', label: 'Send to back', keys: 'Ctrl [', title: 'Draw under everything', run: () => editor.sendToBack() })
   }
   if (!editor.readOnly && items.some((i) => canSketch(i.kind)))
     more.push({
@@ -183,17 +194,32 @@ export function SelectionToolbar() {
   if (statusable && !timed) more.push({ group: 'more', label: 'Time…', keys: one ? 'Alt T' : undefined, title: 'A timer, logged time and an estimate', run: opens(timeOpener) })
 
   return (
-    <div ref={ref} className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+    <div ref={ref} role="toolbar" aria-label="Selected" className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
       <div className="stb-main" onWheel={scrollSideways}>
         {colorable && (
-          <div className="swatches">
-            {palette.map(([name, color]) => (
+          // The colours are one stop for Tab; arrow keys move between them.
+          <div
+            className="swatches"
+            role="group"
+            aria-label="Colour"
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+              const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('.swatch')]
+              const at = all.indexOf(document.activeElement as HTMLButtonElement)
+              e.preventDefault()
+              e.stopPropagation()
+              all[(at + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]?.focus()
+            }}
+          >
+            {palette.map(([name, color], k) => (
               <button
                 key={name + color}
+                tabIndex={current === color || (!palette.some(([, c]) => c === current) && k === 0) ? 0 : -1}
                 className={`swatch${current === color ? ' active' : ''}`}
-                style={{ background: color }}
-                title={name}
-                aria-label={name}
+                // Ink and line colours as the board draws them in this theme (black ink is light on a dark board).
+                style={{ background: palette === INKS ? ink(color) : color }}
+                title={palette === INKS && name === 'Black' ? 'Ink (adapts to the theme)' : name}
+                aria-label={palette === INKS && name === 'Black' ? 'Ink' : name}
                 aria-pressed={current === color}
                 onClick={() => editor.setColor(color)}
               />
@@ -382,14 +408,19 @@ function MoreMenu({ entries, react }: { entries: MoreEntry[]; react: boolean }) 
   const { at, close, toggle, menuProps } = useButtonMenu()
   const button = useRef<HTMLButtonElement>(null)
   const me = editor.me
-  // ⋯ is at the bar's end, often near the window's edge: keep the menu on screen, above the bar
-  // when there's no room below it.
+  // ⋯ is at the bar's end, often near the window's edge: keep the menu on screen, on whichever side
+  // of the bar has more room, scrolling inside itself when even that isn't enough.
   const room = (entries.length + (react ? 2 : 0)) * 34 + 16
-  const up = !!at && at.y + room > window.innerHeight - 8 && button.current
+  const barTop = button.current?.getBoundingClientRect().top ?? 0
+  const below = window.innerHeight - 8 - (at?.y ?? 0)
+  const above = barTop - 16
+  const up = !!at && room > below && above > below
   const place = at && {
     left: Math.min(Math.max(at.x, 118), window.innerWidth - 118),
-    top: up ? button.current!.getBoundingClientRect().top - 8 : at.y,
+    top: up ? barTop - 8 : at.y,
     transform: up ? 'translate(-50%, -100%)' : undefined,
+    maxHeight: Math.max(160, up ? above : below),
+    overflowY: 'auto' as const,
   }
   return (
     <span className="align-anchor">

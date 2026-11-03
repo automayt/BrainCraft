@@ -58,6 +58,10 @@ export interface RoomHost {
   files?(room: Room, req: IncomingMessage, res: ServerResponse, rest: string[], canEdit: boolean): Promise<boolean>
 }
 
+/** Closing a live connection: access to the board was taken away, or changed (reconnect to get it). */
+export const CLOSE_REMOVED = 4403
+export const CLOSE_CHANGED = 4409
+
 /** Mentions listed at most. */
 const MENTIONS_SHOWN = 100
 
@@ -156,6 +160,30 @@ export class AccountBoards {
     if (!user || !role || !level) return null
     this.peek(req, user, room.data, 'joined the live session of')
     return { role, user, level }
+  }
+
+  /**
+   * Everyone connected to `room` keeps only the access they still have, after a change to its access
+   * list or owner, or to people and groups: someone who lost it is disconnected, and someone whose
+   * level changed is reconnected with the new one.
+   */
+  recheck(room: Room) {
+    for (const m of [...room.members.values()]) {
+      if (!m.user || !m.close) continue
+      const user = this.store.user(m.user.id) ?? null
+      const level = this.level(user, room.data)
+      const role = roleOf(level)
+      if (!role) m.close(CLOSE_REMOVED, 'Access removed')
+      else if (role !== m.role || (level === 'manage') !== !!m.manages) m.close(CLOSE_CHANGED, 'Access changed')
+    }
+  }
+
+  /** The same for every board open on the server. */
+  recheckAll() {
+    for (const id of this.host.ids()) {
+      const room = this.host.loaded?.(id)
+      if (room?.members.size) this.recheck(room)
+    }
   }
 
   /** Handles a board route; false when it isn't one. */
@@ -333,6 +361,7 @@ export class AccountBoards {
         }
         room.onChange?.(false)
         this.index(room)
+        this.recheck(room)
         return json(res, 200, this.describe(room, this.level(me, room.data))), true
       }
     }

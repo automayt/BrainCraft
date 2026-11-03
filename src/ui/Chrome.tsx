@@ -45,6 +45,7 @@ function BoardIcon() {
   const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const icon = editor.board.icon
+  const what = editor.board.kind === 'wiki' ? 'wiki' : 'board'
   // The browser tab shows it too.
   useEffect(() => {
     const t = editor.board.title || 'Untitled board'
@@ -55,8 +56,8 @@ function BoardIcon() {
     <div className="anchor">
       <button
         className={`board-icon${icon ? '' : ' empty'}`}
-        aria-label={icon ? 'Change the board icon' : 'Pick a board icon'}
-        title={icon ? 'Change the board icon' : 'Pick an icon for this board'}
+        aria-label={icon ? `Change the ${what} icon` : `Pick a ${what} icon`}
+        title={icon ? `Change the ${what} icon` : `Pick an icon for this ${what}`}
         disabled={ws.viewOnly}
         onMouseDown={keepFocus}
         onClick={() => setOpen(!open)}
@@ -193,7 +194,7 @@ export function TopLeft() {
       <input
         className="board-title"
         value={editor.board.title}
-        aria-label="Board title"
+        aria-label={editor.board.kind === 'wiki' ? 'Wiki name' : 'Board name'}
         spellCheck={false}
         readOnly={ws.viewOnly}
         onChange={(e) => editor.setTitle(e.target.value)}
@@ -201,7 +202,7 @@ export function TopLeft() {
       />
       <SaveState />
       <div className="anchor">
-        <button className={`icon-btn${open ? ' on' : ''}`} aria-label="Board menu" aria-expanded={open} onMouseDown={keepFocus} onClick={() => setOpen(!open)}>
+        <button className={`icon-btn${open ? ' on' : ''}`} aria-label={editor.board.kind === 'wiki' ? 'Wiki menu' : 'Board menu'} aria-expanded={open} onMouseDown={keepFocus} onClick={() => setOpen(!open)}>
           <MenuIcon />
         </button>
         {open && (
@@ -273,7 +274,9 @@ export function TopRight() {
     <div className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <LiveBar onOpen={ui.openShare} />
-      {!ws.liveInfo && !ws.readOnly && (
+      {/* On a server with accounts every board is live, and Share is how people get it: always there
+          for those who can manage it. */}
+      {!ws.readOnly && (!ws.liveInfo || (ws.liveInfo.account && ws.managesBoard)) && (
         <button className="share-btn has-tip" aria-label="Share" onMouseDown={keepFocus} onClick={ui.openShare}>
           <span>Share</span>
           <Tip label="Invite friends to this board" />
@@ -704,41 +707,53 @@ export function BottomLeft() {
         <PlusIcon />
         <Tip label="Zoom in" keys="Ctrl +" />
       </button>
-      <button className="icon-btn has-tip" aria-label="Zoom to fit" onMouseDown={keepFocus} onClick={() => editor.zoomToFit()}>
+      <button className="icon-btn has-tip" aria-label={editor.selection.size ? 'Zoom to the selection' : 'Zoom to fit the board'} onMouseDown={keepFocus} onClick={() => editor.zoomToFit()}>
         <FitIcon />
-        <Tip label="Fit" keys="Shift 1" />
+        <Tip label={editor.selection.size ? 'Fit the selection' : 'Fit the whole board'} keys="Shift 1" />
       </button>
     </div>
   )
 }
 
-/** Status messages appear briefly, then fade. */
+/** A message about something that went wrong, which stays until it's closed. */
+const PROBLEM = /^(Couldn’t|Couldn't|Can’t|Can't|You no longer|That (board|link) |Something went wrong)|(failed|error)/i
+
+/** Status messages appear for long enough to read (longer ones longer), then fade; problems stay until closed. */
 export function Toast() {
   const editor = useEditor()
   const [shown, setShown] = useState(false)
   // The words stay while the message fades out, so it never flashes an empty pill.
   const [text, setText] = useState('')
   const last = useRef('')
+  const problem = PROBLEM.test(text)
+  const hide = () => {
+    setShown(false)
+    last.current = ''
+    editor.status = ''
+  }
   useEffect(() => {
     if (!editor.status || editor.status === last.current) return
     last.current = editor.status
     setText(editor.status)
     setShown(true)
-    const t = setTimeout(() => {
-      setShown(false)
-      last.current = ''
-      editor.status = ''
-    }, 3200)
+    if (PROBLEM.test(editor.status)) return
+    const t = setTimeout(hide, Math.min(8000, 2400 + editor.status.length * 45))
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor.status, editor])
   return (
-    <div className={`toast${shown ? ' show' : ''}`} role="status" aria-live="polite">
+    <div className={`toast${shown ? ' show' : ''}${problem ? ' problem' : ''}`} role={problem ? 'alert' : 'status'} aria-live={problem ? 'assertive' : 'polite'}>
       {text}
+      {problem && shown && (
+        <button className="toast-close" aria-label="Close the message" onMouseDown={keepFocus} onClick={hide}>
+          ×
+        </button>
+      )}
     </div>
   )
 }
 
-const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|Backspace|Home|End|F2|F10|Arrows|arrow|arrows|scroll|[A-Z0-9]|[↑↓←→/?+−#]|1–7|1–9)$/.test(token)
+const isKey = (token: string) => /^(Ctrl|Shift|Alt|Tab|Enter|Esc|Space|Delete|Backspace|Home|End|F2|F10|Arrows|arrow|arrows|scroll|[A-Z0-9]|[↑↓←→/?+−#[\]]|1–7|1–9)$/.test(token)
 
 /** What a wiki's Help shows: wiki keys first, without the canvas-only sections. */
 const CANVAS_ONLY = new Set(['Tools (with nothing selected)', 'Canvas', 'Presenting', 'Mind maps', 'Flowcharts', 'Tables, Kanban, timelines', 'Pasting', 'Together'])

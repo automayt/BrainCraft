@@ -148,11 +148,15 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
       onOpen={() => open(e)}
       onRename={(title) => {
         setRenaming(null)
-        if (e.local && title.trim() && title !== e.title) void ws.rename(e.local.id, title.trim())
+        if (title.trim() && title !== e.title) void ws.rename(e.local?.id, title.trim(), e.server?.id)
       }}
       onStartRename={() => setRenaming(e.key)}
       onDuplicate={() => e.local && void ws.duplicate(e.local.id)}
-      onDelete={() => (confirming === e.key ? (setConfirming(null), e.local && void ws.remove(e.local.id)) : setConfirming(e.key))}
+      onDelete={() =>
+        confirming === e.key
+          ? (setConfirming(null), e.server ? void ws.removeFromServer(e.server.id, e.local?.id) : e.local && void ws.remove(e.local.id))
+          : setConfirming(e.key)
+      }
       onCancelDelete={() => setConfirming(null)}
     />
   )
@@ -418,8 +422,11 @@ function BoardRow(p: {
   const { entry: e } = p
   const { at, close, toggle, menuProps } = useButtonMenu()
   const items = e.local?.items
-  // A board on the server is deleted there by whoever manages it, not from this list.
-  const deletable = !!e.local && !e.server
+  // On a server with accounts: renamed by those who can edit it, deleted (for everyone) by those
+  // who manage it. Only in this browser: anything goes.
+  const level = e.server?.level
+  const renamable = !e.server || level === 'edit' || level === 'manage'
+  const deletable = !e.server ? !!e.local : level === 'manage'
   return (
     <li className={`board-row${p.current ? ' current' : ''}${p.depth ? ' child-board' : ''}`} style={p.depth ? { paddingLeft: 8 + Math.min(p.depth, 4) * 22 } : undefined}>
       <button className="board-row-open" onClick={p.onOpen} tabIndex={-1} aria-hidden="true">
@@ -457,11 +464,11 @@ function BoardRow(p: {
       {p.confirming ? (
         <span className="board-row-confirm">
           <button className="danger confirm" onClick={p.onDelete}>
-            Delete forever
+            {e.server ? 'Delete for everyone' : 'Delete forever'}
           </button>
           <button onClick={p.onCancelDelete}>Keep</button>
         </span>
-      ) : e.local ? (
+      ) : renamable || e.local || deletable ? (
         <span className="align-anchor">
           <button className={`board-row-more${at ? ' on' : ''}`} aria-label={`More for ${e.title || 'Untitled'}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>
             ⋯
@@ -469,12 +476,16 @@ function BoardRow(p: {
           {at &&
             createPortal(
               <div className="align-menu more-menu no-canvas" role="menu" {...menuProps} style={{ left: Math.min(at.x, window.innerWidth - 118), top: at.y }}>
-                <button role="menuitem" onClick={() => (close(), p.onStartRename())}>
-                  Rename
-                </button>
-                <button role="menuitem" onClick={() => (close(), p.onDuplicate())}>
-                  Duplicate
-                </button>
+                {renamable && (
+                  <button role="menuitem" onClick={() => (close(), p.onStartRename())}>
+                    Rename
+                  </button>
+                )}
+                {e.local && (
+                  <button role="menuitem" onClick={() => (close(), p.onDuplicate())}>
+                    Duplicate
+                  </button>
+                )}
                 {deletable && (
                   <button role="menuitem" className="danger-quiet" onClick={() => (close(), p.onDelete())}>
                     Delete…
@@ -914,11 +925,14 @@ export function ReadOnlyBanner() {
 export function LiveViewerBanner() {
   const ws = useWorkspace()
   if (ws.readOnly || !ws.viewOnly) return null
+  // With accounts there are no links to ask for: whoever owns the board gives access.
+  const owner = ws.liveInfo?.account ? ws.serverBoards.find((b) => b.id === ws.liveInfo!.id)?.owner : undefined
+  const ask = ws.liveInfo?.account ? `Ask ${owner && owner.id !== ws.account?.user?.id ? owner.name : 'whoever manages it'} for edit access to join in.` : 'Ask for the edit link to join in.'
   return (
     <div className="viewer-banner island no-canvas" role="status">
       <span className="readonly-dot" aria-hidden="true" />
       <span>
-        <strong>Watching live</strong> · you can follow people, send emotes (E) and chat by your cursor (/). Ask for the edit link to join in.
+        <strong>Watching live</strong> · you can follow people, send emotes (E) and chat by your cursor (/). {ask}
       </span>
       <button onClick={() => void ws.leaveLive().then(() => ws.editor.setStatus('This is your own copy now; the live board carries on without it'))}>Make my own copy</button>
     </div>

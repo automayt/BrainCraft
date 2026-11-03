@@ -134,9 +134,10 @@ export class AccountStore {
     const settings = readJson<ServerSettings>(this.file('settings'), {})
     this.settings = { ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}), ...(cleanNotice(settings.notice) ? { notice: cleanNotice(settings.notice) } : {}) }
     this.tokens = readJson<Token[]>(this.file('sessions'), []).filter((t) => t && t.expires > now())
-    // Everyone is in this group; out of the box it may make boards and use the AI.
+    // Everyone is in this group. Out of the box it may make boards, share them with the people it can
+    // see (everyone on the server) and use the AI: friends planning together need no admin to start.
     if (!this.groups.some((g) => g.everyone)) {
-      this.groups.unshift({ id: 'everyone', name: 'Everyone', description: 'Every signed-in person', permissions: ['boards.create', 'ai.use'], everyone: true })
+      this.groups.unshift({ id: 'everyone', name: 'Everyone', description: 'Every signed-in person', permissions: ['boards.create', 'boards.share', 'people.see', 'ai.use'], everyone: true })
       this.saveGroups()
     }
   }

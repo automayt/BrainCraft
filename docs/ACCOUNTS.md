@@ -42,8 +42,15 @@ Either:
 | See everyone | find people and groups by name when sharing (otherwise only an exact email finds someone) |
 
 Everyone signed in is in the built-in **Everyone** group, which starts with
-*Make boards* and *Use the AI assistant*; change it to suit. A person's
-permissions are their groups' together.
+*Make boards*, *Share boards*, *See everyone* and *Use the AI assistant*, so
+friends can start planning together without an admin; take some away to suit
+an organisation. (Servers set up before November 2026 started with only *Make
+boards* and *Use the AI assistant*; tick the other two in **Admin… → Groups**
+to match.) A person's permissions are their groups' together.
+
+Changing who has a board, someone's groups or role, or turning an account off
+applies at once, to live sessions too: someone who lost access is taken off
+the board, and someone whose level changed reconnects with the new one.
 
 Manage all of this from the account button (top right) → **Admin…**: add
 people (they get a one-time link to choose a password, valid

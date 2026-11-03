@@ -354,8 +354,13 @@ These become interactive once selected; drag them by their title strip.
   when you're signed in, the ones on the server, each once: by name or by
   last edited, filtered to Boards, Wikis or **Shared with me**, child boards
   under the board they came from. ⋯ on a line renames, duplicates or deletes
-  it. ↓ from the search goes down the list and Enter opens; a search that
+  it (a board on the server is renamed there, for everyone, and deleted for
+  everyone by whoever manages it). ↓ from the search goes down the list and Enter opens; a search that
   finds nothing offers a new board or wiki of that name.
+- **Every board has its own address:** the address bar follows the board
+  (and a wiki's page) you have open, so you can bookmark it, copy it to a
+  friend, or press **Back** to return to the board or page before. A live
+  session's keys never go in it.
 - **New** (top right of Your boards) starts a blank board or wiki, or one
   from a template: brainstorm, process map, Kanban, sprint plan,
   retrospective, a trip, moving house, a party or a club handbook.
@@ -405,8 +410,13 @@ shares live exactly like a board.
   it on a phone, where the list is behind **☰ Pages**). Undo and redo sit at
   the top of the list. Deleted pages go to the **Trash**, with their
   sub-pages, until you delete them for good.
-- **Writing:** **Edit** (or double-click the page) opens the Markdown on the
-  left and how it reads on the right. Headings, lists, `- [ ]` checklists
+- **Writing:** **Edit** (or double-click the page) opens the page's Markdown
+  in the same face and size it's read in, with **Preview** beside it on a
+  wide page (or a tab away).
+- **Pictures:** paste or drop a photo while writing, or **/ → Picture…**. It
+  goes in the wiki's Files and shows on the page at the column's width, with
+  its caption under it (`![Caption](file:ID)` in the Markdown); exports
+  carry it too. Headings, lists, `- [ ]` checklists
   (tick them while reading), tables, code, quotes, callouts (`> [!tip]`,
   `> [!note]`, `> [!warning]`, `> [!danger]`), `{{children}}` for the pages
   under this one and `{{toc}}` for its headings. **Insert** (or `/` at the

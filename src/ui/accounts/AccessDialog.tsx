@@ -5,6 +5,9 @@ import { Dialog } from '../Boards'
 import { useWorkspace } from '../useWorkspace'
 import { Copy } from '../Live'
 
+/** What a change of access says once it's saved: "Sam can now edit". */
+const LEVEL_DONE: Record<Level, string> = { view: 'can now view', edit: 'can now edit', manage: 'can now manage it' }
+
 interface Found {
   people: { id: string; name: string; email: string }[]
   groups: { id: string; name: string }[]
@@ -22,7 +25,8 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Found>({ people: [], groups: [] })
   const [msg, setMsg] = useState<string | null>(null)
-  const [dirty, setDirty] = useState(false)
+  /** What someone added gets to do. */
+  const [newLevel, setNewLevel] = useState<Level>('edit')
   const path = live ? `api/boards/${live.id}/access` : ''
 
   useEffect(() => {
@@ -77,21 +81,25 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
 
   const manage = info?.level === 'manage'
   const share = manage && can(ws.account, 'boards.share')
-  const add = (who: 'user' | 'group', id: string, name: string, email?: string) => {
-    if (!grants.some((g) => g.who === who && g.id === id)) setGrants([...grants, { who, id, name, ...(email ? { email } : {}), level: 'edit' }])
-    setQ('')
-    setDirty(true)
-  }
-  const save = async () => {
+  // Every change is saved as it's made (there's no Save to forget); a refusal puts the list back.
+  const commit = async (next: Grant[], done: string) => {
+    const was = grants
+    setGrants(next)
+    setMsg(null)
     try {
-      const r = await call<BoardAccessInfo>(ws.server!, path, 'PUT', { access: grants.map(({ who, id, level }) => ({ who, id, level })) })
+      const r = await call<BoardAccessInfo>(ws.server!, path, 'PUT', { access: next.map(({ who, id, level }) => ({ who, id, level })) })
       setInfo(r)
       setGrants(r.access)
-      setDirty(false)
-      ws.editor.setStatus('Access saved')
+      ws.editor.setStatus(done)
     } catch (err) {
+      setGrants(was)
       setMsg((err as Error).message)
     }
+  }
+  const add = (who: 'user' | 'group', id: string, name: string, email?: string) => {
+    setQ('')
+    if (grants.some((g) => g.who === who && g.id === id)) return
+    void commit([...grants, { who, id, name, ...(email ? { email } : {}), level: newLevel }], `${name} ${LEVEL_DONE[newLevel]}`)
   }
   const me = ws.account?.user
   // No secret links with accounts: the board's own address, which opens it for whoever has access.
@@ -105,6 +113,7 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
           ×
         </button>
       </header>
+      <div className="access-body access-live">
       {msg && <p className="signin-error">{msg}</p>}
       {link && (
         <div className="access-link">
@@ -141,8 +150,11 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
                       aria-label={`What ${g.name ?? 'they'} can do`}
                       value={g.level}
                       onChange={(e) => {
-                        setGrants(grants.map((x, i) => (i === k ? { ...x, level: e.target.value as Level } : x)))
-                        setDirty(true)
+                        const level = e.target.value as Level
+                        void commit(
+                          grants.map((x, i) => (i === k ? { ...x, level } : x)),
+                          `${g.name ?? 'They'} ${LEVEL_DONE[level]}`,
+                        )
                       }}
                     >
                       {(['view', 'edit', 'manage'] as Level[]).map((l) => (
@@ -154,10 +166,7 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
                     <button
                       className="icon-close"
                       aria-label={`Remove ${g.name ?? 'them'}`}
-                      onClick={() => {
-                        setGrants(grants.filter((_, i) => i !== k))
-                        setDirty(true)
-                      }}
+                      onClick={() => void commit(grants.filter((_, i) => i !== k), `${g.name ?? 'They'} no longer ${g.who === 'group' ? 'have' : 'has'} this board`)}
                     >
                       ×
                     </button>
@@ -170,7 +179,16 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
           </ul>
           {share && (
             <div className="access-add">
-              <input aria-label="Add people or groups" placeholder="Add people or groups (name or email)" value={q} onChange={(e) => setQ(e.target.value)} />
+              <div className="access-add-row">
+                <input aria-label="Add people or groups" placeholder="Add people or groups (name or email)" value={q} onChange={(e) => setQ(e.target.value)} />
+                <select aria-label="What they’ll be able to do" value={newLevel} onChange={(e) => setNewLevel(e.target.value as Level)}>
+                  {(['view', 'edit', 'manage'] as Level[]).map((l) => (
+                    <option key={l} value={l}>
+                      {LEVEL_LABEL[l]}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {(found.people.length > 0 || found.groups.length > 0) && (
                 <ul className="access-found">
                   {found.groups.map((g) => (
@@ -215,15 +233,13 @@ export function AccessDialog({ onClose }: { onClose: () => void }) {
               </button>
             )}
             <span className="spacer" />
-            <button onClick={onClose}>{dirty ? 'Cancel' : 'Close'}</button>
-            {manage && (
-              <button className="primary" disabled={!dirty} onClick={() => void save()}>
-                Save
-              </button>
-            )}
+            <button className="primary" onClick={onClose}>
+              Done
+            </button>
           </div>
         </>
       )}
+      </div>
     </Dialog>
   )
 }

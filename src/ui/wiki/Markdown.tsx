@@ -21,6 +21,8 @@ export interface MarkdownActions {
   copyHeading?: (slug: string, text: string) => void
   /** Draws an embedded canvas object; missing shows it as a link. */
   embed?: (block: Extract<Block, { t: 'embed' }>) => ReactNode
+  /** Draws a picture from the wiki's files; missing shows its caption. */
+  image?: (block: Extract<Block, { t: 'image' }>) => ReactNode
   /** Draws a macro that needs the wiki (a page tree, open tasks, another page…); missing shows a note. */
   macro?: (block: MacroBlock) => ReactNode
 }
@@ -165,10 +167,11 @@ function BlockView({ b, a }: { b: Block; a: MarkdownActions }): ReactNode {
     case 'h': {
       const Tag = `h${Math.min(6, b.level + 1)}` as 'h2'
       return (
-        <Tag id={`h-${b.slug}`} className="md-heading">
-          {inline(b.c, a)}
+        // Named by its words alone, not by the # button beside them.
+        <Tag id={`h-${b.slug}`} className="md-heading" aria-labelledby={`h-${b.slug}-words`}>
+          <span id={`h-${b.slug}-words`}>{inline(b.c, a)}</span>
           {a.copyHeading && (
-            <button className="md-anchor" title="Copy a link to this heading" aria-label="Copy a link to this heading" onClick={() => a.copyHeading!(b.slug, inlineText(b.c))}>
+            <button className="md-anchor" title="Copy a link to this heading" aria-label={`Copy a link to “${inlineText(b.c)}”`} onClick={() => a.copyHeading!(b.slug, inlineText(b.c))}>
               #
             </button>
           )}
@@ -250,6 +253,8 @@ function BlockView({ b, a }: { b: Block; a: MarkdownActions }): ReactNode {
       return a.children()
     case 'macro':
       return <MacroView b={b} a={a} />
+    case 'image':
+      return a.image ? a.image(b) : <p className="md-image-missing muted">{b.alt || 'A picture'}</p>
     case 'embed':
       return a.embed ? a.embed(b) : <p>{a.link({ board: b.board, ...(b.item !== undefined ? { item: b.item } : {}) }, b.label || 'Embedded board', 0)}</p>
     case 'toc':

@@ -189,8 +189,14 @@ describe('admins', () => {
     expect(log.map((e) => e.text)).toEqual(expect.arrayContaining([expect.stringMatching(/set the announcement/), expect.stringMatching(/took the announcement down/)]))
   })
 
+  it('lets everyone share and find people on a new server', async () => {
+    const { a } = await admin()
+    expect(a.store.groups.find((g) => g.everyone)?.permissions).toEqual(['boards.create', 'boards.share', 'people.see', 'ai.use'])
+  })
+
   it('let people find others only by exact email without “See everyone”', async () => {
     const { a, cookie } = await admin()
+    a.store.groups.find((g) => g.everyone)!.permissions = ['boards.create', 'ai.use']
     const link = String((await call(a, 'POST', '/api/admin/users', { email: 'sam@x.org', name: 'Sam' }, { cookie })).body.link)
     const sam = cookieOf(await call(a, 'POST', '/api/auth/reset', { token: link.split('#reset=')[1], password: 'sams long password' }))
     expect((await call(a, 'GET', '/api/people?q=an', undefined, { cookie: sam })).body).toEqual({ people: [], groups: [] })
