@@ -8,9 +8,10 @@ browser as a static site, so you can host it anywhere.
 
 ## Look and feel
 
-BrainCraft defaults to a **dark theme** and has three more: **light**,
-**high contrast dark** and **high contrast light**. Pick one from the theme
-button at the top right, or type "theme" in Ctrl+K. The high-contrast themes
+BrainCraft defaults to a **dark theme** and has five more: **light**,
+**wall dark** and **wall light** (a green-grey graphite and a pale sage, softer
+than the default pair), **high contrast dark** and **high contrast light**.
+Pick one from the theme button at the top right, or type "theme" in Ctrl+K. The high-contrast themes
 use pure black and white surfaces, a vivid accent, bold outlines on every
 shape, thicker lines and stronger focus rings. Default board colors (ink,
 lines, frames, mind-map centers) follow the theme, so boards stay readable in
@@ -933,8 +934,8 @@ BrainCraft stands on open-source work. Thank you to the people behind:
 - [Mermaid](https://github.com/mermaid-js/mermaid) (MIT): reading flowcharts
   for Excalidraw sketches
 - [React](https://react.dev) (MIT): the interface
-- [Inter](https://rsms.me/inter/) and [Literata](https://github.com/googlefonts/literata)
-  (SIL Open Font License): the typefaces
+- [Instrument Sans](https://github.com/Instrument/instrument-sans), [Inter](https://rsms.me/inter/)
+  and [Literata](https://github.com/googlefonts/literata) (SIL Open Font License): the typefaces
 - [ws](https://github.com/websockets/ws) (MIT) and the
   [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript) (MIT): live
   sessions and the assistant

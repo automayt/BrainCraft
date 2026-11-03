@@ -4,7 +4,8 @@
    ===================================================================== */
 
 :root,
-:root[data-theme='dark'] {
+:root[data-theme='dark'],
+:root[data-theme='wall-dark'] {
   color-scheme: dark;
   --canvas: #0d0f13;
   --grid: #272b34;
@@ -63,7 +64,8 @@
   --brand-text: #ffd84a;
 }
 
-:root[data-theme='light'] {
+:root[data-theme='light'],
+:root[data-theme='wall-light'] {
   color-scheme: light;
   --canvas: #f3f4f7;
   --grid: #cfd3dc;
@@ -234,7 +236,10 @@
 }
 
 :root {
-  --font: 'Inter Variable', Inter, 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font: 'Instrument Sans Variable', 'Inter Variable', Inter, 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Words on the board and in wiki tables and headings: the face text is measured and fitted in
+     (src/ui/measure.ts), whatever the controls around it use. */
+  --font-board: 'Inter Variable', Inter, 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* For reading what people wrote: a wiki page's title and words. */
   --font-read: 'Literata Variable', Literata, Georgia, 'Times New Roman', serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
@@ -269,7 +274,6 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'cv11', 'ss01';
 }
 
 small {
@@ -826,6 +830,12 @@ button.on,
 .swatch-light i:nth-child(1) { background: #f3f4f7; }
 .swatch-light i:nth-child(2) { background: #ffffff; }
 .swatch-light i:nth-child(3) { background: #5a5af0; }
+.swatch-wall-dark i:nth-child(1) { background: #1c1f1e; }
+.swatch-wall-dark i:nth-child(2) { background: #2c312f; }
+.swatch-wall-dark i:nth-child(3) { background: #79a6f2; }
+.swatch-wall-light i:nth-child(1) { background: #e9ece8; }
+.swatch-wall-light i:nth-child(2) { background: #fafbf9; }
+.swatch-wall-light i:nth-child(3) { background: #2e5fd6; }
 .swatch-hc-dark i:nth-child(1) { background: #000; }
 .swatch-hc-dark i:nth-child(2) { background: #fff; }
 .swatch-hc-dark i:nth-child(3) { background: #ffd60a; }
@@ -975,7 +985,7 @@ button.on,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-size: 14px;
   line-height: 24px;
   color: var(--ink);
@@ -1194,7 +1204,7 @@ button.on,
   width: 100%;
   height: 28px;
   padding: 0 8px;
-  font: 14px var(--font);
+  font: 14px var(--font-board);
   color: var(--text);
   text-align: center;
   background: var(--surface-2);
@@ -1207,7 +1217,7 @@ button.on,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: var(--font);
+  font-family: var(--font-board);
   line-height: 1.3;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1244,7 +1254,7 @@ button.on,
   height: 100%;
   display: flex;
   align-items: center;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-weight: 600;
   color: var(--muted);
   white-space: nowrap;
@@ -1255,7 +1265,7 @@ button.on,
 .mind-text {
   width: 100%;
   height: 100%;
-  font-family: var(--font);
+  font-family: var(--font-board);
   line-height: 1.3;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1276,7 +1286,7 @@ button.on,
   gap: 6px;
   height: 30px;
   padding: 0 10px;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-size: 12px;
   font-weight: 700;
   color: #8a6512;
@@ -1295,7 +1305,7 @@ button.on,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1429,7 +1439,7 @@ button.on,
 
 .notes-badge text {
   fill: #1a1a1a;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-size: 10px;
   font-weight: 800;
 }
@@ -2362,7 +2372,7 @@ button.on,
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-size: 14px;
   color: var(--text);
   background: var(--widget-bg);
@@ -10638,7 +10648,7 @@ button.on,
 }
 
 .wiki-page .md :is(h2, h3, h4, h5, h6) {
-  font-family: var(--font);
+  font-family: var(--font-board);
   font-weight: 650;
   letter-spacing: -0.012em;
 }
@@ -10658,7 +10668,7 @@ button.on,
 
 /* Tables, labels and the app's own bits inside a page speak in the interface's voice. */
 .wiki-page .md :is(table, .md-status, .md-expand > summary, .md-macro-note, .md-callout-title) {
-  font-family: var(--font);
+  font-family: var(--font-board);
 }
 
 .wiki-page .md table {
@@ -10746,6 +10756,7 @@ button.on,
 
 /* An Excalidraw drawing on a dark board: as Excalidraw's own dark mode shows it. */
 :root[data-theme='dark'] .drawing-picture,
+:root[data-theme='wall-dark'] .drawing-picture,
 :root[data-theme='hc-dark'] .drawing-picture {
   filter: invert(93%) hue-rotate(180deg);
 }
@@ -12533,6 +12544,7 @@ button.on,
 }
 
 :root[data-theme='dark'] .time-warn,
+:root[data-theme='wall-dark'] .time-warn,
 :root:not([data-theme]) .time-warn {
   color: #e0a92a;
 }
@@ -13043,4 +13055,57 @@ button.on,
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* The wall themes: the dark and light palettes above, with the board a green-tinted graphite
+   (dark) or pale sage (light) and the panels one step off it. */
+:root[data-theme='wall-dark'] {
+  --canvas: #1c1f1e;
+  --grid: #303533;
+  --surface: #252928;
+  --surface-2: #2c312f;
+  --surface-3: #363c39;
+  --glass: rgba(37, 41, 40, 0.92);
+  --border: rgba(236, 233, 225, 0.09);
+  --border-strong: rgba(236, 233, 225, 0.17);
+  --text: #ece9e1;
+  --muted: #a3a89f;
+  --faint: #8e938b;
+  --accent: #79a6f2;
+  --accent-soft: rgba(121, 166, 242, 0.16);
+  --ink: #ece9e1;
+  --line: #8f958d;
+  --frame-fill: #212523;
+  --frame-stroke: #3a403d;
+  --node-fill: #232726;
+  --widget-bg: #222624;
+  --widget-head: #272b2a;
+  --widget-line: rgba(236, 233, 225, 0.07);
+  --widget-col: #2a2f2d;
+  --card: #303634;
+  --backdrop: rgba(10, 12, 11, 0.6);
+}
+
+:root[data-theme='wall-light'] {
+  --canvas: #e9ece8;
+  --grid: #cdd3cc;
+  --surface: #fafbf9;
+  --surface-2: #f0f2ef;
+  --surface-3: #e3e7e2;
+  --glass: rgba(250, 251, 249, 0.92);
+  --border: rgba(30, 30, 36, 0.09);
+  --border-strong: rgba(30, 30, 36, 0.17);
+  --text: #1e1e24;
+  --muted: #5c625d;
+  --faint: #656b66;
+  --accent: #2e5fd6;
+  --frame-fill: #f6f7f5;
+  --frame-stroke: #d3d8d1;
+  --node-fill: #fafbf9;
+  --widget-bg: #fafbf9;
+  --widget-head: #f4f6f3;
+  --widget-line: #e5e9e4;
+  --widget-col: #edf0ec;
+  --card: #ffffff;
+  --backdrop: rgba(28, 31, 30, 0.28);
 }

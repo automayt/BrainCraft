@@ -68,7 +68,7 @@ export default function DrawingEditor() {
   }
 
   // Excalidraw's own dark mode on a dark app: the drawing reads the same here as on the board.
-  const dark = ui.theme === 'dark' || ui.theme === 'hc-dark'
+  const dark = !ui.theme.endsWith('light')
   return (
     <div
       className="drawing-editor no-canvas"

@@ -1,3 +1,5 @@
+// The controls in Instrument Sans; words on the board in Inter, which their sizes are measured in.
+import '@fontsource-variable/instrument-sans'
 import '@fontsource-variable/inter'
 // Wiki pages read in Literata, with optical sizes (see docs/DESIGN.md).
 import '@fontsource-variable/literata/opsz.css'

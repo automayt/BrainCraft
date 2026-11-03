@@ -29,19 +29,30 @@ Two jobs shape the design:
 | `--muted` | `#9ba2b4` | `#5f6676` | Secondary words, labels |
 | `--accent` | `#8f97ff` | `#5a5af0` | Selection, focus, the one primary action |
 
-Two typefaces, each with one job:
+Three typefaces, each with one job:
 
-- **Inter** for the interface: bars, menus, dialogs, labels, canvas text.
+- **Instrument Sans** for the controls: bars, menus, dialogs, labels. A
+  little narrower and crisper than Inter, so the app's own words read as its own.
+- **Inter** for words on the board (notes, shapes, frames, mind maps) and wiki
+  headings and tables. Board text is measured and fitted in Inter
+  (`src/ui/measure.ts`), so it keeps its own token, `--font-board`, and a change
+  of interface face never moves anyone's text.
 - **Literata** for reading: a wiki page's title and words. It's a book face
   made for long reading on screens, sturdy on a dark page, with optical
   sizes, so large titles get finer detail and small text stays open.
 
 Type scale for a wiki page (The Elements of Typographic Style's progression,
-rounded): body 17px with a 1.7 line height; headings in Inter at 17 / 21 / 26
+rounded): body 17px with a 1.7 line height; headings in Inter (`--font-board`) at 17 / 21 / 26
 for h4 / h3 / h2, so headings and text are clearly two voices; the page title
 in Literata at 38px. Text lines stay under 70 characters; tables, code,
 columns and embedded boards may use the page's full width, all aligned on the
 same left edge.
+
+Themes swap tokens only. Besides dark, light and the two high-contrast themes,
+the **wall** pair tints the board instead of leaving it neutral: dark is a
+green-grey graphite (`#1c1f1e`) with warm off-white text, light a pale sage
+(`#e9ece8`) with panels one step off it. Sticky yellow and the selection blue
+stay the same in every theme.
 
 ## Principles
 
