@@ -230,7 +230,9 @@ export function ContextMenu() {
   const top = Math.min(m.y, Math.max(8, editor.viewport.h - entries.length * 32 - 16))
   return (
     <>
-      <div className="scrim no-canvas" onPointerDown={ui.closeMenu} onContextMenu={(e) => { e.preventDefault(); ui.closeMenu() }} />
+      {/* A press anywhere else closes the menu. Not the browser's own context-menu event: on Windows
+          it arrives after the right button is let go, just as this menu has opened, and lands here. */}
+      <div className="scrim no-canvas" onPointerDown={ui.closeMenu} onContextMenu={(e) => e.preventDefault()} />
       <div ref={listRef} className="popover context-menu no-canvas" role="menu" style={{ left, top }} onKeyDown={moveFocus}>
         {entries.map((e, k) =>
           e === 'sep' ? (

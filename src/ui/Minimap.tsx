@@ -94,6 +94,8 @@ export function Minimap() {
       height={H}
       onPointerDown={(e) => {
         e.stopPropagation()
+        // Only the main button (or a finger) moves the view; a right-click here does nothing.
+        if (e.button !== 0) return
         dragging.current = true
         ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
         go(e)
