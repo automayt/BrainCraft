@@ -21,9 +21,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { can, groupsAdminOf, groupsOf, looksAfter, permissionsOf } from './access'
 import { type Actor, AUDIT_KINDS, type AuditInput, type AuditKind, AuditLog, type AuditTarget, changesOf, changeText } from './audit'
 import { AccountStore, checkPassword, cleanAppName, cleanNotice, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
-import { type AccountRole, type Group, PERMISSIONS, type Permission, publicUser, type User } from './types'
+import { type AccountRole, type Group, isPermission, PERMISSIONS, type Permission, publicUser, type User } from './types'
 
 export const COOKIE = 'braincraft_session'
+
+/** How many groups one person (not an admin) may make. */
+const MAX_OWN_GROUPS = 20
 
 /** What a single sign-on provider adds to the service (see oidc.ts). */
 export interface SsoProvider {
@@ -420,7 +423,7 @@ export class Accounts {
     }
 
     if (parts[1] === 'team') {
-      if (!groupsAdminOf(me, this.store.groups).length) return json(res, 403, { error: 'Only group admins can do that' }), true
+      if (!groupsAdminOf(me, this.store.groups).length && !this.can(me, 'groups.create')) return json(res, 403, { error: 'Only group admins can do that' }), true
       return this.team(req, res, parts.slice(2), m, me, read), true
     }
 
@@ -436,15 +439,29 @@ export class Accounts {
    * (new accounts, or existing ones by email) to those groups and take them out again; for people
    * only in their groups, they also make set-your-password links and turn accounts off and on.
    * Nothing about other groups, permissions or the rest of the server.
+   *
+   * With "Make groups", anyone can start groups here and runs them as their group admin. A group
+   * they made they may also rename, remove, and let do what they may do themselves (never more).
    */
   private async team(req: IncomingMessage, res: ServerResponse, p: string[], m: string, me: User, read: () => Promise<Record<string, unknown>>) {
     const s = this.store
-    const mine = groupsAdminOf(me, s.groups)
-    const ids = new Set(mine.map((g) => g.id))
+    let mine = groupsAdminOf(me, s.groups)
+    let ids = new Set(mine.map((g) => g.id))
     const names = (gs: string[]) => gs.map(this.groupName).join(', ')
     const inMine = (u: User) => groupsOf(u, s.groups).some((g) => ids.has(g.id))
+    const label = (x: Permission) => PERMISSIONS.find((y) => y.id === x)?.label ?? x
+    const held = this.permissions(me)
     const view = () => ({
-      groups: mine.map((g) => ({ id: g.id, name: g.name, permissions: g.permissions.map((x) => PERMISSIONS.find((y) => y.id === x)?.label ?? x) })),
+      groups: mine.map((g) => ({
+        id: g.id,
+        name: g.name,
+        ...(g.description ? { description: g.description } : {}),
+        permissions: g.permissions.map(label),
+        // Theirs to rename, remove and set what it may do (the ids, to tick).
+        ...(g.createdBy === me.id ? { made: true, may: g.permissions } : {}),
+      })),
+      // What a group they make may be let do: what they may do themselves.
+      ...(held.has('groups.create') ? { canMake: true, grantable: PERMISSIONS.filter((x) => held.has(x.id)) } : {}),
       people: s.users.filter(inMine).map((u) => {
         const via = groupsOf(u, s.groups).filter((g) => ids.has(g.id) && !u.groups.includes(g.id))
         return {
@@ -467,6 +484,62 @@ export class Accounts {
     const chosen = (raw: unknown) => (Array.isArray(raw) ? [...new Set(raw.filter((g): g is string => typeof g === 'string' && ids.has(g)))] : [])
 
     if (!p[0] && m === 'GET') return json(res, 200, view())
+
+    if (p[0] === 'groups') {
+      // A group may only be let do what its maker may do. Something an admin added that they can't
+      // do themselves stays as it is: it's not theirs to give or take away.
+      const allowed = (raw: unknown, had: Permission[] = []) => {
+        const want = new Set(Array.isArray(raw) ? raw.filter(isPermission) : had)
+        return PERMISSIONS.map((x) => x.id).filter((x) => (held.has(x) ? want.has(x) : had.includes(x)))
+      }
+      const refresh = () => {
+        mine = groupsAdminOf(me, s.groups)
+        ids = new Set(mine.map((g) => g.id))
+      }
+      if (!p[1] && m === 'POST') {
+        if (!held.has('groups.create')) return json(res, 403, { error: 'You can’t make groups on this server' })
+        if (s.groups.filter((g) => g.createdBy === me.id).length >= MAX_OWN_GROUPS) return json(res, 409, { error: `You’ve made ${MAX_OWN_GROUPS} groups, the most anyone can. Remove one first.` })
+        const b = await read()
+        const name = typeof b.name === 'string' ? b.name.trim() : ''
+        if (!name) return json(res, 400, { error: 'Give the group a name' })
+        const g = s.addGroup({ name, description: typeof b.description === 'string' ? b.description.trim() : undefined, permissions: allowed(b.permissions), admins: [me.id], createdBy: me.id })
+        // Its maker is in it too.
+        s.updateUser(me.id, { groups: [...me.groups, g.id] })
+        const v = this.groupView(g)
+        this.log(req, me, {
+          action: 'group.add',
+          target: { kind: 'group', id: g.id, name: g.name },
+          changes: changesOf({}, v),
+          text: `${me.name} made the group ${g.name}: may ${v.permissions.join(', ') || 'do nothing extra'}`,
+        })
+        refresh()
+        return json(res, 201, { made: g.id, ...view() })
+      }
+      const g = mine.find((x) => x.id === p[1])
+      if (!g) return json(res, 404, { error: 'No such group of yours' })
+      if (g.createdBy !== me.id) return json(res, 403, { error: 'An admin made this group, so only an admin can change it' })
+      if (!p[2] && m === 'PATCH') {
+        const b = await read()
+        const before = this.groupView(g)
+        s.updateGroup(g.id, {
+          ...(typeof b.name === 'string' && b.name.trim() ? { name: b.name } : {}),
+          ...(typeof b.description === 'string' ? { description: b.description.trim() || undefined } : {}),
+          ...(Array.isArray(b.permissions) ? { permissions: allowed(b.permissions, g.permissions) } : {}),
+        })
+        const changes = changesOf(before, this.groupView(g))
+        if (Object.keys(changes).length) this.log(req, me, { action: 'group.change', target: { kind: 'group', id: g.id, name: g.name }, changes, text: `${me.name} changed the group ${before.name}: ${changeText(changes)}` })
+        return json(res, 200, view())
+      }
+      if (!p[2] && m === 'DELETE') {
+        const v = this.groupView(g)
+        s.removeGroup(g.id)
+        this.log(req, me, { action: 'group.remove', target: { kind: 'group', id: g.id, name: g.name }, text: `${me.name} removed the group ${g.name}${v.members.length ? ` (members: ${v.members.join(', ')})` : ''}` })
+        refresh()
+        return json(res, 200, view())
+      }
+      return json(res, 405, { error: 'Method not allowed' })
+    }
+
     if (p[0] !== 'people') return json(res, 404, { error: 'Not found' })
 
     if (!p[1] && m === 'POST') {

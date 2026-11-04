@@ -60,10 +60,10 @@ export function AccountMenu({ onAdmin }: { onAdmin: () => void }) {
               </button>
             </li>
           )}
-          {!!ws.account?.groupAdmin?.length && (
+          {user.role !== 'admin' && (!!ws.account?.groupAdmin?.length || ws.account?.permissions.includes('groups.create')) && (
             <li role="none">
               <button role="menuitem" onClick={pick(() => setDialog('groups'))}>
-                Group admin…
+                Your groups…
               </button>
             </li>
           )}

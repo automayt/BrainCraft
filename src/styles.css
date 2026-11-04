@@ -13168,6 +13168,39 @@ button.on,
   gap: 4px;
 }
 
+.team-groups .group-card {
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.team-groups .group-head {
+  align-items: center;
+  gap: 12px;
+}
+
+/* A group they made: its name is edited where it's shown. */
+.group-name {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  margin-left: -6px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+}
+
+.group-name:hover {
+  border-color: var(--border);
+}
+
+.group-name:focus {
+  border-color: var(--border-strong);
+  background: var(--canvas);
+}
+
 /* The wall themes: the dark and light palettes above, with the board a green-tinted graphite
    (dark) or pale sage (light) and the panels one step off it. */
 :root[data-theme='wall-dark'] {

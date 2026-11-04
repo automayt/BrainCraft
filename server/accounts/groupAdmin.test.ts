@@ -160,3 +160,60 @@ describe('who a group admin looks after', () => {
     expect(looksAfter(bob, bob, groups)).toBe(false)
   })
 })
+
+describe('making groups', () => {
+  type Mine = { id: string; name: string; made?: boolean; may?: string[] }
+  const mine = async (a: Accounts, cookie: string) => (await call(a, 'GET', '/api/team', undefined, { cookie })).body as { groups: Mine[]; canMake?: boolean; grantable?: { id: string }[] }
+
+  it('lets people with “Make groups” start and run their own, never giving more than they have', async () => {
+    const { a, ann, design, sales, bob, cara, dan } = await setup()
+    // Everyone may do nothing extra here, so Dan has only what Sales gives.
+    await call(a, 'PATCH', '/api/admin/groups/everyone', { permissions: [] }, { cookie: ann })
+    expect((await call(a, 'POST', '/api/team/groups', { name: 'Hikers' }, { cookie: dan.cookie })).status).toBe(403)
+    await call(a, 'PATCH', `/api/admin/groups/${sales}`, { permissions: ['boards.create', 'groups.create'] }, { cookie: ann })
+    const before = await mine(a, dan.cookie)
+    expect(before.canMake).toBe(true)
+    expect(before.grantable?.map((x) => x.id)).toEqual(['boards.create', 'groups.create'])
+
+    const made = await call(a, 'POST', '/api/team/groups', { name: '  Hikers ', permissions: ['boards.create', 'ai.use'] }, { cookie: dan.cookie })
+    expect(made.status).toBe(201)
+    const hikers = made.body.made as string
+    // Dan runs it, is in it, and it may only do what Dan may.
+    expect(made.body.groups).toContainEqual(expect.objectContaining({ id: hikers, name: 'Hikers', made: true, may: ['boards.create'] }))
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie: dan.cookie })).body.groupAdmin).toEqual([{ id: hikers, name: 'Hikers' }])
+    expect(a.store.user(dan.id)?.groups).toContain(hikers)
+    expect(a.store.groups.find((g) => g.id === hikers)).toMatchObject({ admins: [dan.id], createdBy: dan.id })
+
+    // He adds a friend by email, like any group admin.
+    expect((await call(a, 'POST', '/api/team/people', { email: 'cara@x.org', groups: [hikers] }, { cookie: dan.cookie })).body.existing).toBe(true)
+    expect(a.store.user(cara.id)?.groups).toContain(hikers)
+
+    // He can't hand out what he doesn't have, nor take away what an admin added.
+    await call(a, 'PATCH', `/api/team/groups/${hikers}`, { name: 'Walkers', permissions: ['people.see'] }, { cookie: dan.cookie })
+    expect(a.store.groups.find((g) => g.id === hikers)).toMatchObject({ name: 'Walkers', permissions: [] })
+    // (Out of it himself, so the group's own permissions don't count as his.)
+    await call(a, 'PATCH', `/api/admin/groups/${hikers}`, { permissions: ['ai.use'], members: [cara.id] }, { cookie: ann })
+    await call(a, 'PATCH', `/api/team/groups/${hikers}`, { permissions: ['boards.create'] }, { cookie: dan.cookie })
+    expect(a.store.groups.find((g) => g.id === hikers)?.permissions).toEqual(['boards.create', 'ai.use'])
+
+    // Nobody else's groups: not Bob's, and Bob not Dan's; an admin's group stays the admin's.
+    expect((await call(a, 'PATCH', `/api/team/groups/${design}`, { name: 'Mine' }, { cookie: dan.cookie })).status).toBe(404)
+    expect((await call(a, 'DELETE', `/api/team/groups/${hikers}`, undefined, { cookie: bob.cookie })).status).toBe(404)
+    expect((await call(a, 'PATCH', `/api/team/groups/${design}`, { name: 'Mine' }, { cookie: bob.cookie })).status).toBe(403)
+    // Running a group isn't making one.
+    expect((await call(a, 'POST', '/api/team/groups', { name: 'Bob’s' }, { cookie: bob.cookie })).status).toBe(403)
+
+    // Removing it takes everyone out of it.
+    expect((await call(a, 'DELETE', `/api/team/groups/${hikers}`, undefined, { cookie: dan.cookie })).status).toBe(200)
+    expect(a.store.groups.some((g) => g.id === hikers)).toBe(false)
+    expect(a.store.user(cara.id)?.groups).not.toContain(hikers)
+  })
+
+  it('needs a name, and stops at a limit', async () => {
+    const { a, ann, sales, dan } = await setup()
+    await call(a, 'PATCH', `/api/admin/groups/${sales}`, { permissions: ['groups.create'] }, { cookie: ann })
+    expect((await call(a, 'POST', '/api/team/groups', { name: ' ' }, { cookie: dan.cookie })).status).toBe(400)
+    for (let k = 0; k < 20; k++) expect((await call(a, 'POST', '/api/team/groups', { name: `G${k}` }, { cookie: dan.cookie })).status).toBe(201)
+    expect((await call(a, 'POST', '/api/team/groups', { name: 'One more' }, { cookie: dan.cookie })).status).toBe(409)
+  })
+})

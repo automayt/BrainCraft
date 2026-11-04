@@ -744,6 +744,8 @@ shares live exactly like a board.
 - **Group admins** add people to the groups they look after (and look after
   people only in those groups) without being admins: they don't see other
   groups, everyone's boards or the rest of the admin screen.
+- With **Make groups**, people start groups of their own (a trip, a club) and
+  run them, letting them do only what they may do themselves.
 - Every board has an **owner** and an **Access** list of people and groups who
   can view, edit or manage it; the secret share links stop working.
 - Sign in with a password, or **single sign-on** with any OpenID Connect

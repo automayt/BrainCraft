@@ -325,6 +325,7 @@ function cleanGroup(g: Omit<Group, 'id'>): Omit<Group, 'id'> {
     ...(g.ssoGroups?.length ? { ssoGroups: [...new Set(g.ssoGroups.map((s) => String(s).trim()).filter(Boolean))].slice(0, 50) } : {}),
     // Everyone has no group admins: they'd look after every account on the server.
     ...(g.admins?.length && !g.everyone ? { admins: [...new Set(g.admins.filter((s) => typeof s === 'string' && s))].slice(0, 50) } : {}),
+    ...(g.createdBy && !g.everyone ? { createdBy: String(g.createdBy) } : {}),
     ...(g.everyone ? { everyone: true as const } : {}),
   }
 }

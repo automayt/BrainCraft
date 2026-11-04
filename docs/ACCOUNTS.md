@@ -40,11 +40,13 @@ Either:
 | Share boards | give other people and groups access to boards they manage |
 | Use the AI assistant | use the server's AI (see [AI.md](AI.md)) |
 | See everyone | find people and groups by name when sharing (otherwise only an exact email finds someone) |
+| Make groups | start groups of their own and run them (see [Making groups](#making-groups)) |
 
 Everyone signed in is in the built-in **Everyone** group, which starts with
 *Make boards*, *Share boards*, *See everyone* and *Use the AI assistant*, so
 friends can start planning together without an admin; take some away to suit
-an organisation. (Servers set up before November 2026 started with only *Make
+an organisation. *Make groups* is off until an admin ticks it, for Everyone or
+for some groups, because it lets people add new accounts. (Servers set up before November 2026 started with only *Make
 boards* and *Use the AI assistant*; tick the other two in **Admin… → Groups**
 to match.) A person's permissions are their groups' together.
 
@@ -62,7 +64,7 @@ permissions.
 
 Make someone a group admin when they should add people to their own team
 without seeing the rest of the server. In **Admin… → Groups**, pick them under
-**Group admins** on each group they look after. They then have **Group admin…**
+**Group admins** on each group they look after. They then have **Your groups…**
 in their account menu, where they:
 
 - see the groups they run (and what each may do) and the people in them; only
@@ -77,10 +79,27 @@ in their account menu, where they:
   be taken over this way. Emails listed in `BRAINCRAFT_ADMINS` can't be set up
   by a group admin at all.
 
-They can't make or remove groups, change what a group may do, choose group
-admins, remove accounts, or open the rest of the admin screen, and they see
-only the boards shared with them. Everything they do is in the activity log as
-"(group admin)". The Everyone group has no group admins.
+They can't change what an admin's group may do, choose group admins, remove
+accounts, or open the rest of the admin screen, and they see only the boards
+shared with them. Unless they have *Make groups*, they can't make or remove
+groups either. Everything they do is in the activity log as "(group admin)".
+The Everyone group has no group admins.
+
+### Making groups
+
+With *Make groups*, anyone can start a group from **Your groups…** in their
+account menu: a circle of friends for a trip, a club, a side project. Whoever
+makes a group is in it and is its group admin, so they add people to it (new
+accounts too, by email) as above. For a group they made, they also:
+
+- rename it, or remove it (its members keep their accounts, and boards shared
+  with the group aren't shared with them any more);
+- tick what it may do, out of **what they may do themselves**: someone who
+  can't use the AI can't make a group that can. Anything an admin lets their
+  group do beyond that stays as it is.
+
+Admins see who made each group in **Admin… → Groups**, and can change or remove
+it like any other. One person can make up to 20 groups.
 
 ## Board access
 

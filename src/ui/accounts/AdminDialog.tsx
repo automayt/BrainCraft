@@ -467,7 +467,10 @@ function GroupRow({ group: g, data, run, api }: Props & { group: Group }) {
   return (
     <li className="group-card">
       <div className="group-head">
-        <strong>{g.name}</strong>
+        <strong>
+          {g.name}
+          {g.createdBy && <small className="muted"> · made by {data.users.find((u) => u.id === g.createdBy)?.name ?? 'someone since removed'}</small>}
+        </strong>
         {g.everyone ? (
           <small className="muted">every signed-in person</small>
         ) : (

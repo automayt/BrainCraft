@@ -5,13 +5,14 @@
  */
 
 /** What a group lets its members do. Admins can do everything. */
-export type Permission = 'boards.create' | 'boards.share' | 'ai.use' | 'people.see'
+export type Permission = 'boards.create' | 'boards.share' | 'ai.use' | 'people.see' | 'groups.create'
 
 export const PERMISSIONS: { id: Permission; label: string; hint: string }[] = [
   { id: 'boards.create', label: 'Make boards', hint: 'Start new boards and wikis on the server' },
   { id: 'boards.share', label: 'Share boards', hint: 'Give other people and groups access to boards they manage' },
   { id: 'ai.use', label: 'Use the AI assistant', hint: 'Through this server’s AI' },
   { id: 'people.see', label: 'See everyone', hint: 'Find people and groups by name when sharing (otherwise type an exact email)' },
+  { id: 'groups.create', label: 'Make groups', hint: 'Start groups of their own and run them: add people (new accounts too) and let the group do what they may do' },
 ]
 
 export const isPermission = (v: unknown): v is Permission => PERMISSIONS.some((p) => p.id === v)
@@ -51,6 +52,8 @@ export interface Group {
    * turning accounts off), without seeing other groups or changing what this one may do.
    */
   admins?: string[]
+  /** Who made it, when someone with "Make groups" did (not an admin): they may rename it, change what it may do, or remove it. */
+  createdBy?: string
   /** The group every signed-in person is in. */
   everyone?: true
 }

@@ -18,7 +18,7 @@ describe('who may do what', () => {
     expect([...permissionsOf(user({ groups: ['planners'] }), groups)].sort()).toEqual(['ai.use', 'boards.create', 'boards.share'])
     // A group from the sign-in provider counts, whatever its case.
     expect(groupsOf(user({ ssoGroups: ['staff-all'] }), groups).map((g) => g.id)).toEqual(['everyone', 'staff'])
-    expect(permissionsOf(user({ role: 'admin' }), groups).size).toBe(4)
+    expect(permissionsOf(user({ role: 'admin' }), groups).size).toBe(5)
     expect(permissionsOf(user({ role: 'admin', disabled: true }), groups).size).toBe(0)
   })
 

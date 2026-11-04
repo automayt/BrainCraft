@@ -5,7 +5,7 @@
  * `X-BrainCraft: 1`, which the server asks for so other sites can't act for you.
  */
 
-export type Permission = 'boards.create' | 'boards.share' | 'ai.use' | 'people.see'
+export type Permission = 'boards.create' | 'boards.share' | 'ai.use' | 'people.see' | 'groups.create'
 export type Level = 'view' | 'edit' | 'manage'
 
 export interface AccountUser {
@@ -88,6 +88,8 @@ export interface Group {
   ssoGroups?: string[]
   /** Its group admins' ids. */
   admins?: string[]
+  /** Who made it, when someone with "Make groups" did. */
+  createdBy?: string
   everyone?: true
 }
 
@@ -110,9 +112,25 @@ export interface TeamPerson {
 }
 
 /** What a group admin sees: their groups and the people in them. */
+export interface TeamGroup {
+  id: string
+  name: string
+  description?: string
+  /** What it may do, in words. */
+  permissions: string[]
+  /** They made it (with "Make groups"), so they may rename it, remove it and set what it may do. */
+  made?: true
+  may?: Permission[]
+}
+
 export interface TeamData {
-  groups: { id: string; name: string; permissions: string[] }[]
+  groups: TeamGroup[]
+  /** They may make groups, letting them do any of `grantable` (what they may do themselves). */
+  canMake?: true
+  grantable?: { id: Permission; label: string; hint: string }[]
   people: TeamPerson[]
+  /** After making a group: its id. */
+  made?: string
   /** After adding someone: their name, a set-your-password link for a new account, or that they had one. */
   added?: string
   link?: string
