@@ -1,9 +1,16 @@
-import { type PointerEvent, useContext, useRef, useState } from 'react'
+import { type PointerEvent, useContext, useEffect, useRef, useState } from 'react'
 import * as K from '../../model/kanban'
 import { today, toDay } from '../../model/timeline'
 import { FILLS, type Item, type KanbanCard, type KanbanData } from '../../model/types'
 import { EditorContext } from '../useEditor'
+import { lift, type Lifted } from './liftedCard'
 import { Menu, Widget } from './Widget'
+
+interface Place {
+  column: string
+  /** Among the column's other cards (not the one being dragged). */
+  index: number
+}
 
 interface DragState {
   card: string
@@ -11,7 +18,13 @@ interface DragState {
   startX: number
   startY: number
   moved: boolean
-  target: { column: string; index: number } | null
+  /** Where it came from, and goes back to if it's let go off the columns or Esc is pressed. */
+  from: Place
+  target: Place | null
+  /** Its height, for the gap that opens where it will land. */
+  height: number
+  /** Let go: gliding into its place. */
+  landing?: boolean
 }
 
 function shortDate(iso: string): string {
@@ -48,33 +61,95 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
   const [adding, setAdding] = useState<string | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
   const dragRef = useRef<DragState | null>(null)
+  const lifted = useRef<Lifted | null>(null)
+  const stopDrag = useRef<(() => void) | null>(null)
   const now = today()
   const lastCol = k.columns.length - 1
 
-  const onCardDown = (e: PointerEvent, card: KanbanCard) => {
+  // Gone mid-drag (deleted by someone else, say): the floating card goes too.
+  useEffect(
+    () => () => {
+      stopDrag.current?.()
+      lifted.current?.drop(null, () => {})
+    },
+    [],
+  )
+
+  const setDragState = (d: DragState | null) => {
+    dragRef.current = d
+    setDrag(d)
+  }
+  /** A column's cards, without the one being dragged. */
+  const others = (cards: KanbanCard[]) => cards.filter((c) => !(drag?.moved && c.id === drag.card))
+
+  /**
+   * Picks a card up: past a few pixels it lifts off and follows the pointer, a gap opening where it
+   * would land; let go, it glides into that gap and moves there.
+   */
+  const onCardDown = (e: PointerEvent, card: KanbanCard, from: Place) => {
     if (editor.readOnly || e.button !== 0 || (e.target as Element).closest('button, input, textarea')) return
     // Cards drag on the first press, even before the board is selected (instead of moving the whole board).
     e.stopPropagation()
     if (!live) editor.select([item.id])
-    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
-    const d = { card: card.id, pointer: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, target: null }
-    dragRef.current = d
-    setDrag(d)
-  }
-  const onCardMove = (e: PointerEvent) => {
-    const d = dragRef.current
-    if (!d || d.pointer !== e.pointerId) return
-    const moved = d.moved || Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 4
-    const next = { ...d, moved, target: moved ? dropTarget(e.clientX, e.clientY, d.card) : null }
-    dragRef.current = next
-    setDrag(next)
-  }
-  const onCardUp = (e: PointerEvent) => {
-    const d = dragRef.current
-    if (!d || d.pointer !== e.pointerId) return
-    dragRef.current = null
-    setDrag(null)
-    if (d.moved && d.target) update((x) => K.moveCard(x, d.card, d.target!.column, d.target!.index))
+    const el = e.currentTarget as HTMLElement
+    const board = el.closest('.kanban-columns')
+    el.setPointerCapture(e.pointerId)
+    setDragState({ card: card.id, pointer: e.pointerId, startX: e.clientX, startY: e.clientY, moved: false, from, target: null, height: el.offsetHeight })
+
+    const move = (ev: globalThis.PointerEvent) => {
+      const d = dragRef.current
+      if (!d || d.pointer !== ev.pointerId || d.landing) return
+      if (!d.moved) {
+        if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) <= 4) return
+        lifted.current = lift(el, d.startX, d.startY, editor.camera.zoom)
+        document.documentElement.classList.add('card-grabbing')
+      }
+      lifted.current?.move(ev.clientX, ev.clientY)
+      // Between two columns the gap stays where it was; off the board altogether, it goes back home.
+      const over = dropTarget(ev.clientX, ev.clientY, d.card)
+      const onBoard = !!board && document.elementsFromPoint(ev.clientX, ev.clientY).includes(board)
+      setDragState({ ...d, moved: true, target: over ?? (onBoard ? (d.target ?? d.from) : d.from) })
+    }
+    const finish = (back: boolean) => {
+      stop()
+      const d = dragRef.current
+      if (!d) return
+      if (!d.moved) return setDragState(null)
+      const to = back ? d.from : (d.target ?? d.from)
+      setDragState({ ...d, target: to, landing: true })
+      // Once the gap is drawn where it lands, the card glides into it.
+      requestAnimationFrame(() => {
+        const gap = document.querySelector(`[data-gap="${item.id}"]`)?.getBoundingClientRect() ?? null
+        const card = lifted.current
+        const land = () => {
+          lifted.current = null
+          setDragState(null)
+          if (to.column !== d.from.column || to.index !== d.from.index) update((x) => K.moveCard(x, d.card, to.column, to.index))
+        }
+        if (card) card.drop(gap, land)
+        else land()
+      })
+    }
+    const up = (ev: globalThis.PointerEvent) => ev.pointerId === dragRef.current?.pointer && finish(ev.type === 'pointercancel')
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape' || !dragRef.current?.moved) return
+      ev.preventDefault()
+      ev.stopPropagation()
+      finish(true)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('keydown', key, true)
+      document.documentElement.classList.remove('card-grabbing')
+      stopDrag.current = null
+    }
+    stopDrag.current = stop
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    window.addEventListener('keydown', key, true)
   }
 
   const actions = (
@@ -130,18 +205,17 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
             <div className="kanban-cards">
               {col.cards.map((card, index) => {
                 const overdue = card.due && ci !== lastCol && toDay(card.due) < now
-                const showDrop = drag?.moved && drag.target?.column === col.id && drag.target.index === index
+                const held = drag?.moved && drag.card === card.id
+                // The gap goes before the card it would land in front of, counting the others only.
+                const gapHere = !held && drag?.moved && drag.target?.column === col.id && drag.target.index === others(col.cards).indexOf(card)
                 return (
                   <div key={card.id}>
-                    {showDrop && <div className="drop-line" />}
+                    {gapHere && <div className="drop-gap" data-gap={item.id} style={{ height: drag.height }} />}
                     <article
                       data-card={card.id}
-                      className={`kanban-card${drag?.moved && drag.card === card.id ? ' dragging' : ''}`}
+                      className={`kanban-card${held ? ' dragging' : ''}`}
                       style={{ borderLeftColor: card.color ?? 'transparent' }}
-                      onPointerDown={(e) => onCardDown(e, card)}
-                      onPointerMove={onCardMove}
-                      onPointerUp={onCardUp}
-                      onPointerCancel={onCardUp}
+                      onPointerDown={(e) => onCardDown(e, card, { column: col.id, index })}
                       onDoubleClick={() => live && setEditing(card.id)}
                       tabIndex={live ? 0 : -1}
                       aria-label={`${card.title || 'Untitled'}, in ${col.title}`}
@@ -220,8 +294,8 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                 )
               })}
               {!col.cards.length && !(drag?.moved && drag.target?.column === col.id) && <p className="kanban-empty">{live || editor.readOnly ? 'No cards yet' : 'No cards yet. Select the Kanban to add one'}</p>}
-              {drag?.moved && drag.target?.column === col.id && drag.target.index >= col.cards.filter((c) => c.id !== drag.card).length && (
-                <div className="drop-line" />
+              {drag?.moved && drag.target?.column === col.id && drag.target.index >= others(col.cards).length && (
+                <div className="drop-gap" data-gap={item.id} style={{ height: drag.height }} />
               )}
               {live &&
                 (adding === col.id ? (
