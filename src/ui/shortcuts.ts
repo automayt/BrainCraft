@@ -146,7 +146,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Wikis',
     [
       ['Ctrl O → New wiki', 'Start a wiki: pages in a tree, to write things down together'],
-      ['Edit · double-click the page', 'Write on the page (it saves as you type)'],
+      ['Click the page · Edit', 'Write on the page, where you clicked (it saves as you type)'],
       ['Enter', 'In the title: start writing the page'],
       ['/ (at the start of a line) · Insert', 'Add a heading, checklist, table, sub-page, an embed from a board, or a macro'],
       ['[[', 'While writing: link to a page or a board'],

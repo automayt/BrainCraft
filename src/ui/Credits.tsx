@@ -24,6 +24,7 @@ const FEATURED: [match: RegExp, what: string][] = [
   [/^@excalidraw\/mermaid-to-excalidraw$/, 'Sketching flowcharts in Excalidraw'],
   [/^mermaid$/, 'Reading flowcharts for those sketches'],
   [/^pdfjs-dist$/, 'Reading PDFs kept in a wiki’s Files'],
+  [/^@codemirror\/view$/, 'Writing wiki pages where they’re read'],
   [/^react$/, 'The interface'],
   [/^@fontsource-variable\/instrument-sans$/, 'Instrument Sans, the typeface of the controls'],
   [/^@fontsource-variable\/inter$/, 'Inter, the typeface of words on the board'],

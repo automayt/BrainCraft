@@ -8864,6 +8864,218 @@ html.card-grabbing * {
   outline: none;
 }
 
+.page-editor-source {
+  margin-left: auto;
+}
+
+.page-editor-source.on {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+}
+
+/* Writing where you read: one column, the tools and Done in reach as the page scrolls. */
+.page-editor.live {
+  grid-template-areas: 'write' 'foot';
+}
+
+.page-editor.live .page-editor-tools {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 6px 0;
+  background: var(--canvas);
+}
+
+.page-editor.live .page-editor-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding: 8px 0;
+  background: var(--canvas);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .page-editor.live .page-editor-hint {
+    display: none;
+  }
+}
+
+.live-text {
+  min-height: 50vh;
+  font-family: var(--font-read);
+  font-optical-sizing: auto;
+  font-size: 17px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.live-text .cm-editor {
+  min-height: 50vh;
+  background: transparent;
+}
+
+.live-text .cm-editor.cm-focused {
+  outline: none;
+}
+
+.live-text .cm-scroller {
+  overflow: visible;
+  font: inherit;
+  line-height: inherit;
+}
+
+.live-text .cm-content {
+  padding: 0 0 40px;
+  caret-color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* The page is the field, and the caret shows it has the keyboard: no box round it. */
+.live-text .cm-content:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.live-text .cm-line:first-child {
+  padding-top: 0 !important;
+}
+
+.live-text .cm-line {
+  max-width: 66ch;
+  padding: 0;
+}
+
+/* Padding, not margins: the editor measures lines by their boxes. */
+.lv-h1,
+.lv-h2,
+.lv-h3,
+.lv-h4,
+.lv-h5,
+.lv-h6 {
+  padding-top: 0.9em !important;
+  padding-bottom: 0.2em !important;
+  font-family: var(--font-board);
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+}
+
+.lv-h1 {
+  font-size: 26px;
+}
+
+.lv-h2 {
+  font-size: 21px;
+}
+
+.lv-h3 {
+  font-size: 17px;
+}
+
+.lv-gap {
+  line-height: 0.7;
+}
+
+.lv-b {
+  font-weight: 700;
+}
+
+.lv-i {
+  font-style: italic;
+}
+
+.lv-s {
+  text-decoration: line-through;
+}
+
+.lv-code {
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+}
+
+.lv-a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.lv-chip {
+  padding: 1px 7px;
+  font-family: var(--font-board);
+  font-size: 0.86em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+}
+
+.lv-list,
+.lv-done {
+  padding-left: 1.4em !important;
+  text-indent: -1.1em;
+}
+
+.lv-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.lv-bullet {
+  display: inline-block;
+  width: 1.1em;
+  text-indent: 0;
+}
+
+.lv-tick {
+  width: 15px;
+  height: 15px;
+  margin: 0 0.4em 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.lv-quote {
+  padding-left: 14px !important;
+  color: var(--muted);
+  border-left: 3px solid var(--border-strong);
+}
+
+.lv-note,
+.lv-tip,
+.lv-warning,
+.lv-danger {
+  padding-left: 14px !important;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+}
+
+.lv-warning {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border-left-color: var(--warning);
+}
+
+.lv-danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-left-color: var(--danger);
+}
+
+/* A block with the caret in it, showing its Markdown. */
+.lv-source {
+  max-width: none !important;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 14px;
+  background: var(--surface);
+}
+
+.lv-block {
+  max-width: none;
+  padding: 6px 0;
+  cursor: text;
+}
+
 .page-picker {
   position: absolute;
   top: 40px;

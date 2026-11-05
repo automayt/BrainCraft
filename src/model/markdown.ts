@@ -80,8 +80,22 @@ export function safeHref(url: string): string | null {
 
 const PUNCT_ESCAPE = /[\\`*_{}[\]()#+\-.!|~>@]/
 
-/** Inline Markdown: emphasis, code, links, BrainCraft links and mentions, line breaks. */
-export function parseInline(s: string, depth = 0): Inline[] {
+/** Where a piece of inline Markdown sits in the text: `open` and `close` are how much of each end isn't words. */
+export interface InlineSpan {
+  t: 'b' | 'i' | 's' | 'code' | 'a' | 'chip' | 'mark'
+  from: number
+  to: number
+  open: number
+  close: number
+  /** What a chip says. */
+  label?: string
+}
+
+/**
+ * Inline Markdown: emphasis, code, links, BrainCraft links and mentions, line breaks. With `spans`,
+ * also notes where each piece is in the text, counting from `base`.
+ */
+export function parseInline(s: string, depth = 0, spans?: InlineSpan[], base = 0): Inline[] {
   const out: Inline[] = []
   let text = ''
   const flush = () => {
@@ -93,11 +107,13 @@ export function parseInline(s: string, depth = 0): Inline[] {
     out.push(x)
   }
   // Emphasis inside emphasis is only followed so deep; past that it stays as typed.
-  const nest = (inner: string) => (depth < MAX_DEPTH ? parseInline(inner, depth + 1) : [{ t: 'text' as const, s: inner }])
+  const nest = (inner: string, at: number) => (depth < MAX_DEPTH ? parseInline(inner, depth + 1, spans, base + at) : [{ t: 'text' as const, s: inner }])
+  const span = (t: InlineSpan['t'], from: number, to: number, open: number, close: number, label?: string) => spans?.push({ t, from: base + from, to: base + to, open, close, ...(label !== undefined ? { label } : {}) })
   let i = 0
   while (i < s.length) {
     const ch = s[i]
     if (ch === '\\' && i + 1 < s.length && PUNCT_ESCAPE.test(s[i + 1])) {
+      span('mark', i, i + 2, 1, 0)
       text += s[i + 1]
       i += 2
       continue
@@ -111,6 +127,7 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const end = s.indexOf('`', i + 1)
       if (end > i + 1) {
         push({ t: 'code', s: s.slice(i + 1, end) })
+        span('code', i, end + 1, 1, 1)
         i = end + 1
         continue
       }
@@ -119,13 +136,16 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const m = readMacro(s, i, 200)
       if (m) {
         // One that belongs on a line of its own, or a name BrainCraft doesn't know: shown marked.
-        push({ t: 'macro', name: macroName(m.name), args: parseArgs(m.args), ...(macroInfo(m.name)?.kind === 'inline' ? {} : { raw: s.slice(i, m.end) }) })
+        const macro: Inline = { t: 'macro', name: macroName(m.name), args: parseArgs(m.args), ...(macroInfo(m.name)?.kind === 'inline' ? {} : { raw: s.slice(i, m.end) }) }
+        push(macro)
+        if (!macro.raw) span('chip', i, m.end, 0, 0, inlineText([macro]))
         i = m.end
         continue
       }
     }
     // An embed written inside a sentence shows as a plain link, without its "!".
     if (ch === '!' && s.startsWith('[[', i + 1) && tokenAt(s, i + 1)) {
+      span('mark', i, i + 1, 1, 0)
       i++
       continue
     }
@@ -133,7 +153,9 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const tok = tokenAt(s, i)
       if (tok && !('text' in tok.part)) {
         const p = tok.part
-        push('mention' in p ? { t: 'mention', id: p.mention, label: p.label } : 'person' in p ? { t: 'person', id: p.person, label: p.label } : { t: 'link', to: p.link, label: p.label })
+        const piece: Inline = 'mention' in p ? { t: 'mention', id: p.mention, label: p.label } : 'person' in p ? { t: 'person', id: p.person, label: p.label } : { t: 'link', to: p.link, label: p.label }
+        push(piece)
+        span('chip', i, i + tok.length, 0, 0, inlineText([piece]))
         i += tok.length
         continue
       }
@@ -142,8 +164,10 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const m = /^\[([^\]\n]*)\]\(([^)\s]+)\)/.exec(s.slice(i, i + 2100))
       if (m) {
         const href = safeHref(m[2])
-        if (href) push({ t: 'a', href, c: nest(m[1] || href) })
-        else text += m[1] || m[2]
+        if (href) {
+          push({ t: 'a', href, c: nest(m[1] || href, i + 1) })
+          span('a', i, i + m[0].length, 1, m[0].length - m[1].length - 1)
+        } else text += m[1] || m[2]
         i += m[0].length
         continue
       }
@@ -159,6 +183,7 @@ export function parseInline(s: string, depth = 0): Inline[] {
           url = url.slice(0, -1)
         }
         push({ t: 'a', href: url, c: [{ t: 'text', s: url }] })
+        span('a', i, i + url.length, 0, 0)
         i += url.length
         continue
       }
@@ -168,7 +193,8 @@ export function parseInline(s: string, depth = 0): Inline[] {
       const end = s.indexOf(two, i + 2)
       // Emphasis closes within a reasonable stretch; looking further on every star is what gets slow.
       if (end > i + 2 && end - i < EMPHASIS_REACH && s[i + 2] !== ' ' && s[end - 1] !== ' ') {
-        push({ t: two === '~~' ? 's' : 'b', c: nest(s.slice(i + 2, end)) })
+        push({ t: two === '~~' ? 's' : 'b', c: nest(s.slice(i + 2, end), i + 2) })
+        span(two === '~~' ? 's' : 'b', i, end + 2, 2, 2)
         i = end + 2
         continue
       }
@@ -179,7 +205,8 @@ export function parseInline(s: string, depth = 0): Inline[] {
         let end = s.indexOf(ch, i + 1)
         while (end > 0 && end - i < EMPHASIS_REACH && (s[end - 1] === ' ' || (ch === '_' && /\w/.test(s[end + 1] ?? '')) || s[end + 1] === ch)) end = s.indexOf(ch, end + (s[end + 1] === ch ? 2 : 1))
         if (end > i + 1 && end - i < EMPHASIS_REACH) {
-          push({ t: 'i', c: nest(s.slice(i + 1, end)) })
+          push({ t: 'i', c: nest(s.slice(i + 1, end), i + 1) })
+          span('i', i, end + 1, 1, 1)
           i = end + 1
           continue
         }
@@ -246,7 +273,7 @@ export function slugify(text: string): string {
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)/
 // Linear on purpose: a lazy group before trailing spaces and #s took minutes on one long line.
-const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
+export const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
 
 /** A heading's words without the closing #s some people write (`## Plan ##`), scanned by hand. */
 function headingText(raw: string): string {
@@ -259,8 +286,8 @@ function headingText(raw: string): string {
   return raw.slice(0, end).trim()
 }
 const HR = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
-const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
-const QUOTE = /^ {0,3}> ?(.*)$/
+export const LIST = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/
+export const QUOTE = /^ {0,3}> ?(.*)$/
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
 /** A macro on a line of its own: `{{name options}}`, and the line that closes one around others. */
 const MACRO_END = /^\s*\{\{\s*\/([a-zA-Z][\w-]{0,30})\s*\}\}\s*$/

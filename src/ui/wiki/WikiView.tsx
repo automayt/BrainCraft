@@ -27,6 +27,7 @@ import { useEditor } from '../useEditor'
 import { useWorkspace } from '../useWorkspace'
 import { Markdown, type MarkdownActions, smoothScroll } from './Markdown'
 import { PageEditor } from './PageEditor'
+import type { PageSpot } from './textSurface'
 import { PageTree } from './PageTree'
 import { FilesDialog } from './FilesDialog'
 import { ObjectEmbed } from './ObjectEmbed'
@@ -246,7 +247,27 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
     titleRef.current?.focus()
     titleRef.current?.select()
   }, [editor, ro, page.id])
+  /** Where a click on the page landed, so writing starts there. */
+  const [startAt, setStartAt] = useState<PageSpot | undefined>()
+  const writeFrom = (e: React.MouseEvent<HTMLElement>) => {
+    // The page's blocks are drawn in order, so the one clicked says which line it came from.
+    const drawn = [...(e.currentTarget.querySelector('.md')?.children ?? [])]
+    const k = drawn.findIndex((el) => el.contains(e.target as Node))
+    const top = (drawn[k] ?? e.currentTarget).getBoundingClientRect().top
+    setStartAt({ line: blocks[k]?.line ?? 0, x: e.clientX, top, y: e.clientY - top })
+    setEditing(true)
+  }
+  // A click writes where it lands, but a press on a touch screen is usually for scrolling, and
+  // popping up the keyboard then would get in the way: there it's a double tap, or Edit.
+  const fine = useMedia('(pointer: fine)')
+  const onPageClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (ro || !fine || e.button !== 0 || e.detail !== 1) return
+    if ((e.target as Element).closest('a, button, input, select, textarea, summary, label, .embed, img, canvas, svg')) return
+    if (!window.getSelection()?.isCollapsed) return
+    writeFrom(e)
+  }
   const doneEditing = () => {
+    setStartAt(undefined)
     setEditing(false)
     // Back to where writing started from, not the top of the page.
     requestAnimationFrame(() => document.querySelector<HTMLElement>('.wiki-page-actions .primary')?.focus())
@@ -467,9 +488,9 @@ function PageView({ page, editing, setEditing }: { page: Page; editing: boolean;
       </header>
 
       {editing ? (
-        <PageEditor key={page.id} page={page} text={text} actions={actions} onDone={doneEditing} />
+        <PageEditor key={page.id} page={page} text={text} actions={actions} start={startAt} onDone={doneEditing} />
       ) : text.trim() ? (
-        <div className="wiki-body" onDoubleClick={(e) => !ro && !(e.target as Element).closest('a, button, input') && setEditing(true)}>
+        <div className="wiki-body" onClick={onPageClick} onDoubleClick={(e) => !ro && !(e.target as Element).closest('a, button, input') && writeFrom(e)}>
           <Markdown blocks={blocks} actions={actions} />
         </div>
       ) : (

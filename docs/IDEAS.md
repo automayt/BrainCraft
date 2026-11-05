@@ -498,7 +498,7 @@ round:
 
 Still to do, biggest first:
 
-- [ ] **Write where you read:** type straight into the page, Markdown
+- [x] **Write where you read:** type straight into the page, Markdown
   shortcuts turning into formatting as you go, links and embeds as named
   chips; Markdown stays the stored format and a toggle for those who want it.
 - [x] **A touch-sized selection bar:** under 480px, one row docked at the

@@ -418,9 +418,15 @@ shares live exactly like a board.
   it on a phone, where the list is behind **☰ Pages**). Undo and redo sit at
   the top of the list. Deleted pages go to the **Trash**, with their
   sub-pages, until you delete them for good.
-- **Writing:** **Edit** (or double-click the page) opens the page's Markdown
-  in the same face and size it's read in, with **Preview** beside it on a
-  wide page (or a tab away).
+- **Writing:** click the page and type, right where you clicked (on a phone,
+  double-tap it or press **Edit**). Markdown turns into formatting as you go:
+  `## ` makes a heading, `- ` a bullet, `- [ ] ` a box to tick, and `**` round a
+  word makes it bold, with the marks back in view when the caret is inside
+  them. Links, mentions and embeds show by name and are deleted as one; click a
+  table or some code to change its Markdown. The page is still stored as
+  Markdown, exactly as typed, and **Markdown** in the tools shows that text
+  with a preview beside it on a wide page (or a tab away). It remembers which
+  you prefer.
 - **Pictures:** paste or drop a photo while writing, or **/ → Picture…**. It
   goes in the wiki's Files and shows on the page at the column's width, with
   its caption under it (`![Caption](file:ID)` in the Markdown); exports

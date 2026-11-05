@@ -340,7 +340,7 @@ ${embed('Present this board', 'show', 300)}`,
         {
           title: 'Writing pages',
           icon: '✍️',
-          text: `**Edit** (or double-click the page) shows the Markdown beside how it reads. It saves as you type; **Done** or **Esc** when you're finished, with a note in **What did you change?** if you like.
+          text: `Click the page and type (on a phone, double-tap it or press **Edit**). \`##\` and a space makes a heading, \`- \` a list and \`**\` around a word makes it bold, there and then; click a table or some code to change it, and links show by name. **Markdown** in the tools shows the plain text beside how it reads, for those who like it. It saves as you type; **Done** or **Esc** when you're finished, with a note in **What did you change?** if you like.
 
 {{toc}}
 

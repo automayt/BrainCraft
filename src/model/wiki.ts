@@ -33,7 +33,7 @@ export function emptyWiki(title = 'Untitled wiki', now = Date.now()): Board {
     ...emptyBoard(title),
     kind: 'wiki',
     pages: [home],
-    bodies: [{ id: home.id, text: `# ${title}\n\nStart writing here: press Edit, or double-click the page.\n\n- Type / at the start of a line for headings, checklists, tables and things from your boards\n- Type [[ to link to another page\n- Add more pages in the page list\n`, at: now }],
+    bodies: [{ id: home.id, text: `# ${title}\n\nStart writing here: click the page and type.\n\n- Type / at the start of a line for headings, checklists, tables and things from your boards\n- Type [[ to link to another page\n- Add more pages in the page list\n`, at: now }],
   }
 }
 

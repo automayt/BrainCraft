@@ -1,4 +1,4 @@
-import { type CSSProperties, type KeyboardEvent, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, Suspense, lazy, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { continueList, imageToken, parseMarkdown, toggleTask } from '../../model/markdown'
 import { merge3 } from '../../model/merge'
 import { linkToken, personCandidates, personToken } from '../../model/notes'
@@ -11,8 +11,20 @@ import { Markdown, type MarkdownActions } from './Markdown'
 import { EmbedPicker } from './EmbedPicker'
 import { embedToken, makeSnap } from '../../model/embed'
 import { saveMissingCopies } from './embedCopies'
-import { caretPoint } from '../caretPoint'
 import { MACROS } from '../../model/macros'
+import { type PageSpot, type TextSurface, textareaSurface } from './textSurface'
+
+// Loaded with the first page written, not with the app.
+const LiveText = lazy(() => import('./LiveText'))
+
+const SOURCE_KEY = 'braincraft:page-markdown'
+const wantsMarkdown = () => {
+  try {
+    return localStorage.getItem(SOURCE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 interface SlashItem {
   label: string
@@ -59,12 +71,18 @@ interface Pick {
   token: string
 }
 
+/** The parts of a key press writing needs, from either way of writing. */
+type Key = { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; preventDefault(): void; stopPropagation(): void }
+type Pasted = { clipboardData: DataTransfer | null; preventDefault(): void }
+type Dropped = { dataTransfer: DataTransfer | null; preventDefault(): void; stopPropagation(): void }
+
 /**
- * Writing a page: Markdown on the left, how it reads on the right (tabs on narrow screens).
+ * Writing a page: in place, as it reads (LiveText), or for those who want it, Markdown on the left
+ * and how it reads on the right (tabs on narrow screens). Either way the text is Markdown.
  * Typing stays in a local draft and goes out a moment after you pause; a friend's change to the
  * page comes in whenever there's nothing of yours still waiting to go.
  */
-export function PageEditor({ page, text, actions, onDone }: { page: Page; text: string; actions: MarkdownActions; onDone: () => void }) {
+export function PageEditor({ page, text, actions, start, onDone }: { page: Page; text: string; actions: MarkdownActions; start?: PageSpot; onDone: () => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [draft, setDraft] = useState(text)
@@ -74,7 +92,12 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const [slash, setSlash] = useState<{ from: number; query: string; k: number } | null>(null)
   /** Where an embed being picked goes. */
   const [embedAt, setEmbedAt] = useState<number | null>(null)
-  const area = useRef<HTMLTextAreaElement>(null)
+  const [source, setSource] = useState(wantsMarkdown)
+  const area = useRef<TextSurface | null>(null)
+  const textarea = useCallback((el: HTMLTextAreaElement | null) => {
+    if (el) area.current = textareaSurface(el)
+  }, [])
+  const writing = useRef<HTMLDivElement>(null)
   /** The picture chooser, and where its pictures go in the text. */
   const pictureInput = useRef<HTMLInputElement>(null)
   const pictureAt = useRef(0)
@@ -134,7 +157,16 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     window.addEventListener('pagehide', flush)
     return () => window.removeEventListener('pagehide', flush)
   })
-  useEffect(() => area.current?.focus({ preventScroll: true }), [page.id])
+  useEffect(() => area.current?.focus({ preventScroll: true }), [page.id, source])
+
+  const switchTo = (markdown: boolean) => {
+    setSource(markdown)
+    try {
+      localStorage.setItem(SOURCE_KEY, markdown ? '1' : '0')
+    } catch {
+      // Only a preference: it just won't be remembered.
+    }
+  }
 
   const change = (value: string, caret?: number) => {
     setDraft(value)
@@ -162,7 +194,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     return [...pages, ...boards, ...fresh]
   }, [pick, editor.board, ws.otherBoards, ws.peopleToMention, page.id])
 
-  const track = (el: HTMLTextAreaElement) => {
+  const track = (el: TextSurface) => {
     const caret = el.selectionStart
     const before = el.value.slice(0, caret)
     const m = /\[\[([^[\]\n]{0,60})$/.exec(before)
@@ -238,7 +270,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     const [a, z] = [el.selectionStart, el.selectionEnd]
     const inner = draft.slice(a, z) || 'text'
     change(draft.slice(0, a) + mark + inner + mark + draft.slice(z))
-    requestAnimationFrame(() => el.setSelectionRange(a + mark.length, a + mark.length + inner.length))
+    requestAnimationFrame(() => area.current?.setSelectionRange(a + mark.length, a + mark.length + inner.length))
   }
 
   /** Tab and Shift Tab indent and outdent the selected lines (for nested lists). */
@@ -259,7 +291,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     })
     const next = draft.slice(0, start) + changed.join('\n') + draft.slice(z)
     change(next)
-    requestAnimationFrame(() => el.setSelectionRange(Math.max(start, a + shift), z + (next.length - draft.length)))
+    requestAnimationFrame(() => area.current?.setSelectionRange(Math.max(start, a + shift), z + (next.length - draft.length)))
   }
 
   /** Keeps pictures in the wiki's files and puts them in the text at `at`, each on a line of its own. */
@@ -276,7 +308,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     editor.setStatus(ids.length === 1 ? 'Added the picture (it’s in the wiki’s Files too)' : `Added ${ids.length} pictures (they’re in the wiki’s Files too)`)
   }
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: Key) => {
     // Escape while a `/`, `[[` or `@` is being typed only puts that away, even when nothing matches.
     if (e.key === 'Escape' && (slash || pick)) {
       e.preventDefault()
@@ -332,7 +364,7 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
       e.preventDefault()
       indent(e.shiftKey)
     } else if (e.key === 'Enter' && !e.shiftKey && !ctrl) {
-      const el = e.currentTarget
+      const el = area.current!
       if (el.selectionStart !== el.selectionEnd) return
       const next = continueList(draft, el.selectionStart)
       if (next) {
@@ -347,7 +379,37 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
     }
   }
 
-  const blocks = useMemo(() => parseMarkdown(draft), [draft])
+  /** A picture dropped in: here, not in the wiki's files only, so the page shows it where it landed. */
+  const onDrop = (e: Dropped) => {
+    const pics = Array.from<File>(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'))
+    if (!pics.length) return
+    e.preventDefault()
+    e.stopPropagation()
+    void addPictures(pics, area.current!.selectionStart)
+  }
+
+  const onPaste = (e: Pasted) => {
+    const pics = Array.from<File>(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'))
+    if (pics.length) {
+      e.preventDefault()
+      void addPictures(pics, area.current!.selectionStart)
+      return
+    }
+    // A BrainCraft web link (a page, a heading, a canvas object) goes in as a named link.
+    const to = targetFromUrl(e.clipboardData?.getData('text/plain') ?? '')
+    if (!to) return
+    e.preventDefault()
+    const [a, z] = [area.current!.selectionStart, area.current!.selectionEnd]
+    void ws.labelFor(to).then((label) => {
+      // A page of this very wiki needs no wiki in its link.
+      const target = to.board && ws.selfKeys.includes(to.board) ? { ...to, board: undefined } : to
+      const token = linkToken(label, target)
+      const cur = draftRef.current
+      change(cur.slice(0, a) + token + cur.slice(z), a + token.length)
+    })
+  }
+
+  const blocks = useMemo(() => (source ? parseMarkdown(draft) : []), [draft, source])
 
   // The open menu sits just under the line being typed (above it near the bottom of the screen).
   const menu = slash && slashItems.length > 0 ? 'slash' : pick && picks.length > 0 ? 'pick' : null
@@ -368,11 +430,12 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   const [place, setPlace] = useState<CSSProperties>({})
   useLayoutEffect(() => {
     const el = area.current
-    if ((!menu && !nothing) || !el) return
-    const c = caretPoint(el)
-    const top = el.offsetTop + Math.min(Math.max(c.top, 0), el.clientHeight - c.height)
-    const left = Math.max(8, Math.min(el.offsetLeft + c.left, el.offsetLeft + el.clientWidth - 330))
-    const below = window.innerHeight - (el.getBoundingClientRect().top + c.top + c.height) > 300
+    const box = writing.current?.getBoundingClientRect()
+    if ((!menu && !nothing) || !el || !box) return
+    const c = el.caretBox()
+    const top = c.top - box.top
+    const left = Math.max(8, Math.min(c.left - box.left, box.width - 330))
+    const below = window.innerHeight - (c.top + c.height) > 300
     setPlace(below ? { top: top + c.height + 4, left, right: 'auto' } : { top: top - 4, left, right: 'auto', transform: 'translateY(-100%)' })
   }, [menu, nothing, slash?.from, pick?.from, draft])
   useEffect(() => {
@@ -380,16 +443,18 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
   }, [active, ids])
 
   return (
-    <div className={`page-editor tab-${tab}`}>
-      <div className="page-editor-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'write'} className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>
-          Write
-        </button>
-        <button role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
-          Preview
-        </button>
-      </div>
-      <div className="page-editor-write">
+    <div className={source ? `page-editor tab-${tab}` : 'page-editor live'}>
+      {source && (
+        <div className="page-editor-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'write'} className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>
+            Write
+          </button>
+          <button role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
+            Preview
+          </button>
+        </div>
+      )}
+      <div ref={writing} className="page-editor-write">
         <div className="page-editor-tools" aria-label="Formatting">
           <button title="Bold (Ctrl B)" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap('**')}>
             <b>B</b>
@@ -408,10 +473,31 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           <button title="Insert a heading, checklist, table, embed… (or type / at the start of a line)" aria-haspopup="listbox" onMouseDown={(e) => e.preventDefault()} onClick={openInsert}>
             Insert ▾
           </button>
-          <span className="muted page-editor-hint">Type / for headings, checklists, tables, embeds and macros · [[ to link a page · @ to mention someone</span>
+          <span className="muted page-editor-hint">/ to insert · [[ to link a page · @ to mention someone</span>
+          <button className={`page-editor-source${source ? ' on' : ''}`} title="Write the page as Markdown, with a preview beside it" aria-pressed={source} onMouseDown={(e) => e.preventDefault()} onClick={() => switchTo(!source)}>
+            Markdown
+          </button>
         </div>
-        <textarea
-          ref={area}
+        {!source && (
+          <Suspense fallback={<div className="live-text"><Markdown blocks={parseMarkdown(draft)} actions={actions} /></div>}>
+            <LiveText
+              value={draft}
+              label={`Text of ${page.title || 'this page'}`}
+              actions={{ ...actions, copyHeading: undefined, toggle: actions.toggle && ((line) => change(toggleTask(draftRef.current, line))) }}
+              start={start}
+              surface={area}
+              picker={menu ? { list: `${ids}-menu`, option: `${ids}-opt-${active}` } : undefined}
+              onChange={change}
+              onCaret={() => area.current && track(area.current)}
+              onKey={onKeyDown}
+              onPaste={onPaste}
+              onDrop={onDrop}
+              onBlur={() => push()}
+            />
+          </Suspense>
+        )}
+        {source && <textarea
+          ref={textarea}
           className="page-text"
           value={draft}
           aria-label={`Text of ${page.title || 'this page'}`}
@@ -421,11 +507,11 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           spellCheck
           onChange={(e) => {
             change(e.target.value)
-            track(e.target)
+            if (area.current) track(area.current)
           }}
-          onClick={(e) => track(e.currentTarget)}
+          onClick={() => area.current && track(area.current)}
           onKeyUp={(e) => {
-            if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) || (!menu && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) track(e.currentTarget)
+            if (area.current && (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key) || (!menu && (e.key === 'ArrowUp' || e.key === 'ArrowDown')))) track(area.current)
           }}
           onScroll={(e) => {
             // The preview follows the text on wide screens.
@@ -434,36 +520,10 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
             if (v && v.offsetParent && t.scrollHeight > t.clientHeight) v.scrollTop = (t.scrollTop / (t.scrollHeight - t.clientHeight)) * (v.scrollHeight - v.clientHeight)
           }}
           onKeyDown={onKeyDown}
-          onDrop={(e) => {
-            const pics = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
-            if (!pics.length) return
-            // Here, not in the wiki's files only: the page shows them where they were dropped.
-            e.preventDefault()
-            e.stopPropagation()
-            void addPictures(pics, e.currentTarget.selectionStart)
-          }}
-          onPaste={(e) => {
-            const pics = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'))
-            if (pics.length) {
-              e.preventDefault()
-              void addPictures(pics, e.currentTarget.selectionStart)
-              return
-            }
-            // A BrainCraft web link (a page, a heading, a canvas object) goes in as a named link.
-            const to = targetFromUrl(e.clipboardData.getData('text/plain'))
-            if (!to) return
-            e.preventDefault()
-            const [a, z] = [e.currentTarget.selectionStart, e.currentTarget.selectionEnd]
-            void ws.labelFor(to).then((label) => {
-              // A page of this very wiki needs no wiki in its link.
-              const target = to.board && ws.selfKeys.includes(to.board) ? { ...to, board: undefined } : to
-              const token = linkToken(label, target)
-              const cur = draftRef.current
-              change(cur.slice(0, a) + token + cur.slice(z), a + token.length)
-            })
-          }}
+          onDrop={onDrop}
+          onPaste={onPaste}
           onBlur={() => push()}
-        />
+        />}
         <input
           ref={pictureInput}
           type="file"
@@ -544,9 +604,11 @@ export function PageEditor({ page, text, actions, onDone }: { page: Page; text: 
           </p>
         )}
       </div>
-      <div ref={preview} className="page-editor-preview" aria-label="Preview">
-        <Markdown blocks={blocks} actions={{ ...actions, copyHeading: undefined, toggle: actions.toggle && ((line) => change(toggleTask(draftRef.current, line))) }} />
-      </div>
+      {source && (
+        <div ref={preview} className="page-editor-preview" aria-label="Preview">
+          <Markdown blocks={blocks} actions={{ ...actions, copyHeading: undefined, toggle: actions.toggle && ((line) => change(toggleTask(draftRef.current, line))) }} />
+        </div>
+      )}
       <div className="page-editor-foot">
         <span className="muted page-editor-saved">Saved as you type · Esc or Ctrl Enter when done</span>
         <input
