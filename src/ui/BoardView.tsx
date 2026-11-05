@@ -395,6 +395,7 @@ export const ConnectorView = memo(function ConnectorView({
   to,
   selected,
   editing,
+  loose,
   hopped,
 }: {
   c: Connector
@@ -403,6 +404,8 @@ export const ConnectorView = memo(function ConnectorView({
   to: Item
   selected: boolean
   editing: boolean
+  /** One of its ends is being carried elsewhere. */
+  loose?: boolean
   /** Its path when it hops over other lines. */
   hopped?: string
 }) {
@@ -414,7 +417,7 @@ export const ConnectorView = memo(function ConnectorView({
   // A line to or from something drawn by hand is drawn by hand too.
   const hand = !!(from.sketch || to.sketch)
   return (
-    <g>
+    <g opacity={loose ? 0.25 : undefined}>
       {hand ? (
         <Rough geom={{ kind: 'path', d, closed: false }} style={{ stroke: color, seed: c.id, strokeWidth: selected ? 2.6 : 1.8, dashed: c.dashed }} className="connector-line" />
       ) : (
@@ -433,7 +436,9 @@ export const ConnectorView = memo(function ConnectorView({
       {c.label && !editing && (
         <foreignObject x={r.mid.x - 120} y={r.mid.y - 20} width={240} height={40}>
           <div className="connector-label">
-            <span style={{ color }}>{c.label}</span>
+            <span style={{ color }} {...(selected ? { 'data-handle': 'lineLabel', 'data-id': c.id, title: 'Drag along the line', className: 'line-label' } : {})}>
+              {c.label}
+            </span>
           </div>
         </foreignObject>
       )}
@@ -505,6 +510,7 @@ export const BoardView = memo(function BoardView({
   editingId,
   editingLabel,
   selectedConnector,
+  looseLine = null,
   selection,
   view = null,
   coarse = false,
@@ -517,6 +523,8 @@ export const BoardView = memo(function BoardView({
   editingId: Id | null
   editingLabel: Id | null
   selectedConnector: Id | null
+  /** The line with an end being carried elsewhere. */
+  looseLine?: Id | null
   selection: ReadonlySet<Id>
   /** Only objects touching this area are drawn (null: all of them). */
   view?: Rect | null
@@ -570,7 +578,7 @@ export const BoardView = memo(function BoardView({
         const from = B.getItem(board, c.from)
         const to = B.getItem(board, c.to)
         if (!from || !to || !pairInView(from, to)) return null
-        return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} hopped={hops.get(`c${c.id}`)} />
+        return <ConnectorView key={c.id} c={c} r={routes.get(c.id)!} from={from} to={to} selected={c.id === selectedConnector} editing={c.id === editingLabel} loose={c.id === looseLine} hopped={hops.get(`c${c.id}`)} />
       })}
       {/* Objects that lead somewhere: a badge on their corner to follow it (moved off the corner while
           selected, where the resize handle is). */}

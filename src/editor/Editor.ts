@@ -11,6 +11,7 @@ import { type ItemLink, setItemLink } from '../model/itemLink'
 import type { BoardFile, ExcalidrawScene, SequenceData, TimeEntry, TimeTarget } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
 import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
+import { fractionAlong } from '../model/routes'
 import { History } from '../model/history'
 import { canFitToContent, canMatchSize, fitToContent, growsText, itemFontSize, sameSize } from '../model/fitText'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
@@ -144,11 +145,33 @@ export function cornerOf(r: Rect, c: Corner): Vec {
   return { x: c[1] === 'w' ? r.x : r.x + r.w, y: c[0] === 'n' ? r.y : r.y + r.h }
 }
 
+export type Edge = 'n' | 'e' | 's' | 'w'
+
 const OPPOSITE: Record<Corner, Corner> = { nw: 'se', ne: 'sw', sw: 'ne', se: 'nw' }
+
+/** What holds still while `grip` is dragged: the opposite corner, or for an edge, the opposite edge and the two beside it. */
+function resizeAnchor(r: Rect, grip: Corner | Edge): { anchor: Vec; pin?: Partial<Vec> } {
+  const [right, bottom] = [r.x + r.w, r.y + r.h]
+  switch (grip) {
+    case 'e':
+      return { anchor: { x: r.x, y: r.y }, pin: { y: bottom } }
+    case 'w':
+      return { anchor: { x: right, y: r.y }, pin: { y: bottom } }
+    case 's':
+      return { anchor: { x: r.x, y: r.y }, pin: { x: right } }
+    case 'n':
+      return { anchor: { x: r.x, y: bottom }, pin: { x: right } }
+    default:
+      return { anchor: cornerOf(r, OPPOSITE[grip]) }
+  }
+}
 
 /** UI handles the canvas can report under the pointer. */
 export type Handle =
-  | { kind: 'resize'; corner: Corner }
+  | { kind: 'resize'; corner: Corner | Edge }
+  | { kind: 'lineEnd'; end: 'from' | 'to' }
+  | { kind: 'lineBend' }
+  | { kind: 'lineLabel'; id: Id }
   | { kind: 'connect' }
   | { kind: 'mindAdd'; id: Id; side?: Side }
   | { kind: 'collapse'; id: Id }
@@ -178,7 +201,12 @@ export type Drag =
       at?: Board
     }
   | { type: 'branch'; id: Id; start: Vec; offset: Vec; target: Id | null; before: Board; at?: Board }
-  | { type: 'resize'; id: Id; anchor: Vec; before: Board; at?: Board }
+  | { type: 'resize'; id: Id; anchor: Vec; pin?: Partial<Vec>; before: Board; at?: Board }
+  /** One end of a line being carried to another object. */
+  | { type: 'lineEnd'; id: Id; end: 'from' | 'to'; current: Vec }
+  /** `grab`: from the pointer to the point on the line it's holding. */
+  | { type: 'lineBend'; id: Id; grab: Vec; before: Board; at?: Board }
+  | { type: 'lineLabel'; id: Id; before: Board; at?: Board }
   /** `frame`: begun inside a frame, which a click there (no drag) selects. */
   | { type: 'marquee'; start: Vec; current: Vec; base: Set<Id>; frame?: Id }
   | { type: 'create'; kind: Kind; start: Vec; current: Vec }
@@ -281,6 +309,8 @@ const EMOTE_MS = 2200
 const CHAT_MS = 6000
 /** How far a right press may move and still be a right-click (screen pixels); further, it pans. */
 const RIGHT_CLICK_SLOP = 5
+/** How close, in screen pixels, a dragged bend comes to a line's usual path before it snaps back. */
+const LINE_SNAP = 8
 const FLIGHT_MS = 520
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
@@ -3071,12 +3101,29 @@ export class Editor {
           return
         case 'resize': {
           const item = this.single
-          if (item) {
-            this.drag = { type: 'resize', id: item.id, anchor: cornerOf(item, OPPOSITE[handle.corner]), before: this.board }
+          if (item) this.drag = { type: 'resize', id: item.id, ...resizeAnchor(item, handle.corner), before: this.board }
+          this.emit()
+          return
+        }
+        case 'lineEnd':
+          if (this.selectedConnector !== null) this.drag = { type: 'lineEnd', id: this.selectedConnector, end: handle.end, current: world }
+          this.emit()
+          return
+        case 'lineBend': {
+          const c = this.selectedConnector !== null ? B.getConnector(this.board, this.selectedConnector) : undefined
+          const r = c && B.connectorRoute(this.board, c)
+          if (c && r) {
+            // A straight line bends right at the pointer; others keep the handle's distance from their bend.
+            const free = (c.style ?? 'straight') === 'straight' && !c.bend
+            this.drag = { type: 'lineBend', id: c.id, grab: free ? { x: 0, y: 0 } : { x: r.knee.x - world.x, y: r.knee.y - world.y }, before: this.board }
           }
           this.emit()
           return
         }
+        case 'lineLabel':
+          this.drag = { type: 'lineLabel', id: handle.id, before: this.board }
+          this.emit()
+          return
         case 'connect':
         case 'flowAdd': {
           const item = this.single
@@ -3272,8 +3319,26 @@ export class Editor {
         d.at = this.board
         break
       }
+      case 'lineEnd':
+        d.current = world
+        break
+      case 'lineBend': {
+        const at = { x: world.x + d.grab.x, y: world.y + d.grab.y }
+        this.apply(B.updateConnector(this.board, d.id, (c) => B.bentTo(this.board, c, at, LINE_SNAP / this.camera.zoom)))
+        d.at = this.board
+        break
+      }
+      case 'lineLabel': {
+        const r = B.routesOf(this.board, true).get(d.id)
+        if (!r) break
+        // Not over the arrowheads.
+        const t = Math.max(0.06, Math.min(0.94, fractionAlong(r.points, world)))
+        this.apply(B.updateConnector(this.board, d.id, (c) => B.withLabelAt(c, t)))
+        d.at = this.board
+        break
+      }
       case 'resize': {
-        const r = rectFromPoints(d.anchor, world)
+        const r = rectFromPoints(d.anchor, { ...world, ...d.pin })
         r.w = Math.max(r.w, 12)
         r.h = Math.max(r.h, 12)
         const item = B.getItem(this.board, d.id)
@@ -3329,6 +3394,13 @@ export class Editor {
       case 'resize':
         this.commit(d.before)
         break
+      case 'lineBend':
+      case 'lineLabel':
+        if (d.at) this.commit(d.before)
+        break
+      case 'lineEnd':
+        this.dropLineEnd(d, world)
+        break
       case 'branch':
         this.dropBranch(d, world)
         break
@@ -3368,6 +3440,25 @@ export class Editor {
     if ('before' in d && d.at) this.apply(this.rebase(d.at, d.before))
     this.drag = { type: 'none' }
     this.emit()
+  }
+
+  /** The object a carried line end at `world` would attach to: not a frame, nor the object at its other end. */
+  lineEndTarget(d: Extract<Drag, { type: 'lineEnd' }>, world: Vec): Item | undefined {
+    const c = B.getConnector(this.board, d.id)
+    const hit = B.hitTest(this.board, world, this.tol(), this.hidden)
+    const target = hit?.type === 'item' ? B.getItem(this.board, hit.id) : undefined
+    return c && target && target.kind !== 'frame' && target.id !== c[d.end === 'from' ? 'to' : 'from'] ? target : undefined
+  }
+
+  private dropLineEnd(d: Extract<Drag, { type: 'lineEnd' }>, world: Vec) {
+    const c = B.getConnector(this.board, d.id)
+    const target = this.lineEndTarget(d, world)
+    if (!c || !target || target.id === c[d.end]) return
+    const before = this.board
+    const next = B.reattach(before, d.id, d.end, target.id)
+    if (next === before) return this.setStatus('Those two are already linked')
+    this.apply(next)
+    this.commit(before)
   }
 
   private dropBranch(d: Extract<Drag, { type: 'branch' }>, world: Vec) {
@@ -3758,7 +3849,7 @@ export class Editor {
     const armed = TOOLS.find((t) => t.tool === this.tool)
     if (armed && CREATES[this.tool]) return `Click to place ${aName(armed.label)} (or drag to size it)  ·  Enter puts one in the middle  ·  Esc cancel`
     if (this.tool === 'hand') return 'Drag to move around the board  ·  V to select'
-    if (this.selectedConnector !== null) return 'Double-click the line to label it'
+    if (this.selectedConnector !== null) return 'Drag an end to another object  ·  Drag the middle dot to bend it  ·  Double-click to label it'
     const node = this.single
     if (node?.kind === 'mind')
       return 'Tab add sub-idea  ·  Enter add idea below  ·  Arrows move  ·  Space edit  ·  / collapse  ·  Alt C comments'

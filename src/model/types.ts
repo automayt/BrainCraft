@@ -471,6 +471,10 @@ export interface Connector {
   /** Defaults to `end`. */
   arrows?: Arrowheads
   dashed?: boolean
+  /** Where it's been bent to, from halfway between its two objects (so it moves with them). */
+  bend?: Vec
+  /** How far along the line its label sits, 0 to 1. Defaults to halfway. */
+  labelAt?: number
 }
 
 export interface Board {

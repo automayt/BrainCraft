@@ -416,6 +416,9 @@ function cleanAutomations(v: unknown, fields: Field[]): Automation[] {
     })
 }
 
+/** Further than any line needs bending; beyond it the sums stop being numbers. */
+const MAX_BEND = 1_000_000
+
 export function cleanConnector(v: unknown): Connector | null {
   if (!isObj(v)) return null
   const id = num(v.id)
@@ -428,6 +431,13 @@ export function cleanConnector(v: unknown): Connector | null {
   if (v.style === 'straight' || v.style === 'elbow' || v.style === 'curved') c.style = v.style
   if (v.arrows === 'end' || v.arrows === 'both' || v.arrows === 'none') c.arrows = v.arrows
   if (v.dashed === true) c.dashed = true
+  if (isObj(v.bend)) {
+    const x = num(v.bend.x)
+    const y = num(v.bend.y)
+    if (x !== undefined && y !== undefined && Math.abs(x) <= MAX_BEND && Math.abs(y) <= MAX_BEND) c.bend = { x, y }
+  }
+  const labelAt = num(v.labelAt)
+  if (labelAt !== undefined && labelAt >= 0 && labelAt <= 1) c.labelAt = labelAt
   return c
 }
 

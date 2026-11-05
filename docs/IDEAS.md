@@ -504,8 +504,8 @@ Still to do, biggest first:
 - [ ] **A touch-sized selection bar:** under 480px, one row docked at the
   bottom (colour behind one swatch, Delete always there), never over the
   selection.
-- [ ] **Handles on lines:** drag an end onto another object to reattach it,
-  the middle to move its label or bend it; edge handles to resize one side.
+- [x] **Handles on lines:** drag an end onto another object to reattach it,
+  the dot to bend it, the label along it; edge handles to resize one side.
 - [ ] **A rail with tools only:** Hand-drawn to the board menu and Ctrl K, Pen
   and Excalidraw as one Draw button, shapes in one menu with number keys.
 - [ ] **Frames as real containers:** the frame you'd drop into lights up

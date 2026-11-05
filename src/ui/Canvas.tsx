@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
 import { addDrawingFiles, isDrawingFile } from './excalidraw/addDrawing'
 import { newWheelMemo, wheelHow } from './wheelHow'
-import { type Corner, type Editor, type Handle, cornerOf } from '../editor/Editor'
+import { type Corner, type Edge, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
 import { applyPatches } from '../collab/patch'
@@ -12,7 +12,8 @@ import { ACCENT, mindRootText } from './paint'
 import { type Item, WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
 import { toScreen, toWorld } from '../model/camera'
-import { type Rect, center, rectFromPoints } from '../model/geom'
+import { type Rect, type Vec, center, rectFromPoints } from '../model/geom'
+import { pointAlong } from '../model/routes'
 import { nodeStyle } from '../model/mindmap'
 import { defaultColor } from '../model/types'
 import { Social } from './Social'
@@ -43,7 +44,13 @@ function readHandle(target: EventTarget | null): Handle | undefined {
   const id = Number(el.getAttribute('data-id'))
   switch (kind) {
     case 'resize':
-      return { kind, corner: el.getAttribute('data-corner') as Corner }
+      return { kind, corner: el.getAttribute('data-corner') as Corner | Edge }
+    case 'lineEnd':
+      return { kind, end: el.getAttribute('data-end') === 'from' ? 'from' : 'to' }
+    case 'lineBend':
+      return { kind }
+    case 'lineLabel':
+      return { kind, id }
     case 'connect':
       return { kind }
     case 'mindAdd':
@@ -247,7 +254,9 @@ export function Canvas() {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onDoubleClick={(e) => {
-        if (!(e.target as Element).closest('.no-canvas, [data-handle]')) editor.doubleClick(local(e))
+        const label = (e.target as Element).closest('[data-handle="lineLabel"]')
+        if (label) editor.startEditingLabel(Number(label.getAttribute('data-id')))
+        else if (!(e.target as Element).closest('.no-canvas, [data-handle]')) editor.doubleClick(local(e))
       }}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -311,7 +320,8 @@ export function Canvas() {
             selectedConnector={editor.selectedConnector}
             selection={editor.selection}
             view={cull}
-            dragging={editor.drag.type === 'move' || editor.drag.type === 'resize'}
+            looseLine={editor.drag.type === 'lineEnd' ? editor.drag.id : null}
+            dragging={['move', 'resize', 'lineBend', 'lineLabel'].includes(editor.drag.type)}
             coarse={camera.zoom < COARSE_ZOOM && !editor.presenting}
             statusFilter={editor.statusFilter}
             personFilter={editor.personFilter}
@@ -396,6 +406,21 @@ function DragPreview({ editor }: { editor: Editor }) {
           {validTarget && <rect {...xywh(validTarget)} fill="none" style={{ stroke: ACCENT }} strokeWidth={2 / z} rx={4} />}
           <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} style={{ stroke: ACCENT }} strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
           <circle cx={end.x} cy={end.y} r={4 / z} style={{ fill: ACCENT }} />
+        </g>
+      )
+    }
+    case 'lineEnd': {
+      const c = B.getConnector(editor.board, d.id)
+      const other = c && B.getItem(editor.board, c[d.end === 'from' ? 'to' : 'from'])
+      if (!other) return null
+      const target = editor.lineEndTarget(d, d.current)
+      const tip = target ? B.anchorTowards(target, center(other)) : d.current
+      const root = B.anchorTowards(other, target ? center(target) : d.current)
+      return (
+        <g>
+          {target && <rect {...xywh(target)} fill="none" style={{ stroke: ACCENT }} strokeWidth={2 / z} rx={4} />}
+          <line x1={root.x} y1={root.y} x2={tip.x} y2={tip.y} style={{ stroke: ACCENT }} strokeWidth={2 / z} strokeDasharray={`${6 / z} ${4 / z}`} />
+          <circle cx={tip.x} cy={tip.y} r={5 / z} style={{ fill: ACCENT }} />
         </g>
       )
     }
@@ -543,10 +568,50 @@ function Overlays({ editor }: { editor: Editor }) {
       </g>,
     )
   }
+  const line = editor.selectedConnector !== null && !editor.readOnly && !editor.editing ? B.getConnector(editor.board, editor.selectedConnector) : undefined
+  const lineRoute = line && (editor.drag.type === 'none' || editor.drag.type === 'lineBend') ? B.routesOf(editor.board, editor.drag.type !== 'none').get(line.id) : undefined
+  if (line && lineRoute) {
+    const at = (p: Vec) => toScreen(editor.camera, p)
+    // Under a label in the middle, the dot moves along the line to stay reachable.
+    const knee = at(lineRoute.knee)
+    const covered = line.label && Math.hypot(knee.x - at(lineRoute.mid).x, knee.y - at(lineRoute.mid).y) < 34
+    const spot = covered ? at(pointAlong(lineRoute.points, (line.labelAt ?? 0.5) > 0.5 ? (line.labelAt ?? 0.5) - 0.25 : (line.labelAt ?? 0.5) + 0.25)) : knee
+    if (editor.drag.type === 'none') {
+      for (const end of ['from', 'to'] as const) {
+        const p = at(end === 'from' ? lineRoute.start : lineRoute.end)
+        out.push(
+          <g key={`line-${end}`} data-handle="lineEnd" data-end={end} className="line-end">
+            <title>Drag onto another object</title>
+            <circle cx={p.x} cy={p.y} r={14} fill="transparent" />
+            <circle cx={p.x} cy={p.y} r={6} className="handle" />
+          </g>,
+        )
+      }
+    }
+    out.push(
+      <g key="line-bend" data-handle="lineBend" className="line-bend">
+        <title>Drag to bend the line</title>
+        <circle cx={spot.x} cy={spot.y} r={14} fill="transparent" />
+        <circle cx={spot.x} cy={spot.y} r={5} className="handle" />
+      </g>,
+    )
+  }
   const single = editor.single
   if (single && !editor.editing && editor.drag.type === 'none') {
     const r = editor.screenRect(single)
     if (editor.resizable) {
+      // One side at a time. (Pictures keep their proportions, so only their corners drag.)
+      if (single.kind !== 'image' && r.w > 32 && r.h > 32) {
+        const strips: Record<Edge, Rect> = {
+          n: { x: r.x + 8, y: r.y - 4, w: r.w - 16, h: 8 },
+          s: { x: r.x + 8, y: r.y + r.h - 4, w: r.w - 16, h: 8 },
+          w: { x: r.x - 4, y: r.y + 8, w: 8, h: r.h - 16 },
+          e: { x: r.x + r.w - 4, y: r.y + 8, w: 8, h: r.h - 16 },
+        }
+        for (const [edge, strip] of Object.entries(strips)) {
+          out.push(<rect key={edge} data-handle="resize" data-corner={edge} {...xywh(strip)} rx={4} className={`resize-edge resize-${edge}`} />)
+        }
+      }
       for (const c of ['nw', 'ne', 'sw', 'se'] as Corner[]) {
         const p = cornerOf(r, c)
         out.push(

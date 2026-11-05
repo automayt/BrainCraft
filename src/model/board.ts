@@ -10,6 +10,7 @@ import {
   boundsOf,
   contains,
   containsRect,
+  dist,
   distToSegment,
   ellipseBorderPoint,
   ellipseContains,
@@ -20,7 +21,7 @@ import {
   union,
   unionAll,
 } from './geom'
-import { type Route, goesAround, route, shiftRoute } from './routes'
+import { type Route, between, goesAround, route, shiftRoute } from './routes'
 import { type Taken, take } from './orthoRoute'
 import { flowHit } from './shapes'
 import {
@@ -131,6 +132,39 @@ export function updateItem(b: Board, id: Id, f: (i: Item) => Item): Board {
 
 export function updateConnector(b: Board, id: Id, f: (c: Connector) => Connector): Board {
   return { ...b, connectors: b.connectors.map((c) => (c.id === id ? f(c) : c)) }
+}
+
+/**
+ * Moves one end of a line onto `target`, dropping any bend made for the old ends. Returns the board
+ * unchanged for a line to itself or one that already exists.
+ */
+export function reattach(b: Board, id: Id, end: 'from' | 'to', target: Id): Board {
+  const c = getConnector(b, id)
+  if (!c || !getItem(b, target) || c[end] === target) return b
+  const from = end === 'from' ? target : c.from
+  const to = end === 'to' ? target : c.to
+  if (from === to || b.connectors.some((x) => x.from === from && x.to === to)) return b
+  const { bend: _, ...rest } = c
+  return updateConnector(b, id, () => ({ ...rest, from, to }))
+}
+
+/** `c` bent to pass through `at`, or back to its usual path when `at` is within `snap` of that. */
+export function bentTo(b: Board, c: Connector, at: Vec, snap: number): Connector {
+  const a = getItem(b, c.from)
+  const z = getItem(b, c.to)
+  if (!a || !z) return c
+  const { bend: _, ...plain } = c
+  const r = route(plain, a, z)
+  const near = (c.style ?? 'straight') === 'straight' ? distToSegment(at, r.start, r.end) : dist(at, r.knee)
+  if (near <= snap) return plain
+  const mid = between(a, z)
+  return { ...plain, bend: { x: at.x - mid.x, y: at.y - mid.y } }
+}
+
+/** `c` with its label `t` of the way along, or back at the middle when it's close to that. */
+export function withLabelAt(c: Connector, t: number): Connector {
+  const { labelAt: _, ...rest } = c
+  return Math.abs(t - 0.5) < 0.04 ? rest : { ...rest, labelAt: t }
 }
 
 /** Removes items and connectors, plus any connector left dangling. */
@@ -311,6 +345,9 @@ export function obstaclesFor(b: Board, a: Item, z: Item): Item[] {
   return out
 }
 
+/** What line `c` might go around: only square-cornered lines do, and not once they've been bent. */
+const obstaclesOf = (b: Board, c: Connector, a: Item, z: Item): Item[] => (c.style === 'elbow' && !c.bend ? obstaclesFor(b, a, z) : [])
+
 /** The last route of each connector, kept while its ends, what's near them and the lines it keeps clear of stay put. */
 const lastRoute = new WeakMap<Connector, { a: Item; z: Item; obstacles: Item[]; near: string; r: Route & { around?: true } }>()
 
@@ -327,7 +364,7 @@ const sameItems = (p: Item[], q: Item[]) => p.length === q.length && p.every((i,
  * clear of lines already gone around (`taken`). The same route comes back (the same object) until
  * any of that moves.
  */
-export function routeBetween(b: Board, c: Connector, a: Item, z: Item, taken?: Taken, obstacles: Item[] = c.style === 'elbow' ? obstaclesFor(b, a, z) : []): Route {
+export function routeBetween(b: Board, c: Connector, a: Item, z: Item, taken?: Taken, obstacles: Item[] = obstaclesOf(b, c, a, z)): Route {
   const near = obstacles.length && taken ? segmentsNear(taken, expand(union(a, z), 200)) : ''
   const hit = lastRoute.get(c)
   if (hit && hit.a === a && hit.z === z && hit.near === near && sameItems(hit.obstacles, obstacles)) {
@@ -394,7 +431,7 @@ export function routesOf(b: Board, quick = false): Map<Id, Route> {
     const a = getItem(b, c.from)
     const z = getItem(b, c.to)
     if (!a || !z) continue
-    const obstacles = c.style === 'elbow' ? obstaclesFor(b, a, z) : []
+    const obstacles = obstaclesOf(b, c, a, z)
     if (goesAround(c, a, z, obstacles)) around.push([c, a, z, obstacles])
     else {
       const r = routeBetween(b, c, a, z, undefined, obstacles)

@@ -95,6 +95,9 @@ The board fills the window and the controls float above it:
   hold **Alt** to move freely.
 - Lines attach to the middle of a side and stay attached as you move things.
   Choose straight, right-angled or curved lines and which ends get arrows.
+- **Click a line** for its handles: drag an end onto another object, drag the
+  dot to bend it (back onto its usual path, it snaps straight again), and drag
+  its label along it. Selected shapes also resize from any one side.
   **Double-click a line** to label it ("Yes", "No").
 - Change a shape's symbol from the toolbar at any time.
 

@@ -223,7 +223,7 @@ The ${tour} has a frame for each part below. Press **Shift+P** on it to see it a
           text: `${embed('Notes, shapes and lines', 'basics', 380)}
 
 - **Sticky notes, text, shapes, frames and a pen** are on the tool rail. With a tool picked, **Enter** puts one in the middle of the view.
-- **Lines:** select something and drag its blue dot onto another object. Drop it on empty space for a new linked note. **Double-click a line** to label it.
+- **Lines:** select something and drag its blue dot onto another object. Drop it on empty space for a new linked note. **Click a line** to get its handles: drag an end onto another object, drag the dot to bend it, drag its label along it. **Double-click a line** to label it.
 - **Type to rename:** with one object selected, just start typing.
 - **Frames** hold what's inside them and become slides when you present. Right-click one → **Move to its own board** to give a busy part a board of its own, with a card here that opens it. To split a whole crowded board, use ☰ → **Divide into child boards…**: by frame, by kind of object, or by topic with the assistant. A child board shows the board it came from beside its title.
 - **Text fits its shape:** it grows and shrinks with flowchart shapes, rectangles and ellipses; **A−/A+** set a size instead, and **Fit text** goes back.
