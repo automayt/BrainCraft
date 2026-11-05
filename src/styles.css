@@ -557,6 +557,11 @@ button.on,
   height: 16px;
 }
 
+/* Short of room, it's just the magnifier. */
+.search-pill:not(:has(> kbd)) {
+  padding: 0 9px;
+}
+
 .search-pill:hover {
   color: var(--text);
 }
@@ -745,6 +750,11 @@ button.on,
 .anchor > .popover {
   top: calc(100% + 10px);
   left: 0;
+}
+
+.anchor > .top-more {
+  right: 0;
+  left: auto;
 }
 
 .theme-menu {
@@ -1747,6 +1757,81 @@ button.on,
   margin-left: 0;
   padding-left: 0;
   border-left: 0;
+}
+
+/* Phones: one row along the bottom, never over the selection (the board slides up instead). */
+.selection-toolbar.docked {
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  z-index: 20;
+  width: auto;
+  max-width: none;
+  padding: 4px;
+  transform: none;
+}
+
+.selection-toolbar.docked .stb-main {
+  flex: 1;
+  /* A thumb swipes it; a scrollbar would only take room from the buttons. */
+  scrollbar-width: none;
+}
+
+.selection-toolbar.docked button,
+.selection-toolbar.docked select {
+  min-width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+.selection-toolbar.docked .stb-end {
+  gap: 4px;
+  margin-left: 2px;
+  padding-left: 4px;
+}
+
+.stb-colour {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.stb-colour i {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+/* Its menus open just above it: there's nothing below. */
+body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
+  top: auto !important;
+  bottom: 70px;
+  left: 50% !important;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 90px) !important;
+  overflow-y: auto;
+  transform: translateX(-50%) !important;
+}
+
+.colour-menu {
+  display: block;
+}
+
+.colour-menu .swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 44px);
+  gap: 4px;
+  width: min(292px, calc(100vw - 40px));
+}
+
+.colour-menu .swatch {
+  justify-self: center;
+  width: 36px;
+  height: 36px;
+  margin: 4px;
 }
 
 /* A menu whose button is in ⋯ for now takes no room. */
@@ -3197,9 +3282,6 @@ html.card-grabbing * {
 }
 
 @media (max-width: 1100px) {
-  .search-pill span {
-    display: none;
-  }
   /* The name is the brand: it stays, shorter. */
   .wordmark {
     max-width: 130px;
@@ -3220,9 +3302,6 @@ html.card-grabbing * {
 @media (max-width: 720px) {
   .board-title {
     width: 120px;
-  }
-  .search-pill kbd {
-    display: none;
   }
   .minimap {
     display: none;
@@ -6417,9 +6496,6 @@ html.card-grabbing * {
     left: 12px;
     width: auto;
   }
-  .ask-btn > span:nth-child(2) {
-    display: none;
-  }
 }
 
 /* Phones: the two top bars don't fit side by side, so the right one takes a second row. */
@@ -6435,13 +6511,6 @@ html.card-grabbing * {
   }
   .top-right {
     top: 62px;
-    max-width: calc(100% - 24px);
-  }
-  .search-pill span {
-    display: none;
-  }
-  .search-pill {
-    padding: 0 9px;
   }
   .notes-panel,
   .ai-panel {
@@ -6459,7 +6528,7 @@ html.card-grabbing * {
   display: none;
 }
 
-@media (max-width: 720px) {
+@media (min-width: 481px) and (max-width: 720px) {
   .selection-toolbar {
     flex-wrap: wrap;
     justify-content: center;

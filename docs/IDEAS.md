@@ -501,7 +501,7 @@ Still to do, biggest first:
 - [ ] **Write where you read:** type straight into the page, Markdown
   shortcuts turning into formatting as you go, links and embeds as named
   chips; Markdown stays the stored format and a toggle for those who want it.
-- [ ] **A touch-sized selection bar:** under 480px, one row docked at the
+- [x] **A touch-sized selection bar:** under 480px, one row docked at the
   bottom (colour behind one swatch, Delete always there), never over the
   selection.
 - [x] **Handles on lines:** drag an end onto another object to reattach it,
@@ -516,8 +516,9 @@ Still to do, biggest first:
   Shared with you first; shares, mentions, replies and access requests in one
   list, sent over the live connection; "Ask for access" on a board you can't
   open.
-- [ ] **A calmer top bar:** fold the rarer buttons into ⋯ by the room there is
-  (it collides at 820px), timer and theme into the account menu.
+- [x] **A calmer top bar:** the rarer buttons fold into ⋯ by the room there
+  is, and the timer and theme live there. (⋯ rather than the account menu,
+  which only exists with accounts on.)
 - [ ] **Joining:** "Robin added you" and a name on the set-your-password
   screen; a name field in the account menu; boards made on the server at the
   first change, not on New.

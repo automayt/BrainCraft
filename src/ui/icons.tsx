@@ -189,6 +189,14 @@ export const SequenceIcon = () => (
 )
 
 /** More tools: tables, plans and data, behind one button. */
+export const MoreIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <circle cx="4" cy="9" r="1.6" fill="currentColor" />
+    <circle cx="9" cy="9" r="1.6" fill="currentColor" />
+    <circle cx="14" cy="9" r="1.6" fill="currentColor" />
+  </svg>
+)
+
 export const MoreToolsIcon = () => (
   <Svg>
     <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />

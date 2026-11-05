@@ -10,7 +10,7 @@ import { canSketch, flowComponent, setBoardSketch, setSketch, sketchNew } from '
 import { type ItemLink, setItemLink } from '../model/itemLink'
 import type { BoardFile, ExcalidrawScene, SequenceData, TimeEntry, TimeTarget } from '../model/types'
 import { type Camera, between, centerOn, defaultCamera, fit, rectToWorld, toScreen, toWorld, zoomAt } from '../model/camera'
-import { type Rect, type Vec, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
+import { type Rect, type Vec, boundsOf, center, dist, intersects, rectFromCenter, rectFromPoints, unionAll } from '../model/geom'
 import { fractionAlong } from '../model/routes'
 import { History } from '../model/history'
 import { canFitToContent, canMatchSize, fitToContent, growsText, itemFontSize, sameSize } from '../model/fitText'
@@ -2468,6 +2468,18 @@ export class Editor {
       }
     }
     if (dx || dy) this.pan(dx, dy)
+  }
+
+  /** On a phone the selection's bar and the tools run along the bottom: slide the board up from under them. */
+  keepSelectionClear() {
+    const line = this.selectedConnector !== null ? B.getConnector(this.board, this.selectedConnector) : undefined
+    const route = line && B.connectorRoute(this.board, line)
+    const box = route ? boundsOf(route.points) : B.bounds(this.board, this.selection)
+    if (!box) return
+    const r = this.screenRect(box)
+    // As far as it takes, but never pushing its top under the top bars.
+    const shift = Math.min(r.y + r.h - (this.viewport.h - 132), r.y - 116)
+    if (shift > 0) this.flyTo({ ...this.camera, y: this.camera.y - shift })
   }
 
   /** Creates whatever the armed tool makes in the middle of the view: keyboard and command-palette creation. */

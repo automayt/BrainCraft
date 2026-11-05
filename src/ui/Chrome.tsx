@@ -1,6 +1,6 @@
 /** The floating controls around the canvas. */
 
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { TimeChip } from './TimeTracking'
 import { AccountMenu } from './accounts/AccountMenu'
 import { useDialog } from './useDialog'
@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom'
 import { TOOLS, type Tool } from '../editor/Editor'
 import { SHORTCUTS } from './shortcuts'
 import { FLOW_SHAPES, type FlowShape, INKS } from '../model/types'
-import { BoardsIcon, CheckIcon, CodeToolIcon, SequenceIcon, CommentsIcon, DrawingIcon, HandDrawnIcon, FitIcon, FlowShapeIcon, HelpIcon, ImageIcon, MenuIcon, MinusIcon, MoreToolsIcon, PlayIcon, PlusIcon, RedoIcon, SearchIcon, TOOL_ICONS, ThemeIcon, UndoIcon, AssistantIcon } from './icons'
+import { BoardsIcon, CheckIcon, CodeToolIcon, SequenceIcon, CommentsIcon, DrawingIcon, HandDrawnIcon, FitIcon, FlowShapeIcon, HelpIcon, ImageIcon, MenuIcon, MinusIcon, MoreIcon, MoreToolsIcon, PlayIcon, PlusIcon, RedoIcon, SearchIcon, TOOL_ICONS, UndoIcon, AssistantIcon } from './icons'
 import { ink } from './paint'
 import { THEMES } from './theme'
 import { useUi } from './uiContext'
@@ -23,6 +23,7 @@ import { AiChip } from './AiConnect'
 import { LiveBar } from './Live'
 import { appName } from '../store/brand'
 import { useClickAway } from './useClickAway'
+import { isFolded, refold } from './topBarFold'
 
 /** A label with an optional key shown on hover, positioned by the parent's `data-tip-side`. */
 function Tip({ label, keys }: { label: string; keys?: string }) {
@@ -264,19 +265,111 @@ function ParentCrumb() {
   )
 }
 
+/** How far the top bar has to fold to stay clear of the bar beside it (see topBarFold.ts). */
+function useFold(bar: React.RefObject<HTMLDivElement | null>) {
+  const [level, setLevel] = useState(0)
+  const at = useRef(level)
+  at.current = level
+  const widths = useRef<number[]>([])
+  const measure = useCallback(() => {
+    const el = bar.current
+    if (!el) return
+    // On a phone it has a row to itself (see .top-right in the styles).
+    const left = window.innerWidth > 720 ? (el.previousElementSibling?.getBoundingClientRect().right ?? 0) + 12 : 12
+    setLevel(refold(at.current, el.getBoundingClientRect().width, window.innerWidth - 12 - left, widths.current))
+  }, [bar])
+  // Settled before anything is painted, so a narrow window never shows the bars colliding.
+  useLayoutEffect(measure, [level, measure])
+  useEffect(() => {
+    const el = bar.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    if (el.previousElementSibling) watch.observe(el.previousElementSibling)
+    window.addEventListener('resize', measure)
+    return () => {
+      watch.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [bar, measure])
+  return level
+}
+
+/** ⋯ at the end of the top bar: theme, the timer, and whatever there isn't room for. */
+function TopMore({ children, onTime }: { children: (close: () => void) => ReactNode; onTime: () => void }) {
+  const ui = useUi()
+  const [open, setOpen] = useState<'menu' | 'themes' | null>(null)
+  const close = () => setOpen(null)
+  return (
+    <div className="anchor">
+      <button className={`icon-btn has-tip${open ? ' on' : ''}`} aria-label="More" aria-haspopup="menu" aria-expanded={!!open} onMouseDown={keepFocus} onClick={() => setOpen(open ? null : 'menu')}>
+        <MoreIcon />
+        {!open && <Tip label="More" />}
+      </button>
+      {open === 'menu' && (
+        <Popover key="menu" onClose={close} className="file-menu top-more">
+          {children(close)}
+          <MenuItem
+            label="Time tracking"
+            onClick={() => {
+              close()
+              onTime()
+            }}
+          />
+          <MenuItem label="Theme…" onClick={() => setOpen('themes')} />
+        </Popover>
+      )}
+      {open === 'themes' && (
+        <Popover key="themes" onClose={close} className="theme-menu">
+          <div className="popover-title">Theme</div>
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              role="menuitemradio"
+              aria-checked={ui.theme === t.id}
+              className={`theme-option${ui.theme === t.id ? ' on' : ''}`}
+              onMouseDown={keepFocus}
+              onClick={() => ui.setTheme(t.id)}
+            >
+              <span className={`theme-swatch swatch-${t.id}`} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>
+                <strong>{t.label}</strong>
+                <small>{t.hint}</small>
+              </span>
+            </button>
+          ))}
+        </Popover>
+      )}
+    </div>
+  )
+}
+
 export function TopRight() {
   const editor = useEditor()
   const ws = useWorkspace()
   const ui = useUi()
-  const [themes, setThemes] = useState(false)
+  const bar = useRef<HTMLDivElement>(null)
+  const level = useFold(bar)
+  const [timing, setTiming] = useState(false)
   const wiki = isWiki(editor.board)
+  // On a server with accounts every board is live, and Share is how people get it: always there
+  // for those who can manage it.
+  const share = !ws.readOnly && (!ws.liveInfo || (ws.liveInfo.account && ws.managesBoard))
+  const present = !wiki
+  const comments = !wiki
+  const run = (close: () => void, f: () => void) => () => {
+    close()
+    f()
+  }
   return (
-    <div className="island top-right no-canvas">
+    <div ref={bar} className="island top-right no-canvas">
       <AiChip bridge={ui.ai} onClick={ui.openAi} />
       <LiveBar onOpen={ui.openShare} />
-      {/* On a server with accounts every board is live, and Share is how people get it: always there
-          for those who can manage it. */}
-      {!ws.readOnly && (!ws.liveInfo || (ws.liveInfo.account && ws.managesBoard)) && (
+      {share && !isFolded('share', level) && (
         <button className="share-btn has-tip" aria-label="Share" onMouseDown={keepFocus} onClick={ui.openShare}>
           <span>Share</span>
           <Tip label="Invite friends to this board" />
@@ -292,24 +385,29 @@ export function TopRight() {
         onClick={ui.toggleAssistant}
       >
         <AssistantIcon />
-        <span>Ask AI</span>
+        {!isFolded('ask', level) && <span>Ask AI</span>}
         <Tip label="Chat with this board" keys="Ctrl J" />
       </button>
-      {!wiki && (
+      {present && !isFolded('present', level) && (
         <button className="present-btn has-tip" aria-label="Present" onMouseDown={keepFocus} onClick={ui.present}>
           <PlayIcon />
           <span>Present</span>
           <Tip label="Frames become slides" keys="Shift P" />
         </button>
       )}
-      <TimeChip />
-      <AccountMenu onAdmin={ui.openAdmin} />
-      <button className="search-pill" aria-label="Search or run a command" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
+      <TimeChip open={timing} onOpen={setTiming} />
+      <button className={`search-pill${isFolded('search', level) ? ' has-tip' : ''}`} aria-label="Search or run a command" onMouseDown={keepFocus} onClick={() => editor.setSearchOpen(true)}>
         <SearchIcon />
-        <span>Search or run a command</span>
-        <kbd>Ctrl K</kbd>
+        {isFolded('search', level) ? (
+          <Tip label="Search or run a command" keys="Ctrl K" />
+        ) : (
+          <>
+            <span>Search or run a command</span>
+            <kbd>Ctrl K</kbd>
+          </>
+        )}
       </button>
-      {!wiki && (
+      {comments && !isFolded('comments', level) && (
         <button
           className={`icon-btn has-tip${editor.notesOpen ? ' on' : ''}`}
           aria-label="Comments"
@@ -321,41 +419,23 @@ export function TopRight() {
           <Tip label="Comments" keys="Alt C" />
         </button>
       )}
-      <div className="anchor">
-        <button className={`icon-btn has-tip${themes ? ' on' : ''}`} aria-label="Theme" aria-expanded={themes} onMouseDown={keepFocus} onClick={() => setThemes(!themes)}>
-          <ThemeIcon />
-          {!themes && <Tip label="Theme" />}
+      {!isFolded('help', level) && (
+        <button className="icon-btn has-tip" aria-label="Help and shortcuts" onMouseDown={keepFocus} onClick={ui.openHelp}>
+          <HelpIcon />
+          <Tip label="Help and shortcuts" keys="?" />
         </button>
-        {themes && (
-          <Popover onClose={() => setThemes(false)} className="theme-menu">
-            <div className="popover-title">Theme</div>
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                role="menuitemradio"
-                aria-checked={ui.theme === t.id}
-                className={`theme-option${ui.theme === t.id ? ' on' : ''}`}
-                onMouseDown={keepFocus}
-                onClick={() => ui.setTheme(t.id)}
-              >
-                <span className={`theme-swatch swatch-${t.id}`} aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span>
-                  <strong>{t.label}</strong>
-                  <small>{t.hint}</small>
-                </span>
-              </button>
-            ))}
-          </Popover>
+      )}
+      <TopMore onTime={() => setTiming(true)}>
+        {(close) => (
+          <>
+            {share && isFolded('share', level) && <MenuItem label="Share…" onClick={run(close, ui.openShare)} />}
+            {present && isFolded('present', level) && <MenuItem label="Present" keys="Shift P" onClick={run(close, ui.present)} />}
+            {comments && isFolded('comments', level) && <MenuItem label="Comments" keys="Alt C" onClick={run(close, () => editor.toggleNotes())} />}
+            {isFolded('help', level) && <MenuItem label="Help and shortcuts" keys="?" onClick={run(close, ui.openHelp)} />}
+          </>
         )}
-      </div>
-      <button className="icon-btn has-tip" aria-label="Help and shortcuts" onMouseDown={keepFocus} onClick={ui.openHelp}>
-        <HelpIcon />
-        <Tip label="Help and shortcuts" keys="?" />
-      </button>
+      </TopMore>
+      <AccountMenu onAdmin={ui.openAdmin} />
     </div>
   )
 }

@@ -11,7 +11,7 @@ browser as a static site, so you can host it anywhere.
 BrainCraft defaults to a **dark theme** and has five more: **light**,
 **wall dark** and **wall light** (a green-grey graphite and a pale sage, softer
 than the default pair), **high contrast dark** and **high contrast light**.
-Pick one from the theme button at the top right, or type "theme" in Ctrl+K. The high-contrast themes
+Pick one from **⋯** at the top right, or type "theme" in Ctrl+K. The high-contrast themes
 use pure black and white surfaces, a vivid accent, bold outlines on every
 shape, thicker lines and stronger focus rings. Default board colors (ink,
 lines, frames, mind-map centers) follow the theme, so boards stay readable in
@@ -25,13 +25,18 @@ The board fills the window and the controls float above it:
 - **Top right:** **Share** (in a live session, the **Live** button that shows
   who's here), **Ask AI**, **Present**, **Search** (Ctrl+K
   searches the board *and* runs any command by name; type `>` to show only
-  commands), **Comments**, the theme and **Help** (?).
+  commands), **Comments**, **Help** (?) and **⋯**, which holds the theme and
+  time tracking. As the window narrows, the search box shrinks to its icon and
+  the rarer buttons move into **⋯**.
 - **Tool rail** (left), grouped by what the tools are for: picking and
   moving, writing, thinking it through (mind maps, flowcharts, lines), and
   drawing (shapes, the pen, frames, Excalidraw). The last button holds tables,
   Kanban boards, timelines, databases, images and code blocks. Hover any tool
   to see its shortcut; every key still works.
 - **Undo, redo and zoom** (bottom left), plus a **minimap** (bottom right).
+- **The selection's bar** floats beside what's selected. On a phone it's one
+  row along the bottom instead, with the colours behind one swatch, and the
+  board slides up if the row would cover the selection.
 - **Right-click** anything for the actions that apply to it.
 
 | Dark | Light | High contrast dark |
@@ -281,8 +286,8 @@ These become interactive once selected; drag them by their title strip.
 
 ### Time tracking, assignees and estimates
 
-- **A timer on anything:** select an object and press **Alt+T** (or the clock
-  in the top bar, or **Time…** in the selection toolbar's **⋯** menu) to start timing it.
+- **A timer on anything:** select an object and press **Alt+T** (or **Time
+  tracking** in the top bar's **⋯**, or **Time…** in the selection toolbar's **⋯** menu) to start timing it.
   With nothing selected it times the board, or the open page in a wiki.
   Database records have their own **Start a timer** on their page.
   - Each person has one timer at a time on a board: starting another stops

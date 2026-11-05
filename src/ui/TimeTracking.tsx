@@ -205,10 +205,11 @@ function PersonSelect({ value, onChange, people, label = 'Who' }: { value: TT.Pe
 // ----- the clock in the top bar -----------------------------------------------------------------
 
 /** My running timer (or a way to start one), and the timesheet, from the top bar. */
-export function TimeChip() {
+/** The running clock, or the panel when ⋯ opens it; with no timer running, nothing takes up the bar. */
+export function TimeChip({ open, onOpen }: { open: boolean; onOpen: (open: boolean) => void }) {
   const editor = useEditor()
   const mine = editor.myTimer
-  const [open, setOpen] = useState(false)
+  const setOpen = onOpen
   useTick(!!mine)
   const ref = useRef<HTMLDivElement>(null)
   useClickAway(ref, () => setOpen(false), () => ref.current?.previousElementSibling, open)
@@ -217,13 +218,14 @@ export function TimeChip() {
   const ms = mine ? TT.durationOf(mine, now) : 0
   const long = ms > TT.LONG_RUN
   const what = mine ? targetWords(editor.board, mine.on, mine.label) : ''
+  if (!mine && !open) return null
   return (
     <div className="anchor">
       <button
         className={`icon-btn has-tip time-chip${mine ? ' running' : ''}${long ? ' long' : ''}`}
         aria-label={mine ? `Timer running: ${TT.formatClock(ms)} on ${what}` : 'Time tracking'}
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" strokeWidth="2" />

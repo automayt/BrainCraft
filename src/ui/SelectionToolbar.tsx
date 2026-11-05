@@ -1,4 +1,4 @@
-import { LockIcon } from './icons'
+import { LockIcon, MoreIcon } from './icons'
 import * as B from '../model/board'
 import { isDrawing } from '../model/excalidraw'
 import { canSketch } from '../model/sketch'
@@ -21,6 +21,7 @@ import { useWorkspace } from './useWorkspace'
 import { followLink } from './followLink'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
+import { useMedia } from './useMedia'
 import { copyText } from './copyText'
 import { setNumbered, toMermaidSequence } from '../model/sequence'
 
@@ -62,7 +63,15 @@ export function SelectionToolbar() {
   const linkOpener: MenuOpener = useRef(null)
   const assignOpener: MenuOpener = useRef(null)
   const timeOpener: MenuOpener = useRef(null)
-  if (editor.drag.type !== 'none' || editor.editing || editor.shapePicker || ui.menu) return null
+  // A phone has no room for it beside what's selected: one row along the bottom, and the board
+  // slides up if that row would cover the selection.
+  const docked = useMedia('(max-width: 480px)')
+  const dragging = editor.drag.type !== 'none'
+  const picked = docked ? `${[...editor.selection].join()}/${editor.selectedConnector ?? ''}` : ''
+  useEffect(() => {
+    if (docked && !dragging) editor.keepSelectionClear()
+  }, [docked, dragging, picked, editor])
+  if (dragging || editor.editing || editor.shapePicker || ui.menu) return null
   const { board } = editor
   let anchor: { x: number; y: number }
   /** Where it goes if there's no room above (its top edge). */
@@ -158,6 +167,37 @@ export function SelectionToolbar() {
   const timer = editor.myTimer?.on
   const timed = !!one && (!!one.estimate || (!!timer && 'item' in timer && timer.item === one.id) || (board.time ?? []).some((e) => !!e.on && 'item' in e.on && e.on.item === one.id))
   const opens = (menu: MenuOpener) => (from: HTMLElement, keyboard: boolean) => menu.current?.(from, keyboard)
+  const shown = (color: string) => (palette === INKS ? ink(color) : color)
+  // The colours are one stop for Tab; arrow keys move between them.
+  const swatches = (
+    <div
+      className="swatches"
+      role="group"
+      aria-label="Colour"
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+        const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('.swatch')]
+        const at = all.indexOf(document.activeElement as HTMLButtonElement)
+        e.preventDefault()
+        e.stopPropagation()
+        all[(at + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]?.focus()
+      }}
+    >
+      {palette.map(([name, color], k) => (
+        <button
+          key={name + color}
+          tabIndex={current === color || (!palette.some(([, c]) => c === current) && k === 0) ? 0 : -1}
+          className={`swatch${current === color ? ' active' : ''}`}
+          // Ink and line colours as the board draws them in this theme (black ink is light on a dark board).
+          style={{ background: shown(color) }}
+          title={palette === INKS && name === 'Black' ? 'Ink (adapts to the theme)' : name}
+          aria-label={palette === INKS && name === 'Black' ? 'Ink' : name}
+          aria-pressed={current === color}
+          onClick={() => editor.setColor(color)}
+        />
+      ))}
+    </div>
+  )
 
   // The rarer actions, in the ⋯ menu so the bar stays short and Delete stays in view.
   const more: MoreEntry[] = []
@@ -194,38 +234,9 @@ export function SelectionToolbar() {
   if (statusable && !timed) more.push({ group: 'more', label: 'Time…', keys: one ? 'Alt T' : undefined, title: 'A timer, logged time and an estimate', run: opens(timeOpener) })
 
   return (
-    <div ref={ref} role="toolbar" aria-label="Selected" className={`selection-toolbar no-canvas${useBelow ? ' below' : ''}`} style={{ left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
+    <div ref={ref} role="toolbar" aria-label="Selected" className={`selection-toolbar no-canvas${docked ? ' docked' : useBelow ? ' below' : ''}`} style={docked ? undefined : { left: x, top: y, maxWidth: Math.max(240, editor.viewport.w - editor.rightInset - leftInset - 12) }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys}>
       <div className="stb-main" onWheel={scrollSideways}>
-        {colorable && (
-          // The colours are one stop for Tab; arrow keys move between them.
-          <div
-            className="swatches"
-            role="group"
-            aria-label="Colour"
-            onKeyDown={(e) => {
-              if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-              const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('.swatch')]
-              const at = all.indexOf(document.activeElement as HTMLButtonElement)
-              e.preventDefault()
-              e.stopPropagation()
-              all[(at + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]?.focus()
-            }}
-          >
-            {palette.map(([name, color], k) => (
-              <button
-                key={name + color}
-                tabIndex={current === color || (!palette.some(([, c]) => c === current) && k === 0) ? 0 : -1}
-                className={`swatch${current === color ? ' active' : ''}`}
-                // Ink and line colours as the board draws them in this theme (black ink is light on a dark board).
-                style={{ background: palette === INKS ? ink(color) : color }}
-                title={palette === INKS && name === 'Black' ? 'Ink (adapts to the theme)' : name}
-                aria-label={palette === INKS && name === 'Black' ? 'Ink' : name}
-                aria-pressed={current === color}
-                onClick={() => editor.setColor(color)}
-              />
-            ))}
-          </div>
-        )}
+        {colorable && (docked ? <ColourMenu color={shown(palette.some(([, c]) => c === current) ? current! : palette[0][1])}>{swatches}</ColourMenu> : swatches)}
         {connector && (
           <>
             <span className="sep" />
@@ -390,6 +401,25 @@ export function SelectionToolbar() {
   )
 }
 
+/** On a phone: one swatch showing the colour now, with the rest behind it. */
+function ColourMenu({ color, children }: { color: string; children: React.ReactNode }) {
+  const { at, close, toggle, menuProps } = useButtonMenu()
+  return (
+    <span className="align-anchor">
+      <button className="stb-colour" title="Colour" aria-label="Colour" aria-expanded={!!at} aria-haspopup="menu" onClick={toggle}>
+        <i style={{ background: color }} />
+      </button>
+      {at &&
+        createPortal(
+          <div className="align-menu colour-menu no-canvas" role="menu" aria-label="Colour" {...menuProps} onPointerDown={(e) => e.stopPropagation()} onMouseDown={keepCanvasKeys} onClick={(e) => (e.target as Element).closest('.swatch') && close()}>
+            {children}
+          </div>,
+          document.body,
+        )}
+    </span>
+  )
+}
+
 /** One action in the toolbar's ⋯ menu. Link, Assign and Time open their own menus from there. */
 interface MoreEntry {
   label: string
@@ -425,11 +455,7 @@ function MoreMenu({ entries, react }: { entries: MoreEntry[]; react: boolean }) 
   return (
     <span className="align-anchor">
       <button ref={button} className={`more-button${at ? ' on' : ''}`} title="More: duplicate, lock, layer order, reactions…" aria-label="More" aria-expanded={!!at} aria-haspopup="menu" onClick={toggle}>
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="4" cy="9" r="1.6" fill="currentColor" />
-          <circle cx="9" cy="9" r="1.6" fill="currentColor" />
-          <circle cx="14" cy="9" r="1.6" fill="currentColor" />
-        </svg>
+        <MoreIcon />
       </button>
       {at &&
         createPortal(
