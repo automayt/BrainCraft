@@ -67,6 +67,11 @@ This is separate from [connecting an outside AI assistant over MCP](MCP.md),
 which suits Claude Desktop, Claude Code or Cursor. Both use the same tools
 and [operations](API.md).
 
+When a request fails, the panel says why and offers **Try again**, which asks
+the same question once more without repeating it in the conversation. A
+request that says nothing for ten minutes is dropped as too slow. Press
+**Stop** to end one yourself.
+
 ## Talking to it
 
 Press **🎙 Talk** and just talk, as you would to a person at the whiteboard.

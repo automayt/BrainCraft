@@ -533,6 +533,18 @@ export class Assistant {
     }
     if (into) into.push(...(message.content as typeof into))
     else this.messages.push(message)
+    return this.run(on, signal, live)
+  }
+
+  /** Asks again after a request failed: the conversation already ends with what was asked. */
+  async retry(on: Callbacks, signal?: AbortSignal): Promise<void> {
+    if (this.messages.at(-1)?.role !== 'user') return
+    this.checksLeft = 1
+    return this.run(on, signal)
+  }
+
+  /** Works through the conversation's last message with the model, step by step. */
+  private async run(on: Callbacks, signal?: AbortSignal, live = false): Promise<void> {
     let jsonRetries = 0
     // This step's tool results so far, kept if the request stops partway.
     let done: Anthropic.Beta.BetaToolResultBlockParam[] = []
@@ -685,8 +697,25 @@ export class Assistant {
   }
 }
 
+export const TOO_LONG = 'The assistant took too long to answer, so the request was dropped. Try again, or ask for something smaller.'
+
+/** A timer that `fire`s after `ms` with no `poke`: for a request that's gone quiet. */
+export function quietTimer(ms: number, fire: () => void) {
+  let t: ReturnType<typeof setTimeout> | undefined
+  const stop = () => clearTimeout(t)
+  const poke = () => {
+    stop()
+    t = setTimeout(fire, ms)
+  }
+  poke()
+  return { poke, stop }
+}
+
 /** A short, human message for an API failure. */
 export function describeError(err: unknown): string {
+  // Gateways give up on slow answers with these.
+  const status = (err as { status?: unknown })?.status
+  if (err instanceof Anthropic.APIConnectionTimeoutError || status === 408 || status === 504) return TOO_LONG
   // The BrainCraft server's own refusals (its password, its hourly limit) say exactly what's wrong.
   const said = (err as { error?: { error?: { message?: unknown } } })?.error?.error?.message
   const server = typeof said === 'string' && /AI password|from this address/.test(said) ? `The BrainCraft server says: ${said}.` : ''
@@ -697,5 +726,7 @@ export function describeError(err: unknown): string {
   if (err instanceof Anthropic.APIConnectionError) return 'Couldn’t reach the AI service. Check your connection or the BrainCraft server.'
   if (err instanceof Anthropic.APIError) return `The AI service returned an error (${err.status ?? 'unknown'}): ${err.message}`
   if ((err as Error)?.name === 'AbortError' || err instanceof Anthropic.APIUserAbortError) return 'Stopped.'
+  // A reply cut off partway through arriving.
+  if (err instanceof TypeError && /terminated|network|fetch/i.test(err.message)) return 'The connection dropped before the answer finished. Try again.'
   return (err as Error)?.message ?? String(err)
 }

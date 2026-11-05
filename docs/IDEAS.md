@@ -525,7 +525,7 @@ Still to do, biggest first:
   a line on what each permission allows, a "Friends and family" setup.
 - [ ] **Phone wiki:** one slim bar, a bottom bar while writing (Done, /, [[,
   checklist, photo), the caret kept above the on-screen keyboard.
-- [ ] **The assistant:** a clear error and Try again when it times out.
+- [x] **The assistant:** a clear error and Try again when it times out.
 
 ## From the earlier list
 

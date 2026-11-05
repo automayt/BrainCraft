@@ -2,7 +2,7 @@
 
 import { AssistantIcon, MicIcon } from './icons'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { AI_MODELS, type AiImage, type AiModel, Assistant, type Proposal, describeError, makeBackend } from '../ai/assistant'
+import { AI_MODELS, type AiImage, type AiModel, Assistant, type Callbacks, type Proposal, TOO_LONG, describeError, makeBackend, quietTimer } from '../ai/assistant'
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
 import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loadThread, ownerOf, saveThread, toSaved } from '../ai/threadStore'
 import * as B from '../model/board'
@@ -16,6 +16,9 @@ import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, plainLine } from './Flowstate'
+
+/** A request that says nothing for this long has stalled. */
+const QUIET_LIMIT = 10 * 60_000
 
 const QUICK: { label: string; prompt: string; needs?: 'selection'; changes?: true }[] = [
   { label: 'Summarise', prompt: 'Summarise what is on the board (or in my selection) in a few bullets.' },
@@ -357,20 +360,34 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     const reply: Turn = { role: 'assistant', text: '', proposals: [], where: here }
     s.turns.push(reply)
     setInput('')
+    await work(s, reply, live, (on, signal) => s.assistant.send(text.trim(), on, signal, images, live))
+  }
+
+  /** Takes a turn with the assistant, its words going into `reply`. */
+  const work = async (s: NonNullable<ReturnType<typeof session>>, reply: Turn, live: boolean, ask: (on: Callbacks, signal: AbortSignal) => Promise<void>) => {
     setRunning(true)
     refresh()
     const ctrl = new AbortController()
     abort.current = ctrl
+    let stalled = false
+    const quiet = quietTimer(QUIET_LIMIT, () => {
+      stalled = true
+      ctrl.abort()
+    })
     try {
-      await s.assistant.send(
-        text.trim(),
+      await ask(
         {
           text: (d) => {
+            quiet.poke()
             reply.text += d
             refresh()
           },
-          status: (st) => setStatus(st),
+          status: (st) => {
+            quiet.poke()
+            setStatus(st)
+          },
           proposal: (p) => {
+            quiet.poke()
             reply.proposals.push(p)
             // Changes elsewhere can't be shown on this board; their card says where they go.
             if (!p.target && p.status === 'pending') editor.previewAi(p)
@@ -380,12 +397,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           ...(live ? { apply: (p: Proposal) => !editor.readOnly && editor.applyAi(p.id, p.summary, p.patches, p.bases) } : {}),
         },
         ctrl.signal,
-        images,
-        live,
       )
     } catch (err) {
-      s.turns.push({ role: 'error', text: describeError(err), proposals: [] })
+      s.turns.push({ role: 'error', text: stalled ? TOO_LONG : describeError(err), proposals: [], ...(stalled || !ctrl.signal.aborted ? { again: true } : {}) })
     } finally {
+      quiet.stop()
       busy.current = false
       abort.current = null
       setRunning(false)
@@ -393,6 +409,19 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       refresh()
       keep(s, keeper)
     }
+  }
+
+  /** Another go after a failure: the question is still the last thing in the conversation. */
+  const tryAgain = () => {
+    const s = session()
+    if (!s || busy.current) return
+    s.turns.pop()
+    const last = s.turns.at(-1)
+    if (last?.role === 'assistant' && !last.text && !last.proposals.length) s.turns.pop()
+    busy.current = true
+    const reply: Turn = { role: 'assistant', text: '', proposals: [], where: here }
+    s.turns.push(reply)
+    void work(s, reply, false, (on, signal) => s.assistant.retry(on, signal))
   }
 
   // A question asked from elsewhere (e.g. "Summarise with AI" on the catch-up banner).
@@ -689,6 +718,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                     {/settings|key|password/i.test(t.text) && (
                       <button className="link ai-fix" onClick={() => setSetup(true)}>
                         Open AI settings
+                      </button>
+                    )}
+                    {t.again && k === turns.length - 1 && !running && !talk.on && (
+                      <button className="link ai-fix" onClick={tryAgain}>
+                        Try again
                       </button>
                     )}
                   </div>

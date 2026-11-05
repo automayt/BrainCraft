@@ -22,6 +22,8 @@ export interface Turn {
   text: string
   proposals: Proposal[]
   where?: Where
+  /** An error worth another go (not one the person caused by pressing Stop). */
+  again?: boolean
 }
 
 export interface Usage {
