@@ -24,7 +24,7 @@ import { MAX_FILE_BYTES, formatSize, getFile, kindOf } from '../model/files'
 import type { BoardFile } from '../model/types'
 import { type FileStore, browserFiles, serverFiles } from './files'
 import { type BoardMeta, Library, type LiveInfo, type VersionMeta } from './library'
-import { type AccountInfo, call, can, fetchAccount, type ServerBoard, type ServerMention } from './account'
+import { type AccountInfo, call, can, fetchAccount, type InboxItem, type InboxPlace, type ServerBoard } from './account'
 import { takeReturn } from './formLink'
 import { boardRefs, type CrossLink, excerpt, LinkIndex } from './links'
 import { decodeBoard, forSharing, sharedFromHash, shareUrl, withoutImages } from './share'
@@ -62,9 +62,12 @@ const randomId = () => {
   crypto.getRandomValues(b)
   return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
-/** When the signed-in person last looked at their mentions, per account. */
-const MENTIONS_SEEN = 'braincraft:mentions-seen:'
-const MENTIONS_EVERY_MS = 2 * 60_000
+/** The address of Your boards. */
+export const HOME_HASH = '#home'
+/** How often the inbox is read anyway, in case its connection is down. */
+const INBOX_EVERY_MS = 2 * 60_000
+/** Several things new at once are read together. */
+const INBOX_SETTLE_MS = 600
 
 export const FILE_EXT = '.braincraft'
 
@@ -132,13 +135,23 @@ export class Workspace {
   account: AccountInfo | null = null
   /** The boards the signed-in person can reach on that server. */
   serverBoards: ServerBoard[] = []
-  /** Where the signed-in person is @mentioned on that server, newest first. */
-  mentions: ServerMention[] = []
-  /** When they last looked at their mentions (newer ones count as unread). */
-  mentionsSeen = 0
+  /** What needs the signed-in person on that server, newest first (see Inbox.tsx). */
+  inbox: InboxItem[] = []
+  /** How much of it is new, and when they last looked. */
+  inboxUnread = 0
+  inboxSeen = 0
+  private inboxLoaded = false
+  private inboxSocket: WebSocket | null = null
+  private inboxTimer: ReturnType<typeof setTimeout> | undefined
+  /** A board a link led to that this person can't open: they're offered to ask for it. */
+  noAccess: string | null = null
+  /** Your boards is showing: the address says so, and stays that way until it closes. */
+  atHome = false
+  /** Opened without an address to go to: start on Your boards, not the last board. */
+  startHome = false
   /** Who can open the open server board, to @mention (and which board, and when it was asked). */
   private boardPeople: { board: string; at: number; people: Person[] } | null = null
-  private mentionsTimer: ReturnType<typeof setInterval> | undefined
+  private inboxEvery: ReturnType<typeof setInterval> | undefined
   saveState: SaveState = 'saved'
   /** The file the current board was opened from or saved to, when the browser can write files. */
   fileName: string | null = null
@@ -269,7 +282,10 @@ export class Workspace {
     if (await ws.openHash(hash)) return ws
     // Why a link didn't open, still shown once the last board is back.
     const said = ws.editor.status
+    const first = !(await ws.library.list()).length
     await ws.openLast()
+    // With no address to go to, start on Your boards, unless this is a first visit: the welcome board is the start.
+    if (!ws.noAccess && (!hash.replace(/^#/, '') || hash === HOME_HASH)) ws.startHome = hash === HOME_HASH || !!ws.account || !first
     if (said) {
       // A live board's first sync loads it again, clearing the status: say it after that.
       await ws.live?.whenSynced()
@@ -331,7 +347,7 @@ export class Workspace {
           this.clearShareHash()
           return true
         }
-        this.editor.setStatus('That board isn’t shared with you. Ask whoever manages it for access.')
+        this.noAccess = open.board!
         this.clearShareHash()
         return false
       }
@@ -1037,7 +1053,8 @@ export class Workspace {
       if (!this.serverBoards.some((b) => b.id === to.board)) await this.loadServerBoards()
       const remote = this.serverBoards.find((b) => b.id === to.board)
       if (!remote) {
-        this.editor.setStatus('That board isn’t shared with you. Ask whoever manages it for access.')
+        this.noAccess = to.board
+        this.emit()
         return
       }
       await this.openServerBoard(remote)
@@ -1204,49 +1221,115 @@ export class Workspace {
     if (info.user) {
       this.editor.setAuthor(info.user.name, info.user.id)
       this.live?.setMe(this.me)
-      this.mentionsSeen = Number(safeStorage()?.getItem(MENTIONS_SEEN + info.user.id)) || 0
     }
     await this.loadServerBoards()
     this.emit()
     if (info.user) {
-      void this.loadMentions()
-      // New mentions show up without a reload: now and then, and on coming back to the tab.
-      if (this.mentionsTimer === undefined && typeof window !== 'undefined') {
-        this.mentionsTimer = setInterval(() => void this.loadMentions(), MENTIONS_EVERY_MS)
-        window.addEventListener('focus', () => void this.loadMentions())
+      void this.loadInbox()
+      this.listenForInbox()
+      // Should the connection be down: now and then, and on coming back to the tab.
+      if (this.inboxEvery === undefined && typeof window !== 'undefined') {
+        this.inboxEvery = setInterval(() => void this.loadInbox(), INBOX_EVERY_MS)
+        window.addEventListener('focus', () => void this.loadInbox())
       }
     }
   }
 
-  // ----- mentions of people -----------------------------------------------------------
+  // ----- the inbox -------------------------------------------------------------------
 
-  /** Where the signed-in person is mentioned, across the server's boards they can open. */
-  async loadMentions() {
+  /** What needs the signed-in person, newest first. */
+  async loadInbox() {
     if (!this.server || !this.account?.user) return
     try {
-      this.mentions = (await call<{ mentions: ServerMention[] }>(this.server, 'api/mentions')).mentions
+      const r = await call<{ items: InboxItem[]; unread: number; seen: number }>(this.server, 'api/inbox')
+      const more = r.unread > this.inboxUnread
+      this.inbox = r.items
+      this.inboxUnread = r.unread
+      this.inboxSeen = r.seen
+      // Heard about it while on a board: a word, and the badge on Your boards.
+      if (more && this.inboxLoaded && !this.atHome) this.editor.setStatus('Something new in your inbox')
+      this.inboxLoaded = true
+      // A board shared just now belongs on the list too.
+      if (more) await this.loadServerBoards()
       this.emit()
+      // The board they asked for and were waiting on: in they go.
+      const waiting = this.noAccess
+      if (waiting && r.items.some((i) => i.kind === 'share' && i.board === waiting)) {
+        this.noAccess = null
+        await this.openPlace({ board: waiting })
+      }
     } catch {
       // Kept as it was; the next try may reach the server.
     }
   }
 
-  /** Mentions by someone else since the person last looked. */
-  get unreadMentions(): number {
-    const me = this.account?.user?.name
-    return this.mentions.filter((m) => (m.at ?? 0) > this.mentionsSeen && m.by !== me).length
+  /** Holds a connection that says when there's something new, so it shows without a reload. */
+  private listenForInbox(wait = 1000) {
+    if (!this.server || typeof WebSocket === 'undefined' || this.inboxSocket) return
+    const url = new URL('api/inbox/live', this.server.endsWith('/') ? this.server : `${this.server}/`)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    let socket: WebSocket
+    try {
+      socket = new WebSocket(url)
+    } catch {
+      return
+    }
+    this.inboxSocket = socket
+    let opened = false
+    socket.onopen = () => {
+      opened = true
+      // Whatever happened while it was down.
+      void this.loadInbox()
+    }
+    socket.onmessage = () => {
+      clearTimeout(this.inboxTimer)
+      this.inboxTimer = setTimeout(() => void this.loadInbox(), INBOX_SETTLE_MS)
+    }
+    socket.onclose = () => {
+      this.inboxSocket = null
+      if (!this.account?.user) return
+      setTimeout(() => this.listenForInbox(opened ? 1000 : Math.min(wait * 2, 60_000)), wait)
+    }
   }
 
-  markMentionsSeen() {
-    const user = this.account?.user
-    if (!user) return
-    this.mentionsSeen = Date.now()
-    safeStorage()?.setItem(MENTIONS_SEEN + user.id, String(this.mentionsSeen))
+  /** Looked at: what's there stops counting as new (requests count until they're answered). */
+  markInboxSeen() {
+    if (!this.server || !this.account?.user) return
+    this.inboxSeen = Date.now()
+    this.inboxUnread = this.inbox.filter((i) => i.kind === 'request').length
     this.emit()
+    void call(this.server, 'api/inbox/seen', 'POST', {}).catch(() => {})
   }
 
-  /** Opens a mention: its board (joining it live), then the comment's object or the page. */
-  async openMention(m: ServerMention) {
+  /** Answers a request for access; what went wrong, or null. */
+  async answerRequest(id: string, answer: 'view' | 'edit' | 'no'): Promise<string | null> {
+    if (!this.server) return 'This isn’t connected to a server'
+    try {
+      await call(this.server, `api/inbox/requests/${encodeURIComponent(id)}`, 'POST', { answer })
+      await this.loadInbox()
+      return null
+    } catch (err) {
+      return (err as Error).message
+    }
+  }
+
+  /** Asks for a board this person can't open; what went wrong, or null. */
+  async askForAccess(board: string, note: string): Promise<string | null> {
+    if (!this.server) return 'This isn’t connected to a server'
+    try {
+      await call(this.server, `api/boards/${encodeURIComponent(board)}/ask`, 'POST', { note })
+      return null
+    } catch (err) {
+      return (err as Error).message
+    }
+  }
+
+  async openInboxItem(i: InboxItem) {
+    if (i.kind !== 'declined') await this.openPlace(i)
+  }
+
+  /** Opens a board on the server (joining it live), then the comment's object or the page. */
+  async openPlace(m: InboxPlace) {
     // A board shared since the list was read is asked for again.
     if (!this.serverBoards.some((b) => b.id === m.board)) await this.loadServerBoards()
     const remote = this.serverBoards.find((b) => b.id === m.board)
@@ -1257,6 +1340,10 @@ export class Workspace {
     if (this.liveInfo?.id !== m.board) {
       await this.openServerBoard(remote)
       await this.live?.whenSynced()
+    } else if (this.live?.state === 'denied') {
+      // Taken off this board earlier, and let back on.
+      this.live.rejoin()
+      await this.live.whenSynced()
     }
     if (m.page !== undefined) return this.openLink({ page: m.page })
     if (m.item === undefined) return
@@ -1560,7 +1647,7 @@ export class Workspace {
    * does everything when `replace` (an address that couldn't be opened goes back to what's open).
    */
   syncAddress(replace = false) {
-    if (typeof location === 'undefined' || typeof history === 'undefined') return
+    if (typeof location === 'undefined' || typeof history === 'undefined' || this.atHome) return
     const key = this.linkKey
     if (!key || sharedFromHash(location.hash) || liveFromHash(location.hash)) return
     if (this.openingAddress) return
@@ -1570,7 +1657,7 @@ export class Workspace {
     const was = openFromHash(location.hash)
     const same = was && this.selfKeys.includes(was.board!) && was.page === page
     const url = location.pathname + location.search + want
-    if (!was || same || replace) history.replaceState(null, '', url)
+    if ((!was && location.hash !== HOME_HASH) || same || replace) history.replaceState(null, '', url)
     else history.pushState(null, '', url)
   }
 }

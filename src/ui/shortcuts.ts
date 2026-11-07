@@ -201,7 +201,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     'Comments',
     [
       ['Enter', 'Post (Shift Enter for a new line)'],
-      ['@', 'Mention someone (they see it under Mentions of you) or another object'],
+      ['@', 'Mention someone (they see it in their inbox) or another object'],
       ['[[', 'Link a board or object (in comments and descriptions)'],
       ['C then click', 'Place a comment block'],
     ],

@@ -756,6 +756,24 @@ server.on('upgrade', (req, socket, head) => {
   let manages: boolean | undefined
   try {
     const url = parseUrl(req)
+    // Someone with the app open, on any board or none: told when there's news (see accounts/inbox.ts).
+    if (url?.pathname === '/api/inbox/live') {
+      const me = accountBoards?.inboxSocket(req)
+      if (!me) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+        socket.destroy()
+        return
+      }
+      wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
+        const stop = accountBoards!.inbox.listen(me.id, () => ws.readyState === ws.OPEN && ws.send('{"t":"inbox"}'))
+        const ping = setInterval(() => ws.readyState === ws.OPEN && ws.ping(), 25_000)
+        ws.on('close', () => {
+          clearInterval(ping)
+          stop()
+        })
+      })
+      return
+    }
     const m = url && /^\/api\/boards\/([^/]+)\/live$/.exec(url.pathname)
     room = m ? getRoom(m[1]) : null
     if (accountBoards && room) {
@@ -835,6 +853,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     }
     accounts?.store.flush()
     accounts?.store.saveBoards()
+    accountBoards?.inbox.flush()
     usage.save()
     process.exit(0)
   })

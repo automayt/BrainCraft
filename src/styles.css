@@ -3456,19 +3456,159 @@ html.card-grabbing * {
   }
 }
 
-/* Big: it's where you find everything, so it gets most of the window. */
+/* A page of its own: where you start, and where you find everything. */
 .modal-backdrop:has(> .modal.boards) {
-  align-items: center;
-  padding: 24px;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  background: var(--canvas);
+  backdrop-filter: none;
 }
 
 .modal.boards {
-  width: min(1240px, calc(100vw - 48px));
-  height: min(920px, calc(100vh - 48px));
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  background: var(--canvas);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
 }
 
 .modal.boards header {
   gap: 10px;
+  padding-inline: max(20px, calc((100% - 1320px) / 2));
+}
+
+.home-back {
+  flex: none;
+}
+
+.home-badge {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.home-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Your boards takes the room; the inbox sits beside it, and stays put while they scroll. */
+.boards-body.with-inbox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 0 36px;
+  align-items: start;
+}
+
+.boards-body {
+  padding-inline: max(20px, calc((100% - 1320px) / 2));
+}
+
+.home-main {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.home-inbox {
+  position: sticky;
+  top: 0;
+  grid-column: 2;
+  grid-row: 1;
+  max-height: calc(100dvh - 110px);
+  overflow-y: auto;
+}
+
+.inbox-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.inbox-entry {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 10px 10px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  overflow-wrap: anywhere;
+}
+
+button.inbox-entry {
+  cursor: pointer;
+}
+
+button.inbox-entry:hover,
+button.inbox-entry:focus-visible {
+  background: var(--surface-2);
+}
+
+.inbox-list li.new .inbox-entry {
+  border-left-color: var(--accent);
+}
+
+.inbox-list li.new .inbox-line {
+  font-weight: 650;
+}
+
+.inbox-where {
+  font-size: 12.5px;
+}
+
+.inbox-words {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.inbox-answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.inbox-problem {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.inbox-none {
+  font-size: 13.5px;
+  line-height: 1.5;
 }
 
 .modal.boards h2 {
@@ -6663,14 +6803,23 @@ html.card-grabbing * {
   .templates {
     grid-template-columns: repeat(2, 1fr);
   }
-  .modal-backdrop:has(> .modal.boards) {
-    padding: 0;
+  /* The inbox above your boards, kept short so they're still in reach. */
+  .boards-body.with-inbox {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    gap: 18px 0;
   }
-  .modal.boards {
-    width: 100vw;
-    height: 100dvh;
-    border: 0;
-    border-radius: 0;
+  .modal.boards .wordmark {
+    display: none;
+  }
+  .home-main,
+  .home-inbox {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .home-inbox {
+    position: static;
+    max-height: 260px;
   }
   .recent-grid {
     grid-auto-columns: 44%;
@@ -10461,6 +10610,24 @@ html.card-grabbing * {
   font-size: 13px;
 }
 
+.modal.no-access > :is(p, label, .account-actions) {
+  margin-inline: 20px;
+}
+
+.modal.no-access .account-actions {
+  margin-bottom: 18px;
+}
+
+.modal.no-access textarea {
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-ctl);
+  resize: vertical;
+}
+
 .signin-card input,
 .account-dialog input,
 .account-inline input,
@@ -10537,81 +10704,12 @@ html.card-grabbing * {
   position: relative;
 }
 
-/* New mentions, on the account button. */
-.account-badge {
-  position: absolute;
-  top: -4px;
-  right: -6px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 17px;
-  color: #fff;
-  background: var(--danger, #d6336c);
-  border: 2px solid var(--surface);
-  border-radius: var(--r-ctl);
-  box-sizing: content-box;
-}
-
 .account-menu .menu-count {
   float: right;
   margin-left: 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
-}
-
-.mention-list {
-  max-height: min(60vh, 520px);
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.mention-list li {
-  border-bottom: 1px solid var(--border);
-}
-
-.mention-list li.muted {
-  padding: 12px 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.mention-list button {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  padding: 9px 10px;
-  font: inherit;
-  text-align: left;
-  color: var(--text);
-  background: none;
-  border: none;
-  border-radius: var(--r-ctl);
-}
-
-.mention-list button:hover,
-.mention-list button:focus-visible {
-  background: var(--surface-2);
-}
-
-.mention-list li.new button {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.mention-where {
-  font-size: 13px;
-}
-
-.mention-excerpt {
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 /* The menu itself, not lists in the dialogs it opens. */

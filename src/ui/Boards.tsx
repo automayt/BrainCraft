@@ -21,6 +21,7 @@ import { LiveSection } from './Live'
 import { copyText } from './copyText'
 import { useUi } from './uiContext'
 import { appName } from '../store/brand'
+import { InboxPanel } from './Inbox'
 
 export function timeAgo(t: number, now = Date.now()): string {
   const s = Math.round((now - t) / 1000)
@@ -79,6 +80,7 @@ export function Dialog({ label, onClose, className = '', children }: { label: st
 const RECENT = 5
 const MORE = 10
 
+/** Your boards: a page of its own, where BrainCraft starts, with your inbox beside it. */
 export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onOpenFile: () => void }) {
   const ws = useWorkspace()
   const editor = useEditor()
@@ -93,16 +95,21 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
   const all = useMemo(() => boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined), [ws.boards, ws.serverBoards, ws.account, ws.server])
   const shown = useMemo(() => shownEntries(all, { query, filter, sort, me }), [all, query, filter, sort, me])
   const recentList = useMemo(() => byOpened(all), [all])
+  const sharedList = useMemo(() => all.filter((e) => sharedWithMe(e, me)).sort((a, z) => (z.server?.updated ?? 0) - (a.server?.updated ?? 0)), [all, me])
   const titleOf = (key: string | undefined) => (key === undefined ? undefined : all.find((e) => keysOf(e).includes(key))?.title)
   const shared = all.some((e) => sharedWithMe(e, me))
   const wikis = all.some((e) => e.kind === 'wiki')
   const searching = !!query.trim()
 
-  const open = (e: BoardEntry) => {
-    onClose()
-    if (e.local) {
-      if (e.local.id !== ws.boardId) void ws.switchTo(e.local.id)
-    } else if (e.server) void ws.openServerBoard(e.server)
+  // The board first, so the address goes from here straight to it.
+  const open = async (e: BoardEntry) => {
+    try {
+      if (e.local) {
+        if (e.local.id !== ws.boardId) await ws.switchTo(e.local.id)
+      } else if (e.server) await ws.openServerBoard(e.server)
+    } finally {
+      onClose()
+    }
   }
   const create = (t: (typeof TEMPLATES)[number], title?: string) => {
     onClose()
@@ -145,7 +152,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
       current={!!e.local && e.local.id === ws.boardId}
       renaming={renaming === e.key}
       confirming={confirming === e.key}
-      onOpen={() => open(e)}
+      onOpen={() => void open(e)}
       onRename={(title) => {
         setRenaming(null)
         if (title.trim() && title !== e.title) void ws.rename(e.local?.id, title.trim(), e.server?.id)
@@ -164,6 +171,9 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
   return (
     <Dialog label="Your boards" onClose={onClose} className="boards">
       <header>
+        <span className="wordmark" aria-hidden="true">
+          {appName()}
+        </span>
         <h2>Your boards</h2>
         <input
           ref={search}
@@ -175,7 +185,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && shown[0]) open(shown[0].entry)
+            if (e.key === 'Enter' && shown[0]) void open(shown[0].entry)
             else moveIn(e)
           }}
         />
@@ -183,18 +193,37 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           Open a file…
         </button>
         <NewMenu onBoard={(t) => create(t)} onWiki={(t) => newWiki(t)} onGuide={() => (onClose(), void ws.openGuide())} onFile={() => (onClose(), onOpenFile())} />
-        <button className="icon-close" aria-label="Close" onClick={onClose}>
-          ×
+        <button className="home-back" onClick={onClose}>
+          Back to the board
         </button>
       </header>
-      <div className="boards-body">
+      <div className={`boards-body${ws.account?.user ? ' with-inbox' : ''}`}>
+        {ws.account?.user && <InboxPanel onOpened={onClose} />}
+        <div className="home-main">
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
+        {!searching && sharedList.length > 0 && (
+          <section className="boards-recent" aria-labelledby="boards-shared-title">
+            <div className="home-section-head">
+              <h3 id="boards-shared-title">Shared with you</h3>
+              {sharedList.length > RECENT && (
+                <button className="link" onClick={() => setFilter('shared')}>
+                  See all {sharedList.length}
+                </button>
+              )}
+            </div>
+            <div className="recent-grid">
+              {sharedList.slice(0, RECENT).map((e) => (
+                <BoardTile key={e.key} entry={e} me={me} parentTitle={titleOf(e.parent)} current={!!e.local && e.local.id === ws.boardId} onOpen={() => void open(e)} />
+              ))}
+            </div>
+          </section>
+        )}
         {!searching && all.length > 0 && (
           <section className="boards-recent" aria-labelledby="boards-recent-title">
             <h3 id="boards-recent-title">Recent</h3>
             <div className="recent-grid">
               {recentList.slice(0, recent).map((e) => (
-                <BoardTile key={e.key} entry={e} me={me} parentTitle={titleOf(e.parent)} current={!!e.local && e.local.id === ws.boardId} onOpen={() => open(e)} />
+                <BoardTile key={e.key} entry={e} me={me} parentTitle={titleOf(e.parent)} current={!!e.local && e.local.id === ws.boardId} onOpen={() => void open(e)} />
               ))}
             </div>
             {all.length > RECENT && (
@@ -313,6 +342,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
             </section>
           </section>
         )}
+        </div>
       </div>
     </Dialog>
   )

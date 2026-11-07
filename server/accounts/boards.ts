@@ -10,6 +10,10 @@
  *   GET    /api/boards/:id/access       who has access
  *   GET    /api/boards/:id/people       the people who can open it, to @mention
  *   GET    /api/mentions                where you're @mentioned, across the boards you can open
+ *   GET    /api/inbox                   what needs you: shares, mentions, replies, requests for access
+ *   POST   /api/inbox/seen              you've looked
+ *   POST   /api/inbox/requests/:id {answer}   answer a request: "view", "edit" or "no" (manage)
+ *   POST   /api/boards/:id/ask {note?}  ask for a board you can't open (the same reply whether it exists or not)
  *   PUT    /api/boards/:id/access       change who has access, or the owner (manage)
  *   DELETE /api/boards/:id              delete it (manage); it can be put back for 90 days
  *   GET    /api/boards/:id/versions…    its saved versions, and putting one back (see backupRoutes.ts)
@@ -23,7 +27,7 @@ import type { Role } from '../../src/collab/protocol'
 import type { Room, RoomData } from '../../src/collab/room'
 import { maskFor } from '../../src/model/brainstorm'
 import { hours, summarize, timeCsv, type TimeFilter } from '../../src/model/timeTracking'
-import { mentionsOf, objectLabel, parseNote } from '../../src/model/notes'
+import { mentionsOf, objectLabel, parseNote, repliesTo } from '../../src/model/notes'
 import { fromJson } from '../../src/model/serialize'
 import type { Board } from '../../src/model/types'
 import type { Backups } from '../backups'
@@ -31,9 +35,10 @@ import { versionRoute } from '../backupRoutes'
 import { readBoard, sendRead } from '../boardReads'
 import { boardWrite } from '../boardWrites'
 import { atLeast, levelFor, roleOf } from './access'
+import { Inbox, cleanNote } from './inbox'
 import type { Accounts } from './service'
 import { type BoardEntry, cleanGrants } from './store'
-import type { Grant, Level, User } from './types'
+import { type Grant, LEVELS, type Level, type User } from './types'
 
 const LEVEL_WORDS: Record<Level, string> = { view: 'can view', edit: 'can edit', manage: 'can manage' }
 /** An admin opening the same board again within this long isn't noted again. */
@@ -62,8 +67,27 @@ export interface RoomHost {
 export const CLOSE_REMOVED = 4403
 export const CLOSE_CHANGED = 4409
 
-/** Mentions listed at most. */
+/** Mentions listed at most, and entries in an inbox. */
 const MENTIONS_SHOWN = 100
+
+/** A mention of you, or a comment after yours. */
+interface PersonNews {
+  kind: 'mention' | 'reply'
+  board: string
+  title: string
+  boardKind?: 'wiki'
+  at?: number
+  by?: string
+  excerpt: string
+  item?: number
+  label?: string
+  note?: string
+  page?: string
+  pageTitle?: string
+}
+
+/** How many boards' worth of "already told" are remembered before starting again. */
+const TOLD_KEPT = 10_000
 
 const json = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -78,13 +102,18 @@ export class AccountBoards {
   private origins: string[]
   /** When each admin last opened each board they could only open as an admin. */
   private peeks = new Map<string, number>()
-  /** Who each board mentions, as of its last change, so listing mentions reads only boards that have yours. */
+  /** Who each board mentions or has comments by, as of its last change, so listing them reads only boards that have yours. */
   private mentioned = new Map<string, { updated: number; ids: Set<string> }>()
+  /** What needs each person. */
+  inbox: Inbox
+  /** The newest thing each online person has been told about on each board. */
+  private told = new Map<string, number>()
 
   constructor(accounts: Accounts, host: RoomHost, origins: string[] = []) {
     this.accounts = accounts
     this.host = host
     this.origins = origins.map((o) => o.replace(/\/+$/, ''))
+    this.inbox = new Inbox(accounts.dir, accounts.now)
     // Boards made before this index (or before accounts) are added to it once.
     const known = accounts.store.boards
     let added = false
@@ -110,6 +139,32 @@ export class AccountBoards {
     clearTimeout(this.indexTimer)
     this.indexTimer = setTimeout(() => this.store.saveBoards(), 1500)
     this.indexTimer.unref?.()
+    this.tellOnline(room)
+  }
+
+  /** Someone with the app open who has something new on this board hears about it now. */
+  private tellOnline(room: Room) {
+    const online = this.inbox.online()
+    if (!online.length) return
+    const ids = whoIsMentioned(room.data.board)
+    for (const [id, since] of online) {
+      const user = this.store.user(id)
+      if (!user || !ids.size || !concerns(ids, user) || !this.level(user, room.data)) continue
+      const newest = Math.max(0, ...this.newsOn(room.data.board, user).map((n) => n.at ?? 0))
+      const key = `${id} ${room.data.id}`
+      if (newest <= (this.told.get(key) ?? since)) continue
+      if (this.told.size > TOLD_KEPT) this.told.clear()
+      this.told.set(key, newest)
+      this.inbox.nudge(id)
+    }
+  }
+
+  /** Mentions of `me` and replies to them on a board, as they'd see it. */
+  private newsOn(board: Board, me: User) {
+    // A hidden brainstorm note's comments stay hidden here too.
+    const seen = maskFor(board, me.name)
+    const who = { id: me.id, name: me.name }
+    return [...mentionsOf(seen, who).map((r) => ({ ...r, kind: 'mention' as const })), ...repliesTo(seen, who).map((r) => ({ ...r, kind: 'reply' as const }))].filter((r) => r.by !== me.name)
   }
 
   level(user: User | null, access: { owner?: string; access?: RoomData['access'] }): Level | null {
@@ -150,10 +205,19 @@ export class AccountBoards {
 
   private accessWords = (grants: Grant[]) => grants.map((g) => `${this.grantName(g)} ${LEVEL_WORDS[g.level]}`).join(', ') || 'nobody else'
 
+  private ownOrigin(req: IncomingMessage) {
+    const origin = req.headers.origin
+    return !origin || origin.replace(/\/+$/, '') === this.accounts.origin(req) || this.origins.includes(origin)
+  }
+
+  /** Who an inbox connection is for; null to refuse (wrong origin, not signed in). */
+  inboxSocket(req: IncomingMessage): User | null {
+    return this.ownOrigin(req) ? this.accounts.userOf(req) : null
+  }
+
   /** The role a live connection gets, and who it is; null to refuse (wrong origin, no access). */
   socket(req: IncomingMessage, room: Room): { role: Role; user: User; level: Level } | null {
-    const origin = req.headers.origin
-    if (origin && origin.replace(/\/+$/, '') !== this.accounts.origin(req) && !this.origins.includes(origin)) return null
+    if (!this.ownOrigin(req)) return null
     const user = this.accounts.userOf(req)
     const level = this.level(user, room.data)
     const role = roleOf(level)
@@ -189,7 +253,7 @@ export class AccountBoards {
   /** Handles a board route; false when it isn't one. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'time' && parts[1] !== 'backups') return false
+    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'inbox' && parts[1] !== 'time' && parts[1] !== 'backups') return false
     if (!this.accounts.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const me = this.accounts.userOf(req)
     if (!me) return json(res, 401, { error: 'Sign in first' }), true
@@ -199,8 +263,10 @@ export class AccountBoards {
 
     if (parts[1] === 'mentions') {
       if (m !== 'GET' || parts.length !== 2) return json(res, 405, { error: 'Method not allowed' }), true
-      return json(res, 200, { mentions: this.mentions(me) }), true
+      return json(res, 200, { mentions: this.peopleNews(me).filter((n) => n.kind === 'mention').map(({ kind: _kind, boardKind, ...n }) => ({ ...n, ...(boardKind ? { kind: boardKind } : {}) })) }), true
     }
+
+    if (parts[1] === 'inbox') return this.inboxRoute(req, res, me, m, parts.slice(2), body), true
 
     // GET /api/time?from=&to=&who=&format=csv → time across every board you can open.
     if (parts[1] === 'time') {
@@ -248,6 +314,12 @@ export class AccountBoards {
       const room = this.host.create(board, me.id)
       this.index(room)
       return json(res, 201, { id: room.data.id, level: 'manage' }), true
+    }
+
+    // Before anything says whether the board exists: asking for one that doesn't looks the same.
+    if (parts[3] === 'ask' && parts.length === 4) {
+      if (m !== 'POST') return json(res, 405, { error: 'Method not allowed' }), true
+      return this.ask(req, me, parts[2], await body()), json(res, 200, { ok: true }), true
     }
 
     const room = parts[2] ? this.host.get(parts[2]) : null
@@ -332,18 +404,7 @@ export class AccountBoards {
         if (b.access !== undefined) {
           const grants = cleanGrants(b.access, this.store)
           if (!grants) return json(res, 400, { error: 'Each entry needs who ("user" or "group"), an id that exists, and a level (view, edit or manage)' }), true
-          const before = room.data.access ?? []
-          const widened = grants.some((g) => !before.some((x) => x.who === g.who && x.id === g.id && atLeast(x.level, g.level)))
-          if (widened && !this.accounts.can(me, 'boards.share')) return json(res, 403, { error: 'You can’t give others access to boards. Ask an admin.' }), true
-          room.data.access = grants
-          const changed = this.accessChanges(before, grants)
-          if (changed.length)
-            this.accounts.log(req, me, {
-              action: 'board.access',
-              target: boardTarget(room.data),
-              changes: { access: [this.accessWords(before), this.accessWords(grants)] },
-              text: `${me.name} changed who has “${room.data.board.title}”: ${changed.join('; ')}`,
-            })
+          if (!this.grant(req, me, room, grants)) return json(res, 403, { error: 'You can’t give others access to boards. Ask an admin.' }), true
         }
         if (b.owner !== undefined) {
           if (typeof b.owner !== 'string' || !this.store.user(b.owner)) return json(res, 400, { error: 'The new owner must be someone on this server' }), true
@@ -357,7 +418,9 @@ export class AccountBoards {
               changes: { owner: [was?.name ?? 'nobody', to.name] },
               text: `${me.name} handed “${room.data.board.title}” to ${to.name} (it was ${was ? `${was.name}’s` : 'nobody’s'})`,
             })
+          const before = { owner: room.data.owner, access: room.data.access }
           room.data.owner = b.owner
+          this.tellNewAccess(me, room, before)
         }
         room.onChange?.(false)
         this.index(room)
@@ -407,7 +470,129 @@ export class AccountBoards {
     return json(res, 200, { id: room.data.id, title: room.data.board.title, ...(room.data.board.kind === 'wiki' ? { kind: 'wiki' } : {}), level: this.level(me, room.data) })
   }
 
-  /** Where `me` is mentioned on the boards they can open, newest first. */
+  /**
+   * Gives a board these grants, in the activity log and everyone's inbox; false when that would give
+   * access `me` may not give.
+   */
+  private grant(req: IncomingMessage, me: User, room: Room, grants: Grant[]) {
+    const before = room.data.access ?? []
+    const widened = grants.some((g) => !before.some((x) => x.who === g.who && x.id === g.id && atLeast(x.level, g.level)))
+    if (widened && !this.accounts.can(me, 'boards.share')) return false
+    const had = { owner: room.data.owner, access: before }
+    room.data.access = grants
+    const changed = this.accessChanges(before, grants)
+    if (changed.length)
+      this.accounts.log(req, me, {
+        action: 'board.access',
+        target: boardTarget(room.data),
+        changes: { access: [this.accessWords(before), this.accessWords(grants)] },
+        text: `${me.name} changed who has “${room.data.board.title}”: ${changed.join('; ')}`,
+      })
+    this.tellNewAccess(me, room, had)
+    return true
+  }
+
+  /** Everyone who can do more with a board than they could (`had`) hears who gave it to them. */
+  private tellNewAccess(me: User, room: Room, had: { owner?: string; access?: RoomData['access'] }) {
+    const rank = (l: Level | null) => (l ? LEVELS.indexOf(l) : -1)
+    for (const u of this.store.users) {
+      if (u.id === me.id || u.disabled) continue
+      // As themselves, not as admins: being able to open everything isn't having been given this.
+      const plain: User = { ...u, role: 'user' }
+      const level = this.level(plain, room.data)
+      if (level && rank(level) > rank(this.level(plain, had))) this.inbox.tell(u.id, { kind: 'share', board: room.data.id, by: me.name, level })
+    }
+  }
+
+  /** Who answers requests for a board: those who manage it, or admins when nobody does. */
+  private managers(data: { owner?: string; access?: RoomData['access'] }) {
+    const live = this.store.users.filter((u) => !u.disabled)
+    const those = live.filter((u) => this.level({ ...u, role: 'user' }, data) === 'manage')
+    return those.length ? those : live.filter((u) => u.role === 'admin')
+  }
+
+  /** Asks for a board. Silent whatever happens: the reply must not say whether it exists. */
+  private ask(req: IncomingMessage, me: User, id: string, raw: string) {
+    const entry = this.store.boards[id]
+    if (!entry || this.level(me, entry) || !this.inbox.mayAsk(me.id, id)) return
+    let note: string | undefined
+    try {
+      note = cleanNote((JSON.parse(raw || '{}') as { note?: unknown }).note)
+    } catch {
+      // A note that can't be read: the request still stands.
+    }
+    this.inbox.ask(me.id, id, note)
+    this.accounts.log(req, me, { action: 'board.request', target: { kind: 'board', id, name: entry.title }, text: `${me.name} asked for access to “${entry.title}”` })
+    for (const u of this.managers(entry)) this.inbox.nudge(u.id)
+  }
+
+  private inboxRoute(req: IncomingMessage, res: ServerResponse, me: User, m: string, rest: string[], body: () => Promise<string>): void | Promise<void> {
+    if (rest.length === 0) {
+      if (m !== 'GET') return json(res, 405, { error: 'Method not allowed' })
+      const items = this.inboxOf(me)
+      const seen = this.inbox.seenBy(me.id)
+      return json(res, 200, { seen, unread: items.filter((i) => i.kind === 'request' || (i.at ?? 0) > seen).length, items })
+    }
+    if (rest.length === 1 && rest[0] === 'seen') {
+      if (m !== 'POST') return json(res, 405, { error: 'Method not allowed' })
+      this.inbox.markSeen(me.id)
+      return json(res, 200, { ok: true })
+    }
+    if (rest.length === 2 && rest[0] === 'requests') {
+      if (m !== 'POST') return json(res, 405, { error: 'Method not allowed' })
+      return this.answer(req, res, me, rest[1], body)
+    }
+    return json(res, 404, { error: 'Not found' })
+  }
+
+  private async answer(req: IncomingMessage, res: ServerResponse, me: User, id: string, body: () => Promise<string>) {
+    const request = this.inbox.requests.find((r) => r.id === id && !r.declined)
+    const room = request ? this.host.get(request.board) : null
+    if (!request || !room || this.level(me, room.data) !== 'manage') return json(res, 404, { error: 'No such request' })
+    let answer: unknown
+    try {
+      answer = (JSON.parse((await body()) || '{}') as { answer?: unknown }).answer
+    } catch {
+      return json(res, 400, { error: 'Send {"answer": "view", "edit" or "no"}' })
+    }
+    const asker = this.store.user(request.from)
+    if (answer === 'no') {
+      this.inbox.settle(request.id, true)
+      this.accounts.log(req, me, { action: 'board.request', target: boardTarget(room.data), text: `${me.name} turned down ${asker?.name ?? 'someone'}’s request for “${room.data.board.title}”` })
+      if (asker) this.inbox.tell(asker.id, { kind: 'declined' })
+    } else if (answer === 'view' || answer === 'edit') {
+      const grants = (room.data.access ?? []).filter((g) => !(g.who === 'user' && g.id === request.from))
+      if (!this.grant(req, me, room, [...grants, { who: 'user', id: request.from, level: answer }])) return json(res, 403, { error: 'You can’t give others access to boards. Ask an admin.' })
+      this.inbox.settle(request.id)
+      room.onChange?.(false)
+      this.index(room)
+      this.recheck(room)
+    } else return json(res, 400, { error: 'Send {"answer": "view", "edit" or "no"}' })
+    // It goes from the other managers' inboxes too.
+    for (const u of this.managers(room.data)) if (u.id !== me.id) this.inbox.nudge(u.id)
+    return json(res, 200, { ok: true })
+  }
+
+  /** Everything for one person's inbox, newest first. */
+  private inboxOf(me: User) {
+    const boards = this.store.boards
+    const about = (id: string) => ({ title: boards[id]?.title ?? '', ...(boards[id]?.kind ? { boardKind: boards[id].kind } : {}) })
+    this.inbox.sweep((r) => !boards[r.board] || !this.store.user(r.from))
+    const requests = this.inbox.requests.flatMap((r) => {
+      const entry = boards[r.board]
+      const from = this.store.user(r.from)
+      if (r.declined || !entry || !from || !this.managers(entry).some((u) => u.id === me.id)) return []
+      return [{ kind: 'request' as const, id: r.id, board: r.board, ...about(r.board), at: r.at, by: from.name, ...(this.accounts.can(me, 'people.see') ? { email: from.email } : {}), ...(r.note ? { note: r.note } : {}) }]
+    })
+    const news = this.inbox.newsFor(me.id).flatMap<{ kind: string; id: string; at: number }>((n) => {
+      if (n.kind === 'declined') return [n]
+      const entry = boards[n.board]
+      return entry && this.level(me, entry) ? [{ ...n, ...about(n.board) }] : []
+    })
+    const people = this.peopleNews(me).map((n) => ({ ...n, id: `${n.board}/${n.item ?? ''}/${n.note ?? ''}/${n.page ?? ''}/${n.kind}` }))
+    return [...requests, ...news, ...people].sort((a, z) => (z.at ?? 0) - (a.at ?? 0)).slice(0, MENTIONS_SHOWN)
+  }
+
   /** Time on every board this person can open (as they'd see it: hidden notes stay hidden). */
   private timeAcross(me: User, f: TimeFilter) {
     const now = Date.now()
@@ -437,13 +622,13 @@ export class AccountBoards {
     }
   }
 
-  private mentions(me: User) {
-    const out: { board: string; title: string; kind?: 'wiki'; at?: number; by?: string; excerpt: string; item?: number; label?: string; note?: string; page?: string; pageTitle?: string }[] = []
+  /** Where `me` is mentioned on the boards they can open, and replies to them, newest first. */
+  private peopleNews(me: User) {
+    const out: PersonNews[] = []
     for (const [id, e] of Object.entries(this.store.boards)) {
       if (!this.level(me, e)) continue
       let seen = this.mentioned.get(id)
-      // Ids of accounts, and (lower case) names of mentions by name alone.
-      const mine = (x: { ids: Set<string> }) => x.ids.has(me.id) || x.ids.has(nameKey(me.name))
+      const mine = (x: { ids: Set<string> }) => concerns(x.ids, me)
       if (seen && seen.updated === e.updated && !mine(seen)) continue
       const data = this.host.loaded?.(id)?.data ?? this.host.peek(id)
       if (!data) continue
@@ -452,12 +637,12 @@ export class AccountBoards {
         this.mentioned.set(id, seen)
         if (!mine(seen)) continue
       }
-      // A hidden brainstorm note's comments stay hidden here too.
-      for (const r of mentionsOf(maskFor(data.board, me.name), { id: me.id, name: me.name })) {
+      for (const r of this.newsOn(data.board, me)) {
         out.push({
+          kind: r.kind,
           board: id,
           title: data.board.title,
-          ...(data.board.kind === 'wiki' ? { kind: 'wiki' as const } : {}),
+          ...(data.board.kind === 'wiki' ? { boardKind: 'wiki' as const } : {}),
           ...(r.at !== undefined ? { at: r.at } : {}),
           ...(r.by ? { by: r.by } : {}),
           excerpt: r.excerpt,
@@ -490,8 +675,15 @@ export class AccountBoards {
 }
 
 const nameKey = (name: string) => `name:${name.replace(/\s+/g, ' ').trim().toLowerCase()}`
+const writerKey = (name: string) => `wrote:${name.replace(/\s+/g, ' ').trim().toLowerCase()}`
 
-/** Who a board mentions anywhere (comments, descriptions, pages): account ids, and names (see nameKey) of the rest. */
+/** Whether what whoIsMentioned found has anything to do with `me`. */
+const concerns = (ids: Set<string>, me: User) => ids.has(me.id) || ids.has(nameKey(me.name)) || ids.has(writerKey(me.name))
+
+/**
+ * Who a board mentions anywhere (comments, descriptions, pages): account ids, and names (see nameKey)
+ * of the rest. And who has written comments, since those people get replies.
+ */
 function whoIsMentioned(b: Board): Set<string> {
   const ids = new Set<string>()
   const scan = (text: string) => {
@@ -500,7 +692,10 @@ function whoIsMentioned(b: Board): Set<string> {
   }
   for (const i of b.items) {
     if (i.description) scan(i.description)
-    for (const n of i.notes ?? []) scan(n.text)
+    for (const n of i.notes ?? []) {
+      scan(n.text)
+      if (n.author) ids.add(writerKey(n.author))
+    }
   }
   for (const body of b.bodies ?? []) scan(body.text)
   return ids

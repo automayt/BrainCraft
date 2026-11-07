@@ -512,7 +512,7 @@ Still to do, biggest first:
   ("Add to Trip ideas"), and can grow to fit.
 - [ ] **The board by keyboard:** Tab or arrows between objects in reading
   order, the selection read out, an Objects list as an alternative.
-- [ ] **A home page and an inbox:** Your boards as a page of its own, with
+- [x] **A home page and an inbox:** Your boards as a page of its own, with
   Shared with you first; shares, mentions, replies and access requests in one
   list, sent over the live connection; "Ask for access" on a board you can't
   open.

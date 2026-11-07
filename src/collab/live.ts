@@ -173,6 +173,12 @@ export class LiveSession {
     setTimeout(() => this.connect(), wait)
   }
 
+  /** Tries again after being refused: access may have been given back. */
+  rejoin() {
+    this.retries = 0
+    this.connect()
+  }
+
   close() {
     this.closed = true
     clearTimeout(this.sendTimer)

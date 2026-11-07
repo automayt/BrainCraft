@@ -33,6 +33,7 @@ export const AUDIT_ACTIONS = {
   'board.owner': 'boards',
   'board.delete': 'boards',
   'board.open-as-admin': 'boards',
+  'board.request': 'boards',
   'board.restore': 'boards',
   'board.undelete': 'boards',
   'backup.download': 'settings',

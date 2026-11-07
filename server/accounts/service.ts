@@ -101,12 +101,17 @@ export class Accounts {
   audit: AuditLog
   sso: SsoProvider | null
   private o: Required<Omit<AccountsOptions, 'sso' | 'publicUrl' | 'appName'>> & { publicUrl?: string; appName?: string }
+  /** Where its files live, and its clock. */
+  dir: string
+  now: () => number
   private loginByVisitor: (k: string) => boolean
   private loginByEmail: (k: string) => boolean
 
   constructor(o: AccountsOptions) {
     this.o = { admins: [], trustProxy: false, visitor: (req) => req.socket.remoteAddress ?? '', now: Date.now, allowedDomains: [], ...o }
     this.o.admins = this.o.admins.map(normalEmail).filter(Boolean)
+    this.dir = o.dir
+    this.now = this.o.now
     this.store = new AccountStore(o.dir, this.o.now)
     this.audit = new AuditLog(o.dir, this.o.now)
     this.sso = o.sso ?? null

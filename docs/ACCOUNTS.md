@@ -121,16 +121,52 @@ it like any other. One person can make up to 20 groups.
   data (or use a private window).
 - Names in live sessions are the accounts' names, so you can trust who's who.
 
+## The inbox
+
+The Inbox sits beside Your boards, and the Your boards button shows how many
+things in it are new. It holds:
+
+- **Boards shared with you:** who gave it to you and what you can do. It also
+  reaches everyone a group lets in, and says so again when you can do more.
+- **Mentions** of you (see below).
+- **Replies:** someone else's comment after yours on the same object.
+- **Requests for access** to boards you manage. These count as new until
+  they're answered, however often you look.
+
+What's new shows up as it happens, over a small connection of its own
+(`/api/inbox/live`), which only ever says "something's new". The app then reads
+your inbox as it would anyway, so nothing private travels on it. Should that
+connection be down, the app looks every two minutes.
+
+What's been seen is kept on the server, so it follows you between devices.
+
+### Asking for access
+
+A link to a board you can't open offers **Ask for access**, with an optional
+note. The request goes to whoever manages the board, not to admins who merely
+could; a board nobody manages goes to admins. They answer **Can edit**,
+**Can view** or **Decline** from their inbox, and it needs the "Share boards"
+permission, as sharing does. On a yes the board opens by itself for someone
+still on that screen, and it's in their inbox either way. Every request and
+answer goes in the activity log.
+
+- The screen, and the reply from the server, are the same whether the board
+  exists or not, and it never shows a title: someone guessing at addresses
+  learns nothing.
+- A declined request tells the person it wasn't approved, without saying which
+  board or who answered.
+- Someone turned down can't ask for that board again for a day, and nobody can
+  have more than 20 requests waiting.
+
 ## Mentions
 
 Type **@** in a comment, a description or a wiki page and pick someone: the
 list offers the people who can open that board (and anyone there now). The
 mention is tied to their account, so it still finds them after a name change.
 
-- **Mentions of you…** in the account menu lists every comment, description
-  and page that mentions you, on the boards and wikis you can open, newest
-  first; the account button shows how many are new. Picking one opens the
-  board at that object's comments, or the wiki at that page.
+- **The Inbox** on Your boards lists every comment, description and page that
+  mentions you, on the boards and wikis you can open, newest first. Picking one
+  opens the board at that object's comments, or the wiki at that page.
 - **`{{tasks @me}}`** in a wiki page lists the unticked checklist items that
   mention whoever is reading it (`{{tasks @Sam Lee}}`: Sam Lee's), so
   "- [ ] Book the train @Sam" is an assignment.
@@ -411,5 +447,5 @@ curl -H "Authorization: Bearer bct_..." https://boards.example.org/api/boards
   `BRAINCRAFT_TRUST_PROXY=1`) so cookies are marked Secure and links use the
   right address.
 - Accounts live in `BRAINCRAFT_DATA/accounts/` (`users.json`, `groups.json`,
-  `sessions.json`, `boards.json`, and the activity log `audit.jsonl`); back
+  `sessions.json`, `boards.json`, `inbox.json`, and the activity log `audit.jsonl`); back
   them up with the boards.

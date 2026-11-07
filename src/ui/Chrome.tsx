@@ -186,9 +186,14 @@ export function TopLeft() {
         </span>
       </div>
       <span className="divider" />
-      <button className="icon-btn has-tip" aria-label="Your boards" onMouseDown={keepFocus} onClick={ui.openBoards}>
+      <button className="icon-btn has-tip" aria-label={ws.inboxUnread ? `Your boards and inbox, ${ws.inboxUnread} new` : 'Your boards'} onMouseDown={keepFocus} onClick={ui.openBoards}>
         <BoardsIcon />
-        <Tip label="Your boards" keys="Ctrl O" />
+        {ws.inboxUnread > 0 && (
+          <span className="home-badge" aria-hidden="true">
+            {ws.inboxUnread > 9 ? '9+' : ws.inboxUnread}
+          </span>
+        )}
+        <Tip label={ws.inboxUnread ? 'Your boards and inbox' : 'Your boards'} keys="Ctrl O" />
       </button>
       {editor.board.parent && <ParentCrumb />}
       <BoardIcon />
@@ -435,7 +440,7 @@ export function TopRight() {
           </>
         )}
       </TopMore>
-      <AccountMenu onAdmin={ui.openAdmin} />
+      <AccountMenu onAdmin={ui.openAdmin} onInbox={ui.openBoards} />
     </div>
   )
 }

@@ -48,11 +48,13 @@ export interface ServerBoard {
   parent?: string
 }
 
-/** Where someone was @mentioned: a comment or description on an object, or a wiki page. */
-export interface ServerMention {
+/** A mention of you (a comment, a description or a wiki page), or a comment after yours. */
+export interface InboxPersonNews {
+  kind: 'mention' | 'reply'
+  id: string
   board: string
   title: string
-  kind?: 'wiki'
+  boardKind?: 'wiki'
   /** When it was written (none for a description). */
   at?: number
   by?: string
@@ -65,6 +67,17 @@ export interface ServerMention {
   page?: string
   pageTitle?: string
 }
+
+/** Something in your inbox (see server/accounts/inbox.ts). */
+export type InboxItem =
+  | InboxPersonNews
+  | { kind: 'share'; id: string; board: string; title: string; boardKind?: 'wiki'; at: number; by: string; level: Level }
+  | { kind: 'request'; id: string; board: string; title: string; boardKind?: 'wiki'; at: number; by: string; email?: string; note?: string }
+  /** Says no more than this: not which board, nor who. */
+  | { kind: 'declined'; id: string; at: number }
+
+/** Where an inbox entry leads: a board, and maybe a page or a comment on it. */
+export type InboxPlace = { board: string; item?: number; note?: string; page?: string }
 
 export interface Grant {
   who: 'user' | 'group'

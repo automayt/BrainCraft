@@ -413,6 +413,26 @@ export function mentionsOf(b: Board, me: Me): MentionRef[] {
   return out.sort((a, z) => (z.at ?? -1) - (a.at ?? -1))
 }
 
+/**
+ * Comments by others on objects `me` has commented on, after their first comment there, newest
+ * first. One that mentions `me` is left to mentionsOf.
+ */
+export function repliesTo(b: Board, me: Me): MentionRef[] {
+  const out: MentionRef[] = []
+  const name = me.name.trim().toLowerCase()
+  const mine = (author: string | undefined) => author?.trim().toLowerCase() === name
+  for (const item of b.items) {
+    const notes = item.notes ?? []
+    const first = notes.findIndex((n) => mine(n.author))
+    if (first < 0) continue
+    for (const note of notes.slice(first + 1)) {
+      if (mine(note.author) || mentionsMe(note.text, me)) continue
+      out.push({ item, note, at: note.at, ...(note.author ? { by: note.author } : {}), excerpt: excerptAround(note.text, me) })
+    }
+  }
+  return out.sort((a, z) => (z.at ?? -1) - (a.at ?? -1))
+}
+
 /** Names of people seen on the board (comment authors and page writers), for mentioning them. */
 export function namesOnBoard(b: Board): string[] {
   const names = new Set<string>()

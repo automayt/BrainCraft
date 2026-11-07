@@ -274,8 +274,8 @@ These become interactive once selected; drag them by their title strip.
   straight into the comment box. Comments are timestamped, show who
   wrote them, and can be deleted. Type **@** to mention someone or another
   object. A mentioned object links back ("Linked from"); a mentioned person
-  sees it marked, and on a server with accounts under **Mentions of you** in
-  their account menu (wiki pages too; `{{tasks @me}}` lists the checklist
+  sees it marked, and on a server with accounts in their **Inbox** on Your
+  boards (wiki pages too; `{{tasks @me}}` lists the checklist
   items that mention you).
   With nothing selected, the panel shows every comment on the board.
 - **Comment blocks (C)** are notes you can place anywhere on the board.
@@ -356,7 +356,9 @@ These become interactive once selected; drag them by their title strip.
 
 ### Boards, files and sharing
 
-- **Your boards (Ctrl+O)** opens big, with **Recent** at the top: the five
+- **Your boards (Ctrl+O)** is a page of its own, and where BrainCraft opens
+  when there's no address to go to. **Back** comes back to it, **Esc** goes back
+  to the board. Boards shared with you come first, then **Recent**: the five
   boards and wikis you opened last, with their pictures (**Show 10 more**
   for more). Below is everything in one list, boards in this browser and,
   when you're signed in, the ones on the server, each once: by name or by
@@ -365,6 +367,12 @@ These become interactive once selected; drag them by their title strip.
   it (a board on the server is renamed there, for everyone, and deleted for
   everyone by whoever manages it). ↓ from the search goes down the list and Enter opens; a search that
   finds nothing offers a new board or wiki of that name.
+- **The Inbox** (signed in to a server with accounts) sits beside your boards:
+  boards shared with you, mentions, replies to your comments and requests for
+  access, new ones as they happen, with a count on the Your boards button.
+  Someone following a link to a board they can't open gets **Ask for access**;
+  whoever manages it answers from their inbox (**Can edit**, **Can view** or
+  **Decline**), and on a yes the board opens for them there and then.
 - **Every board has its own address:** the address bar follows the board
   (and a wiki's page) you have open, so you can bookmark it, copy it to a
   friend, or press **Back** to return to the board or page before. A live

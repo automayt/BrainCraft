@@ -16,7 +16,9 @@ import { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
 import { FILE_EXT, Workspace } from '../store/workspace'
+import { HOME_HASH } from '../store/workspace'
 import { BoardsDialog, ReadOnlyBanner, ShareDialog, VersionsDialog } from './Boards'
+import { NoAccess } from './NoAccess'
 import { Canvas } from './Canvas'
 import { BottomLeft, Help, ToolRail, Toast, TopLeft, TopRight } from './Chrome'
 import { ContextMenu } from './ContextMenu'
@@ -116,6 +118,7 @@ function App({ ws }: { ws: Workspace }) {
     openDivide: () => setDialog('divide'),
     openBoards: () => {
       void ws.loadServerBoards()
+      void ws.loadInbox()
       setDialog('boards')
     },
     openVersions: () => setDialog('versions'),
@@ -250,7 +253,12 @@ function App({ ws }: { ws: Workspace }) {
     }
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.
-    const onHash = () => void ws.openHash(location.hash).then((opened) => !opened && ws.syncAddress(true))
+    const onHash = () => {
+      // Back to Your boards, or away from it.
+      if (location.hash === HOME_HASH) return setDialog('boards')
+      setDialog((d) => (d === 'boards' ? null : d))
+      void ws.openHash(location.hash).then((opened) => !opened && ws.syncAddress(true))
+    }
     window.addEventListener('hashchange', onHash)
     window.addEventListener('pagehide', onHide)
     document.addEventListener('visibilitychange', onVisibility)
@@ -444,6 +452,31 @@ function App({ ws }: { ws: Workspace }) {
   }, [editor, ws])
 
   const close = () => setDialog(null)
+  // Opened with no address to go to, once signed in.
+  useEffect(() => {
+    if (!ws.startHome || (ws.account && !ws.account.user)) return
+    ws.startHome = false
+    void ws.loadServerBoards()
+    setDialog('boards')
+  }, [ws, ws.startHome, ws.account])
+  // Your boards has an address, so Back gets to it. Leaving puts back what the address said.
+  const homeFrom = useRef('')
+  useEffect(() => {
+    const home = dialog === 'boards'
+    const was = ws.atHome
+    ws.atHome = home
+    const here = location.pathname + location.search
+    if (home && location.hash !== HOME_HASH) {
+      homeFrom.current = location.hash
+      history.pushState(null, '', here + HOME_HASH)
+    }
+    if (was && !home) {
+      ws.syncAddress()
+      if (location.hash === HOME_HASH) history.replaceState(null, '', here + homeFrom.current)
+    }
+  }, [dialog, ws])
+  // A board that can't be opened: the link's, or one taken away while on it.
+  const refused = ws.noAccess ?? (ws.live?.state === 'denied' && ws.liveInfo?.account ? ws.liveInfo.id : null)
   return (
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
@@ -514,6 +547,15 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'credits' && <CreditsDialog onClose={close} />}
           {dialog === 'import' && <ImportExport onClose={close} initialTab={importTab} />}
           {dialog === 'boards' && <BoardsDialog onClose={close} onOpenFile={ui.openFile} />}
+          {refused && dialog !== 'boards' && (
+            <NoAccess
+              board={refused}
+              onHome={() => {
+                ws.noAccess = null
+                ui.openBoards()
+              }}
+            />
+          )}
           {dialog === 'versions' && <VersionsDialog onClose={close} />}
           {dialog === 'share' && (ws.account ? <AccessDialog onClose={close} /> : <ShareDialog onClose={close} />)}
           {dialog === 'admin' && <AdminDialog onClose={close} />}
