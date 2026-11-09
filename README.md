@@ -743,7 +743,7 @@ shares live exactly like a board.
   up) goes back to it once to tidy. See
   [AI.md](docs/AI.md#building-things-properly).
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
-  bars and panels go away, the assistant's few words float at the top as it
+  bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press

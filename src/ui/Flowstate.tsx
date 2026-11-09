@@ -1,10 +1,11 @@
 /**
- * Flowstate: the board alone on screen while you talk it into shape. The assistant's few words
- * float at the top as it works; what you're saying shows faintly at the bottom; nothing else.
- * Esc (or leaving full screen) ends it.
+ * Flowstate: the board alone on screen while you talk it into shape. The rest fades away; the
+ * assistant's few words float at the top as it works; what you're saying shows faintly at the
+ * bottom. It stays in the window unless you ask for full screen. Esc ends it.
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { flowFullScreen } from './flowFullScreen'
 import { PushToMute } from './pushToMute'
 import { useEditor } from './useEditor'
 
@@ -107,6 +108,13 @@ export function Flowstate(props: {
     return () => cancelAnimationFrame(raf)
   }, [])
 
+  const [full, setFull] = useState(() => !!document.fullscreenElement)
+  useEffect(() => {
+    const changed = () => setFull(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', changed)
+    return () => document.removeEventListener('fullscreenchange', changed)
+  }, [])
+
   const shown = lines.slice(-3)
   return (
     <div className="flow no-canvas" role="region" aria-label="Flowstate">
@@ -141,6 +149,11 @@ export function Flowstate(props: {
         {listening && (
           <button type="button" onClick={() => onMute(!muted)} aria-pressed={muted}>
             {muted ? 'Unmute' : 'Mute'} <kbd>Space</kbd>
+          </button>
+        )}
+        {document.fullscreenEnabled && (
+          <button type="button" onClick={() => flowFullScreen(!full)} aria-pressed={full}>
+            {full ? 'Leave full screen' : 'Full screen'}
           </button>
         )}
         <button type="button" onClick={onLeave}>

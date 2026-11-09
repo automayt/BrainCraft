@@ -97,8 +97,8 @@ flowchart", "move the press release first".
 
 **Flowstate** (Ctrl Shift F, **Flowstate** in the panel, **Or talk it
 through** on a blank board, or Ctrl K → Flowstate) is talking with nothing
-else on screen: the app's bars, tools and panels go away and the board fills
-the screen (full screen where the browser allows, otherwise the window). Just talk.
+else on screen: the app's bars, tools and panels fade away and the board has the
+window to itself. Just talk.
 
 - The assistant's few words float at the top middle as it writes them ("Mind
   map of the launch, three branches.") and fade once they've been read; the
@@ -123,10 +123,11 @@ the screen (full screen where the browser allows, otherwise the window). Just ta
 - **Esc** ends it, and **Ctrl J** goes from it straight to the assistant
   panel, where the whole conversation is, with an **Undo** on every change.
   Moving the mouse shows a **Leave Flowstate** button at the top right.
-- Full screen is a bonus, not a need: Flowstate works the same in a window,
-  and leaving full screen just carries on in the window. In full screen,
-  Firefox and Safari keep the first Esc for leaving full screen, so a second
-  Esc leaves Flowstate; Chrome and Edge let one Esc do both.
+- It stays in the window. For full screen, move the mouse and press **Full
+  screen** beside **Leave Flowstate**; leaving full screen carries on in the
+  window. In full screen, Firefox and Safari keep the first Esc for leaving
+  full screen, so a second Esc leaves Flowstate; Chrome and Edge let one Esc
+  do both.
 - Say it the way you'd say it to a person: "a mind map called
   infrastructure", "add Jason and Brian off that", "under Jason, workstations
   and desktops", "rename monitoring to monitoring and alerts". Each line

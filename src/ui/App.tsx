@@ -19,6 +19,7 @@ import { FILE_EXT, Workspace } from '../store/workspace'
 import { HOME_HASH } from '../store/workspace'
 import { BoardsDialog, ReadOnlyBanner, ShareDialog, VersionsDialog } from './Boards'
 import { NoAccess } from './NoAccess'
+import { flowKeys } from './flowFullScreen'
 import { Canvas } from './Canvas'
 import { BottomLeft, Help, ToolRail, Toast, TopLeft, TopRight } from './Chrome'
 import { ContextMenu } from './ContextMenu'
@@ -88,6 +89,8 @@ function App({ ws }: { ws: Workspace }) {
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [assistant, setAssistant] = useState(false)
+  const [flowLeft, setFlowLeft] = useState(false)
+  const flowLeftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const fileInput = useRef<HTMLInputElement>(null)
   const imageInput = useRef<HTMLInputElement>(null)
 
@@ -147,18 +150,14 @@ function App({ ws }: { ws: Workspace }) {
       setDialog(null)
       setMenu(null)
       editor.setFlow(on)
-      // Full screen where the browser allows it, but Flowstate doesn't depend on it: windowed, it
-      // hides the same, and Esc ends it either way. In full screen, browsers keep Esc for leaving
-      // full screen; where a page may ask for it (Chrome, Edge), one Esc ends Flowstate too.
-      const keys = (navigator as Navigator & { keyboard?: { lock?: (k: string[]) => Promise<void>; unlock?: () => void } }).keyboard
-      if (on)
-        document.documentElement
-          .requestFullscreen?.()
-          .then(() => keys?.lock?.(['Escape']))
-          .catch(() => {})
-      else {
-        keys?.unlock?.()
+      // It stays in the window, the rest fading away; full screen is a button in it (flowFullScreen).
+      if (!on) {
+        flowKeys()?.unlock?.()
         if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+        // The rest fades back in.
+        setFlowLeft(true)
+        clearTimeout(flowLeftTimer.current)
+        flowLeftTimer.current = setTimeout(() => setFlowLeft(false), 500)
       }
     },
     ai: bridge,
@@ -481,7 +480,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen || editor.peek || editor.outlineOf !== null ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
+          className={`app${editor.notesOpen || editor.peek || editor.outlineOf !== null ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : flowLeft ? ' flowstate-left' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}

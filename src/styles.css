@@ -11641,6 +11641,7 @@ button.inbox-entry:focus-visible {
 
 /* ----- Flowstate: just the board, built as you talk ----- */
 
+/* Everything else fades away (and can't be clicked by accident while it does). */
 .app.flowstate > .island,
 .app.flowstate .minimap,
 .app.flowstate .hint-bar,
@@ -11651,7 +11652,25 @@ button.inbox-entry:focus-visible {
 .app.flowstate .whats-new,
 .app.flowstate .catchup,
 .app.flowstate .toast {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.6s var(--ease),
+    visibility 0s linear 0.6s;
+}
+
+/* ...and comes back the same way. */
+.app.flowstate-left > .island,
+.app.flowstate-left .minimap,
+.app.flowstate-left .status-key {
+  animation: flow-back 0.4s var(--ease);
+}
+
+@keyframes flow-back {
+  from {
+    opacity: 0;
+  }
 }
 
 .flow {
