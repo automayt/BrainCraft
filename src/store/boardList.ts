@@ -23,13 +23,18 @@ export interface BoardEntry {
   server?: ServerBoard
   /** The board it was divided from (a key of another entry). */
   parent?: string
+  /** Your category for it, if you've put it in one. */
+  category?: string
 }
 
 export type BoardFilter = 'all' | 'boards' | 'wikis' | 'shared'
 export type BoardSort = 'recent' | 'name'
 
-/** Merges the two lists, newest first. */
-export function boardEntries(local: readonly BoardMeta[], server: readonly ServerBoard[], serverUrl?: string): BoardEntry[] {
+/**
+ * Merges the two lists, newest first. `categories` are those kept in this browser, by its board ids
+ * (a board on the server keeps its category there instead).
+ */
+export function boardEntries(local: readonly BoardMeta[], server: readonly ServerBoard[], serverUrl?: string, categories: Readonly<Record<string, string>> = {}): BoardEntry[] {
   const onServer = new Map(server.map((s) => [s.id, s]))
   const out: BoardEntry[] = []
   const matched = new Set<string>()
@@ -48,9 +53,11 @@ export function boardEntries(local: readonly BoardMeta[], server: readonly Serve
       local: b,
       server: s,
       parent: b.parent ?? s?.parent,
+      ...((s ? s.category : categories[b.id]) ? { category: s ? s.category : categories[b.id] } : {}),
     })
   }
-  for (const s of server) if (!matched.has(s.id)) out.push({ key: `server:${s.id}`, title: s.title, kind: s.kind, updated: s.updated, opened: s.updated, server: s, parent: s.parent })
+  for (const s of server)
+    if (!matched.has(s.id)) out.push({ key: `server:${s.id}`, title: s.title, kind: s.kind, updated: s.updated, opened: s.updated, server: s, parent: s.parent, ...(s.category ? { category: s.category } : {}) })
   return out.sort((p, q) => q.updated - p.updated)
 }
 
@@ -63,12 +70,23 @@ export const keysOf = (e: BoardEntry): string[] => [e.key, ...(e.local?.live ? [
 /** Whether it's someone else's board, shared with you. */
 export const sharedWithMe = (e: BoardEntry, me: string | undefined) => !!e.server?.owner && e.server.owner.id !== me
 
-/** What the list shows for a search, a filter and an order. Sorted by name, child boards follow their parent. */
-export function shownEntries(all: readonly BoardEntry[], o: { query?: string; filter?: BoardFilter; sort?: BoardSort; me?: string }): { entry: BoardEntry; depth: number }[] {
+/** Every category in use, by name, with how many boards are in it. */
+export function categoriesOf(all: readonly BoardEntry[]): { name: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const e of all) if (e.category) counts.set(e.category, (counts.get(e.category) ?? 0) + 1)
+  return [...counts].map(([name, count]) => ({ name, count })).sort((a, z) => a.name.localeCompare(z.name, undefined, { sensitivity: 'base', numeric: true }))
+}
+
+/**
+ * What the list shows for a search, a filter, a category (null: those in none) and an order. Sorted
+ * by name, child boards follow their parent.
+ */
+export function shownEntries(all: readonly BoardEntry[], o: { query?: string; filter?: BoardFilter; sort?: BoardSort; me?: string; category?: string | null }): { entry: BoardEntry; depth: number }[] {
   const q = o.query?.trim().toLowerCase() ?? ''
   const list = all.filter(
     (e) =>
       (!q || e.title.toLowerCase().includes(q)) &&
+      (o.category === undefined || (o.category === null ? !e.category : e.category === o.category)) &&
       (o.filter === 'boards' ? e.kind !== 'wiki' : o.filter === 'wikis' ? e.kind === 'wiki' : o.filter === 'shared' ? sharedWithMe(e, o.me) : true),
   )
   if (o.sort !== 'name') return list.map((entry) => ({ entry, depth: 0 }))

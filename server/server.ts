@@ -854,6 +854,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     accounts?.store.flush()
     accounts?.store.saveBoards()
     accountBoards?.inbox.flush()
+    accountBoards?.categories.flush()
     usage.save()
     process.exit(0)
   })

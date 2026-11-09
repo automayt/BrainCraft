@@ -110,7 +110,7 @@ export function SearchPalette() {
   const boards: Row[] =
     commandOnly || filter !== 0 || !q
       ? []
-      : boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined)
+      : boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined, ws.categories)
           .filter((b) => b.local?.id !== ws.boardId && b.title.toLowerCase().includes(q))
           .slice(0, BOARDS)
           .map((b) => ({

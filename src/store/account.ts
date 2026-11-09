@@ -46,6 +46,8 @@ export interface ServerBoard {
   owner: { id: string; name: string } | null
   /** A child board: the board it was divided from. */
   parent?: string
+  /** Your category for it ("Webex meetings"): yours alone. */
+  category?: string
 }
 
 /** A mention of you (a comment, a description or a wiki page), or a comment after yours. */

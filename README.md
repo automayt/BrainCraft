@@ -367,6 +367,14 @@ These become interactive once selected; drag them by their title strip.
   it (a board on the server is renamed there, for everyone, and deleted for
   everyone by whoever manages it). ↓ from the search goes down the list and Enter opens; a search that
   finds nothing offers a new board or wiki of that name.
+- **Categories** group your boards ("Webex meetings", "Trips"): **+ New
+  category** above the list, then drag boards onto it or use ⋯ → **Move to**.
+  Click a category to see just its boards; a board or wiki made while looking
+  at one goes in it. **Rename** and **Remove** sit beside the one you're looking
+  at (removing it keeps its boards). Categories are yours alone: on a server
+  with accounts they're kept with your account, so they follow you, and
+  nobody else's list changes; a board only in this browser keeps its category
+  here.
 - **The Inbox** (signed in to a server with accounts) sits beside your boards:
   boards shared with you, mentions, replies to your comments and requests for
   access, new ones as they happen, with a count on the Your boards button.

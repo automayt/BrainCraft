@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ServerBoard } from './account'
-import { boardEntries, byOpened, shownEntries } from './boardList'
+import { boardEntries, byOpened, categoriesOf, shownEntries } from './boardList'
 import type { BoardMeta } from './library'
 
 const SERVER = 'https://boards.example'
@@ -43,5 +43,29 @@ describe('your boards as one list', () => {
       ['Kit list', 1],
       ['Zoo', 0],
     ])
+  })
+})
+
+describe('categories', () => {
+  const local = [meta('a', 'Trip', 100, { live: { server: SERVER, id: 'S1', key: '', role: 'edit', account: true } }), meta('b', 'Recipes', 300), meta('c', 'Notes', 200)]
+  const server = [remote('S1', 'Trip', 100, { category: 'Webex meetings' }), remote('S2', 'Budget', 50, { category: 'Webex meetings' })]
+  // This browser's own categories, by its ids; 'a' is on the server, so the server's word counts.
+  const all = boardEntries(local, server, SERVER, { a: 'Old', b: 'Cooking' })
+
+  it('come from the server for its boards, and from this browser for its own', () => {
+    expect(Object.fromEntries(all.map((e) => [e.title, e.category ?? null]))).toEqual({ Trip: 'Webex meetings', Recipes: 'Cooking', Notes: null, Budget: 'Webex meetings' })
+  })
+
+  it('are listed by name with how many boards each has', () => {
+    expect(categoriesOf(all)).toEqual([
+      { name: 'Cooking', count: 1 },
+      { name: 'Webex meetings', count: 2 },
+    ])
+  })
+
+  it('narrow the list to one, or to boards in none', () => {
+    expect(shownEntries(all, { category: 'Webex meetings', sort: 'name' }).map((e) => e.entry.title)).toEqual(['Budget', 'Trip'])
+    expect(shownEntries(all, { category: null }).map((e) => e.entry.title)).toEqual(['Notes'])
+    expect(shownEntries(all, {})).toHaveLength(4)
   })
 })

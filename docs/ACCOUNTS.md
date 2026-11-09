@@ -447,5 +447,6 @@ curl -H "Authorization: Bearer bct_..." https://boards.example.org/api/boards
   `BRAINCRAFT_TRUST_PROXY=1`) so cookies are marked Secure and links use the
   right address.
 - Accounts live in `BRAINCRAFT_DATA/accounts/` (`users.json`, `groups.json`,
-  `sessions.json`, `boards.json`, `inbox.json`, and the activity log `audit.jsonl`); back
+  `sessions.json`, `boards.json`, `inbox.json`, `categories.json` (each person's
+  categories for their boards), and the activity log `audit.jsonl`); back
   them up with the boards.

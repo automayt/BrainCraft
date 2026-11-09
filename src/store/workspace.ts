@@ -64,6 +64,10 @@ const randomId = () => {
 }
 /** The address of Your boards. */
 export const HOME_HASH = '#home'
+/** Where this browser keeps your categories for its own boards. */
+const CATEGORIES_KEY = 'categories'
+/** A category's name as it's kept (as the server does it): one line, at most 60 characters; null for none. */
+export const cleanCategoryName = (v: string | null | undefined) => (v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null
 /** How often the inbox is read anyway, in case its connection is down. */
 const INBOX_EVERY_MS = 2 * 60_000
 /** Several things new at once are read together. */
@@ -149,6 +153,8 @@ export class Workspace {
   atHome = false
   /** Opened without an address to go to: start on Your boards, not the last board. */
   startHome = false
+  /** Your categories for boards only in this browser, by their ids here. */
+  categories: Record<string, string> = {}
   /** Who can open the open server board, to @mention (and which board, and when it was asked). */
   private boardPeople: { board: string; at: number; people: Person[] } | null = null
   private inboxEvery: ReturnType<typeof setInterval> | undefined
@@ -532,6 +538,60 @@ export class Workspace {
 
   async refresh() {
     this.boards = await this.library.list()
+    this.categories = (await this.library.kv.get<Record<string, string>>(CATEGORIES_KEY)) ?? {}
+    this.emit()
+  }
+
+  // ----- categories ------------------------------------------------------------------
+
+  /**
+   * Puts a board in one of your categories (null: none). A board on the server keeps it there, with
+   * your account, so it follows you; a board only in this browser keeps it here.
+   */
+  async setCategory(at: { local?: string; server?: string }, category: string | null) {
+    const name = cleanCategoryName(category)
+    const meta = at.local ? this.boards.find((m) => m.id === at.local) : undefined
+    const remote = at.server ?? (meta?.live?.account && meta.live.server === this.server ? meta.live.id : undefined)
+    if (remote && this.server && this.account?.user) {
+      try {
+        await call(this.server, `api/boards/${encodeURIComponent(remote)}/category`, 'PUT', { category: name })
+      } catch (err) {
+        this.editor.setStatus(`Couldn’t file it: ${(err as Error).message}`)
+        return
+      }
+      await this.loadServerBoards()
+      return
+    }
+    if (!at.local) return
+    const next = { ...this.categories }
+    if (name) next[at.local] = name
+    else delete next[at.local]
+    await this.saveCategories(next)
+  }
+
+  /** Renames one of your categories, wherever its boards are; null takes them all out of it. */
+  async renameCategory(from: string, to: string | null) {
+    const name = cleanCategoryName(to)
+    if (this.server && this.account?.user) {
+      try {
+        await call(this.server, 'api/categories/rename', 'POST', { from, to: name })
+      } catch (err) {
+        this.editor.setStatus(`Couldn’t rename it: ${(err as Error).message}`)
+        return
+      }
+      await this.loadServerBoards()
+    }
+    const next: Record<string, string> = {}
+    for (const [id, c] of Object.entries(this.categories)) {
+      if (c !== from) next[id] = c
+      else if (name) next[id] = name
+    }
+    await this.saveCategories(next)
+  }
+
+  private async saveCategories(next: Record<string, string>) {
+    this.categories = next
+    await this.library.kv.set(CATEGORIES_KEY, next)
     this.emit()
   }
 

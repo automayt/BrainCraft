@@ -14,6 +14,8 @@
  *   POST   /api/inbox/seen              you've looked
  *   POST   /api/inbox/requests/:id {answer}   answer a request: "view", "edit" or "no" (manage)
  *   POST   /api/boards/:id/ask {note?}  ask for a board you can't open (the same reply whether it exists or not)
+ *   PUT    /api/boards/:id/category {category}   your category for it (null for none)
+ *   POST   /api/categories/rename {from, to}     rename one of your categories (to null: empty it)
  *   PUT    /api/boards/:id/access       change who has access, or the owner (manage)
  *   DELETE /api/boards/:id              delete it (manage); it can be put back for 90 days
  *   GET    /api/boards/:id/versions…    its saved versions, and putting one back (see backupRoutes.ts)
@@ -36,6 +38,7 @@ import { readBoard, sendRead } from '../boardReads'
 import { boardWrite } from '../boardWrites'
 import { atLeast, levelFor, roleOf } from './access'
 import { Inbox, cleanNote } from './inbox'
+import { Categories, cleanCategory } from './categories'
 import type { Accounts } from './service'
 import { type BoardEntry, cleanGrants } from './store'
 import { type Grant, LEVELS, type Level, type User } from './types'
@@ -106,6 +109,8 @@ export class AccountBoards {
   private mentioned = new Map<string, { updated: number; ids: Set<string> }>()
   /** What needs each person. */
   inbox: Inbox
+  /** Each person's categories for their boards. */
+  categories: Categories
   /** The newest thing each online person has been told about on each board. */
   private told = new Map<string, number>()
 
@@ -114,6 +119,7 @@ export class AccountBoards {
     this.host = host
     this.origins = origins.map((o) => o.replace(/\/+$/, ''))
     this.inbox = new Inbox(accounts.dir, accounts.now)
+    this.categories = new Categories(accounts.dir)
     // Boards made before this index (or before accounts) are added to it once.
     const known = accounts.store.boards
     let added = false
@@ -253,7 +259,7 @@ export class AccountBoards {
   /** Handles a board route; false when it isn't one. */
   async handle(req: IncomingMessage, res: ServerResponse, url: URL, body: () => Promise<string>): Promise<boolean> {
     const parts = url.pathname.split('/').filter(Boolean)
-    if (parts[1] !== 'boards' && parts[1] !== 'mentions' && parts[1] !== 'inbox' && parts[1] !== 'time' && parts[1] !== 'backups') return false
+    if (!['boards', 'mentions', 'inbox', 'categories', 'time', 'backups'].includes(parts[1])) return false
     if (!this.accounts.fromApp(req)) return json(res, 403, { error: 'Missing the X-BrainCraft header' }), true
     const me = this.accounts.userOf(req)
     if (!me) return json(res, 401, { error: 'Sign in first' }), true
@@ -267,6 +273,22 @@ export class AccountBoards {
     }
 
     if (parts[1] === 'inbox') return this.inboxRoute(req, res, me, m, parts.slice(2), body), true
+
+    if (parts[1] === 'categories') {
+      if (parts[2] !== 'rename' || parts.length !== 3) return json(res, 404, { error: 'Not found' }), true
+      if (m !== 'POST') return json(res, 405, { error: 'Method not allowed' }), true
+      let b: { from?: unknown; to?: unknown }
+      try {
+        b = JSON.parse((await body()) || '{}') as typeof b
+      } catch {
+        return json(res, 400, { error: 'Send {"from": "…", "to": "…"}' }), true
+      }
+      const from = cleanCategory(b.from)
+      const to = cleanCategory(b.to)
+      if (!from || to === undefined) return json(res, 400, { error: 'Send {"from": "…", "to": "…"} (to null to empty it)' }), true
+      this.categories.rename(me.id, from, to)
+      return json(res, 200, { ok: true }), true
+    }
 
     // GET /api/time?from=&to=&who=&format=csv → time across every board you can open.
     if (parts[1] === 'time') {
@@ -290,11 +312,13 @@ export class AccountBoards {
     }
 
     if (parts.length === 2 && m === 'GET') {
+      const mine = this.categories.of(me.id)
       const boards = Object.entries(this.store.boards).flatMap(([id, e]) => {
         const level = this.level(me, e)
         if (!level) return []
         const owner = e.owner ? this.store.user(e.owner) : undefined
-        return [{ id, title: e.title, ...(e.kind ? { kind: e.kind } : {}), ...(e.parent ? { parent: e.parent } : {}), updated: e.updated, level, owner: owner ? { id: owner.id, name: owner.name } : null }]
+        const category = mine[id]
+        return [{ id, title: e.title, ...(e.kind ? { kind: e.kind } : {}), ...(e.parent ? { parent: e.parent } : {}), ...(category ? { category } : {}), updated: e.updated, level, owner: owner ? { id: owner.id, name: owner.name } : null }]
       })
       return json(res, 200, { boards: boards.sort((a, b) => b.updated - a.updated) }), true
     }
@@ -391,6 +415,20 @@ export class AccountBoards {
       }
     }
 
+    // Anyone who can open a board may file it away for themselves.
+    if (parts[3] === 'category' && parts.length === 4) {
+      if (m !== 'PUT') return json(res, 405, { error: 'Method not allowed' }), true
+      let category: string | null | undefined
+      try {
+        category = cleanCategory((JSON.parse((await body()) || '{}') as { category?: unknown }).category ?? null)
+      } catch {
+        return json(res, 400, { error: 'Send {"category": "…"} (null for none)' }), true
+      }
+      if (category === undefined) return json(res, 400, { error: 'Send {"category": "…"} (null for none)' }), true
+      if (!this.categories.set(me.id, room.data.id, category)) return json(res, 422, { error: 'That’s as many boards in categories as one person can have' }), true
+      return json(res, 200, { category }), true
+    }
+
     if (parts[3] === 'access') {
       if (m === 'GET') return json(res, 200, this.describe(room, level)), true
       if (m === 'PUT') {
@@ -434,6 +472,7 @@ export class AccountBoards {
       const owner = room.data.owner ? this.store.user(room.data.owner) : undefined
       this.accounts.log(req, me, { action: 'board.delete', target: boardTarget(room.data), text: `${me.name} deleted “${room.data.board.title}”${owner && owner.id !== me.id ? ` (${owner.name}’s board)` : ''} from the server` })
       this.host.remove(room.data.id, me.name)
+      this.categories.forget(room.data.id)
       delete this.store.boards[room.data.id]
       this.store.saveBoards()
       return json(res, 200, { ok: true }), true

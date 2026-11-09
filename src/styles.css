@@ -3936,6 +3936,101 @@ button.inbox-entry:focus-visible {
   border-radius: var(--r-sm);
 }
 
+/* Your categories: one to look at, each a place to drop boards. */
+.board-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.board-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.board-category-chip small {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.board-category-chip:hover {
+  color: var(--text);
+}
+
+.board-category-chip.on {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.board-category-chip.over {
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.board-category-chip.over small {
+  color: inherit;
+}
+
+.board-category-add {
+  padding: 5px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+}
+
+.board-category-name {
+  width: 220px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--canvas);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  outline: none;
+}
+
+.board-category-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+.board-category {
+  flex: none;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+}
+
+.board-row[draggable='true'] {
+  cursor: grab;
+}
+
 .board-kind.now {
   color: var(--accent);
   background: var(--accent-soft);

@@ -1,7 +1,7 @@
 /** The board library, version history, share links and the read-only banner. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type BoardEntry, type BoardFilter, type BoardSort, boardEntries, byOpened, keysOf, sharedWithMe, shownEntries } from '../store/boardList'
+import { type BoardEntry, type BoardFilter, type BoardSort, boardEntries, byOpened, categoriesOf, keysOf, sharedWithMe, shownEntries } from '../store/boardList'
 import { createPortal } from 'react-dom'
 import { useButtonMenu } from './menuKeys'
 import { useDialog } from './useDialog'
@@ -16,7 +16,7 @@ import { ink, mindRootFill } from './paint'
 import { useEditor } from './useEditor'
 import { useEscape } from './useEscape'
 import { useWorkspace } from './useWorkspace'
-import { safeStorage } from '../store/workspace'
+import { cleanCategoryName, safeStorage } from '../store/workspace'
 import { LiveSection } from './Live'
 import { copyText } from './copyText'
 import { useUi } from './uiContext'
@@ -92,8 +92,37 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
   const me = ws.account?.user?.id
-  const all = useMemo(() => boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined), [ws.boards, ws.serverBoards, ws.account, ws.server])
-  const shown = useMemo(() => shownEntries(all, { query, filter, sort, me }), [all, query, filter, sort, me])
+  const all = useMemo(() => boardEntries(ws.boards, ws.account?.user ? ws.serverBoards : [], ws.server ?? undefined, ws.categories), [ws.boards, ws.serverBoards, ws.account, ws.server, ws.categories])
+  // The category being looked at (undefined: all of them; null: boards in none), remembered.
+  const [category, setCategoryShown] = useState<string | null | undefined>(storedCategory)
+  const show = (c: string | null | undefined) => {
+    setCategoryShown(c)
+    try {
+      safeStorage()?.setItem(CATEGORY_KEY, JSON.stringify(c === undefined ? { all: true } : { c }))
+    } catch {
+      // Only a preference.
+    }
+  }
+  // Made but with nothing in yet: kept while this page is open, gone if nothing goes in.
+  const [fresh, setFresh] = useState<string[]>([])
+  const used = useMemo(() => categoriesOf(all), [all])
+  const categories = useMemo(() => [...used, ...fresh.filter((f) => !used.some((u) => u.name === f)).map((name) => ({ name, count: 0 }))], [used, fresh])
+  // A remembered category that no longer exists shows everything.
+  const looking = typeof category === 'string' && !categories.some((c) => c.name === category) ? undefined : category
+  const shown = useMemo(() => shownEntries(all, { query, filter, sort, me, category: looking }), [all, query, filter, sort, me, looking])
+  /** Files a board under a category (null: none). */
+  const file = (e: BoardEntry, c: string | null) => void ws.setCategory({ local: e.local?.id, server: e.server?.id }, c)
+  /** A board moved to a category being named: it goes in once the name is given. */
+  const [naming, setNaming] = useState<{ entry?: BoardEntry } | null>(null)
+  const name = (raw: string) => {
+    const c = cleanCategoryName(raw)
+    const entry = naming?.entry
+    setNaming(null)
+    if (!c) return
+    if (entry) file(entry, c)
+    else if (!categories.some((x) => x.name === c)) setFresh((f) => [...f, c])
+    show(c)
+  }
   const recentList = useMemo(() => byOpened(all), [all])
   const sharedList = useMemo(() => all.filter((e) => sharedWithMe(e, me)).sort((a, z) => (z.server?.updated ?? 0) - (a.server?.updated ?? 0)), [all, me])
   const titleOf = (key: string | undefined) => (key === undefined ? undefined : all.find((e) => keysOf(e).includes(key))?.title)
@@ -111,14 +140,16 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
       onClose()
     }
   }
+  // Made while looking at a category: it goes in that category.
+  const into = (id: string) => (typeof looking === 'string' ? ws.setCategory({ local: id }, looking) : undefined)
   const create = (t: (typeof TEMPLATES)[number], title?: string) => {
     onClose()
     const b = boardFromTemplate(t, editor.measure)
-    void ws.newBoard(title ? { ...b, title } : b)
+    void ws.newBoard(title ? { ...b, title } : b).then(into)
   }
   const newWiki = (template: string, title?: string) => {
     onClose()
-    void ws.newWiki(title, template)
+    void ws.newWiki(title, template).then(into)
   }
   const list = useRef<HTMLUListElement>(null)
   // ↓ from the search goes into the list; ↑ and ↓ move along it; ↑ at the top goes back.
@@ -165,6 +196,9 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           : setConfirming(e.key)
       }
       onCancelDelete={() => setConfirming(null)}
+      categories={categories.map((c) => c.name)}
+      onFile={(c) => (c === NEW_CATEGORY ? setNaming({ entry: e }) : file(e, c))}
+      showCategory={looking === undefined}
     />
   )
 
@@ -201,7 +235,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
         {ws.account?.user && <InboxPanel onOpened={onClose} />}
         <div className="home-main">
         {!ws.persistent && <p className="boards-warning">This browser isn't keeping boards between visits. Save to a file to keep your work.</p>}
-        {!searching && sharedList.length > 0 && (
+        {!searching && looking === undefined && sharedList.length > 0 && (
           <section className="boards-recent" aria-labelledby="boards-shared-title">
             <div className="home-section-head">
               <h3 id="boards-shared-title">Shared with you</h3>
@@ -218,7 +252,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
             </div>
           </section>
         )}
-        {!searching && all.length > 0 && (
+        {!searching && looking === undefined && all.length > 0 && (
           <section className="boards-recent" aria-labelledby="boards-recent-title">
             <h3 id="boards-recent-title">Recent</h3>
             <div className="recent-grid">
@@ -235,8 +269,35 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
           </section>
         )}
         <section className="boards-all" aria-labelledby="boards-all-title">
+          {all.length > 0 && (
+            <CategoryBar
+              categories={categories}
+              shown={looking}
+              uncategorised={all.filter((e) => !e.category).length}
+              naming={naming}
+              onShow={show}
+              onStartNaming={() => setNaming({})}
+              onName={name}
+              onDrop={(key, c) => {
+                const e = all.find((x) => x.key === key)
+                if (e) file(e, c)
+              }}
+              onRename={(from, to) => {
+                const c = cleanCategoryName(to)
+                if (!c || c === from) return
+                setFresh((f) => f.map((x) => (x === from ? c : x)))
+                void ws.renameCategory(from, c)
+                show(c)
+              }}
+              onRemove={(c) => {
+                setFresh((f) => f.filter((x) => x !== c))
+                void ws.renameCategory(c, null)
+                show(undefined)
+              }}
+            />
+          )}
           <div className="boards-all-head">
-            <h3 id="boards-all-title">{searching ? `Found ${shown.length}` : 'All boards and wikis'}</h3>
+            <h3 id="boards-all-title">{searching ? `Found ${shown.length}` : looking === undefined ? 'All boards and wikis' : looking === null ? 'Not in a category' : looking}</h3>
             {(wikis || shared) && (
               <div className="boards-filter" role="radiogroup" aria-label="Show">
                 {(
@@ -274,14 +335,20 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
               <button onClick={() => newWiki('wiki', query.trim())}>New wiki called “{query.trim()}”</button>
             </div>
           ) : (
-            <p className="muted boards-none">{filter === 'shared' ? 'Nobody has shared a board with you yet.' : 'Nothing here yet.'}</p>
+            <p className="muted boards-none">
+              {typeof looking === 'string' && !searching
+                ? `Nothing in ${looking} yet. Drag a board onto it above, or use ⋯ → Move to on a board. New boards made from here go in it.`
+                : filter === 'shared'
+                  ? 'Nobody has shared a board with you yet.'
+                  : 'Nothing here yet.'}
+            </p>
           )}
           {ws.account?.user && ws.account.backups && <RecentlyDeleted />}
         </section>
         {!searching && (
           <section className="start-new" aria-label="Start something new">
             <h3 className="templates-title" id="new-board-title">
-              New board <small>a canvas to draw and brainstorm on</small>
+              New board <small>{typeof looking === 'string' ? `a canvas, in ${looking}` : 'a canvas to draw and brainstorm on'}</small>
             </h3>
             <section className="templates" aria-labelledby="new-board-title">
               {TEMPLATES.map((t) => (
@@ -293,7 +360,7 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
               ))}
             </section>
             <h3 className="templates-title" id="new-wiki-title">
-              New wiki <small>pages to write things down: plans, lists, notes</small>
+              New wiki <small>{typeof looking === 'string' ? `pages to write things down, in ${looking}` : 'pages to write things down: plans, lists, notes'}</small>
             </h3>
             <section className="templates wiki-templates" aria-labelledby="new-wiki-title">
               <button
@@ -349,6 +416,139 @@ export function BoardsDialog({ onClose, onOpenFile }: { onClose: () => void; onO
 }
 
 const SORT_KEY = 'braincraft:boards-sort'
+const CATEGORY_KEY = 'braincraft:boards-category'
+/** The ⋯ menu's choice to file a board under a category not yet named. */
+const NEW_CATEGORY = '\u0000new'
+/** Dragging a board, as the drag carries it. */
+const DRAGGED = 'application/x-braincraft-board'
+
+function storedCategory(): string | null | undefined {
+  try {
+    const v = JSON.parse(safeStorage()?.getItem(CATEGORY_KEY) ?? '{}') as { all?: true; c?: string | null }
+    return 'c' in v && (v.c === null || typeof v.c === 'string') ? v.c : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Your categories, to look at one; each takes boards dragged onto it. */
+function CategoryBar(p: {
+  categories: { name: string; count: number }[]
+  shown: string | null | undefined
+  uncategorised: number
+  naming: { entry?: BoardEntry } | null
+  onShow: (c: string | null | undefined) => void
+  onStartNaming: () => void
+  onName: (name: string) => void
+  onDrop: (key: string, c: string | null) => void
+  onRename: (from: string, to: string) => void
+  onRemove: (c: string) => void
+}) {
+  const [over, setOver] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  useEffect(() => {
+    setRenaming(false)
+    setRemoving(false)
+  }, [p.shown])
+  const target = (c: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAGGED)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setOver(c ?? '')
+    },
+    onDragLeave: () => setOver(null),
+    onDrop: (e: React.DragEvent) => {
+      const key = e.dataTransfer.getData(DRAGGED)
+      setOver(null)
+      if (!key) return
+      e.preventDefault()
+      p.onDrop(key, c)
+    },
+  })
+  const chip = (label: React.ReactNode, c: string | null | undefined, count?: number, drop = true) => (
+    <button
+      key={c === undefined ? 'all' : c === null ? 'none' : `c:${c}`}
+      className={`board-category-chip${p.shown === c ? ' on' : ''}${over === (c ?? '') && drop ? ' over' : ''}`}
+      aria-pressed={p.shown === c}
+      onClick={() => p.onShow(c)}
+      {...(drop && c !== undefined ? target(c) : {})}
+    >
+      {label}
+      {count !== undefined && <small>{count}</small>}
+    </button>
+  )
+  const named = typeof p.shown === 'string' ? p.shown : null
+  return (
+    <div className="board-categories" role="group" aria-label="Categories">
+      {chip('All', undefined, undefined, false)}
+      {p.categories.map((c) => chip(c.name, c.name, c.count))}
+      {p.categories.length > 0 && chip('Not in a category', null, p.uncategorised)}
+      {p.naming ? (
+        <input
+          autoFocus
+          className="board-category-name"
+          aria-label={p.naming.entry ? `Name the category for ${p.naming.entry.title || 'Untitled'}` : 'Name the new category'}
+          placeholder={p.naming.entry ? `A category for ${p.naming.entry.title || 'Untitled'}` : 'Name the category'}
+          maxLength={60}
+          onBlur={(e) => p.onName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              ;(e.target as HTMLInputElement).value = ''
+              ;(e.target as HTMLInputElement).blur()
+            }
+          }}
+        />
+      ) : (
+        <button className="board-category-add" onClick={p.onStartNaming}>
+          + New category
+        </button>
+      )}
+      {named &&
+        (renaming ? (
+          <input
+            autoFocus
+            className="board-category-name"
+            aria-label={`Rename ${named}`}
+            defaultValue={named}
+            maxLength={60}
+            onBlur={(e) => {
+              setRenaming(false)
+              p.onRename(named, e.target.value)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                ;(e.target as HTMLInputElement).value = named
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+          />
+        ) : removing ? (
+          <span className="board-category-actions">
+            <span className="muted">Remove {named}? Its boards stay, in no category.</span>
+            <button className="danger-quiet" onClick={() => p.onRemove(named)}>
+              Remove
+            </button>
+            <button onClick={() => setRemoving(false)}>Keep</button>
+          </span>
+        ) : (
+          <span className="board-category-actions">
+            <button className="link" onClick={() => setRenaming(true)}>
+              Rename
+            </button>
+            <button className="link" onClick={() => setRemoving(true)}>
+              Remove
+            </button>
+          </span>
+        ))}
+    </div>
+  )
+}
 
 /** New: a blank board or wiki, or one from a template. */
 function NewMenu({ onBoard, onWiki, onGuide, onFile }: { onBoard: (t: (typeof TEMPLATES)[number]) => void; onWiki: (template: string) => void; onGuide: () => void; onFile: () => void }) {
@@ -448,6 +648,11 @@ function BoardRow(p: {
   onDuplicate: () => void
   onDelete: () => void
   onCancelDelete: () => void
+  /** Your categories, to move it into one; null takes it out. */
+  categories: string[]
+  onFile: (category: string | null) => void
+  /** Its category beside its name (not when the list is one category already). */
+  showCategory: boolean
 }) {
   const { entry: e } = p
   const { at, close, toggle, menuProps } = useButtonMenu()
@@ -458,7 +663,15 @@ function BoardRow(p: {
   const renamable = !e.server || level === 'edit' || level === 'manage'
   const deletable = !e.server ? !!e.local : level === 'manage'
   return (
-    <li className={`board-row${p.current ? ' current' : ''}${p.depth ? ' child-board' : ''}`} style={p.depth ? { paddingLeft: 8 + Math.min(p.depth, 4) * 22 } : undefined}>
+    <li
+      className={`board-row${p.current ? ' current' : ''}${p.depth ? ' child-board' : ''}`}
+      style={p.depth ? { paddingLeft: 8 + Math.min(p.depth, 4) * 22 } : undefined}
+      draggable={!p.renaming}
+      onDragStart={(ev) => {
+        ev.dataTransfer.setData(DRAGGED, e.key)
+        ev.dataTransfer.effectAllowed = 'move'
+      }}
+    >
       <button className="board-row-open" onClick={p.onOpen} tabIndex={-1} aria-hidden="true">
         <EntryThumb entry={e} />
       </button>
@@ -484,6 +697,7 @@ function BoardRow(p: {
             <span className="board-title-text">{e.title || 'Untitled'}</span>
             {e.kind === 'wiki' && <span className="board-kind">Wiki</span>}
             {p.current && <span className="board-kind now">Open now</span>}
+            {p.showCategory && e.category && <span className="board-category">{e.category}</span>}
           </button>
         )}
         {p.parentTitle !== undefined && <small className="board-parent">Divided from {p.parentTitle || 'another board'}</small>}
@@ -498,7 +712,7 @@ function BoardRow(p: {
           </button>
           <button onClick={p.onCancelDelete}>Keep</button>
         </span>
-      ) : renamable || e.local || deletable ? (
+      ) : (
         <span className="align-anchor">
           <button className={`board-row-more${at ? ' on' : ''}`} aria-label={`More for ${e.title || 'Untitled'}`} aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}>
             ⋯
@@ -516,17 +730,36 @@ function BoardRow(p: {
                     Duplicate
                   </button>
                 )}
-                {deletable && (
-                  <button role="menuitem" className="danger-quiet" onClick={() => (close(), p.onDelete())}>
-                    Delete…
+                <hr />
+                <p className="menu-heading">Move to</p>
+                {p.categories
+                  .filter((c) => c !== e.category)
+                  .map((c) => (
+                    <button key={c} role="menuitem" onClick={() => (close(), p.onFile(c))}>
+                      {c}
+                    </button>
+                  ))}
+                {/* Once the menu has gone (and given the keyboard back), so the name field keeps it. */}
+                <button role="menuitem" onClick={() => (close(), setTimeout(() => p.onFile(NEW_CATEGORY)))}>
+                  New category…
+                </button>
+                {e.category && (
+                  <button role="menuitem" onClick={() => (close(), p.onFile(null))}>
+                    Out of {e.category}
                   </button>
+                )}
+                {deletable && (
+                  <>
+                    <hr />
+                    <button role="menuitem" className="danger-quiet" onClick={() => (close(), p.onDelete())}>
+                      Delete…
+                    </button>
+                  </>
                 )}
               </div>,
               document.body,
             )}
         </span>
-      ) : (
-        <span />
       )}
     </li>
   )
