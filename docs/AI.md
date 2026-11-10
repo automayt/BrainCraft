@@ -90,6 +90,8 @@ flowchart", "move the press release first".
 - What you said while it was working waits, and goes as one turn when it's
   done. **Go now** sends it without waiting for the pause.
 - **Stop talking** ends it (what you were saying still goes).
+- In a meeting it can tell who said what, when the server has a speaker
+  model: see [Who said what, in a meeting](#who-said-what-in-a-meeting).
 - The microphone needs the page on https or on this computer (localhost); see
   [HTTPS.md](HTTPS.md).
 

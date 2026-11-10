@@ -743,7 +743,8 @@ shares live exactly like a board.
   you describe, and changes it when you correct yourself. Every change can be
   undone from History. Works in Firefox, Chrome, Edge and Safari with the
   server's speech to text (such as Whisper on vLLM); see
-  [AI.md](docs/AI.md#talking-to-it).
+  [AI.md](docs/AI.md#talking-to-it). In a meeting it can tell who said what
+  (below).
 - **Builds things properly:** it grows a mind map idea by idea under the
   idea you name, adds steps to a flowchart, and changes Kanban boards, tables
   and timelines in place, and a change that would make a mess (lines between

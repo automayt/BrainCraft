@@ -513,6 +513,8 @@ Every object has comments and a description (**Alt+C**). Comment blocks (**C**) 
 - Every applied change has its own **Undo**, even after other edits.
 - Quick actions: Summarise, Find gaps, Decision log; with a selection, Cluster into themes, Make a mind map, Make a flowchart.
 - **Sketch to board:** draw a rough chart with the pen, or drop in a photo of a whiteboard, select it and press **Make into objects** on its toolbar.
+- **Talk to it:** press **🎙 Talk** and think out loud; at each pause it builds and reshapes the board from what you said. **Flowstate** (**Ctrl+Shift+F**) is the same with the rest of the app faded away; **Space** mutes, **Esc** leaves.
+- **Who said what:** when the server can tell voices apart, talking in a meeting shows a **Voices** strip once a second voice is heard. Click "Voice 2" to name it, and each person's ideas are put down as theirs.
 - The model can be Claude through an API key, your own model server (such as vLLM), or **Claude Code** (\`claude -p\`) or **Codex** (\`codex exec\`) on the computer your BrainCraft server runs on: when they're installed there, they're in the list, signed in as whoever uses them there.
 
 > [!tip] Assistants outside the app
