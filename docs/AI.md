@@ -134,6 +134,46 @@ window to itself. Just talk.
   becomes its own idea in the right place, never more words crammed into one
   box (see [Building things properly](#building-things-properly)).
 
+### Who said what, in a meeting
+
+With a speaker-recognition model on the server, BrainCraft tells voices apart
+while you talk, so in a meeting the assistant knows who said what and puts
+each person's ideas down as theirs.
+
+- Each phrase is matched to the voices heard so far in that conversation:
+  Voice 1, Voice 2 and so on, in the order people first speak.
+- Once a second voice is heard, a **Voices** strip appears (in Flowstate,
+  above the words at the bottom; in the panel, in the talking bar). Click a
+  voice to name it ("Sam"). The assistant hears the name, uses it from then on,
+  and changes the voice to the name on what it already made.
+- The assistant gets each line with who said it ("[Sam] let's move it to
+  May"), and puts the person on the idea, shown as the people an idea is
+  assigned to. It goes only by who said the line, never by guessing from the
+  words.
+- Talking on your own, nothing changes: one voice is just you.
+- It needs to hear everyone: a laptop in a meeting room, or a call on the
+  computer's speakers. Over headphones it only hears you.
+- Short phrases ("yeah, and the budget") are the hardest to place: one under
+  about a second never starts a new voice, and goes to the nearest one already
+  heard. Two people talking over each other land on whoever's louder. If the
+  same person turns up as two voices, give them both the same name.
+
+**Turning it on (server):** the model runs inside the BrainCraft server, on
+the processor, through the sherpa-onnx library; there's nothing else to run.
+
+1. `npm install` installs the library (`sherpa-onnx-node`, an optional
+   dependency, with ready-built files for Windows, Linux and macOS).
+2. Download a speaker-recognition model from the sherpa-onnx project's GitHub
+   releases (the "speaker-recongition-models" release; its spelling), for
+   example `wespeaker_en_voxceleb_resnet34_LM.onnx` (about 26 MB).
+3. Set `BRAINCRAFT_SPEAKER_MODEL` to that file and restart. The log says if it
+   couldn't be loaded; `/api/health` says `"voices": true` when it's on.
+
+It works alongside speech to text (`BRAINCRAFT_TRANSCRIBE_URL`), which it needs.
+`BRAINCRAFT_SPEAKER_THRESHOLD` (default 0.5) is how alike two phrases must be
+to count as one voice: raise it if different people are taken for one, lower
+it if one person keeps turning into several.
+
 ### Building things properly
 
 Spoken turns change the board straight away, so what the assistant makes has

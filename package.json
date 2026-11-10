@@ -55,5 +55,8 @@
     "@excalidraw/mermaid-to-excalidraw": {
       "nanoid": "5.1.16"
     }
+  },
+  "optionalDependencies": {
+    "sherpa-onnx-node": "^2.0.1"
   }
 }

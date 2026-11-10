@@ -16,6 +16,7 @@ import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, plainLine } from './Flowstate'
+import { VoiceNames } from './VoiceNames'
 
 /** A request that says nothing for this long has stalled. */
 const QUIET_LIMIT = 10 * 60_000
@@ -438,7 +439,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
   // Talking: each pause sends what was said, and the assistant shapes the board as it goes.
-  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, serverPreviews: !!server.transcribePreview, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
+  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, serverPreviews: !!server.transcribePreview, serverVoices: !!server.voices, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
   const follow = (to: LinkTarget | null, label: string) => {
     const target = to ?? resolveName(label, editor.board, ws.otherBoards)
     if (target) void ws.openLink(target)
@@ -517,7 +518,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           : !talk.how
             ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.'
             : talk.error
-    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} muted={talk.muted} onMute={talk.mute} problem={problem} onLeave={() => onFlow?.(false)} />
+    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} muted={talk.muted} onMute={talk.mute} problem={problem} onLeave={() => onFlow?.(false)} voices={<VoiceNames voices={talk.voices} onName={talk.nameVoice} />} />
   }
 
   const showSetup = setup || !connection
@@ -898,6 +899,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
               <button type="button" className="primary" onClick={() => talk.stop()}>
                 Stop talking
               </button>
+              <VoiceNames voices={talk.voices} onName={talk.nameVoice} />
             </div>
           )}
         </>

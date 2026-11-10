@@ -5,6 +5,9 @@
  * injectable clock, so it's tested without a microphone.
  */
 
+/** Phrases as one turn: run together, except that each person's lines ("[Sam] …") start a line of their own. */
+export const joined = (phrases: readonly string[]) => phrases.map((p, k) => (k && p.startsWith('[') ? `\n${p}` : k ? ` ${p}` : p)).join('')
+
 export interface UtteranceOptions {
   /** A pause this long sends what was said. */
   pauseMs?: number
@@ -39,7 +42,7 @@ export class Utterances {
 
   /** What's waiting to go (shown under the words being heard). */
   get waiting(): string {
-    return this.pending.join(' ')
+    return joined(this.pending)
   }
 
   /** Whether a turn is with the assistant. */
@@ -99,7 +102,7 @@ export class Utterances {
   private async go() {
     this.timer = null
     if (this.busy || !this.pending.length) return
-    const text = this.pending.join(' ')
+    const text = joined(this.pending)
     this.pending = []
     this.first = null
     this.busy = true

@@ -379,6 +379,8 @@ export function navigate(b: Board, id: Id, dir: Direction): Id | undefined {
 // ----- outlines ------------------------------------------------------------------
 
 export interface OutlineNode {
+  /** Who it came from, by name (shown on the idea, as people it's assigned to). */
+  who?: string[]
   text: string
   children: OutlineNode[]
 }

@@ -13,8 +13,8 @@
 import { Downsampler, Phrases, wav } from './phrases'
 
 export interface Hearing {
-  /** A finished phrase. */
-  final(text: string): void
+  /** A finished phrase, and which voice said it, when the server can tell voices apart. */
+  final(text: string, voice?: number): void
   /** Words still being said. */
   interim?(text: string): void
   /** The sound level, 0–1, for a meter. */
@@ -117,9 +117,15 @@ export function browserEar(lang: string, on: Hearing): Ear {
   }
 }
 
+/** A phrase turned into words, and which voice said it, when the server can tell. */
+export interface Heard {
+  text: string
+  voice?: number
+}
+
 export interface ServerEarOptions {
-  /** Sends a recording (WAV) to be turned into words; resolves with them. */
-  transcribe(audio: Blob): Promise<string>
+  /** Sends a recording (WAV) to be turned into words; resolves with them. `preview`: a phrase still being said. */
+  transcribe(audio: Blob, preview?: boolean): Promise<Heard>
   /** A pause this long ends a phrase. */
   pauseMs?: number
   /** Shows the words while they're being said, by transcribing the phrase so far about once a second. */
@@ -200,7 +206,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
             .then(
               (t) => {
                 on.interim?.('')
-                if (words(t)) on.final(t.trim())
+                if (words(t.text)) on.final(t.text.trim(), t.voice)
               },
               (err: Error) => {
                 if (!stopped) on.error(err.message)
@@ -213,9 +219,9 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       preview: (audio, id) => {
         if (previewing || stopped) return
         previewing = true
-        o.transcribe(wav(audio))
+        o.transcribe(wav(audio), true)
           .then((t) => {
-            if (!stopped && phrases.id === id && words(t)) on.interim?.(t.trim())
+            if (!stopped && phrases.id === id && words(t.text)) on.interim?.(t.text.trim())
           })
           .catch(() => {})
           .finally(() => (previewing = false))

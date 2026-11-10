@@ -10,7 +10,8 @@ export default defineConfig({
     emptyOutDir: false,
     target: 'node20',
     minify: false,
-    rollupOptions: { output: { entryFileNames: 'braincraft-server.mjs', banner: '#!/usr/bin/env node' } },
+    // The speaker-recognition library is native and optional: found in node_modules when installed.
+    rollupOptions: { external: ['sherpa-onnx-node'], output: { entryFileNames: 'braincraft-server.mjs', banner: '#!/usr/bin/env node' } },
   },
   ssr: { noExternal: true },
 })

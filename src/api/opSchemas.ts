@@ -47,7 +47,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     summary: 'A mind map, laid out automatically',
     properties: {
       outline: str('An indented list, two spaces per level (Markdown bullets are fine); one line is just the central idea'),
-      tree: { type: 'object', description: '{"text", "children": [...]}, instead of an outline' },
+      tree: { type: 'object', description: '{"text", "who": ["Name"], "children": [...]}, instead of an outline ("who": the people an idea came from, shown on it)' },
       ...placed,
     },
   },
@@ -55,7 +55,7 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     summary: 'Adds ideas to a mind map under an idea; laid out automatically',
     properties: {
       parent: ref,
-      ideas: oneOf(str('One idea per line; indent two spaces for ideas under the line above'), list(oneOf(str(), { type: 'object', description: '{"text", "children": [...]}' }))),
+      ideas: oneOf(str('One idea per line; indent two spaces for ideas under the line above'), list(oneOf(str(), { type: 'object', description: '{"text", "who": ["Name"], "children": [...]}; "who": the people it came from, shown on it' }))),
       ref: placed.ref,
     },
     required: ['parent', 'ideas'],

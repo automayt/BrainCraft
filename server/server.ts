@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
 import { Transcriber } from './transcribe'
+import { type Embedder, Voices, loadEmbedder } from './speakers'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
@@ -403,8 +404,18 @@ const openAiProxy = OPENAI_BASE
 const TRANSCRIBE_URL = process.env.BRAINCRAFT_TRANSCRIBE_URL?.trim() || ''
 /** Words shown while they're said: the phrase so far is transcribed about once a second (best when you run the speech-to-text server yourself). */
 const TRANSCRIBE_PREVIEW = /^(1|true|on|yes)$/i.test(process.env.BRAINCRAFT_TRANSCRIBE_PREVIEW?.trim() ?? '')
+/** Who said what in a meeting: a speaker-recognition model (see speakers.ts), when there is one. */
+const SPEAKER_MODEL = process.env.BRAINCRAFT_SPEAKER_MODEL?.trim() || ''
+let embedder: Embedder | null = null
+if (SPEAKER_MODEL && TRANSCRIBE_URL)
+  try {
+    embedder = await loadEmbedder(SPEAKER_MODEL, Math.max(1, Number(process.env.BRAINCRAFT_SPEAKER_THREADS) || 1))
+  } catch (err) {
+    log(`voices off: couldn't load the speaker model (${(err as Error).message}). Is sherpa-onnx-node installed, and BRAINCRAFT_SPEAKER_MODEL a model file?`)
+  }
 const transcriber = TRANSCRIBE_URL
   ? new Transcriber({
+      ...(embedder ? { voices: { embedder, voices: new Voices({ threshold: Number(process.env.BRAINCRAFT_SPEAKER_THRESHOLD) || undefined }), who: (req) => accounts?.userOf(req)?.id ?? visitor(req) } } : {}),
       baseUrl: TRANSCRIBE_URL,
       model: process.env.BRAINCRAFT_TRANSCRIBE_MODEL?.trim() || 'whisper-1',
       apiKey: process.env.BRAINCRAFT_TRANSCRIBE_KEY?.trim() || undefined,
@@ -461,6 +472,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       backups: !!backups,
       transcribe: !!transcriber,
       transcribePreview: !!transcriber && TRANSCRIBE_PREVIEW,
+      voices: !!transcriber && !!embedder,
       appName: appName(),
     })
 

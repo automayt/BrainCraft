@@ -15,7 +15,22 @@ export interface TalkOptions {
   serverPreviews?: boolean
   /** The server's AI password, if it asks for one. */
   password?: string
+  /** The server tells voices apart (see server/speakers.ts). */
+  serverVoices?: boolean
   say(text: string): Promise<void>
+}
+
+/** A voice heard in this conversation, and what it's called. */
+export interface HeardVoice {
+  n: number
+  name: string
+}
+
+/** Who said a phrase, as the assistant reads it: only once there's more than one voice. */
+export function voiceLine(text: string, voice: number | undefined, voices: readonly HeardVoice[]): string {
+  if (voice === undefined || voices.length < 2) return text
+  const name = voices.find((v) => v.n === voice)?.name ?? `Voice ${voice}`
+  return `[${name}] ${text}`
 }
 
 /** How this browser can hear: through the server (any browser), its own recognition, or not at all. */
@@ -32,6 +47,9 @@ export function useTalk(o: TalkOptions) {
   const [error, setError] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   const [, setTick] = useState(0)
+  /** The voices heard so far in this conversation, in the order they were first heard. */
+  const [voices, setVoices] = useState<HeardVoice[]>([])
+  const voicesRef = useRef<HeardVoice[]>([])
   const ear = useRef<Ear | null>(null)
   const turns = useRef<Utterances | null>(null)
   const latest = useRef(o)
@@ -71,10 +89,23 @@ export function useTalk(o: TalkOptions) {
     )
     turns.current = u
     const lang = navigator.language || 'en-US'
+    // Each time it starts is a conversation of its own, with its own voices.
+    const conversation = Math.random().toString(36).slice(2, 12)
+    voicesRef.current = []
+    setVoices([])
     const hearing = {
-      final: (text: string) => {
+      final: (text: string, voice?: number) => {
         setInterim('')
-        u.heard(text)
+        let line = text
+        if (voice !== undefined && !voicesRef.current.some((v) => v.n === voice)) {
+          const first = voicesRef.current.length === 1 ? voicesRef.current[0] : null
+          voicesRef.current = [...voicesRef.current, { n: voice, name: `Voice ${voice}` }]
+          setVoices(voicesRef.current)
+          // A second voice: what was said before it was all the first one's.
+          if (first) u.heard(`[Until now, everything was said by ${first.name}.]`)
+        }
+        line = voiceLine(line, voice, voicesRef.current)
+        u.heard(line)
         setTick((t) => t + 1)
       },
       interim: (text: string) => {
@@ -95,16 +126,17 @@ export function useTalk(o: TalkOptions) {
         ear.current = await serverEar(
           {
             preview: !!serverPreviews,
-            transcribe: async (audio) => {
-              const res = await fetch(new URL(`api/ai/transcribe?lang=${encodeURIComponent(lang)}`, server!.endsWith('/') ? server! : `${server}/`), {
+            transcribe: async (audio, preview) => {
+              const voicesToo = latest.current.serverVoices && !preview ? `&voices=${conversation}` : ''
+              const res = await fetch(new URL(`api/ai/transcribe?lang=${encodeURIComponent(lang)}${voicesToo}`, server!.endsWith('/') ? server! : `${server}/`), {
                 method: 'POST',
                 body: audio,
                 credentials: 'include',
                 headers: { 'content-type': audio.type || 'audio/wav', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
               })
-              const out = (await res.json().catch(() => ({}))) as { text?: string; error?: string }
+              const out = (await res.json().catch(() => ({}))) as { text?: string; voice?: number; error?: string }
               if (!res.ok) throw new Error(out.error ?? `Speech to text failed (${res.status})`)
-              return out.text ?? ''
+              return { text: out.text ?? '', ...(typeof out.voice === 'number' ? { voice: out.voice } : {}) }
             },
           },
           hearing,
@@ -134,6 +166,18 @@ export function useTalk(o: TalkOptions) {
     stop,
     /** Sends what's waiting now, without waiting for a pause. */
     flush: () => turns.current?.flush(),
+    /** The voices heard in this conversation (two or more: a meeting). */
+    voices,
+    /** Names a voice; the assistant hears it, and changes the voice to the name on the board. */
+    nameVoice: (n: number, name: string) => {
+      const was = voicesRef.current.find((v) => v.n === n)
+      const clean = name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40)
+      if (!was || !clean || clean === was.name) return
+      voicesRef.current = voicesRef.current.map((v) => (v.n === n ? { ...v, name: clean } : v))
+      setVoices(voicesRef.current)
+      turns.current?.heard(`[${was.name} is ${clean}]`)
+      setTick((t) => t + 1)
+    },
     muted,
     /** Stops hearing for now (what was said up to then still goes), or starts again. */
     mute: (quiet: boolean) => {

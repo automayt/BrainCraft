@@ -750,6 +750,10 @@ shares live exactly like a board.
   ideas, several ideas in one, boxes standing in for a mind map, things piled
   up) goes back to it once to tidy. See
   [AI.md](docs/AI.md#building-things-properly).
+- **Who said what:** with a speaker-recognition model on the server, talking
+  in a meeting tells voices apart. Name each voice once ("Voice 2" is Sam) and
+  the assistant puts each person's ideas down as theirs. See
+  [docs/AI.md](docs/AI.md#who-said-what-in-a-meeting).
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.

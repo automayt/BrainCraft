@@ -59,7 +59,7 @@ import {
 /** An object id, or the `ref` name of an object created earlier in the same batch. */
 export type Ref = number | string
 
-type IdeaIn = string | { text: string; children?: IdeaIn[] }
+type IdeaIn = string | { text: string; who?: string | string[]; children?: IdeaIn[] }
 /** A database field: a name and type, plus a formula, what a relation links to, or how a rollup sums up. */
 type FieldSpec = {
   name: string
@@ -369,10 +369,15 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       return v as NonNullable<T>
     }
 
+    /** Who an idea came from: names, as a list or one. */
+    const peopleOf = (v: unknown): { who?: string[] } => {
+      const names = (Array.isArray(v) ? v : typeof v === 'string' ? [v] : []).filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim())
+      return names.length ? { who: names } : {}
+    }
     /** A mind map from "outline" (one line is just its central idea) or "tree". */
     const treeOf = (o: { outline?: unknown; tree?: unknown }): OutlineNode => {
       const normalize = (n: OutlineNode): OutlineNode =>
-        n && typeof n === 'object' ? { text: String(n.text ?? ''), children: Array.isArray(n.children) ? n.children.map(normalize) : [] } : { text: String(n ?? ''), children: [] }
+        n && typeof n === 'object' ? { text: String(n.text ?? ''), ...peopleOf(n.who), children: Array.isArray(n.children) ? n.children.map(normalize) : [] } : { text: String(n ?? ''), children: [] }
       if (o.tree !== undefined) {
         const t = normalize(o.tree as OutlineNode)
         if (!t.text) fail(index, op, '"tree" needs {"text": …, "children": […]}')
@@ -387,8 +392,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     const ideasOf = (v: unknown, field: string): OutlineNode[] => {
       const node = (n: unknown, f: string): OutlineNode => {
         if (typeof n === 'string' || typeof n === 'number') return { text: String(n).trim(), children: [] }
-        const o = obj(n, f) as { text?: unknown; children?: unknown[] }
-        return { text: text(o.text, `${f}.text`).trim(), children: list(o.children, `${f}.children`).map((c, k) => node(c, `${f}.children[${k}]`)) }
+        const o = obj(n, f) as { text?: unknown; who?: unknown; children?: unknown[] }
+        return { text: text(o.text, `${f}.text`).trim(), ...peopleOf(o.who), children: list(o.children, `${f}.children`).map((c, k) => node(c, `${f}.children[${k}]`)) }
       }
       const out =
         typeof v === 'string'
@@ -582,6 +587,16 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         let root: Id
         ;[b, root] = createMapFromOutline(b, tree, { x: 0, y: 0 })
         const ids = b.items.filter((i) => !before.has(i.id)).map((i) => i.id)
+        // Who each idea came from, in the order the map was made.
+        const people: (string[] | undefined)[] = []
+        const order = (n: OutlineNode) => {
+          people.push(n.who)
+          n.children.forEach(order)
+        }
+        order(tree)
+        ids.forEach((id, k) => {
+          if (people[k]?.length) b = TT.assign(b, [id], people[k]!)
+        })
         place(ids, op.at)
         done({ id: root, ids })
         break
@@ -596,6 +611,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           for (const n of nodes) {
             let id: Id
             ;[b, id] = addChild(b, under, undefined, n.text)
+            if (n.who?.length) b = TT.assign(b, [id], n.who)
             ids.push(id)
             grow(id, n.children)
           }

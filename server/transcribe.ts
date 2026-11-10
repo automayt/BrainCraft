@@ -4,8 +4,11 @@
  * compatible transcription endpoint, such as Whisper served by vLLM on your own machines, or a
  * hosted one.
  *
- *   POST /api/ai/transcribe?lang=en-US   body: the recording (audio/webm, audio/ogg, audio/mp4…)
- *   → { "text": "what was said" }
+ *   POST /api/ai/transcribe?lang=en-US&voices=ID   body: the recording (audio/webm, audio/ogg, audio/mp4…)
+ *   → { "text": "what was said", "voice": 2 }
+ *
+ * With a speaker-recognition model (speakers.ts) and `voices` naming the conversation, a WAV
+ * recording also says which voice said it, as heard so far in that conversation.
  *
  * Settings: BRAINCRAFT_TRANSCRIBE_URL (the endpoint's base, e.g. http://localhost:8000/v1),
  * BRAINCRAFT_TRANSCRIBE_MODEL (default whisper-1), BRAINCRAFT_TRANSCRIBE_KEY (if it needs one).
@@ -14,6 +17,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AiGate } from './aiProxy'
+import { type Embedder, type Voices, wavSamples } from './speakers'
 
 export interface TranscribeOptions {
   baseUrl: string
@@ -24,6 +28,8 @@ export interface TranscribeOptions {
   maxBytes?: number
   timeoutMs?: number
   fetch?: typeof fetch
+  /** Who said what: the speaker-recognition model, the voices heard, and whose conversation it is. */
+  voices?: { embedder: Embedder; voices: Voices; who: (req: IncomingMessage) => string }
 }
 
 const json = (res: ServerResponse, status: number, body: unknown) => {
@@ -52,7 +58,7 @@ function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
 }
 
 export class Transcriber {
-  private o: Required<Omit<TranscribeOptions, 'apiKey'>> & { apiKey?: string }
+  private o: Required<Omit<TranscribeOptions, 'apiKey' | 'voices'>> & Pick<TranscribeOptions, 'apiKey' | 'voices'>
 
   constructor(o: TranscribeOptions) {
     this.o = { maxBytes: 15 * 1024 * 1024, timeoutMs: 60_000, fetch: globalThis.fetch.bind(globalThis), ...o, baseUrl: o.baseUrl.replace(/\/+$/, '') }
@@ -81,13 +87,16 @@ export class Transcriber {
     const lang = /^([a-z]{2,3})(?:[-_][A-Za-z]{2,4})?$/.exec(url.searchParams.get('lang') ?? '')?.[1]
     if (lang) form.append('language', lang)
     let r: Response
+    const asked = this.o.fetch(`${this.o.baseUrl}/audio/transcriptions`, {
+      method: 'POST',
+      headers: this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {},
+      body: form,
+      signal: AbortSignal.timeout(this.o.timeoutMs),
+    })
+    // While the words are worked out elsewhere: whose voice it is.
+    const voice = this.voiceOf(req, url, audio)
     try {
-      r = await this.o.fetch(`${this.o.baseUrl}/audio/transcriptions`, {
-        method: 'POST',
-        headers: this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {},
-        body: form,
-        signal: AbortSignal.timeout(this.o.timeoutMs),
-      })
+      r = await asked
     } catch (err) {
       return json(res, 502, { error: `Couldn’t reach the transcription server (${(err as Error).message})` })
     }
@@ -96,6 +105,21 @@ export class Transcriber {
       return json(res, 502, { error: `The transcription server said ${r.status}${said ? `: ${said.slice(0, 200)}` : ''}` })
     }
     const out = (await r.json().catch(() => ({}))) as { text?: unknown }
-    return json(res, 200, { text: typeof out.text === 'string' ? out.text.trim() : '' })
+    return json(res, 200, { text: typeof out.text === 'string' ? out.text.trim() : '', ...(voice ? { voice } : {}) })
+  }
+
+  /** Which voice said a recording, in the conversation the app named; null when it can't tell. */
+  private voiceOf(req: IncomingMessage, url: URL, audio: Buffer): number | null {
+    const v = this.o.voices
+    const talk = url.searchParams.get('voices')
+    if (!v || !talk || !/^[\w-]{6,40}$/.test(talk)) return null
+    const sound = wavSamples(audio)
+    if (!sound) return null
+    try {
+      const print = v.embedder.embed(sound.samples, sound.rate)
+      return print ? v.voices.place(`${v.who(req)} ${talk}`, print, sound.samples.length / sound.rate) : null
+    } catch {
+      return null
+    }
   }
 }

@@ -40,8 +40,10 @@ export function Flowstate(props: {
   /** Why it can't work right now, if it can't. */
   problem: string | null
   onLeave: () => void
+  /** In a meeting, the voices heard, to name them. */
+  voices?: React.ReactNode
 }) {
-  const { lines, waiting, interim, level, listening, muted, onMute, problem, onLeave } = props
+  const { lines, waiting, interim, level, listening, muted, onMute, problem, onLeave, voices } = props
   const editor = useEditor()
 
   // Space mutes: a tap mutes or unmutes, holding mutes while held. It takes Space before the
@@ -135,6 +137,7 @@ export function Flowstate(props: {
       </div>
 
       <div className="flow-voice">
+        {voices}
         {(waiting || interim) && (
           <p className="flow-words">
             {waiting} <span>{interim}</span>
