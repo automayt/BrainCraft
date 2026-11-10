@@ -46,8 +46,12 @@ export interface Ui {
   toggleAssistant: () => void
   /** Presents the board's frames as slides, full screen. */
   present: () => void
-  /** Flowstate: just the board, full screen, built by talking to the assistant. */
-  flow: (on: boolean) => void
+  /**
+   * Flowstate: just the board, built by talking to the assistant; with `meeting`, Meeting notes
+   * (the assistant taking notes on a meeting). Leaving a meeting wraps it up first (its last notes,
+   * then its frame), unless `now`.
+   */
+  flow: (on: boolean, o?: { meeting?: boolean; now?: boolean }) => void
   /** The recorded runs of the flowchart containing `id`. */
   openRuns: (id: number) => void
   /** The link to AI assistants through the MCP server. */

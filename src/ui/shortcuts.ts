@@ -79,6 +79,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Space (tap)', 'Mute, or listen again'],
       ['Space (hold)', 'Mute while held (pan with the middle button or a scroll instead)'],
       ['Esc', 'Leave Flowstate'],
+      ['Esc (Meeting notes)', 'End the meeting: its notes are finished and put in one frame named for it (Esc again leaves at once)'],
       ['Ctrl J', 'Leave it for the assistant panel, with the whole conversation'],
       ['Ctrl Z', 'Undo the last change (each one is in the assistant’s History too)'],
     ],

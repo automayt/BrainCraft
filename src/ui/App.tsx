@@ -144,12 +144,14 @@ function App({ ws }: { ws: Workspace }) {
       // Full screen where allowed; leaving full screen (Esc in most browsers) ends the presentation.
       document.documentElement.requestFullscreen?.().catch(() => {})
     },
-    flow: (on) => {
+    flow: (on, o = {}) => {
       if (on === editor.flow) return
       if (on && (isWiki(editor.board) || editor.presenting || editor.running)) return
+      // A meeting wraps up before it ends: its last notes, then the frame (see AiPanel).
+      if (!on && editor.meeting && !o.now) return editor.endMeeting()
       setDialog(null)
       setMenu(null)
-      editor.setFlow(on)
+      editor.setFlow(on, o.meeting)
       // It stays in the window, the rest fading away; full screen is a button in it (flowFullScreen).
       if (!on) {
         flowKeys()?.unlock?.()
@@ -515,7 +517,7 @@ function App({ ws }: { ws: Workspace }) {
               what="the assistant"
               onClose={() => {
                 setAssistant(false)
-                ui.flow(false)
+                ui.flow(false, { now: true })
               }}
             >
               <Suspense fallback={editor.flow ? null : <aside className="ai-panel loading no-canvas" aria-busy="true" aria-label="AI assistant" />}>

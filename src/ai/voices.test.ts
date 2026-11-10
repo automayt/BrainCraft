@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyOps, type Op } from '../api/ops'
 import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
-import { voiceLine } from '../ui/useTalk'
+import { sameVoice, voiceLine } from '../ui/useTalk'
 import { Utterances, joined } from './listen'
 
 describe('who said what, as the assistant reads it', () => {
@@ -18,7 +18,44 @@ describe('who said what, as the assistant reads it', () => {
 
   it('leaves someone talking alone as they are', () => {
     expect(voiceLine('a mind map of the launch', 1, [{ n: 1, name: 'Voice 1' }])).toBe('a mind map of the launch')
-    expect(voiceLine('no voices here', undefined, two)).toBe('no voices here')
+    expect(voiceLine('no voices here', undefined, [])).toBe('no voices here')
+  })
+
+  it('says when it isn’t sure who, rather than letting the line run on as the last person’s', () => {
+    expect(voiceLine('and the budget', undefined, two)).toBe('[Not sure who] and the budget')
+    expect(joined(['[Sam] we could', '[Not sure who] and the budget'])).toBe('[Sam] we could\n[Not sure who] and the budget')
+  })
+})
+
+describe('two voices that were one person', () => {
+  it('keeps the earlier one, and tells the assistant', () => {
+    const three = [
+      { n: 1, name: 'Voice 1' },
+      { n: 2, name: 'Voice 2' },
+      { n: 3, name: 'Voice 3' },
+    ]
+    expect(sameVoice(three, 3, 1)).toEqual({ voices: [three[0], three[1]], told: ['[Voice 3 is Voice 1]'] })
+  })
+
+  it('keeps a name either of them was given', () => {
+    const named = [
+      { n: 1, name: 'Voice 1' },
+      { n: 2, name: 'Brian' },
+    ]
+    expect(sameVoice(named, 2, 1)).toEqual({ voices: [{ n: 1, name: 'Brian' }], told: ['[Voice 1 is Brian]'] })
+    const both = [
+      { n: 1, name: 'Jason' },
+      { n: 3, name: 'Voice 3' },
+    ]
+    expect(sameVoice(both, 3, 1)).toEqual({ voices: [{ n: 1, name: 'Jason' }], told: ['[Voice 3 is Jason]'] })
+  })
+
+  it('changes nothing for a voice it never showed', () => {
+    const two = [
+      { n: 1, name: 'Voice 1' },
+      { n: 2, name: 'Sam' },
+    ]
+    expect(sameVoice(two, 5, 1)).toEqual({ voices: two, told: [] })
   })
 
   it('gives each person’s lines a line of their own, and runs one person’s phrases together', () => {

@@ -758,6 +758,12 @@ shares live exactly like a board.
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.
+- **Meeting notes:** Flowstate for a meeting. The assistant listens and takes
+  the notes on the board as you meet: a mind map of every point, the flows,
+  sequences and timelines people describe drawn as they go, and a table of
+  decisions and actions with who and when. When it ends, it all goes in one
+  frame named for the meeting. See
+  [docs/AI.md](docs/AI.md#meeting-notes).
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or
   drop in a photo of a napkin or whiteboard, select it and press
   **Make into objects**. Claude reads the picture and proposes real shapes, ideas or

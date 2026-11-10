@@ -104,6 +104,13 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       : []),
     { id: 'check', label: 'Check board…', group: 'Board', aliases: 'tidy clean lint problems overlap empty stray messy fix tidy up', run: ui.openCheck },
     { id: 'flowstate', label: 'Flowstate: build the board by talking', group: 'Board', keys: 'Ctrl Shift F', aliases: 'voice talk speak dictate microphone live immersive focus full screen', run: () => ui.flow(true) },
+    {
+      id: 'meeting',
+      label: 'Meeting notes: the assistant takes the notes as you meet',
+      group: 'Board',
+      aliases: 'meeting call transcribe transcript minutes notes record listen webex zoom teams standup',
+      run: () => ui.flow(true, { meeting: true }),
+    },
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
     editor.board.sketch
@@ -235,8 +242,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
 
 const LOOK_GROUPS = new Set(['Board', 'View', 'Help'])
 /** Board commands that only mean something on a canvas. */
-const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export', 'flowstate', 'check'])
-const EDIT_IDS = new Set(['versions', 'import', 'flowstate'])
+const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export', 'flowstate', 'meeting', 'check'])
+const EDIT_IDS = new Set(['versions', 'import', 'flowstate', 'meeting'])
 const LOOK_IDS = new Set(['emote', 'chat', 'select-all', 'comments', 'run-history'])
 /** Runs work on boards that can't be changed (nothing is recorded); not while one is under way. */
 const RUN_IDS = new Set(['run', 'run-here'])

@@ -149,6 +149,21 @@ export interface Callbacks {
 /** What a live turn tells the model, besides what was said. */
 const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk, quickly. First say in a few words what you're doing (it appears on their screen as you write it, e.g. "Mind map of the launch, three branches."), then call propose_changes once with everything for this turn; it's applied at once (they can undo it), and that ends your turn, so write nothing after it. Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup, replace or remove parts of it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. Build it BrainCraft's way: start a mind map with createMindMap even if it's only the topic so far, then grow it with addIdeas under the idea they name ("add X and Y off Z" is two new ideas under Z, never more words in Z); grow a flowchart with addSteps; change a Kanban board, table or timeline with setKanban, setTable or setTimeline. When they correct themselves ("actually, replace X with Y"), change what you made: rename it with update, or delete it and add the right one. When they are only thinking aloud and there is nothing to add yet, just say a few words and change nothing. Several people may be talking, as in a meeting: then each line starts with who said it, like "[Sam] we should move it to May". Show on the board who each idea came from: give it "who" in addIdeas or createMindMap ({"text", "who": ["Sam"]}), or set assignees with update on an idea already there. Go only by the name at the start of the line, never by guessing from the words, and keep each person's ideas theirs. A line like "[Voice 2 is Sam]" names a voice: use the name from then on, and change that voice to the name on what you made.]`
 
+/** Who said what, as the lines of a meeting show it. */
+const WHO_NOTE = `Each line may start with who said it, like "[Sam] we should move it to May", or "[Not sure who]" when that isn't known. Show on the board who each point came from: give it "who" in addIdeas or createMindMap ({"text", "who": ["Sam"]}), or set assignees with update on an idea already there, and put the name in the Who column of the table. Go only by the name at the start of the line, never by guessing from the words, and keep each person's points theirs; put no name on the points of a "[Not sure who]" line. A line like "[Voice 2 is Sam]" names a voice: use the name from then on, and change that voice to the name on what you made. When the lines have no names, put no names on anything.`
+
+/** Meeting notes: what was just said in a meeting the person is in, for the assistant to take notes on. */
+const MEETING_NOTE = `[Meeting notes: the person is in a meeting and you are taking the notes on this board. What's below was just said by the people in the meeting, to each other, not to you: never answer them or ask them anything. First say in a few words what you noted (it appears on their screen, e.g. "Noted the venue options; started the timeline."), then call propose_changes once with everything for this stretch; it's applied at once, and that ends your turn, so write nothing after it.
+Take thorough notes: every point, proposal, fact, number, name, date, decision, action item, risk and open question, each in a few plain words of your own (never a transcript). Leave things out only when nothing of substance was said (greetings, small talk, "can you hear me").
+Shape the notes as the meeting goes, and keep shaping them:
+- The notes themselves are a mind map: createMindMap with the meeting's subject in the middle (rename it with update as the subject becomes clear), a branch for each topic discussed, the points under their topic. Grow it with addIdeas; move points with moveIdea, and rename or regroup branches as topics become clear.
+- Draw what people describe as soon as there is enough to draw, and refine it as they go on: the steps of a process or a decision as a flowchart (createFlowchart, then addSteps or setFlowchart); who or what sends what to whom, such as systems, teams, requests and replies, as a sequence diagram (createSequence, then setSequence); dates, deadlines, phases or a schedule as a timeline (createTimeline, then setTimeline); options being compared as a table.
+- Decisions, action items and open questions go in one table titled "Decisions and actions" with the columns Type, What, Who, When (Type is Decision, Action or Question): make it with createTable when the first one comes up, then change it with setTable, giving every row each time.
+Improve what you made rather than adding copies, and fix what turns out to be wrong. Leave alone what was on the board before the meeting, and don't put a frame around it all: that's done when the meeting ends. Leave out "at", so what you make is placed beside the rest. ` + WHO_NOTE + `]`
+
+/** The meeting is over: the last of the notes, and a title for them. */
+const MEETING_END = `[Meeting notes: the meeting is over. Finish the notes in one last propose_changes: make sure every decision, action item and open question is in the "Decisions and actions" table, tidy the mind map (merge repeated points, give branches clear names), and add a sticky note starting "Summary:" with the few things that matter most. Start what you write with the meeting's title on a line of its own: "Title: " and a few words saying what the meeting was about (like "Title: Q3 launch planning"); it becomes the title of the frame put around the notes. Then call propose_changes, and write nothing after it. ` + WHO_NOTE + `]`
+
 const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards', 'read_time']
 
 /** How much of a file read_file gives at once (characters). */
@@ -489,11 +504,15 @@ export class Assistant {
     return { content: `${f.name}: characters ${from}–${from + part.length} of ${text.length}${more ? ` (read on with "from": ${from + FILE_CHUNK})` : ''}\n\n${part}` }
   }
 
-  /** Sends a message and runs the conversation until the model has answered. */
   /** How many times this turn's proposals may still be sent back to be tidied. */
   private checksLeft = 1
 
-  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live = false): Promise<void> {
+  /**
+   * Sends a message and runs the conversation until the model has answered. `live`: spoken, its
+   * changes applied as they come; 'meeting' is a stretch of a meeting to take notes on, and
+   * 'meeting-end' wraps the meeting's notes up (`text` is then not used).
+   */
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: boolean | 'meeting' | 'meeting-end' = false): Promise<void> {
     this.checksLeft = 1
     const sel = this.host.selection()
     const others = this.host.others?.()
@@ -524,16 +543,20 @@ export class Assistant {
         ...images.map((img) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.data } })),
         {
           type: 'text',
-          text: live
-            ? // Talking: the board comes along every time, so changes follow it without reading it first.
-              `${context}\n${LIVE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 12_000)}\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}`
-            : `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}`,
+          text:
+            live === 'meeting' || live === 'meeting-end'
+              ? // A meeting: the whole board comes along (the notes grow long), and what was said, line by line.
+                `${context}\n${live === 'meeting' ? MEETING_NOTE : MEETING_END}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
+              : live
+                ? // Talking: the board comes along every time, so changes follow it without reading it first.
+                  `${context}\n${LIVE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 12_000)}\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}`
+                : `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}`,
         },
       ],
     }
     if (into) into.push(...(message.content as typeof into))
     else this.messages.push(message)
-    return this.run(on, signal, live)
+    return this.run(on, signal, !!live)
   }
 
   /** Asks again after a request failed: the conversation already ends with what was asked. */

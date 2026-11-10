@@ -8,6 +8,7 @@ import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loa
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
+import { meetingTitle, untitledMeeting } from '../model/meeting'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
@@ -237,7 +238,7 @@ function keep(t: Thread, k: Keeper) {
  * The assistant: a side panel, or, in Flowstate (`flow`), nothing but the board, its words
  * floating over it while you talk. Both share the board's conversation.
  */
-export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean) => void }) {
+export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean, o?: { meeting?: boolean; now?: boolean }) => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
@@ -352,16 +353,18 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
 
   // A turn is with the assistant (kept outside React too, so a turn spoken meanwhile waits its go).
   const busy = useRef(false)
-  const send = async (text: string, images: AiImage[] = [], label?: string, live = false) => {
+  /** Sends a message; resolves with the reply once it's done (null when it couldn't be sent). */
+  const send = async (text: string, images: AiImage[] = [], label?: string, live: boolean | 'meeting' | 'meeting-end' = false): Promise<Turn | null> => {
     const s = session()
-    if (!s || !text.trim() || busy.current) return
+    if (!s || (!text.trim() && live !== 'meeting-end') || busy.current) return null
     busy.current = true
     // A long built-in request shows as its short label in the chat.
     s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [], where: here })
     const reply: Turn = { role: 'assistant', text: '', proposals: [], where: here }
     s.turns.push(reply)
     setInput('')
-    await work(s, reply, live, (on, signal) => s.assistant.send(text.trim(), on, signal, images, live))
+    await work(s, reply, !!live, (on, signal) => s.assistant.send(text.trim(), on, signal, images, live))
+    return reply
   }
 
   /** Takes a turn with the assistant, its words going into `reply`. */
@@ -439,7 +442,23 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
 
   const go = (id: number) => B.getItem(editor.board, id) && editor.focusObject(id)
   // Talking: each pause sends what was said, and the assistant shapes the board as it goes.
-  const talk = useTalk({ server: ws.server, serverTranscribes: !!server.transcribe, serverPreviews: !!server.transcribePreview, serverVoices: !!server.voices, password: settings.password, say: (t) => send(t, [], `🎙 ${t}`, true) })
+  // In a meeting, how many people are in it, when the person says (never more voices than that).
+  const [people, setPeople] = useState<number | null>(null)
+  /** Leaving a meeting before it's wrapped up: what's still being said goes nowhere. */
+  const dropTalk = useRef(false)
+  const talk = useTalk({
+    server: ws.server,
+    serverTranscribes: !!server.transcribe,
+    serverPreviews: !!server.transcribePreview,
+    serverVoices: !!server.voices,
+    password: settings.password,
+    meeting: !!editor.meeting,
+    people: editor.meeting ? people : null,
+    say: async (t) => {
+      if (dropTalk.current) return
+      await send(t, [], `🎙 ${t}`, editor.meeting ? 'meeting' : true)
+    },
+  })
   const follow = (to: LinkTarget | null, label: string) => {
     const target = to ?? resolveName(label, editor.board, ws.otherBoards)
     if (target) void ws.openLink(target)
@@ -493,11 +512,51 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   const canTalk = !!connection && !editor.readOnly && !!talk.how
   useEffect(() => {
     if (flow) {
-      if (checked && canTalk && !talk.on) void talk.start()
+      dropTalk.current = false
+      if (checked && canTalk && !talk.on && !editor.meeting?.ending) void talk.start()
     } else if (talk.on) talk.stop()
     // Only when Flowstate starts or ends, or once it's known whether it can listen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, checked, canTalk])
+
+  // A meeting wraps up when it ends: what was still being said, the last of the notes and its
+  // title, then everything it made goes in one frame with that title. Ending it again hurries.
+  const ending = !!(flow && editor.meeting?.ending)
+  const hurry = !!(flow && editor.meeting?.hurry)
+  const wrapping = useRef(false)
+  const hurried = useRef<() => void>(() => {})
+  useEffect(() => {
+    const m = editor.meeting
+    if (!ending || !m || wrapping.current) return
+    wrapping.current = true
+    const hurry = new Promise<void>((ok) => (hurried.current = ok))
+    void (async () => {
+      let title: string | null = null
+      try {
+        await Promise.race([talk.finish(), hurry])
+        if (!editor.meeting?.hurry && connection && !editor.readOnly && editor.board.items.some((i) => !m.before.has(i.id))) {
+          const reply = await Promise.race([send('', [], '🗒 The meeting is over: finishing the notes', 'meeting-end'), hurry.then(() => null)])
+          title = reply ? meetingTitle(reply.text) : null
+        }
+      } catch {
+        // Whatever went wrong, what was noted still gets its frame.
+      } finally {
+        const name = title ?? untitledMeeting(m.started)
+        const framed = editor.frameMeeting(name, m.before)
+        editor.setStatus(framed !== null ? `Meeting notes put in the frame “${name}”` : 'Nothing was noted in this meeting')
+        wrapping.current = false
+        onFlow?.(false, { now: true })
+      }
+    })()
+    // Only when it starts to end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ending])
+  useEffect(() => {
+    if (!hurry) return
+    dropTalk.current = true
+    hurried.current()
+    abort.current?.abort()
+  }, [hurry])
 
   if (flow) {
     const lines: FlowLine[] = turns.slice(flowFrom.current).flatMap((t, i): FlowLine[] => {
@@ -518,7 +577,21 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           : !talk.how
             ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.'
             : talk.error
-    return <Flowstate lines={lines} waiting={talk.waiting} interim={talk.interim} level={talk.level} listening={talk.on} muted={talk.muted} onMute={talk.mute} problem={problem} onLeave={() => onFlow?.(false)} voices={<VoiceNames voices={talk.voices} onName={talk.nameVoice} />} />
+    return (
+      <Flowstate
+        lines={lines}
+        waiting={talk.waiting}
+        interim={talk.interim}
+        level={talk.level}
+        listening={talk.on}
+        muted={talk.muted}
+        onMute={talk.mute}
+        problem={problem}
+        onLeave={() => onFlow?.(false)}
+        voices={<VoiceNames voices={talk.voices} onName={talk.nameVoice} />}
+        meeting={editor.meeting ? { started: editor.meeting.started, ending, people, onPeople: talk.voicesOn ? setPeople : undefined } : undefined}
+      />
+    )
   }
 
   const showSetup = setup || !connection
@@ -842,6 +915,17 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   onClick={() => onFlow(true)}
                 >
                   Flowstate
+                </button>
+              )}
+              {!talk.on && onFlow && (
+                <button
+                  type="button"
+                  className="talk-btn"
+                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                  title="Meeting notes: the assistant listens to your meeting and takes the notes on this board, with diagrams, then frames them when it ends"
+                  onClick={() => onFlow(true, { meeting: true })}
+                >
+                  Meeting notes
                 </button>
               )}
               {!talk.on && (

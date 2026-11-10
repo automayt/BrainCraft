@@ -26,6 +26,10 @@ export class Utterances {
   private busy = false
   private held = false
   private stopped = false
+  /** Stopped with what's left still to go. */
+  private finishing = false
+  /** The turn with the assistant now. */
+  private current: Promise<void> = Promise.resolve()
   private readonly o: Required<UtteranceOptions>
   private readonly send: (text: string) => Promise<void>
 
@@ -76,14 +80,24 @@ export class Utterances {
   /** Sends what's waiting now (a "go" from the person). */
   flush() {
     this.clear()
-    void this.go()
+    this.start()
   }
 
-  /** Stops listening; anything unsent is dropped unless `send` is true. */
-  stop(send = false) {
+  /**
+   * Stops listening; anything unsent is dropped unless `send` is true, when it goes as soon as the
+   * turn with the assistant now (if any) is done. Resolves once nothing is left to go.
+   */
+  async stop(send = false): Promise<void> {
     this.clear()
-    if (send) void this.go()
     this.stopped = true
+    this.finishing = send
+    if (!send) this.pending = []
+    else this.start()
+    while (this.busy || (this.finishing && this.pending.length)) await this.current
+  }
+
+  private start() {
+    if (!this.busy && this.pending.length) this.current = this.go()
   }
 
   private clear() {
@@ -96,7 +110,7 @@ export class Utterances {
     if (this.busy) return
     const waited = this.first === null ? 0 : this.o.now() - this.first
     const left = Math.max(0, this.o.maxWaitMs - waited)
-    this.timer = this.o.setTimer(() => void this.go(), this.held ? left : Math.min(left, this.o.pauseMs))
+    this.timer = this.o.setTimer(() => this.start(), this.held ? left : Math.min(left, this.o.pauseMs))
   }
 
   private async go() {
@@ -110,8 +124,9 @@ export class Utterances {
       await this.send(text)
     } finally {
       this.busy = false
-      // What was said meanwhile goes next, after its own pause.
-      if (this.pending.length && !this.stopped) this.schedule()
+      // What was said meanwhile goes next, after its own pause (or at once, when it's all that's left).
+      if (this.pending.length && this.finishing) this.start()
+      else if (this.pending.length && !this.stopped) this.schedule()
     }
   }
 }

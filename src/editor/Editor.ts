@@ -44,6 +44,7 @@ import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import * as FS from '../model/files'
+import { meetingItems } from '../model/meeting'
 import type { PagePlan } from '../files/toWiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys, toggleTask } from '../model/markdown'
@@ -366,16 +367,50 @@ export class Editor {
    * brought into view, clear of its words at the top and yours at the bottom.
    */
   flow = false
+  /**
+   * Meeting notes: Flowstate hearing a meeting, the assistant taking notes on the board. What was
+   * on the board when it started is kept, so what the meeting made can be framed when it ends.
+   * `ending`: wrapping up (the last notes, then the frame); `hurry`: asked to leave before that's done.
+   */
+  meeting: { started: number; before: ReadonlySet<Id>; ending: boolean; hurry: boolean } | null = null
 
-  setFlow(on: boolean) {
+  setFlow(on: boolean, meeting = false) {
     if (on === this.flow) return
     this.flow = on
+    this.meeting = on && meeting ? { started: Date.now(), before: new Set(this.board.items.map((i) => i.id)), ending: false, hurry: false } : null
     if (on) {
       this.finishEditing()
       this.selection = new Set()
       this.setTool('select')
     }
     this.emit()
+  }
+
+  /** Ends a meeting: the last of its notes, then its frame. Asked again while that happens, it hurries. */
+  endMeeting() {
+    const m = this.meeting
+    if (!m) return
+    this.meeting = m.ending ? { ...m, hurry: true } : { ...m, ending: true }
+    this.emit()
+  }
+
+  /** Puts everything a meeting made into one frame with its title, and shows it; null when it made nothing. */
+  frameMeeting(title: string, before: ReadonlySet<Id>): Id | null {
+    if (this.readOnly) return null
+    const ids = meetingItems(this.board, before)
+    if (!ids.length) return null
+    let frame: Id | null = null
+    this.edit((b) => {
+      const out = applyOps(b, [{ op: 'createFrame', title, around: ids }], { measure: this.measure })
+      frame = out.results[0]?.id ?? null
+      return out.board
+    })
+    if (frame === null) return null
+    this.selection = new Set([frame])
+    const box = B.bounds(this.board, this.selection)
+    if (box) this.flyTo(fit(box, this.openView, 80))
+    this.emit()
+    return frame
   }
 
   /**

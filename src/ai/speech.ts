@@ -15,6 +15,8 @@ import { Downsampler, Phrases, wav } from './phrases'
 export interface Hearing {
   /** A finished phrase, and which voice said it, when the server can tell voices apart. */
   final(text: string, voice?: number): void
+  /** Voices the server found to be one person: each [later, earlier] is the earlier one from now on. */
+  merged?(pairs: [number, number][]): void
   /** Words still being said. */
   interim?(text: string): void
   /** The sound level, 0–1, for a meter. */
@@ -121,6 +123,8 @@ export function browserEar(lang: string, on: Hearing): Ear {
 export interface Heard {
   text: string
   voice?: number
+  /** Voices found to be one person since the last phrase: [the later one, the one it went into]. */
+  merged?: [number, number][]
 }
 
 export interface ServerEarOptions {
@@ -130,6 +134,11 @@ export interface ServerEarOptions {
   pauseMs?: number
   /** Shows the words while they're being said, by transcribing the phrase so far about once a second. */
   preview?: boolean
+  /**
+   * Hearing a meeting: the other people come out of the computer's speakers, so the microphone
+   * keeps that sound rather than taking it away as an echo.
+   */
+  meeting?: boolean
 }
 
 /** Runs on the audio thread: passes the microphone's sound on in batches. */
@@ -151,7 +160,7 @@ registerProcessor('braincraft-tap', Tap)`
  * words. Phrases are transcribed side by side but heard in the order they were said.
  */
 export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !o.meeting, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
   // At the microphone's own rate (Firefox won't connect a microphone to a context at another),
   // brought down to 16 kHz here.
   const ctx = new AudioContext()
@@ -206,6 +215,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
             .then(
               (t) => {
                 on.interim?.('')
+                if (t.merged?.length) on.merged?.(t.merged)
                 if (words(t.text)) on.final(t.text.trim(), t.voice)
               },
               (err: Error) => {

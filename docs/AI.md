@@ -91,7 +91,9 @@ flowchart", "move the press release first".
   done. **Go now** sends it without waiting for the pause.
 - **Stop talking** ends it (what you were saying still goes).
 - In a meeting it can tell who said what, when the server has a speaker
-  model: see [Who said what, in a meeting](#who-said-what-in-a-meeting).
+  model: see [Who said what, in a meeting](#who-said-what-in-a-meeting). To
+  have it take a meeting's notes rather than build what you ask, see
+  [Meeting notes](#meeting-notes).
 - The microphone needs the page on https or on this computer (localhost); see
   [HTTPS.md](HTTPS.md).
 
@@ -136,6 +138,42 @@ window to itself. Just talk.
   becomes its own idea in the right place, never more words crammed into one
   box (see [Building things properly](#building-things-properly)).
 
+### Meeting notes
+
+**Meeting notes** (**Meeting notes** in the panel, **Or take notes in a
+meeting** on a blank board, or Ctrl K → Meeting notes) is Flowstate for a
+meeting: you're talking to other people, not to the assistant, and it takes
+the notes on the board as the meeting goes.
+
+- It writes down every point, proposal, number, date, decision, action item
+  and open question, in a few words each, and keeps shaping them:
+  - the notes themselves are a mind map, with the meeting's subject in the
+    middle and a branch for each topic;
+  - what people describe gets drawn as soon as there's enough of it, and
+    redrawn as they go on: the steps of a process as a flowchart, who sends
+    what to whom as a sequence diagram, dates and phases as a timeline,
+    options as a table;
+  - decisions, action items and open questions go in one **Decisions and
+    actions** table, with who and when.
+- With voices told apart (below), each point carries who said it.
+- A sign at the top left shows it's listening and for how long. With voices
+  told apart, it also has **People**: say how many are in the meeting and it
+  never splits them into more voices than that.
+- It sends what's said in longer stretches than Flowstate (at a pause of a
+  couple of seconds, or every half minute), so each turn has enough to make
+  sense of.
+- It keeps the sound that comes out of the computer's speakers (the others
+  on a call), where talking to the assistant takes it away as an echo.
+- **Esc** (or **End meeting**) ends it. What was still being said goes in,
+  the assistant finishes the notes (a **Summary** note, the table complete,
+  the mind map tidied) and names the meeting, and everything the meeting made
+  goes into one frame with that name, such as "Q3 launch planning". Pressing
+  Esc again while it finishes (**Leave now**) skips the last turn; the frame
+  is then named for the day.
+- What was on the board before stays as it was, outside the frame. Several
+  meetings on one board each get a frame of their own.
+- **Space** mutes, as in Flowstate.
+
 ### Who said what, in a meeting
 
 With a speaker-recognition model on the server, BrainCraft tells voices apart
@@ -143,11 +181,16 @@ while you talk, so in a meeting the assistant knows who said what and puts
 each person's ideas down as theirs.
 
 - Each phrase is matched to the voices heard so far in that conversation:
-  Voice 1, Voice 2 and so on, in the order people first speak.
+  Voice 1, Voice 2 and so on, in the order people first speak. A new voice
+  counts once it's been heard twice, so a cough or two people at once don't
+  make one; until then the phrase is "not sure who".
+- Voices that turn out to sound alike are put together, keeping the earlier
+  number (and any name either was given), and the assistant is told.
 - Once a second voice is heard, a **Voices** strip appears (in Flowstate,
   above the words at the bottom; in the panel, in the talking bar). Click a
   voice to name it ("Sam"). The assistant hears the name, uses it from then on,
-  and changes the voice to the name on what it already made.
+  and changes the voice to the name on what it already made. Giving a voice a
+  name another voice has makes them one person.
 - The assistant gets each line with who said it ("[Sam] let's move it to
   May"), and puts the person on the idea, shown as the people an idea is
   assigned to. It goes only by who said the line, never by guessing from the
@@ -155,10 +198,11 @@ each person's ideas down as theirs.
 - Talking on your own, nothing changes: one voice is just you.
 - It needs to hear everyone: a laptop in a meeting room, or a call on the
   computer's speakers. Over headphones it only hears you.
+- In Meeting notes, setting **People** keeps it to that many voices, the
+  surest way to stop one person turning into two.
 - Short phrases ("yeah, and the budget") are the hardest to place: one under
   about a second never starts a new voice, and goes to the nearest one already
-  heard. Two people talking over each other land on whoever's louder. If the
-  same person turns up as two voices, give them both the same name.
+  heard. Two people talking over each other land on whoever's louder.
 
 **Turning it on (server):** the model runs inside the BrainCraft server, on
 the processor, through the sherpa-onnx library; there's nothing else to run.
@@ -172,9 +216,9 @@ the processor, through the sherpa-onnx library; there's nothing else to run.
    couldn't be loaded; `/api/health` says `"voices": true` when it's on.
 
 It works alongside speech to text (`BRAINCRAFT_TRANSCRIBE_URL`), which it needs.
-`BRAINCRAFT_SPEAKER_THRESHOLD` (default 0.5) is how alike two phrases must be
-to count as one voice: raise it if different people are taken for one, lower
-it if one person keeps turning into several.
+`BRAINCRAFT_SPEAKER_THRESHOLD` (default 0.35) is how alike a phrase must be
+to a voice to count as it: raise it if different people are taken for one,
+lower it if one person keeps turning into several.
 
 ### Building things properly
 

@@ -90,6 +90,34 @@ describe('talking to the assistant', () => {
     await c.tick(5000)
     expect(sent).toEqual(['make it a flowchart'])
   })
+
+  it('when stopped to finish, sends what was said during the turn in hand once it’s done, and says when all has gone', async () => {
+    const c = clock()
+    const sent: string[] = []
+    let answer: () => void = () => {}
+    const u = new Utterances(
+      (t) => {
+        sent.push(t)
+        return new Promise<void>((ok) => (answer = ok))
+      },
+      { ...c, pauseMs: 1000 },
+    )
+    u.heard('first we pick the venue')
+    u.flush()
+    u.heard('and then the date')
+    let done = false
+    void u.stop(true).then(() => (done = true))
+    await Promise.resolve()
+    expect(sent).toEqual(['first we pick the venue'])
+    answer()
+    await new Promise((ok) => setTimeout(ok, 0))
+    // What was said meanwhile went next, straight away.
+    expect(sent).toEqual(['first we pick the venue', 'and then the date'])
+    expect(done).toBe(false)
+    answer()
+    await new Promise((ok) => setTimeout(ok, 0))
+    expect(done).toBe(true)
+  })
 })
 
 describe('waiting for a phrase still being heard', () => {

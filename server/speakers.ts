@@ -73,10 +73,14 @@ export function wavSamples(buf: Buffer): { samples: Float32Array; rate: number }
 export interface VoicesOptions {
   /** How alike a phrase must be to a voice to be that voice (cosine similarity, 0–1). */
   threshold?: number
+  /** How alike two voices must become to be taken for one person, and put together. */
+  same?: number
   /** Voices one conversation can have; past that, a phrase goes to its nearest. */
   most?: number
-  /** A phrase shorter than this (seconds) is matched to a voice already heard, but never starts one. */
+  /** A phrase shorter than this (seconds) goes with the nearest voice already heard, but never starts one. */
   shortest?: number
+  /** A new voice counts once it's been heard this many times, so one odd phrase doesn't make one. */
+  heardTimes?: number
   /** Conversations remembered at once, and for how long after their last phrase. */
   conversations?: number
   forgetMs?: number
@@ -84,10 +88,29 @@ export interface VoicesOptions {
 }
 
 interface Voice {
+  /** Its number (1, 2…), or 0 while it's only a maybe: heard once, and not yet again. */
+  n: number
   /** The running total of its phrases' voiceprints, each made unit length. */
   sum: Float32Array
-  n: number
+  heard: number
+  at: number
 }
+
+interface Talk {
+  at: number
+  voices: Voice[]
+  next: number
+  /** How many people the app says are in it, when it knows. */
+  people: number | null
+  /** Voices found to be one person since the app last asked: [the later one, the one it went into]. */
+  merged: [number, number][]
+}
+
+/** Maybes kept per conversation, and how long one waits to be heard again. */
+const MAYBES = 8
+const MAYBE_MS = 10 * 60_000
+/** A voice heard fewer times than this is still young: what it sounds like isn't settled, so it's put with another more readily. */
+const YOUNG = 5
 
 const unit = (v: Float32Array) => {
   let s = 0
@@ -108,48 +131,108 @@ const cosine = (a: Float32Array, b: Float32Array) => {
   return dot / (Math.sqrt(aa * bb) || 1)
 }
 
-/** The voices heard in each conversation, so each phrase can be put to one. */
+/** Settings given as undefined (an unset environment variable) keep their defaults. */
+const given = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && !(typeof v === 'number' && !Number.isFinite(v)))) as Partial<T>
+
+/**
+ * The voices heard in each conversation, so each phrase can be put to one. A phrase joins the
+ * voice it's most like when it's like enough; otherwise it may be someone new, but it only becomes
+ * a voice once a second phrase sounds like it (until then it's said to be no one known). Voices
+ * that grow alike are found to be one person and put together, and when the app says how many
+ * people there are, there are never more voices than that.
+ */
 export class Voices {
   private o: Required<VoicesOptions>
-  private talks = new Map<string, { at: number; voices: Voice[] }>()
+  private talks = new Map<string, Talk>()
 
   constructor(o: VoicesOptions = {}) {
-    this.o = { threshold: 0.5, most: 12, shortest: 1.2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, ...o }
+    this.o = { threshold: 0.35, same: 0.5, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, ...given(o) }
   }
 
-  /** Which voice said a phrase (1, 2…), or null when it's too short to start a new one. */
-  place(conversation: string, print: Float32Array, seconds: number): number | null {
+  /**
+   * Which voice said a phrase (1, 2…), or null when it can't be known yet. `people`: how many
+   * are in the conversation, when the app knows.
+   */
+  place(conversation: string, print: Float32Array, seconds: number, people?: number | null): number | null {
     const now = this.o.now()
     this.forget(now)
     let talk = this.talks.get(conversation)
     if (!talk) {
-      talk = { at: now, voices: [] }
+      talk = { at: now, voices: [], next: 1, people: null, merged: [] }
       this.talks.set(conversation, talk)
     }
     talk.at = now
+    if (people !== undefined) talk.people = people && people > 0 ? Math.min(people, this.o.most) : null
+    // Maybes not heard again for a while were someone passing, or a noise.
+    talk.voices = talk.voices.filter((v) => v.n || now - v.at < MAYBE_MS)
     const p = unit(print)
-    let best = -1
-    let score = -Infinity
-    talk.voices.forEach((v, k) => {
-      if (v.sum.length !== p.length) return
-      const s = cosine(v.sum, p)
-      if (s > score) {
-        score = s
-        best = k
+    const fits = talk.voices.filter((v) => v.sum.length === p.length)
+    const known = fits.filter((v) => v.n)
+    const nearest = (among: Voice[]) => {
+      let best: Voice | null = null
+      let score = -Infinity
+      for (const v of among) {
+        const s = cosine(v.sum, p)
+        if (s > score) {
+          score = s
+          best = v
+        }
       }
-    })
-    const join = (k: number) => {
-      const v = talk.voices[k]
-      for (let i = 0; i < p.length; i++) v.sum[i] += p[i]
-      v.n++
-      return k + 1
+      return { best, score }
     }
-    if (best >= 0 && score >= this.o.threshold) return join(best)
-    // Too short to be sure it's someone new.
-    if (seconds < this.o.shortest) return null
-    if (talk.voices.length >= this.o.most) return best >= 0 ? join(best) : null
-    talk.voices.push({ sum: Float32Array.from(p), n: 1 })
-    return talk.voices.length
+    const most = talk.people ?? this.o.most
+    // Everyone's been heard: it's one of them.
+    if (known.length >= most) {
+      talk.voices = talk.voices.filter((v) => v.n)
+      const { best, score } = nearest(known)
+      if (!best) return null
+      // Only a phrase that sounds like them shapes what they sound like.
+      return score >= this.o.threshold ? this.join(talk, best, p, now) : best.n
+    }
+    // A voice already known has first claim; a maybe gets only what no one known sounds like.
+    const mine = nearest(known)
+    if (mine.best && mine.score >= this.o.threshold) return this.join(talk, mine.best, p, now)
+    const maybe = nearest(fits.filter((v) => !v.n))
+    if (maybe.best && maybe.score >= this.o.threshold) return this.join(talk, maybe.best, p, now)
+    // Too short to be sure it's someone new: the nearest voice already known, left as it was.
+    if (seconds < this.o.shortest) return mine.best?.n ?? null
+    // Maybe someone new: a voice once heard again.
+    talk.voices.push({ n: 0, sum: Float32Array.from(p), heard: 1, at: now })
+    const maybes = talk.voices.filter((v) => !v.n)
+    if (maybes.length > MAYBES) talk.voices.splice(talk.voices.indexOf(maybes[0]), 1)
+    return null
+  }
+
+  /** Voices found to be one person since last asked, as [the later one, the one it went into]. */
+  merged(conversation: string): [number, number][] {
+    const talk = this.talks.get(conversation)
+    if (!talk?.merged.length) return []
+    const out = talk.merged
+    talk.merged = []
+    return out
+  }
+
+  private join(talk: Talk, v: Voice, p: Float32Array, now: number): number | null {
+    for (let i = 0; i < p.length; i++) v.sum[i] += p[i]
+    v.heard++
+    v.at = now
+    if (!v.n) {
+      if (v.heard < this.o.heardTimes) return null
+      v.n = talk.next++
+    }
+    // Grown like another voice: they were one person all along, and the earlier number stays.
+    let into = v
+    for (const w of [...talk.voices]) {
+      if (w === into || !w.n || !talk.voices.includes(w) || w.sum.length !== into.sum.length || cosine(w.sum, into.sum) < (Math.min(w.heard, into.heard) < YOUNG ? this.o.threshold : this.o.same)) continue
+      const [keep, drop] = w.n < into.n ? [w, into] : [into, w]
+      for (let i = 0; i < keep.sum.length; i++) keep.sum[i] += drop.sum[i]
+      keep.heard += drop.heard
+      keep.at = now
+      talk.voices.splice(talk.voices.indexOf(drop), 1)
+      talk.merged.push([drop.n, keep.n])
+      into = keep
+    }
+    return into.n
   }
 
   private forget(now: number) {

@@ -942,10 +942,16 @@ function EmptyBoard() {
       <button className="link" onClick={() => ui.openImport()}>
         Import Mermaid, an outline, an Excalidraw file or AI-generated JSON…
       </button>
-      <button className="flow-start" onClick={() => ui.flow(true)} title="Ctrl Shift F">
-        <strong>Or talk it through</strong>
-        <small>Flowstate: just the board, built by the assistant as you speak</small>
-      </button>
+      <div className="flow-starts">
+        <button className="flow-start" onClick={() => ui.flow(true)} title="Ctrl Shift F">
+          <strong>Or talk it through</strong>
+          <small>Flowstate: just the board, built by the assistant as you speak</small>
+        </button>
+        <button className="flow-start" onClick={() => ui.flow(true, { meeting: true })}>
+          <strong>Or take notes in a meeting</strong>
+          <small>Meeting notes: the assistant listens and writes it all up here</small>
+        </button>
+      </div>
     </div>
   )
 }

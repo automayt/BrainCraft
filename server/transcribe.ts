@@ -4,11 +4,13 @@
  * compatible transcription endpoint, such as Whisper served by vLLM on your own machines, or a
  * hosted one.
  *
- *   POST /api/ai/transcribe?lang=en-US&voices=ID   body: the recording (audio/webm, audio/ogg, audio/mp4…)
- *   → { "text": "what was said", "voice": 2 }
+ *   POST /api/ai/transcribe?lang=en-US&voices=ID&people=3   body: the recording (audio/webm, audio/ogg, audio/mp4…)
+ *   → { "text": "what was said", "voice": 2, "merged": [[3, 1]] }
  *
  * With a speaker-recognition model (speakers.ts) and `voices` naming the conversation, a WAV
- * recording also says which voice said it, as heard so far in that conversation.
+ * recording also says which voice said it, as heard so far in that conversation; `people`, when
+ * the app knows how many are in it, keeps it to that many voices. "merged" lists voices found to
+ * be one person since the last reply: each later one went into the earlier.
  *
  * Settings: BRAINCRAFT_TRANSCRIBE_URL (the endpoint's base, e.g. http://localhost:8000/v1),
  * BRAINCRAFT_TRANSCRIBE_MODEL (default whisper-1), BRAINCRAFT_TRANSCRIBE_KEY (if it needs one).
@@ -94,7 +96,7 @@ export class Transcriber {
       signal: AbortSignal.timeout(this.o.timeoutMs),
     })
     // While the words are worked out elsewhere: whose voice it is.
-    const voice = this.voiceOf(req, url, audio)
+    const heard = this.voiceOf(req, url, audio)
     try {
       r = await asked
     } catch (err) {
@@ -105,19 +107,22 @@ export class Transcriber {
       return json(res, 502, { error: `The transcription server said ${r.status}${said ? `: ${said.slice(0, 200)}` : ''}` })
     }
     const out = (await r.json().catch(() => ({}))) as { text?: unknown }
-    return json(res, 200, { text: typeof out.text === 'string' ? out.text.trim() : '', ...(voice ? { voice } : {}) })
+    return json(res, 200, { text: typeof out.text === 'string' ? out.text.trim() : '', ...(heard?.voice ? { voice: heard.voice } : {}), ...(heard?.merged.length ? { merged: heard.merged } : {}) })
   }
 
-  /** Which voice said a recording, in the conversation the app named; null when it can't tell. */
-  private voiceOf(req: IncomingMessage, url: URL, audio: Buffer): number | null {
+  /** Which voice said a recording, in the conversation the app named (null when it can't tell), and voices since found to be one. */
+  private voiceOf(req: IncomingMessage, url: URL, audio: Buffer): { voice: number | null; merged: [number, number][] } | null {
     const v = this.o.voices
     const talk = url.searchParams.get('voices')
     if (!v || !talk || !/^[\w-]{6,40}$/.test(talk)) return null
     const sound = wavSamples(audio)
     if (!sound) return null
+    const conversation = `${v.who(req)} ${talk}`
+    const people = /^\d{1,2}$/.test(url.searchParams.get('people') ?? '') ? Number(url.searchParams.get('people')) : null
     try {
       const print = v.embedder.embed(sound.samples, sound.rate)
-      return print ? v.voices.place(`${v.who(req)} ${talk}`, print, sound.samples.length / sound.rate) : null
+      const voice = print ? v.voices.place(conversation, print, sound.samples.length / sound.rate, people) : null
+      return { voice, merged: v.voices.merged(conversation) }
     } catch {
       return null
     }

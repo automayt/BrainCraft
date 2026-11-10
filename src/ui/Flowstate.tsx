@@ -2,6 +2,10 @@
  * Flowstate: the board alone on screen while you talk it into shape. The rest fades away; the
  * assistant's few words float at the top as it works; what you're saying shows faintly at the
  * bottom. It stays in the window unless you ask for full screen. Esc ends it.
+ *
+ * Meeting notes is Flowstate hearing a meeting: the assistant takes the notes, a small sign at the
+ * top left says it's listening and for how long, and Esc ends the meeting (the notes are finished
+ * and framed, then it leaves).
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -28,6 +32,43 @@ export function plainLine(text: string): string {
     .trim()
 }
 
+/** Minutes and seconds since `from` ("12:04", or "1:02:09" past an hour). */
+export function elapsed(from: number, now: number): string {
+  const s = Math.max(0, Math.floor((now - from) / 1000))
+  const two = (n: number) => String(n).padStart(2, '0')
+  const h = Math.floor(s / 3600)
+  return h ? `${h}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`
+}
+
+/** The sign that a meeting is being heard: how long for, and how many people are in it. */
+function MeetingSign({ started, ending, people, onPeople, listening }: { started: number; ending: boolean; people: number | null; onPeople?: (n: number | null) => void; listening: boolean }) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div className={`flow-meeting${listening && !ending ? ' on' : ''}`} role="status" aria-label="Meeting notes">
+      <i aria-hidden="true" />
+      <span>{ending ? 'Finishing the notes…' : 'Meeting notes'}</span>
+      {!ending && <time>{elapsed(started, now)}</time>}
+      {onPeople && !ending && (
+        <label title="With the number of people, voices are never split into more people than there are">
+          People
+          <select value={people ?? ''} onChange={(e) => onPeople(e.target.value ? Number(e.target.value) : null)} onKeyDown={(e) => e.stopPropagation()}>
+            <option value="">Not sure</option>
+            {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+  )
+}
+
 export function Flowstate(props: {
   lines: FlowLine[]
   /** Said and waiting to go; still being said. */
@@ -42,8 +83,10 @@ export function Flowstate(props: {
   onLeave: () => void
   /** In a meeting, the voices heard, to name them. */
   voices?: React.ReactNode
+  /** Meeting notes: when it started, whether it's being wrapped up, and how many people are in it (when the server tells voices apart). */
+  meeting?: { started: number; ending: boolean; people: number | null; onPeople?: (n: number | null) => void }
 }) {
-  const { lines, waiting, interim, level, listening, muted, onMute, problem, onLeave, voices } = props
+  const { lines, waiting, interim, level, listening, muted, onMute, problem, onLeave, voices, meeting } = props
   const editor = useEditor()
 
   // Space mutes: a tap mutes or unmutes, holding mutes while held. It takes Space before the
@@ -133,8 +176,12 @@ export function Flowstate(props: {
           </p>
         ))}
         {problem && <p className="flow-line error">{problem}</p>}
-        {!shown.length && !problem && <p className="flow-line hint">Just talk. Ask for a mind map, a flowchart, a plan… and keep going.</p>}
+        {!shown.length && !problem && (
+          <p className="flow-line hint">{meeting ? 'Listening to the meeting. The notes build up here as people talk: ideas, decisions, and the flows and timelines they describe.' : 'Just talk. Ask for a mind map, a flowchart, a plan… and keep going.'}</p>
+        )}
       </div>
+
+      {meeting && <MeetingSign {...meeting} listening={listening && !muted} />}
 
       <div className="flow-voice">
         {voices}
@@ -160,7 +207,7 @@ export function Flowstate(props: {
           </button>
         )}
         <button type="button" onClick={onLeave}>
-          Leave Flowstate <kbd>Esc</kbd>
+          {meeting ? (meeting.ending ? 'Leave now' : 'End meeting') : 'Leave Flowstate'} <kbd>Esc</kbd>
         </button>
       </div>
     </div>

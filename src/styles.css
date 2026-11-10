@@ -11993,6 +11993,68 @@ button.inbox-entry:focus-visible {
   opacity: calc(0.16 + var(--level) * 0.36);
 }
 
+/* Meeting notes: a quiet sign at the top left that the meeting is being heard, and for how long. */
+.flow-meeting {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+.flow-meeting > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.flow-meeting.on > i {
+  background: var(--danger);
+  animation: flow-meeting-on 2.4s ease-in-out infinite;
+}
+
+@keyframes flow-meeting-on {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.flow-meeting time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.flow-meeting label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.flow-meeting select {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.flow-meeting select option {
+  color: var(--text);
+  background: var(--surface);
+}
+
 .flow-leave {
   position: absolute;
   top: 18px;
@@ -12039,6 +12101,13 @@ button.inbox-entry:focus-visible {
   .flow-replies {
     top: 56px;
   }
+  /* A meeting's sign takes the top left, so the buttons go under it, and the words under them. */
+  .flow-meeting ~ .flow-leave {
+    top: 58px;
+  }
+  .flow:has(.flow-meeting) .flow-replies {
+    top: 104px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -12050,7 +12119,8 @@ button.inbox-entry:focus-visible {
     opacity: 0.6;
   }
   .flow-dots i,
-  .flow-glow.on {
+  .flow-glow.on,
+  .flow-meeting.on > i {
     animation: none;
   }
 }
@@ -12077,6 +12147,22 @@ button.inbox-entry:focus-visible {
 
 .flow-start small {
   color: var(--muted);
+}
+
+/* Talking it through, or taking a meeting's notes: side by side, or stacked where there's no room. */
+.flow-starts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.flow-starts .flow-start {
+  flex: 1 1 220px;
+  max-width: 300px;
+  margin: 0;
+  text-align: center;
 }
 
 /* Where the conversation moved to another board or wiki. */

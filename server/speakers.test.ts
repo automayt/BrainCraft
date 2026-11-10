@@ -35,6 +35,35 @@ function print(who: number, wobble = 0.1, dim = 32): Float32Array {
   return v
 }
 
+/** Two directions on a flat plane, for voices that are made to grow alike. */
+const at = (x: number, y: number) => Float32Array.from([x, y, 0, 0])
+
+function random(seed: number) {
+  let s = seed >>> 0 || 1
+  return () => {
+    s ^= s << 13
+    s ^= s >>> 17
+    s ^= s << 5
+    return ((s >>> 0) % 1_000_000) / 1_000_000
+  }
+}
+
+function gauss(r: () => number) {
+  return Math.sqrt(-2 * Math.log(r() || 1e-9)) * Math.cos(2 * Math.PI * r())
+}
+
+/** A made-up person: a direction of their own in voiceprint space. */
+function person(seed: number, dim = 64): Float32Array {
+  const r = random(seed * 7919)
+  return Float32Array.from({ length: dim }, () => gauss(r))
+}
+
+/** One phrase of theirs: their voice plus noise (`noise` 1 is as much noise as voice, as in a short phrase through a laptop). */
+function phrase(of: Float32Array, r: () => number, noise: number): Float32Array {
+  const len = Math.hypot(...of)
+  return of.map((x) => x / len + (gauss(r) * noise) / Math.sqrt(of.length))
+}
+
 describe('reading the app’s recordings', () => {
   it('takes the samples and their rate', () => {
     const s = wavSamples(wav(0.5))!
@@ -62,35 +91,130 @@ describe('reading the app’s recordings', () => {
 })
 
 describe('telling voices apart', () => {
-  it('numbers voices in the order they’re first heard, and knows them again', () => {
+  it('numbers voices in the order they’re first heard, once each is heard twice, and knows them again', () => {
     const v = new Voices()
-    expect(v.place('m', print(0, 0.05), 3)).toBe(1)
-    expect(v.place('m', print(1, 0.05), 3)).toBe(2)
+    expect(v.place('m', print(0, 0.05), 3)).toBeNull()
+    expect(v.place('m', print(0, 0.08), 3)).toBe(1)
+    expect(v.place('m', print(1, 0.05), 3)).toBeNull()
+    expect(v.place('m', print(1, 0.07), 3)).toBe(2)
     expect(v.place('m', print(0, 0.12), 2)).toBe(1)
-    expect(v.place('m', print(2, 0.05), 2)).toBe(3)
+    expect(v.place('m', print(2, 0.05), 2)).toBeNull()
     expect(v.place('m', print(1, 0.15), 4)).toBe(2)
+    expect(v.place('m', print(2, 0.06), 2)).toBe(3)
+  })
+
+  it('keeps its settings when they’re given as nothing (an unset environment variable)', () => {
+    // An undefined threshold once meant nothing was ever like enough: every phrase a new voice.
+    const v = new Voices({ threshold: undefined, same: Number('not a number') })
+    for (let k = 0; k < 6; k++) v.place('m', print(0, 0.05 + k * 0.01), 3)
+    expect(v.place('m', print(0, 0.11), 3)).toBe(1)
+  })
+
+  it('hears two people as two voices, however much each phrase wobbles', () => {
+    const v = new Voices()
+    const r = random(7)
+    const me = person(1)
+    const brian = person(2)
+    const heard: (number | null)[] = []
+    // Voices found to be one person are one, as the app takes them.
+    const into = new Map<number, number>()
+    // Back and forth for a while, each phrase a few seconds long and noisy.
+    for (let k = 0; k < 120; k++) {
+      heard.push(v.place('m', phrase(k % 3 ? me : brian, r, 1.4), 2 + (k % 4)))
+      for (const [from, to] of v.merged('m')) into.set(from, to)
+    }
+    const final = (x: number): number => (into.has(x) ? final(into.get(x)!) : x)
+    const said = heard.map((x) => (x === null ? null : final(x)))
+    expect([...new Set(said.filter((x) => x !== null))].sort()).toEqual([1, 2])
+    // Few phrases are left as no one known.
+    expect(heard.filter((x) => x === null).length).toBeLessThan(15)
+    // Nearly every phrase is put to the right one.
+    const mine = said.filter((x, k) => k % 3 && x !== null)
+    expect(mine.filter((x) => x === mine[0]).length / mine.length).toBeGreaterThan(0.95)
+    const his = said.filter((x, k) => !(k % 3) && x !== null)
+    expect(his.filter((x) => x === his[0]).length / his.length).toBeGreaterThan(0.95)
+    expect(his[0]).not.toBe(mine[0])
+  })
+
+  it('won’t make a voice of one odd phrase', () => {
+    const v = new Voices()
+    v.place('m', print(0), 3)
+    v.place('m', print(0, 0.12), 3)
+    // A cough, or two people at once: heard once, never again.
+    expect(v.place('m', print(9), 3)).toBeNull()
+    for (let k = 0; k < 5; k++) expect(v.place('m', print(0, 0.05 + k * 0.02), 3)).toBe(1)
+    v.place('m', print(1), 3)
+    expect(v.place('m', print(1, 0.12), 3)).toBe(2)
+  })
+
+  it('puts a phrase too short to be sure of with the nearest voice, without starting one', () => {
+    const v = new Voices()
+    expect(v.place('m', print(0), 0.6)).toBeNull()
+    expect(v.place('m', print(0), 2)).toBeNull()
+    expect(v.place('m', print(0, 0.15), 2)).toBe(1)
+    expect(v.place('m', print(0, 0.15), 0.6)).toBe(1)
+    expect(v.place('m', print(3), 0.6)).toBe(1)
+  })
+
+  it('puts a young voice with one it sounds like', () => {
+    const v = new Voices({ threshold: 0.6, same: 0.95 })
+    v.place('m', at(1, 0), 3)
+    for (let k = 0; k < 6; k++) v.place('m', at(1, 0), 3)
+    // Something like it but not quite, twice: a voice of its own for a moment, then known for the same one.
+    v.place('m', at(0.55, 0.835), 3)
+    v.place('m', at(0.55, 0.835), 3)
+    expect(v.place('m', at(0.7, 0.714), 3)).toBe(1)
+    expect(v.merged('m')).toEqual([[2, 1]])
+  })
+
+  it('puts together voices that turn out to be one person, and says so once, as [the later, the one it went into]', () => {
+    const v = new Voices({ threshold: 0.9, same: 0.75 })
+    // Each heard enough to be settled, and not alike enough to be one.
+    v.place('m', at(1, 0), 3)
+    for (let k = 0; k < 4; k++) expect(v.place('m', at(1, 0), 3)).toBe(1)
+    v.place('m', at(0.7, 0.71), 3)
+    for (let k = 0; k < 4; k++) expect(v.place('m', at(0.7, 0.71), 3)).toBe(2)
+    expect(v.merged('m')).toEqual([])
+    // Somewhere between the two, heard often: voice 2 was voice 1 all along.
+    let merged: [number, number][] = []
+    let last: number | null = null
+    for (let k = 0; k < 6 && !merged.length; k++) {
+      last = v.place('m', at(0.92, 0.38), 3)
+      merged = v.merged('m')
+    }
+    expect(merged).toEqual([[2, 1]])
+    expect(last).toBe(1)
+    expect(v.place('m', at(0.7, 0.71), 3)).toBe(1)
+    expect(v.merged('m')).toEqual([])
+  })
+
+  it('never has more voices than the people the app says are there', () => {
+    const v = new Voices()
+    for (const who of [0, 0, 1, 1]) v.place('m', print(who), 3, 2)
+    // A third-sounding phrase, long and heard twice: still one of the two.
+    expect([1, 2]).toContain(v.place('m', print(5), 3, 2))
+    expect([1, 2]).toContain(v.place('m', print(5, 0.12), 3, 2))
+    // Without that, it would have been a third voice.
+    const free = new Voices()
+    for (const who of [0, 0, 1, 1]) free.place('m', print(who), 3)
+    free.place('m', print(5), 3)
+    expect(free.place('m', print(5, 0.12), 3)).toBe(3)
   })
 
   it('keeps each conversation’s voices apart', () => {
     const v = new Voices()
     v.place('a', print(0), 3)
+    v.place('a', print(0), 3)
+    v.place('b', print(5), 3)
     expect(v.place('b', print(5), 3)).toBe(1)
+    v.place('a', print(5), 3)
     expect(v.place('a', print(5), 3)).toBe(2)
-  })
-
-  it('won’t start a new voice on a phrase too short to be sure of', () => {
-    const v = new Voices()
-    expect(v.place('m', print(0), 0.6)).toBeNull()
-    expect(v.place('m', print(0), 2)).toBe(1)
-    expect(v.place('m', print(0, 0.15), 0.6)).toBe(1)
-    expect(v.place('m', print(3), 0.6)).toBeNull()
   })
 
   it('stops making voices past the most, giving each phrase its nearest', () => {
     const v = new Voices({ most: 2 })
-    v.place('m', print(0), 3)
-    v.place('m', print(1), 3)
-    expect(v.place('m', print(2), 3)).not.toBeNull()
+    for (const who of [0, 0, 1, 1]) v.place('m', print(who), 3)
+    expect([1, 2]).toContain(v.place('m', print(2), 3))
     expect([1, 2]).toContain(v.place('m', print(3), 3))
   })
 
@@ -98,22 +222,28 @@ describe('telling voices apart', () => {
     let now = 0
     const v = new Voices({ now: () => now, forgetMs: 1000 })
     v.place('m', print(0), 3)
+    v.place('m', print(0), 3)
     now = 5000
+    v.place('m', print(4), 3)
     expect(v.place('m', print(4), 3)).toBe(1)
   })
 
   it('keeps no more conversations than it should', () => {
     let now = 0
     const v = new Voices({ conversations: 3, now: () => now++ })
-    for (const c of ['a', 'b', 'c', 'd']) v.place(c, print(0), 3)
+    for (const c of ['a', 'b', 'c', 'd']) {
+      v.place(c, print(0), 3)
+      v.place(c, print(0), 3)
+    }
     // "a" was the quietest, so it went: its first voice now is a new one.
+    v.place('a', print(7), 3)
     expect(v.place('a', print(7), 3)).toBe(1)
   })
 })
 
 describe('transcribing with voices', () => {
   const gate = new AiGate({ password: '', equal: (a, b) => a === b, visitor: () => '1.2.3.4', limit: 100 })
-  const transcriber = (embed: Embedder['embed']) => {
+  const transcriber = (embed: Embedder['embed'], voices = new Voices()) => {
     const sent: string[] = []
     const t = new Transcriber({
       baseUrl: 'http://whisper.test/v1',
@@ -127,7 +257,7 @@ describe('transcribing with voices', () => {
             return embed(s, r)
           },
         },
-        voices: new Voices(),
+        voices,
         who: () => 'me',
       },
     })
@@ -146,19 +276,47 @@ describe('transcribing with voices', () => {
       },
     }) as unknown as IncomingMessage
     await t.handle(request, r, new URL(`http://localhost${path}`))
-    return r.reply
+    return (await r.reply).body as { text?: string; voice?: number; merged?: [number, number][] }
   }
 
   it('says which voice, when the app asks', async () => {
     const { t, sent } = transcriber(() => print(0))
-    const reply = await post(t, '/api/ai/transcribe?lang=en&voices=meeting1', wav(2))
-    expect(reply.body).toEqual({ text: 'hello', voice: 1 })
-    expect(sent).toEqual(['32000@16000'])
+    // The first phrase is no one yet; heard again, it's a voice.
+    expect(await post(t, '/api/ai/transcribe?lang=en&voices=meeting1', wav(2))).toEqual({ text: 'hello' })
+    expect(await post(t, '/api/ai/transcribe?lang=en&voices=meeting1', wav(2))).toEqual({ text: 'hello', voice: 1 })
+    expect(sent).toEqual(['32000@16000', '32000@16000'])
+  })
+
+  it('keeps to the number of people the app says are there', async () => {
+    let who = 0
+    const { t } = transcriber(() => print(who))
+    const say = async (w: number) => {
+      who = w
+      return post(t, '/api/ai/transcribe?voices=meeting1&people=1', wav(2))
+    }
+    await say(0)
+    expect((await say(0)).voice).toBe(1)
+    expect((await say(4)).voice).toBe(1)
+  })
+
+  it('says when two voices were one person', async () => {
+    let next: Float32Array = at(1, 0)
+    const { t } = transcriber(() => next, new Voices({ threshold: 0.9, same: 0.75 }))
+    const say = (p: Float32Array) => {
+      next = p
+      return post(t, '/api/ai/transcribe?voices=meeting1', wav(2))
+    }
+    for (let k = 0; k < 5; k++) await say(at(1, 0))
+    for (let k = 0; k < 4; k++) await say(at(0.7, 0.71))
+    expect((await say(at(0.7, 0.71))).voice).toBe(2)
+    let reply: { voice?: number; merged?: [number, number][] } = {}
+    for (let k = 0; k < 6 && !reply.merged; k++) reply = await say(at(0.92, 0.38))
+    expect(reply).toEqual({ text: 'hello', voice: 1, merged: [[2, 1]] })
   })
 
   it('leaves voices out when the app doesn’t ask (talking alone, or a preview)', async () => {
     const { t, sent } = transcriber(() => print(0))
-    expect((await post(t, '/api/ai/transcribe?lang=en', wav(2))).body).toEqual({ text: 'hello' })
+    expect(await post(t, '/api/ai/transcribe?lang=en', wav(2))).toEqual({ text: 'hello' })
     expect(sent).toEqual([])
   })
 
@@ -166,7 +324,7 @@ describe('transcribing with voices', () => {
     const { t } = transcriber(() => {
       throw new Error('model broke')
     })
-    expect((await post(t, '/api/ai/transcribe?voices=meeting1', wav(2))).body).toEqual({ text: 'hello' })
+    expect(await post(t, '/api/ai/transcribe?voices=meeting1', wav(2))).toEqual({ text: 'hello' })
   })
 
   it('ignores a conversation name that isn’t one', async () => {
