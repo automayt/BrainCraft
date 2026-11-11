@@ -8,16 +8,24 @@
  *   also transcribed while it's being said, to show the words straight away.
  * - The browser's own recognition (`browser`): Chrome, Edge and Safari have one (Firefox only
  *   behind a setting); it shows words as they're said. Used when the server has none.
+ *
+ * In a meeting on a call, either can hear the call's own sound too (see callAudio.ts), the
+ * microphone then keeping to the speaker's own voice.
  */
 
+import { MIC_ON_CALL, mixed } from './callAudio'
 import { Downsampler, Phrases, wav } from './phrases'
+
+/** Where a phrase was heard, once the call is heard too: the microphone (the person here) or the call. */
+export type HeardFrom = 'me' | 'call'
 
 export interface Hearing {
   /**
    * A finished phrase, which voice said it (when the server can tell voices apart), when, in a
-   * recording (ms), and whether speech to text wasn't sure of some of it (marked "[unclear: …]").
+   * recording (ms), whether speech to text wasn't sure of some of it (marked "[unclear: …]"), and,
+   * once the call is heard too, whether it came from the microphone or the call.
    */
-  final(text: string, voice?: number, at?: number, unclear?: boolean): void
+  final(text: string, voice?: number, at?: number, unclear?: boolean, from?: HeardFrom): void
   /** The server knows who a voice is: named here, or in an earlier meeting. */
   named?(voice: number, name: string): void
   /** Voices the server found to be one person: each [later, earlier] is the earlier one from now on. */
@@ -39,6 +47,11 @@ export interface Ear {
   stop(): Promise<void>
   /** Stops hearing for now (what was said up to then still counts), or starts again. */
   mute(quiet: boolean): void
+  /**
+   * Hears a call's own sound as well (and the microphone, from then on, only the person here):
+   * every voice heard once, from where it was said.
+   */
+  hearCall?(call: MediaStream): Promise<void>
 }
 
 type Recognition = {
@@ -48,7 +61,8 @@ type Recognition = {
   onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null
   onerror: ((e: { error: string }) => void) | null
   onend: (() => void) | null
-  start(): void
+  /** Chrome can listen to a sound of the page's choosing rather than the microphone. */
+  start(track?: MediaStreamTrack): void
   stop(): void
 }
 
@@ -72,6 +86,8 @@ export function browserEar(lang: string, on: Hearing): Ear {
   let stopped = false
   let muted = false
   let ended: (() => void) | null = null
+  /** Once the call is heard too: the microphone and the call, mixed, which it listens to instead. */
+  let both: { track: MediaStreamTrack; ctx: AudioContext; mic: MediaStream } | null = null
   const r = new Rec()
   r.continuous = true
   r.interimResults = true
@@ -91,10 +107,13 @@ export function browserEar(lang: string, on: Hearing): Ear {
     on.error(e.error === 'not-allowed' ? 'The microphone isn’t allowed for this page' : `Speech recognition stopped (${e.error})`)
   }
   r.onend = () => {
-    if (stopped) ended?.()
-    else if (!muted) r.start()
+    if (stopped) {
+      letGo()
+      ended?.()
+    } else if (!muted) tryStart()
   }
-  r.start()
+  const begin = () => (both ? r.start(both.track) : r.start())
+  begin()
   on.state?.('listening')
   return {
     kind: 'browser',
@@ -103,7 +122,10 @@ export function browserEar(lang: string, on: Hearing): Ear {
       // The last words arrive before it ends.
       const done = new Promise<void>((ok) => {
         ended = ok
-        setTimeout(ok, 2000)
+        setTimeout(() => {
+          letGo()
+          ok()
+        }, 2000)
       })
       r.stop()
       return done
@@ -114,13 +136,29 @@ export function browserEar(lang: string, on: Hearing): Ear {
       if (quiet) r.stop()
       else tryStart()
     },
+    async hearCall(call) {
+      // It hears one sound: the person's own voice (the call taken out of the microphone) and the call, together.
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_ON_CALL })
+      const ctx = new AudioContext()
+      if (ctx.state === 'suspended') await ctx.resume()
+      letGo()
+      both = { track: mixed(ctx, [mic, call]), ctx, mic }
+      // Starts again on the two, once it has ended (onend).
+      if (!muted && !stopped) r.stop()
+    },
   }
   function tryStart() {
     try {
-      r.start()
+      begin()
     } catch {
       // Still ending: it starts again from onend.
     }
+  }
+  function letGo() {
+    if (!both) return
+    for (const t of both.mic.getTracks()) t.stop()
+    void both.ctx.close()
+    both = null
   }
 }
 
@@ -137,15 +175,19 @@ export interface Heard {
 }
 
 export interface ServerEarOptions {
-  /** Sends a recording (WAV) to be turned into words; resolves with them. `preview`: a phrase still being said. */
-  transcribe(audio: Blob, preview?: boolean): Promise<Heard>
+  /**
+   * Sends a recording (WAV) to be turned into words; resolves with them. `preview`: a phrase still
+   * being said. `from`: once the call is heard too, where it was heard (the microphone's phrases
+   * are the person's own, so whose voice it is needn't be asked).
+   */
+  transcribe(audio: Blob, preview?: boolean, from?: HeardFrom): Promise<Heard>
   /** A pause this long ends a phrase. */
   pauseMs?: number
   /** Shows the words while they're being said, by transcribing the phrase so far about once a second. */
   preview?: boolean
   /**
    * Hearing a meeting: the other people come out of the computer's speakers, so the microphone
-   * keeps that sound rather than taking it away as an echo.
+   * keeps that sound rather than taking it away as an echo (until the call is heard on its own).
    */
   meeting?: boolean
 }
@@ -166,36 +208,32 @@ registerProcessor('braincraft-tap', Tap)`
 
 /**
  * Listens through the server: the sound is cut into phrases, each sent as WAV and turned into
- * words. Phrases are transcribed side by side but heard in the order they were said.
+ * words. Phrases are transcribed side by side but heard in the order they were said. With the call
+ * heard too, the microphone and the call are cut into phrases each on their own.
  */
 export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !o.meeting, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
+  const first = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !o.meeting, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
   // At the microphone's own rate (Firefox won't connect a microphone to a context at another),
   // brought down to 16 kHz here.
   const ctx = new AudioContext()
-  let node: AudioWorkletNode
   try {
     const url = URL.createObjectURL(new Blob([TAP], { type: 'text/javascript' }))
     await ctx.audioWorklet.addModule(url)
     URL.revokeObjectURL(url)
-    node = new AudioWorkletNode(ctx, 'braincraft-tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' })
   } catch (err) {
-    for (const t of stream.getTracks()) t.stop()
+    for (const t of first.getTracks()) t.stop()
     void ctx.close()
     throw err
   }
-  const source = ctx.createMediaStreamSource(stream)
   // Silent, but connected, so the audio thread keeps running it.
-  const mute = ctx.createGain()
-  mute.gain.value = 0
-  source.connect(node)
-  node.connect(mute).connect(ctx.destination)
+  const silent = ctx.createGain()
+  silent.gain.value = 0
+  silent.connect(ctx.destination)
   if (ctx.state === 'suspended') await ctx.resume()
 
-  const down = new Downsampler(ctx.sampleRate)
   let stopped = false
   let muted = false
-  /** Phrases begun and not yet heard (or dropped). */
+  /** Phrases begun and not yet heard (or dropped), from every source. */
   let open = 0
   const opened = () => {
     if (!open++) on.holding?.(true)
@@ -210,67 +248,107 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
   let delivered: Promise<void> = Promise.resolve()
   let previewing = false
 
-  const phrases = new Phrases(
-    { pauseMs: o.pauseMs, previewMs: o.preview ? 1000 : 0 },
-    {
-      started: opened,
-      dropped: closed,
-      level: (v) => on.level?.(v),
-      phrase: (audio) => {
-        on.state?.('transcribing')
-        const text = o.transcribe(wav(audio))
-        delivered = delivered.then(() =>
-          text
-            .then(
-              (t) => {
-                on.interim?.('')
-                if (t.merged?.length) on.merged?.(t.merged)
-                if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
-                if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear)
-              },
-              (err: Error) => {
-                if (!stopped) on.error(err.message)
-              },
-            )
-            .finally(closed),
-        )
-      },
-      // One at a time: when the server is slow, previews just come less often.
-      preview: (audio, id) => {
-        if (previewing || stopped) return
-        previewing = true
-        o.transcribe(wav(audio), true)
-          .then((t) => {
-            if (!stopped && phrases.id === id && words(t.text)) on.interim?.(t.text.trim())
-          })
-          .catch(() => {})
-          .finally(() => (previewing = false))
-      },
-    },
-  )
-  node.port.onmessage = (e: MessageEvent<Float32Array>) => {
-    if (!stopped && !muted) phrases.feed(down.push(e.data))
+  /** A sound being listened to: cut into phrases, each sent to be turned into words. */
+  interface Tap {
+    stream: MediaStream
+    phrases: Phrases
+    end(): void
   }
+  const tap = (stream: MediaStream, from?: HeardFrom): Tap => {
+    const node = new AudioWorkletNode(ctx, 'braincraft-tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' })
+    const source = ctx.createMediaStreamSource(stream)
+    source.connect(node)
+    node.connect(silent)
+    const down = new Downsampler(ctx.sampleRate)
+    const phrases: Phrases = new Phrases(
+      { pauseMs: o.pauseMs, previewMs: o.preview ? 1000 : 0 },
+      {
+        started: opened,
+        dropped: closed,
+        level: (v) => on.level?.(v),
+        phrase: (audio) => {
+          on.state?.('transcribing')
+          const text = o.transcribe(wav(audio), false, from)
+          delivered = delivered.then(() =>
+            text
+              .then(
+                (t) => {
+                  on.interim?.('')
+                  if (t.merged?.length) on.merged?.(t.merged)
+                  if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
+                  if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear, from)
+                },
+                (err: Error) => {
+                  if (!stopped) on.error(err.message)
+                },
+              )
+              .finally(closed),
+          )
+        },
+        // One at a time: when the server is slow, previews just come less often.
+        preview: (audio, id) => {
+          if (previewing || stopped) return
+          previewing = true
+          o.transcribe(wav(audio), true, from)
+            .then((t) => {
+              if (!stopped && phrases.id === id && words(t.text)) on.interim?.(t.text.trim())
+            })
+            .catch(() => {})
+            .finally(() => (previewing = false))
+        },
+      },
+    )
+    node.port.onmessage = (e: MessageEvent<Float32Array>) => {
+      if (!stopped && !muted) phrases.feed(down.push(e.data))
+    }
+    return {
+      stream,
+      phrases,
+      end() {
+        // What was being said still counts.
+        phrases.end()
+        node.port.onmessage = null
+        source.disconnect()
+        node.disconnect()
+        for (const t of stream.getTracks()) t.stop()
+      },
+    }
+  }
+
+  let mic = tap(first)
+  let call: Tap | null = null
   on.state?.('listening')
 
   return {
     kind: 'server',
     stop() {
-      // What was being said when stopped still counts.
-      phrases.end()
       stopped = true
-      node.port.onmessage = null
-      source.disconnect()
-      for (const t of stream.getTracks()) t.stop()
+      mic.end()
+      call?.end()
       void ctx.close()
       return delivered
     },
     mute(quiet) {
       if (quiet === muted || stopped) return
       // What was said before muting still goes.
-      if (quiet) phrases.end()
+      if (quiet) {
+        mic.phrases.end()
+        call?.phrases.end()
+      }
       muted = quiet
       on.level?.(0)
+    },
+    async hearCall(stream) {
+      // The microphone from now on: the person's own voice, the call taken out of it.
+      const own = await navigator.mediaDevices.getUserMedia({ audio: MIC_ON_CALL })
+      if (stopped) {
+        for (const t of own.getTracks()) t.stop()
+        return
+      }
+      mic.end()
+      mic = tap(own, 'me')
+      call?.end()
+      call = tap(stream, 'call')
     },
   }
 }

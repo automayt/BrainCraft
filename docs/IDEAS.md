@@ -460,7 +460,12 @@ the last meeting left. Next:
   voiceprint for the conversation; once the meeting is over it could group
   them all again at once (more surely than one at a time, as they come) and
   hand the review its corrections alongside the words.
-- [ ] **One phone per person, for a room where everyone's in the same
+- [ ] **Your voice alone, on the server.** Hearing the call too keeps the
+  microphone to your voice with the browser's echo cancelling and voice
+  isolation, phrase by phrase. A model on the server that strips everything
+  but your (remembered) voice from the sound itself would also clean up the
+  moments someone on the call talks over you.
+- [ ] **One phone per person,** for a room where everyone's in the same
   place. On calls it doesn't help: each microphone picks up everyone else
   from the speakers, so the voices model stays the way to tell people apart.
 - [ ] **Voices and accounts.** A remembered voice tied to a signed-in person,

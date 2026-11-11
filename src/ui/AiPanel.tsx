@@ -479,6 +479,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     password: settings.password,
     meeting: !!editor.meeting,
     people: editor.meeting ? people : null,
+    me: editor.author,
     say: async (t) => {
       // A turn of its own (the agenda, the first question) may still be under way.
       while (busy.current && !dropTalk.current) await wait(250)
@@ -708,6 +709,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 onPeople: talk.voicesOn ? setPeople : undefined,
                 recording: editor.meeting.recording && { name: editor.meeting.recording.file.name, done: editor.meeting.recording.done, length: editor.meeting.recording.length },
                 agenda: agendaOf(editor.board, meetingItems(editor.board, editor.meeting.before)),
+                call: { can: talk.canHearCall, on: talk.call, hear: () => void talk.hearCall() },
               }
             : undefined
         }

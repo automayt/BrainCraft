@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Utterances } from '../ai/listen'
 import { fileEar } from '../ai/recording'
-import { browserEar, canRecognise, canRecord, type Ear, type Heard, serverEar } from '../ai/speech'
+import { canHearCall, captureCall } from '../ai/callAudio'
+import { browserEar, canRecognise, canRecord, type Ear, type Heard, type HeardFrom, serverEar } from '../ai/speech'
 
 export interface TalkOptions {
   /** The BrainCraft server, when it turns speech into words. */
@@ -25,6 +26,8 @@ export interface TalkOptions {
   meeting?: boolean
   /** How many people are in the meeting, when known: never more voices than that. */
   people?: number | null
+  /** The person here, by name: once a call is heard too, what the microphone hears is theirs. */
+  me?: string
   say(text: string): Promise<void>
   /** Each line as it's heard: who said it (a voice number), from a recording, when (ms into it), and whether some of it was unclear. */
   line?(l: { text: string; voice?: number; at?: number; unclear?: boolean }): void
@@ -87,6 +90,8 @@ export function useTalk(o: TalkOptions) {
   const [state, setState] = useState<'listening' | 'transcribing'>('listening')
   const [error, setError] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
+  /** The call's own sound is being heard too. */
+  const [call, setCall] = useState<MediaStream | null>(null)
   const [, setTick] = useState(0)
   /** The voices heard so far in this conversation, in the order they were first heard. */
   const [voices, setVoices] = useState<HeardVoice[]>([])
@@ -142,6 +147,7 @@ export function useTalk(o: TalkOptions) {
     const u = turns.current
     ear.current = null
     turns.current = null
+    setCall(null)
     setOn(false)
     setMuted(false)
     setInterim('')
@@ -196,8 +202,13 @@ export function useTalk(o: TalkOptions) {
           if (/^Voice \d+$/.test(v.name)) callVoice(n, name)
         } else known.current.set(n, name)
       },
-      final: (text: string, heardAs?: number, at?: number, unclear?: boolean) => {
+      final: (text: string, heardAs?: number, at?: number, unclear?: boolean, from?: HeardFrom) => {
         setInterim('')
+        // With the call heard too, the microphone is the person here: their own voice, numbered 0.
+        if (from === 'me') {
+          heardAs = 0
+          if (!voicesRef.current.some((v) => v.n === 0)) known.current.set(0, (latest.current.me ?? '').replace(/[[\]\n]+/g, ' ').trim().slice(0, 40) || 'Me')
+        }
         const voice = heardAs === undefined ? undefined : whose(heardAs)
         let line = text
         if (voice !== undefined && !voicesRef.current.some((v) => v.n === voice)) {
@@ -233,10 +244,13 @@ export function useTalk(o: TalkOptions) {
     }
     try {
       const { server, password, serverPreviews } = latest.current
-      const transcribe = async (audio: Blob, preview?: boolean): Promise<Heard> => {
+      const transcribe = async (audio: Blob, preview?: boolean, from?: HeardFrom): Promise<Heard> => {
         const { people } = latest.current
         const context = preview ? '' : (latest.current.context?.() ?? '').slice(-800)
-        const voicesToo = latest.current.serverVoices && !preview ? `&voices=${conversation}${people ? `&people=${people}` : ''}` : ''
+        // The microphone's phrases are the person's own once the call is heard on its own: only the
+        // call's voices are told apart (one fewer person among them).
+        const others = from === 'call' && people ? Math.max(1, people - 1) : people
+        const voicesToo = latest.current.serverVoices && !preview && from !== 'me' ? `&voices=${conversation}${others ? `&people=${others}` : ''}` : ''
         const res = await fetch(serverUrl(server!, `api/ai/transcribe?lang=${encodeURIComponent(lang)}${voicesToo}`), {
           method: 'POST',
           body: audio,
@@ -341,6 +355,40 @@ export function useTalk(o: TalkOptions) {
     guessVoice: (label: string, name: string) => {
       const v = voicesRef.current.find((x) => x.name.toLowerCase() === label.trim().toLowerCase())
       if (v && !named(v)) callVoice(v.n, name)
+    },
+    /** The call's own sound is heard as well as the microphone. */
+    call: !!call,
+    /** Whether the call's sound could be heard here (Chrome and Edge, listening live). */
+    canHearCall: on && canHearCall() && !!ear.current?.hearCall,
+    /**
+     * Hears the call's own sound too: asks to share the call's tab (with its sound) or the screen
+     * (with the computer's sound); the microphone then keeps to the person's own voice.
+     */
+    hearCall: async () => {
+      const e = ear.current
+      if (!e?.hearCall) return
+      let stream: MediaStream
+      try {
+        stream = await captureCall()
+      } catch (err) {
+        const x = err as Error
+        if (x.name !== 'NotAllowedError' && x.name !== 'AbortError') setError(x.message)
+        return
+      }
+      if (ear.current !== e) {
+        for (const t of stream.getTracks()) t.stop()
+        return
+      }
+      try {
+        await e.hearCall(stream)
+      } catch (err) {
+        for (const t of stream.getTracks()) t.stop()
+        setError(`Couldn’t hear the call: ${(err as Error).message}`)
+        return
+      }
+      setCall(stream)
+      // Stopped from the browser's sharing bar: back to the microphone alone, as it was.
+      stream.getAudioTracks()[0].addEventListener('ended', () => setCall((c) => (c === stream ? null : c)))
     },
     /** What a voice is called now (after any merges and names). */
     nameOf: (n: number) => voicesRef.current.find((v) => v.n === whose(n))?.name ?? `Voice ${whose(n)}`,

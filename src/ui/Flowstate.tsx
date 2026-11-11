@@ -164,10 +164,15 @@ interface MeetingProps {
   /** From a recording: its name, and how far through it is (ms). */
   recording: { name: string; done: number; length: number } | null
   agenda: readonly AgendaItem[]
+  /**
+   * Hearing the call's own sound too: whether it can be (in Chrome or Edge, listening live),
+   * whether it is, and asking to.
+   */
+  call?: { can: boolean; on: boolean; hear: () => void }
 }
 
 /** The sign that a meeting is being heard: how long for, and how many people are in it (or how far through a recording). */
-function MeetingSign({ started, ending, picked, people, onPeople, listening, recording }: Pick<MeetingProps, 'started' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording'> & { listening: boolean }) {
+function MeetingSign({ started, ending, picked, people, onPeople, listening, recording, call }: Pick<MeetingProps, 'started' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording' | 'call'> & { listening: boolean }) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -187,6 +192,22 @@ function MeetingSign({ started, ending, picked, people, onPeople, listening, rec
           <time>{elapsed(started, now)}</time>
         ))}
       {recording && !ending && <b className="flow-read" style={{ ['--read' as string]: read }} aria-hidden="true" />}
+      {call && !ending && !recording && (call.on || call.can) && (
+        <button
+          type="button"
+          className={`flow-call${call.on ? ' on' : ''}`}
+          disabled={call.on}
+          aria-pressed={call.on}
+          title={
+            call.on
+              ? 'The call’s own sound is heard, and the microphone keeps to your voice (stop sharing in the browser’s bar to go back)'
+              : 'Hear the call as well as the room: share the call’s tab with its sound, or your screen with the computer’s sound. Your microphone then keeps to your own voice, so nobody is heard twice.'
+          }
+          onClick={call.hear}
+        >
+          {call.on ? 'Hearing the call' : 'Hear the call too'}
+        </button>
+      )}
       {onPeople && !ending && (
         <label title="With the number of people, voices are never split into more people than there are">
           People
