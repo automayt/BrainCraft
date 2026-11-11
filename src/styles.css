@@ -12143,8 +12143,63 @@ button.inbox-entry:focus-visible {
 .flow-meeting .flow-call.on {
   color: var(--text);
   border-color: transparent;
-  opacity: 1;
   cursor: default;
+}
+
+.flow-call-wrap {
+  position: relative;
+}
+
+/* Where the call's sound can come from: a menu under the sign. */
+.flow-call-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(380px, calc(100vw - 48px));
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+
+.flow-call-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.flow-call-menu button:hover,
+.flow-call-menu button:focus-visible {
+  background: var(--surface-2);
+}
+
+.flow-call-menu small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.flow-call-menu p {
+  margin: 4px 10px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 /* Reading a recording: how far through it is, as a thin line under the sign. */

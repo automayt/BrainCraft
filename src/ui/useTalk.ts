@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Utterances } from '../ai/listen'
 import { fileEar } from '../ai/recording'
-import { canHearCall, captureCall } from '../ai/callAudio'
+import { type CallInput, callInputs, canShareSound, captureCall, captureInput } from '../ai/callAudio'
 import { browserEar, canRecognise, canRecord, type Ear, type Heard, type HeardFrom, serverEar } from '../ai/speech'
 
 export interface TalkOptions {
@@ -80,6 +80,16 @@ export function hearingFor(o: Pick<TalkOptions, 'server' | 'serverTranscribes'>)
   return canRecognise() ? 'browser' : null
 }
 
+/** Where the call's sound came from last time, in this browser. */
+const CALL_FROM = 'braincraft.callFrom'
+const lastCallFrom = (): string | null => {
+  try {
+    return localStorage.getItem(CALL_FROM)
+  } catch {
+    return null
+  }
+}
+
 /** An address on the BrainCraft server. */
 const serverUrl = (server: string, path: string) => new URL(path, server.endsWith('/') ? server : `${server}/`)
 
@@ -90,8 +100,10 @@ export function useTalk(o: TalkOptions) {
   const [state, setState] = useState<'listening' | 'transcribing'>('listening')
   const [error, setError] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
-  /** The call's own sound is being heard too. */
-  const [call, setCall] = useState<MediaStream | null>(null)
+  /** The call's own sound, while it's heard too, and where from. */
+  const [call, setCall] = useState<{ stream: MediaStream; label: string } | null>(null)
+  /** Inputs the call's sound could come from, kept up to date while listening. */
+  const [inputs, setInputs] = useState<CallInput[]>([])
   const [, setTick] = useState(0)
   /** The voices heard so far in this conversation, in the order they were first heard. */
   const [voices, setVoices] = useState<HeardVoice[]>([])
@@ -297,6 +309,24 @@ export function useTalk(o: TalkOptions) {
     }
   }
 
+  // While listening (the microphone allowed, so inputs have their names), the inputs there are.
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!on || !md?.enumerateDevices) return
+    let live = true
+    const load = () =>
+      void md
+        .enumerateDevices()
+        .then((d) => live && setInputs(callInputs(d)))
+        .catch(() => {})
+    load()
+    md.addEventListener?.('devicechange', load)
+    return () => {
+      live = false
+      md.removeEventListener?.('devicechange', load)
+    }
+  }, [on])
+
   // Closing the panel stops listening (what was being said is dropped).
   useEffect(() => () => stop(false), [])
 
@@ -356,23 +386,27 @@ export function useTalk(o: TalkOptions) {
       const v = voicesRef.current.find((x) => x.name.toLowerCase() === label.trim().toLowerCase())
       if (v && !named(v)) callVoice(v.n, name)
     },
-    /** The call's own sound is heard as well as the microphone. */
-    call: !!call,
-    /** Whether the call's sound could be heard here (Chrome and Edge, listening live). */
-    canHearCall: on && canHearCall() && !!ear.current?.hearCall,
+    /** Where the call's sound is heard from, while it is: "a shared tab or screen", or an input's name. */
+    call: call?.label ?? null,
+    /** The call's sound could be shared here (Chrome and Edge). */
+    canShare: on && canShareSound() && !!ear.current?.hearCall,
+    /** Inputs the call's sound could come from (a loopback, Stereo Mix, a virtual cable…), while listening. */
+    inputs: on && ear.current?.hearCall ? inputs : [],
+    /** Where the call's sound came from last time, in this browser ("share", or an input). */
+    lastCall: lastCallFrom(),
     /**
-     * Hears the call's own sound too: asks to share the call's tab (with its sound) or the screen
-     * (with the computer's sound); the microphone then keeps to the person's own voice.
+     * Hears the call's own sound too, from a share of the call's tab or the screen ("share") or from
+     * an input; the microphone then keeps to the person's own voice.
      */
-    hearCall: async () => {
+    hearCall: async (from: string) => {
       const e = ear.current
       if (!e?.hearCall) return
       let stream: MediaStream
       try {
-        stream = await captureCall()
+        stream = from === 'share' ? await captureCall() : await captureInput(from)
       } catch (err) {
         const x = err as Error
-        if (x.name !== 'NotAllowedError' && x.name !== 'AbortError') setError(x.message)
+        if (x.name !== 'NotAllowedError' && x.name !== 'AbortError') setError(from === 'share' ? x.message : `Couldn’t open that input: ${x.message}`)
         return
       }
       if (ear.current !== e) {
@@ -386,9 +420,15 @@ export function useTalk(o: TalkOptions) {
         setError(`Couldn’t hear the call: ${(err as Error).message}`)
         return
       }
-      setCall(stream)
-      // Stopped from the browser's sharing bar: back to the microphone alone, as it was.
-      stream.getAudioTracks()[0].addEventListener('ended', () => setCall((c) => (c === stream ? null : c)))
+      try {
+        localStorage.setItem(CALL_FROM, from)
+      } catch {
+        // Asked again next time.
+      }
+      const label = from === 'share' ? 'a shared tab or screen' : (inputs.find((i) => i.id === from)?.label ?? 'another input')
+      setCall({ stream, label })
+      // Stopped from the browser's sharing bar, or the input unplugged: the call isn't heard any more.
+      stream.getAudioTracks()[0].addEventListener('ended', () => setCall((c) => (c?.stream === stream ? null : c)))
     },
     /** What a voice is called now (after any merges and names). */
     nameOf: (n: number) => voicesRef.current.find((v) => v.n === whose(n))?.name ?? `Voice ${whose(n)}`,

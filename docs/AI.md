@@ -185,18 +185,27 @@ the notes on the board as the meeting goes.
 - It keeps the sound that comes out of the computer's speakers (the others
   on a call), where talking to the assistant takes it away as an echo.
 - **Hearing the call too.** On a call, **Hear the call too** on the sign at
-  the top left (Chrome and Edge) takes the call's own sound as well as the
-  room: share the call's tab with **Also share tab audio** ticked, or your
-  whole screen with **Share system audio** ticked for a call in its own app.
-  The microphone then keeps to your own voice: echo cancelled, so the call
-  coming out of the speakers isn't heard twice, and other voices and noise
-  reduced where the browser or computer can (voice isolation; on a Mac, the
-  Voice Isolation mic mode, and Voice Focus on Windows computers that have
-  it, do this for every app). With the server's speech to text, what the microphone hears is put
-  down as yours, by your name, and only the call's voices are told apart;
-  with the browser's own recognition, both are heard as one. Stop sharing
-  from the browser's bar to go back to the microphone alone. Headphones are
-  surest: then nothing from the call reaches the microphone at all.
+  the top left takes the call's own sound as well as the room, from one of:
+  - **a share** (Chrome and Edge): the call's tab with **Also share tab
+    audio** ticked, or your whole screen with **Share system audio** ticked;
+  - **an input that carries the computer's sound** (every browser, Firefox
+    too): an audio interface's loopback, Windows' Stereo Mix, or a virtual
+    cable. Those that look like one are listed first. It suits a call in its
+    own app, and asks nothing each time.
+
+  The last one used is offered first next time. The microphone then keeps to
+  your own voice: echo cancelled, so the call coming out of the speakers
+  isn't heard twice, and other voices and noise reduced where the browser or
+  computer can (voice isolation; on a Mac, the Voice Isolation mic mode, and
+  Voice Focus on Windows computers that have it, do this for every app). The
+  browser's echo cancelling only knows what the browser itself plays, so with
+  a call in its own app it's voice isolation, or headphones, that keeps the
+  call out of the microphone. With the server's speech to text, what the
+  microphone hears is put down as yours, by your name, and only the call's
+  voices are told apart; with the browser's own recognition (Chrome), both
+  are heard as one. Stopping the share, or unplugging the input, goes back to
+  the microphone alone. Headphones are surest: then nothing from the call
+  reaches the microphone at all.
 - **The view stays still.** What the notes add glows briefly where it is
   (a still outline instead, when the computer is set to reduce motion); the
   board only moves by itself when none of the notes are in view yet.

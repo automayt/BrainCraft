@@ -12,13 +12,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import type { CallInput } from '../ai/callAudio'
 import { ALL_PICKS, type AgendaItem, type MeetingPicks } from '../model/meeting'
 import { flowFullScreen } from './flowFullScreen'
 import { PushToMute } from './pushToMute'
 import { useEditor } from './useEditor'
 
 /** Typing somewhere (a sticky being edited, a field), where Space is a space. */
-const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || !!t.closest('.flow-picks'))
+const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || !!t.closest('.flow-picks, .flow-call-menu'))
 
 export interface FlowLine {
   key: string
@@ -165,10 +166,71 @@ interface MeetingProps {
   recording: { name: string; done: number; length: number } | null
   agenda: readonly AgendaItem[]
   /**
-   * Hearing the call's own sound too: whether it can be (in Chrome or Edge, listening live),
-   * whether it is, and asking to.
+   * Hearing the call's own sound too: where from while it is, whether it can be shared (Chrome and
+   * Edge), the inputs it could come from, where from last time, and asking to.
    */
-  call?: { can: boolean; on: boolean; hear: () => void }
+  call?: { from: string | null; share: boolean; inputs: readonly CallInput[]; last: string | null; hear: (from: string) => void }
+}
+
+/**
+ * Hearing the call too: from a share of the call's tab or the screen (Chrome and Edge), or from an
+ * input that carries the computer's sound (any browser). Once on, it says where from.
+ */
+function CallPicker({ from, share, inputs, last, hear }: NonNullable<MeetingProps['call']>) {
+  const [open, setOpen] = useState(false)
+  const menu = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    menu.current?.querySelector('button')?.focus()
+    const away = (e: PointerEvent) => !menu.current?.parentElement?.contains(e.target as Node) && setOpen(false)
+    window.addEventListener('pointerdown', away, true)
+    return () => window.removeEventListener('pointerdown', away, true)
+  }, [open])
+  if (from) return <span className="flow-call on" title="The call’s own sound is heard, and the microphone keeps to your voice, so nobody is heard twice">Hearing the call from {from}</span>
+  if (!share && !inputs.length) return null
+  // Where it came from last time first.
+  const choices = [...(share ? [{ id: 'share', label: 'Share the call’s tab or screen…', likely: false }] : []), ...inputs].sort((a, b) => Number(b.id === last) - Number(a.id === last))
+  const pick = (id: string) => {
+    setOpen(false)
+    hear(id)
+  }
+  return (
+    <span className="flow-call-wrap">
+      <button
+        type="button"
+        className="flow-call"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Hear the call as well as the room. Your microphone then keeps to your own voice, so nobody is heard twice."
+        onClick={() => setOpen((o) => !o)}
+      >
+        Hear the call too
+      </button>
+      {open && (
+        <div
+          ref={menu}
+          className="flow-call-menu"
+          role="menu"
+          aria-label="Hear the call from"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setOpen(false)
+            }
+          }}
+        >
+          {choices.map((c) => (
+            <button key={c.id} type="button" role="menuitem" onClick={() => pick(c.id)}>
+              {c.label}
+              {c.id === 'share' ? <small>Tick the tab’s sound, or the computer’s sound for a whole screen</small> : c.likely ? <small>Looks like the computer’s own sound</small> : null}
+              {c.id === last && <small>Used last time</small>}
+            </button>
+          ))}
+          {!share && <p>This browser can’t share a call’s sound: choose an input that carries the computer’s sound, such as an audio interface’s loopback or Stereo Mix.</p>}
+        </div>
+      )}
+    </span>
+  )
 }
 
 /** The sign that a meeting is being heard: how long for, and how many people are in it (or how far through a recording). */
@@ -192,22 +254,7 @@ function MeetingSign({ started, ending, picked, people, onPeople, listening, rec
           <time>{elapsed(started, now)}</time>
         ))}
       {recording && !ending && <b className="flow-read" style={{ ['--read' as string]: read }} aria-hidden="true" />}
-      {call && !ending && !recording && (call.on || call.can) && (
-        <button
-          type="button"
-          className={`flow-call${call.on ? ' on' : ''}`}
-          disabled={call.on}
-          aria-pressed={call.on}
-          title={
-            call.on
-              ? 'The call’s own sound is heard, and the microphone keeps to your voice (stop sharing in the browser’s bar to go back)'
-              : 'Hear the call as well as the room: share the call’s tab with its sound, or your screen with the computer’s sound. Your microphone then keeps to your own voice, so nobody is heard twice.'
-          }
-          onClick={call.hear}
-        >
-          {call.on ? 'Hearing the call' : 'Hear the call too'}
-        </button>
-      )}
+      {call && !ending && !recording && <CallPicker {...call} />}
       {onPeople && !ending && (
         <label title="With the number of people, voices are never split into more people than there are">
           People

@@ -213,23 +213,6 @@ registerProcessor('braincraft-tap', Tap)`
  */
 export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> {
   const first = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !o.meeting, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
-  // At the microphone's own rate (Firefox won't connect a microphone to a context at another),
-  // brought down to 16 kHz here.
-  const ctx = new AudioContext()
-  try {
-    const url = URL.createObjectURL(new Blob([TAP], { type: 'text/javascript' }))
-    await ctx.audioWorklet.addModule(url)
-    URL.revokeObjectURL(url)
-  } catch (err) {
-    for (const t of first.getTracks()) t.stop()
-    void ctx.close()
-    throw err
-  }
-  // Silent, but connected, so the audio thread keeps running it.
-  const silent = ctx.createGain()
-  silent.gain.value = 0
-  silent.connect(ctx.destination)
-  if (ctx.state === 'suspended') await ctx.resume()
 
   let stopped = false
   let muted = false
@@ -250,15 +233,32 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
 
   /** A sound being listened to: cut into phrases, each sent to be turned into words. */
   interface Tap {
-    stream: MediaStream
     phrases: Phrases
     end(): void
   }
-  const tap = (stream: MediaStream, from?: HeardFrom): Tap => {
-    const node = new AudioWorkletNode(ctx, 'braincraft-tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' })
+  const tap = async (stream: MediaStream, from?: HeardFrom): Promise<Tap> => {
+    // Each sound at its own rate (Firefox won't connect a sound to a context at another), brought
+    // down to 16 kHz here.
+    const rate = stream.getAudioTracks()[0]?.getSettings().sampleRate
+    const ctx = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext()
+    let node: AudioWorkletNode
+    try {
+      const url = URL.createObjectURL(new Blob([TAP], { type: 'text/javascript' }))
+      await ctx.audioWorklet.addModule(url)
+      URL.revokeObjectURL(url)
+      node = new AudioWorkletNode(ctx, 'braincraft-tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' })
+    } catch (err) {
+      for (const t of stream.getTracks()) t.stop()
+      void ctx.close()
+      throw err
+    }
     const source = ctx.createMediaStreamSource(stream)
+    // Silent, but connected, so the audio thread keeps running it.
+    const silent = ctx.createGain()
+    silent.gain.value = 0
     source.connect(node)
-    node.connect(silent)
+    node.connect(silent).connect(ctx.destination)
+    if (ctx.state === 'suspended') await ctx.resume()
     const down = new Downsampler(ctx.sampleRate)
     const phrases: Phrases = new Phrases(
       { pauseMs: o.pauseMs, previewMs: o.preview ? 1000 : 0 },
@@ -302,20 +302,19 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       if (!stopped && !muted) phrases.feed(down.push(e.data))
     }
     return {
-      stream,
       phrases,
       end() {
         // What was being said still counts.
         phrases.end()
         node.port.onmessage = null
         source.disconnect()
-        node.disconnect()
         for (const t of stream.getTracks()) t.stop()
+        void ctx.close()
       },
     }
   }
 
-  let mic = tap(first)
+  let mic = await tap(first)
   let call: Tap | null = null
   on.state?.('listening')
 
@@ -325,7 +324,6 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       stopped = true
       mic.end()
       call?.end()
-      void ctx.close()
       return delivered
     },
     mute(quiet) {
@@ -345,10 +343,11 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
         for (const t of own.getTracks()) t.stop()
         return
       }
+      const heard = await tap(stream, 'call')
       mic.end()
-      mic = tap(own, 'me')
+      mic = await tap(own, 'me')
       call?.end()
-      call = tap(stream, 'call')
+      call = heard
     },
   }
 }
