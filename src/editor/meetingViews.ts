@@ -102,7 +102,8 @@ export function polishMeeting(board: Board, o: Polish, measure: Measure): { boar
   // The overview: what the meeting came to.
   if (o.picks.notes && wants('overview')) {
     const text = overviewText({ title: o.title, length: o.howLong, people: o.people, outcomes: o.review.outcomes })
-    const h = Math.min(1400, 70 + text.split('\n').length * 30)
+    // Tall enough for its lines as they wrap (about 40 characters a line, 560 wide).
+    const h = Math.min(1600, 80 + text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 40)), 0) * 32)
     const was = ofView('overview')[0]
     if (was && edited(was)) kept.push(VIEW_NAMES.overview)
     else if (was) b = B.updateItem(b, was.id, (i) => tag({ ...i, text, h: Math.max(i.h, h) }, 'overview'))
