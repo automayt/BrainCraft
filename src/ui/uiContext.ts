@@ -48,10 +48,13 @@ export interface Ui {
   present: () => void
   /**
    * Flowstate: just the board, built by talking to the assistant; with `meeting`, Meeting notes
-   * (the assistant taking notes on a meeting). Leaving a meeting wraps it up first (its last notes,
-   * then its frame), unless `now`.
+   * (the assistant taking notes on a meeting), or with `recording`, notes from a recording of one;
+   * with `guide`, the assistant asking the questions. Leaving a meeting wraps it up first (what to
+   * keep, its last notes, then its frame), unless `now`.
    */
-  flow: (on: boolean, o?: { meeting?: boolean; now?: boolean }) => void
+  flow: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; now?: boolean }) => void
+  /** Plays back the meeting a frame holds (see MeetingReplay). */
+  replayMeeting: (frame: number) => void
   /** The recorded runs of the flowchart containing `id`. */
   openRuns: (id: number) => void
   /** The link to AI assistants through the MCP server. */

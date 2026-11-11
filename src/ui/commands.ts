@@ -14,6 +14,7 @@ import { canHaveStatus, STATUSES, statusCounts } from '../model/status'
 import { describeTarget, peopleOn, sameTarget } from '../model/timeTracking'
 import { THEMES } from './theme'
 import type { Ui } from './uiContext'
+import { pickRecording } from './meetingFiles'
 import { appName } from '../store/brand'
 
 export interface Command {
@@ -111,6 +112,23 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       aliases: 'meeting call transcribe transcript minutes notes record listen webex zoom teams standup',
       run: () => ui.flow(true, { meeting: true }),
     },
+    {
+      id: 'meeting-recording',
+      label: 'Meeting notes from a recording…',
+      group: 'Board',
+      aliases: 'meeting recording audio video file upload transcribe transcript minutes notes past call mp3 m4a mp4 wav',
+      run: () => void pickRecording().then((f) => f && ui.flow(true, { recording: f })),
+    },
+    {
+      id: 'guide',
+      label: 'Guided: the assistant asks you questions',
+      group: 'Board',
+      aliases: 'guide guided questions ask interview coach socratic think through brainstorm prompt help me think',
+      run: () => ui.flow(true, { guide: true }),
+    },
+    ...(editor.single?.kind === 'frame' && editor.single.meeting
+      ? [{ id: 'replay', label: 'Replay this meeting', group: 'Board', aliases: 'replay play back playback meeting watch again catch up timelapse history', run: () => ui.replayMeeting(editor.single!.id) }]
+      : []),
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },
     editor.board.sketch
@@ -242,8 +260,8 @@ export function commands(editor: Editor, ui: Ui): Command[] {
 
 const LOOK_GROUPS = new Set(['Board', 'View', 'Help'])
 /** Board commands that only mean something on a canvas. */
-const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export', 'flowstate', 'meeting', 'check'])
-const EDIT_IDS = new Set(['versions', 'import', 'flowstate', 'meeting'])
+const CANVAS_IDS = new Set(['export-image', 'copy-image', 'import', 'export', 'flowstate', 'meeting', 'meeting-recording', 'guide', 'check'])
+const EDIT_IDS = new Set(['versions', 'import', 'flowstate', 'meeting', 'meeting-recording', 'guide'])
 const LOOK_IDS = new Set(['emote', 'chat', 'select-all', 'comments', 'run-history'])
 /** Runs work on boards that can't be changed (nothing is recorded); not while one is under way. */
 const RUN_IDS = new Set(['run', 'run-here'])

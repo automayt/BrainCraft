@@ -5,7 +5,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Utterances } from '../ai/listen'
-import { browserEar, canRecognise, canRecord, type Ear, serverEar } from '../ai/speech'
+import { fileEar } from '../ai/recording'
+import { browserEar, canRecognise, canRecord, type Ear, type Heard, serverEar } from '../ai/speech'
 
 export interface TalkOptions {
   /** The BrainCraft server, when it turns speech into words. */
@@ -25,6 +26,12 @@ export interface TalkOptions {
   /** How many people are in the meeting, when known: never more voices than that. */
   people?: number | null
   say(text: string): Promise<void>
+  /** Each line as it's heard: who said it (a voice number) and, from a recording, when (ms into it). */
+  line?(l: { text: string; voice?: number; at?: number }): void
+  /** Reading a recording: how far through it is (ms). */
+  progress?(done: number, length: number): void
+  /** A recording has all been heard. */
+  ended?(): void
 }
 
 /** A voice heard in this conversation, and what it's called. */
@@ -65,6 +72,9 @@ export function hearingFor(o: Pick<TalkOptions, 'server' | 'serverTranscribes'>)
   return canRecognise() ? 'browser' : null
 }
 
+/** An address on the BrainCraft server. */
+const serverUrl = (server: string, path: string) => new URL(path, server.endsWith('/') ? server : `${server}/`)
+
 export function useTalk(o: TalkOptions) {
   const [on, setOn] = useState(false)
   const [level, setLevel] = useState(0)
@@ -85,6 +95,24 @@ export function useTalk(o: TalkOptions) {
       at = next
     }
     return n
+  }
+  /** Names the server gave voices before they were first heard here. */
+  const known = useRef(new Map<number, string>())
+  /** The conversation the server knows this talk's voices by. */
+  const conversationRef = useRef('')
+  /** A voice's name: the assistant hears it, and changes it on what it made. A name another voice has makes them one. */
+  const callVoice = (n: number, name: string) => {
+    n = whose(n)
+    const was = voicesRef.current.find((v) => v.n === n)
+    const clean = name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40)
+    if (!was || !clean || clean === was.name) return
+    // Someone else's name: the two were one person.
+    const other = voicesRef.current.find((v) => v.n !== n && v.name.toLowerCase() === clean.toLowerCase())
+    if (other) return merge(n, other.n)
+    voicesRef.current = voicesRef.current.map((v) => (v.n === n ? { ...v, name: clean } : v))
+    setVoices(voicesRef.current)
+    turns.current?.heard(`[${was.name} is ${clean}]`)
+    setTick((t) => t + 1)
   }
   /** Two voices are one person: the assistant hears so. */
   const merge = (from: number, into: number) => {
@@ -117,12 +145,17 @@ export function useTalk(o: TalkOptions) {
     void (e?.stop() ?? Promise.resolve()).finally(() => send && u?.stop(true))
   }
 
-  const start = async () => {
+  /** Starts listening, or, given a recording, reads that instead. */
+  const start = async (recording?: File) => {
     setError(null)
     setMuted(false)
-    const how = hearingFor(latest.current)
+    const how = recording ? (latest.current.server && latest.current.serverTranscribes ? 'server' : null) : hearingFor(latest.current)
     if (!how) {
-      setError('This browser can’t hear you without the server’s speech to text (ask whoever runs it to set BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.')
+      setError(
+        recording
+          ? 'Notes from a recording need the server’s speech to text (ask whoever runs it to set BRAINCRAFT_TRANSCRIBE_URL).'
+          : 'This browser can’t hear you without the server’s speech to text (ask whoever runs it to set BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari.',
+      )
       return
     }
     const u = new Utterances(
@@ -134,31 +167,50 @@ export function useTalk(o: TalkOptions) {
       // The server's phrases already end at a pause, and the turn holds while one is heard, so a
       // short wait is enough; the browser's own recognition gives less warning.
       // In a meeting, longer stretches at a time: enough said to make sense of.
-      latest.current.meeting ? { pauseMs: 2500, maxWaitMs: 30_000 } : { pauseMs: how === 'server' ? 300 : 1200 },
+      // A recording is read as fast as the notes keep up: a stretch at a time.
+      recording ? { pauseMs: 500, maxWaitMs: 4000 } : latest.current.meeting ? { pauseMs: 2500, maxWaitMs: 30_000 } : { pauseMs: how === 'server' ? 300 : 1200 },
     )
     turns.current = u
     const lang = navigator.language || 'en-US'
     // Each time it starts is a conversation of its own, with its own voices.
     const conversation = Math.random().toString(36).slice(2, 12)
+    conversationRef.current = conversation
     voicesRef.current = []
     same.current = new Map()
+    known.current = new Map()
     setVoices([])
     const hearing = {
       merged: (pairs: [number, number][]) => {
         for (const [from, into] of pairs) merge(from, into)
       },
-      final: (text: string, heardAs?: number) => {
+      // Someone the server knows: their name, now or once their voice is first heard here.
+      named: (n: number, name: string) => {
+        if (voicesRef.current.some((v) => v.n === whose(n))) {
+          const v = voicesRef.current.find((x) => x.n === whose(n))!
+          // A name given here stays.
+          if (/^Voice \d+$/.test(v.name)) callVoice(n, name)
+        } else known.current.set(n, name)
+      },
+      final: (text: string, heardAs?: number, at?: number) => {
         setInterim('')
         const voice = heardAs === undefined ? undefined : whose(heardAs)
         let line = text
         if (voice !== undefined && !voicesRef.current.some((v) => v.n === voice)) {
           const first = voicesRef.current.length === 1 ? voicesRef.current[0] : null
-          voicesRef.current = [...voicesRef.current, { n: voice, name: `Voice ${voice}` }]
-          setVoices(voicesRef.current)
-          // A second voice: what was said before it was all the first one's.
-          if (first) u.heard(`[Until now, everything was said by ${first.name}.]`)
+          const name = known.current.get(voice)
+          // Already known by that name (the same person, numbered twice): one voice.
+          const twin = name ? voicesRef.current.find((v) => v.name.toLowerCase() === name.toLowerCase()) : undefined
+          if (twin) same.current.set(voice, twin.n)
+          else {
+            voicesRef.current = [...voicesRef.current, { n: voice, name: name ?? `Voice ${voice}` }]
+            setVoices(voicesRef.current)
+            // A second voice: what was said before it was all the first one's.
+            if (first) u.heard(`[Until now, everything was said by ${first.name}.]`)
+          }
         }
-        line = voiceLine(line, voice, voicesRef.current)
+        const who = voice === undefined ? undefined : whose(voice)
+        line = voiceLine(line, who, voicesRef.current)
+        latest.current.line?.({ text, ...(who !== undefined ? { voice: who } : {}), ...(at !== undefined ? { at } : {}) })
         u.heard(line)
         setTick((t) => t + 1)
       },
@@ -175,34 +227,46 @@ export function useTalk(o: TalkOptions) {
       },
     }
     try {
-      if (how === 'server') {
-        const { server, password, serverPreviews } = latest.current
-        ear.current = await serverEar(
+      const { server, password, serverPreviews } = latest.current
+      const transcribe = async (audio: Blob, preview?: boolean): Promise<Heard> => {
+        const { people } = latest.current
+        const voicesToo = latest.current.serverVoices && !preview ? `&voices=${conversation}${people ? `&people=${people}` : ''}` : ''
+        const res = await fetch(serverUrl(server!, `api/ai/transcribe?lang=${encodeURIComponent(lang)}${voicesToo}`), {
+          method: 'POST',
+          body: audio,
+          credentials: 'include',
+          headers: { 'content-type': audio.type || 'audio/wav', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
+        })
+        const out = (await res.json().catch(() => ({}))) as { text?: string; voice?: number; name?: unknown; merged?: unknown; error?: string }
+        if (!res.ok) throw new Error(out.error ?? `Speech to text failed (${res.status})`)
+        const merged = Array.isArray(out.merged) ? out.merged.filter((m): m is [number, number] => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x > 0)) : []
+        const name = typeof out.name === 'string' ? out.name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40) : ''
+        return { text: out.text ?? '', ...(typeof out.voice === 'number' ? { voice: out.voice } : {}), ...(name ? { name } : {}), ...(merged.length ? { merged } : {}) }
+      }
+      if (recording)
+        ear.current = await fileEar(
+          recording,
           {
-            preview: !!serverPreviews,
-            meeting: !!latest.current.meeting,
-            transcribe: async (audio, preview) => {
-              const { people } = latest.current
-              const voicesToo = latest.current.serverVoices && !preview ? `&voices=${conversation}${people ? `&people=${people}` : ''}` : ''
-              const res = await fetch(new URL(`api/ai/transcribe?lang=${encodeURIComponent(lang)}${voicesToo}`, server!.endsWith('/') ? server! : `${server}/`), {
-                method: 'POST',
-                body: audio,
-                credentials: 'include',
-                headers: { 'content-type': audio.type || 'audio/wav', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
-              })
-              const out = (await res.json().catch(() => ({}))) as { text?: string; voice?: number; merged?: unknown; error?: string }
-              if (!res.ok) throw new Error(out.error ?? `Speech to text failed (${res.status})`)
-              const merged = Array.isArray(out.merged) ? out.merged.filter((m): m is [number, number] => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x > 0)) : []
-              return { text: out.text ?? '', ...(typeof out.voice === 'number' ? { voice: out.voice } : {}), ...(merged.length ? { merged } : {}) }
-            },
+            transcribe,
+            progress: (done, length) => latest.current.progress?.(done, length),
+            // Enough waiting for the assistant's next turn: read on once it's taken.
+            backlog: () => (turns.current?.waiting.length ?? 0) > 2500,
+            ended: () => latest.current.ended?.(),
           },
           hearing,
         )
-      } else ear.current = browserEar(lang, hearing)
+      else if (how === 'server') ear.current = await serverEar({ preview: !!serverPreviews, meeting: !!latest.current.meeting, transcribe }, hearing)
+      else ear.current = browserEar(lang, hearing)
       setOn(true)
     } catch (err) {
       const e = err as Error
-      setError(e.name === 'NotAllowedError' ? 'The microphone isn’t allowed for this page (it needs https, or localhost)' : `Couldn’t start listening: ${e.message}`)
+      setError(
+        recording
+          ? `Couldn’t read ${recording.name}: ${e.name === 'EncodingError' ? 'this browser can’t read its sound (try an mp3, m4a, wav or mp4)' : e.message}`
+          : e.name === 'NotAllowedError'
+            ? 'The microphone isn’t allowed for this page (it needs https, or localhost)'
+            : `Couldn’t start listening: ${e.message}`,
+      )
       stop(false)
     }
   }
@@ -240,19 +304,25 @@ export function useTalk(o: TalkOptions) {
     voices,
     /** The server tells voices apart here. */
     voicesOn: hearingFor(o) === 'server' && !!o.serverVoices,
-    /** Names a voice; the assistant hears it, and changes the voice to the name on the board. */
+    /**
+     * Names a voice; the assistant hears it, and changes the voice to the name on the board. The
+     * server remembers the voice by that name, to know them in later meetings.
+     */
     nameVoice: (n: number, name: string) => {
-      const was = voicesRef.current.find((v) => v.n === n)
       const clean = name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40)
-      if (!was || !clean || clean === was.name) return
-      // Someone else's name: the two were one person.
-      const other = voicesRef.current.find((v) => v.n !== n && v.name.toLowerCase() === clean.toLowerCase())
-      if (other) return merge(n, other.n)
-      voicesRef.current = voicesRef.current.map((v) => (v.n === n ? { ...v, name: clean } : v))
-      setVoices(voicesRef.current)
-      turns.current?.heard(`[${was.name} is ${clean}]`)
-      setTick((t) => t + 1)
+      if (!clean) return
+      callVoice(n, clean)
+      const { server, password, serverVoices } = latest.current
+      if (server && serverVoices && conversationRef.current)
+        void fetch(serverUrl(server, `api/ai/voices?voices=${conversationRef.current}`), {
+          method: 'POST',
+          body: JSON.stringify({ voice: n, name: clean }),
+          credentials: 'include',
+          headers: { 'content-type': 'application/json', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
+        }).catch(() => {})
     },
+    /** What a voice is called now (after any merges and names). */
+    nameOf: (n: number) => voicesRef.current.find((v) => v.n === whose(n))?.name ?? `Voice ${whose(n)}`,
     muted,
     /** Stops hearing for now (what was said up to then still goes), or starts again. */
     mute: (quiet: boolean) => {

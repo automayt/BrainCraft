@@ -12,6 +12,8 @@ import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
 import { Presenter } from './Present'
 import { RunPanel, RunsDialog } from './RunPanel'
+import { MeetingReplay } from './MeetingReplay'
+import { playMeeting } from './meetingFiles'
 import { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
@@ -79,7 +81,7 @@ function App({ ws }: { ws: Workspace }) {
   useWorkspace()
   const editor = ws.editor
   // Re-render only when the panels or modes that shape the layout change, not on every editor update.
-  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.outlineOf ?? ''}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}|${editor.timesheet ? 'time' : ''}`)
+  useSyncExternalStore(editor.subscribe, () => `${editor.notesOpen}|${!!editor.presenting}|${editor.flow}|${!!editor.running}|${!!editor.pendingAiPrompt}|${isWiki(editor.board)}|${!!editor.peek}|${editor.outlineOf ?? ''}|${editor.drawing ? editor.drawing.id ?? 'new' : ''}|${editor.timesheet ? 'time' : ''}|${!!editor.replay}`)
   const wiki = isWiki(editor.board)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -146,12 +148,12 @@ function App({ ws }: { ws: Workspace }) {
     },
     flow: (on, o = {}) => {
       if (on === editor.flow) return
-      if (on && (isWiki(editor.board) || editor.presenting || editor.running)) return
+      if (on && (isWiki(editor.board) || editor.presenting || editor.running || editor.replay)) return
       // A meeting wraps up before it ends: its last notes, then the frame (see AiPanel).
       if (!on && editor.meeting && !o.now) return editor.endMeeting()
       setDialog(null)
       setMenu(null)
-      editor.setFlow(on, o.meeting)
+      editor.setFlow(on, o)
       // It stays in the window, the rest fading away; full screen is a button in it (flowFullScreen).
       if (!on) {
         flowKeys()?.unlock?.()
@@ -162,6 +164,7 @@ function App({ ws }: { ws: Workspace }) {
         flowLeftTimer.current = setTimeout(() => setFlowLeft(false), 500)
       }
     },
+    replayMeeting: (frame) => void playMeeting(ws, editor, frame),
     ai: bridge,
     menu,
     openMenu: setMenu,
@@ -482,7 +485,7 @@ function App({ ws }: { ws: Workspace }) {
     <EditorContext.Provider value={editor}>
       <UiContext.Provider value={ui}>
         <div
-          className={`app${editor.notesOpen || editor.peek || editor.outlineOf !== null ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow ? ' flowstate' : flowLeft ? ' flowstate-left' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
+          className={`app${editor.notesOpen || editor.peek || editor.outlineOf !== null ? ' notes-open' : ''}${assistant ? ' ai-open' : ''}${ws.viewOnly ? ' read-only' : ''}${editor.presenting ? ' presenting' : ''}${editor.flow || editor.replay ? ' flowstate' : flowLeft ? ' flowstate-left' : ''}${editor.running ? ' running' : ''}${wiki ? ' wiki-open' : ''}`}
           onDragOver={(e) => {
             if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
           }}
@@ -534,6 +537,7 @@ function App({ ws }: { ws: Workspace }) {
             <>
               <Presenter />
               <RunPanel />
+              {editor.replay && <MeetingReplay />}
             </>
           )}
           {runsFor !== null && <RunsDialog id={runsFor} onClose={() => setRunsFor(null)} />}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps } from '../api/ops'
 import { emptyBoard } from './board'
-import { meetingItems, meetingTitle, untitledMeeting } from './meeting'
+import { agendaOf, clock, meetingItems, meetingParts, meetingTitle, summaryPoints, transcriptText, unpicked, untitledMeeting } from './meeting'
 import { fakeMeasure } from './test-helpers'
 
 const ctx = { measure: fakeMeasure }
@@ -58,5 +58,83 @@ describe('the meeting’s title', () => {
 
   it('says the day when there’s no other', () => {
     expect(untitledMeeting(Date.UTC(2026, 10, 10, 12), 'en-GB')).toBe('Meeting, 10 Nov 2026')
+  })
+})
+
+describe('what to keep when a meeting ends', () => {
+  const made = () => {
+    const { board, results } = applyOps(
+      emptyBoard(),
+      [
+        { op: 'createMindMap', outline: 'Launch\n  Venue' },
+        { op: 'createTable', title: 'Decisions and actions', columns: ['Type', 'What'], rows: [['Action', 'Book it']] },
+        { op: 'createTable', title: 'Agenda', columns: ['Item', 'Why now', 'Covered'], rows: [['Venue', 'Due Friday', '✓'], ['Budget', 'Over', '']] },
+        { op: 'createKanban', title: 'Actions', columns: [{ title: 'To do', cards: ['Book it'] }] },
+        { op: 'createTimeline', title: 'Plan' },
+        { op: 'createNote', text: 'Transcript' },
+      ],
+      ctx,
+    )
+    return { board, ids: board.items.map((i) => i.id), transcript: results[5].id! }
+  }
+
+  it('sorts what it made into the notes, the Kanban and the collage', () => {
+    const { board, ids, transcript } = made()
+    const parts = meetingParts(board, ids, new Set([transcript]))
+    const kinds = (list: number[]) => list.map((id) => board.items.find((i) => i.id === id)!.kind)
+    expect(kinds(parts.notes)).toEqual(['mind', 'mind', 'table', 'table'])
+    expect(kinds(parts.kanban)).toEqual(['kanban'])
+    expect(kinds(parts.collage)).toEqual(['timeline'])
+  })
+
+  it('takes away only what wasn’t picked, never the transcript', () => {
+    const { board, ids, transcript } = made()
+    expect(unpicked(board, ids, { collage: true, kanban: true, notes: true }, new Set([transcript]))).toEqual([])
+    const drop = unpicked(board, ids, { collage: false, kanban: true, notes: false }, new Set([transcript]))
+    expect(drop.map((id) => board.items.find((i) => i.id === id)!.kind).sort()).toEqual(['mind', 'mind', 'table', 'table', 'timeline'])
+    expect(drop).not.toContain(transcript)
+  })
+
+  it('reads the agenda, and what’s been covered', () => {
+    const { board, ids } = made()
+    expect(agendaOf(board, ids)).toEqual([
+      { text: 'Venue', covered: true },
+      { text: 'Budget', covered: false },
+    ])
+    expect(agendaOf(board, [])).toEqual([])
+  })
+})
+
+describe('a meeting’s transcript', () => {
+  it('takes the summary from the list after the title', () => {
+    expect(summaryPoints('Title: Launch\n- Moved to **May**\n* Brian books the venue\nThen some words.\n1. Budget open')).toEqual(['Moved to May', 'Brian books the venue', 'Budget open'])
+  })
+
+  it('has the summary, then every line with when and who, and what was noted along the way', () => {
+    const text = transcriptText({
+      lines: [
+        { at: 1000, voice: 1, text: 'Shall we move it?' },
+        { at: 4000, voice: 1, text: 'To May, I mean.' },
+        { at: 65_000, voice: 2, text: 'Yes.' },
+        { at: 70_000, text: 'Who said that?' },
+      ],
+      noted: [{ at: 5000, text: 'Noted the move to May.' }],
+      summary: ['Launch moves to May'],
+      who: (v) => (v === 1 ? 'Jo' : 'Brian'),
+    })
+    expect(text).toBe(['Summary', '- Launch moves to May', '', 'Transcript', '[0:01] Jo: Shall we move it?', '[0:04] To May, I mean.', '  → Noted the move to May.', '[1:05] Brian: Yes.', '[1:10] Who said that?'].join('\n'))
+  })
+
+  it('stops short of what a note can hold', () => {
+    const lines = Array.from({ length: 500 }, (_, k) => ({ at: k * 1000, text: 'words '.repeat(20) }))
+    const text = transcriptText({ lines, who: () => '', max: 5000 })
+    expect(text.length).toBeLessThanOrEqual(5000)
+    expect(text.endsWith('(the rest is in the meeting’s replay)')).toBe(true)
+  })
+
+  it('tells the time like a clock', () => {
+    expect(clock(0)).toBe('0:00')
+    expect(clock(65_400)).toBe('1:05')
+    expect(clock(3_725_000)).toBe('1:02:05')
   })
 })

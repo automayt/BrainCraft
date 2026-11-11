@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { AiGate, AiProxy } from './aiProxy'
 import { Transcriber } from './transcribe'
-import { type Embedder, Voices, loadEmbedder } from './speakers'
+import { type Embedder, VoiceBook, Voices, loadEmbedder } from './speakers'
 import { CommandRunner, OpenAiProxy, programOf } from './aiProviders'
 import { agentsFromEnv } from './aiAgents'
 import { AccountBoards } from './accounts/boards'
@@ -413,9 +413,21 @@ if (SPEAKER_MODEL && TRANSCRIBE_URL)
   } catch (err) {
     log(`voices off: couldn't load the speaker model (${(err as Error).message}). Is sherpa-onnx-node installed, and BRAINCRAFT_SPEAKER_MODEL a model file?`)
   }
+/** Voices remembered by name across meetings (see VoiceBook), kept in DATA/voices.json. */
+const VOICES_FILE = join(DATA, 'voices.json')
+const voiceBook = embedder
+  ? new VoiceBook({
+      load: () => (existsSync(VOICES_FILE) ? JSON.parse(readFileSync(VOICES_FILE, 'utf8')) : []),
+      save: (list) => {
+        const tmp = `${VOICES_FILE}.tmp`
+        writeFileSync(tmp, JSON.stringify(list))
+        renameSync(tmp, VOICES_FILE)
+      },
+    })
+  : null
 const transcriber = TRANSCRIBE_URL
   ? new Transcriber({
-      ...(embedder ? { voices: { embedder, voices: new Voices({ threshold: Number(process.env.BRAINCRAFT_SPEAKER_THRESHOLD) || undefined }), who: (req) => accounts?.userOf(req)?.id ?? visitor(req) } } : {}),
+      ...(embedder ? { voices: { embedder, voices: new Voices({ threshold: Number(process.env.BRAINCRAFT_SPEAKER_THRESHOLD) || undefined, book: voiceBook }), book: voiceBook, who: (req) => accounts?.userOf(req)?.id ?? visitor(req) } } : {}),
       baseUrl: TRANSCRIBE_URL,
       model: process.env.BRAINCRAFT_TRANSCRIBE_MODEL?.trim() || 'whisper-1',
       apiKey: process.env.BRAINCRAFT_TRANSCRIBE_KEY?.trim() || undefined,
@@ -600,6 +612,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (url.pathname === '/api/ai/transcribe') {
       if (!transcriber) return send(res, 404, { error: 'Speech to text isn’t set up on this server (BRAINCRAFT_TRANSCRIBE_URL)' })
       return transcriber.handle(req, res, url)
+    }
+    if (url.pathname === '/api/ai/voices') {
+      if (!transcriber) return send(res, 404, { error: 'Speech to text isn’t set up on this server (BRAINCRAFT_TRANSCRIBE_URL)' })
+      return transcriber.voicesRoute(req, res, url)
     }
     if (url.pathname === '/api/ai/command') {
       if (!agents.size) return send(res, 404, { error: 'No command-line agent here: install Claude Code or Codex on the server, or set BRAINCRAFT_AI_COMMAND' })
@@ -868,6 +884,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     accountBoards?.inbox.flush()
     accountBoards?.categories.flush()
     usage.save()
+    voiceBook?.flush()
     process.exit(0)
   })
 }

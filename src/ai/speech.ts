@@ -13,8 +13,10 @@
 import { Downsampler, Phrases, wav } from './phrases'
 
 export interface Hearing {
-  /** A finished phrase, and which voice said it, when the server can tell voices apart. */
-  final(text: string, voice?: number): void
+  /** A finished phrase, which voice said it (when the server can tell voices apart), and when, in a recording (ms). */
+  final(text: string, voice?: number, at?: number): void
+  /** The server knows who a voice is: named here, or in an earlier meeting. */
+  named?(voice: number, name: string): void
   /** Voices the server found to be one person: each [later, earlier] is the earlier one from now on. */
   merged?(pairs: [number, number][]): void
   /** Words still being said. */
@@ -29,7 +31,7 @@ export interface Hearing {
 }
 
 export interface Ear {
-  readonly kind: 'server' | 'browser'
+  readonly kind: 'server' | 'browser' | 'file'
   /** Stops listening; resolves once what was being said has been heard. */
   stop(): Promise<void>
   /** Stops hearing for now (what was said up to then still counts), or starts again. */
@@ -123,6 +125,8 @@ export function browserEar(lang: string, on: Hearing): Ear {
 export interface Heard {
   text: string
   voice?: number
+  /** Who that voice is, when the server knows. */
+  name?: string
   /** Voices found to be one person since the last phrase: [the later one, the one it went into]. */
   merged?: [number, number][]
 }
@@ -216,6 +220,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
               (t) => {
                 on.interim?.('')
                 if (t.merged?.length) on.merged?.(t.merged)
+                if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
                 if (words(t.text)) on.final(t.text.trim(), t.voice)
               },
               (err: Error) => {

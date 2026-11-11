@@ -437,6 +437,27 @@ Admin, next:
 - [ ] **The guide refreshes itself** (or says a newer one is there), and uses
   the server's own app name throughout.
 
+## Meetings, next (November 2026)
+
+Done: an agenda from the board's priorities, instructions to the robot,
+picking what a meeting leaves (idea collage, Kanban, notes), the transcript
+with its summary, notes from a recording, playing a meeting back, voices
+remembered by name, and Guided (the assistant asking the questions). Next:
+
+- [ ] **Remember the last meeting.** When the same people meet again, start
+  with what's still open from their last frame ("Brian was booking the venue:
+  done?"). The catch: who's there is only known once they've spoken, so it
+  would wait for the first few voices it knows, then bring up what's open for
+  them, or ask "Is this the launch group again?" at the start.
+- [ ] **One phone per person,** for a room where everyone's in the same
+  place. On calls it doesn't help: each microphone picks up everyone else
+  from the speakers, so the voices model stays the way to tell people apart.
+- [ ] **Voices and accounts.** A remembered voice tied to a signed-in person,
+  so their ideas carry their account (and their name changes with it).
+- [ ] **A recording too long for memory** (several hours of video): read it a
+  piece at a time instead of all at once.
+- [ ] **Talk time.** How long each person spoke, on the transcript note.
+
 ## From the design review (November 2026)
 
 Done this round: Your boards rebuilt (Recent, one list, New, a bigger window),

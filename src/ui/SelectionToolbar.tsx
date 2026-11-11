@@ -366,6 +366,11 @@ export function SelectionToolbar() {
             ↻ Turn over
           </button>
         )}
+        {items.length === 1 && items[0].kind === 'frame' && items[0].meeting && (
+          <button title="Play the meeting back: how its notes grew, with what was said" onClick={() => ui.replayMeeting(items[0].id)}>
+            ▶ Replay meeting
+          </button>
+        )}
         {items.length === 1 && isDrawing(items[0]) && (
           <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
             {editor.readOnly ? 'Open drawing' : 'Edit drawing'}

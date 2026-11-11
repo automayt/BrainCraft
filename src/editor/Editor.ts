@@ -44,7 +44,8 @@ import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import * as FS from '../model/files'
-import { meetingItems } from '../model/meeting'
+import { type MeetingPicks, meetingItems, unpicked } from '../model/meeting'
+import { type MeetingRecord, replayBoard, stepsBy } from '../model/meetingReplay'
 import type { PagePlan } from '../files/toWiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys, toggleTask } from '../model/markdown'
@@ -370,14 +371,38 @@ export class Editor {
   /**
    * Meeting notes: Flowstate hearing a meeting, the assistant taking notes on the board. What was
    * on the board when it started is kept, so what the meeting made can be framed when it ends.
-   * `ending`: wrapping up (the last notes, then the frame); `hurry`: asked to leave before that's done.
+   * `ending`: wrapping up; `picks`: what to keep, once chosen; `hurry`: asked to leave before
+   * that's done. `recording`: notes from a recording rather than a meeting heard now, and how far
+   * through it is (ms).
    */
-  meeting: { started: number; before: ReadonlySet<Id>; ending: boolean; hurry: boolean } | null = null
+  meeting: {
+    started: number
+    before: ReadonlySet<Id>
+    linksBefore: ReadonlySet<Id>
+    ending: boolean
+    picks: MeetingPicks | null
+    hurry: boolean
+    recording: { file: File; done: number; length: number } | null
+  } | null = null
+  /** Guided: Flowstate where the assistant asks questions to draw ideas out, mapping them as it goes. */
+  guide = false
 
-  setFlow(on: boolean, meeting = false) {
+  setFlow(on: boolean, o: { meeting?: boolean; guide?: boolean; recording?: File } = {}) {
     if (on === this.flow) return
     this.flow = on
-    this.meeting = on && meeting ? { started: Date.now(), before: new Set(this.board.items.map((i) => i.id)), ending: false, hurry: false } : null
+    this.meeting =
+      on && (o.meeting || o.recording)
+        ? {
+            started: Date.now(),
+            before: new Set(this.board.items.map((i) => i.id)),
+            linksBefore: new Set(this.board.connectors.map((c) => c.id)),
+            ending: false,
+            picks: null,
+            hurry: false,
+            recording: o.recording ? { file: o.recording, done: 0, length: 0 } : null,
+          }
+        : null
+    this.guide = on && !this.meeting && !!o.guide
     if (on) {
       this.finishEditing()
       this.selection = new Set()
@@ -386,12 +411,49 @@ export class Editor {
     this.emit()
   }
 
-  /** Ends a meeting: the last of its notes, then its frame. Asked again while that happens, it hurries. */
+  /** Ends a meeting: what to keep is asked, then come its last notes and its frame. Asked again meanwhile, it hurries. */
   endMeeting() {
     const m = this.meeting
     if (!m) return
     this.meeting = m.ending ? { ...m, hurry: true } : { ...m, ending: true }
     this.emit()
+  }
+
+  /** What to keep from the meeting being ended: its last notes and its frame follow. */
+  pickMeeting(picks: MeetingPicks) {
+    const m = this.meeting
+    if (!m?.ending || m.picks) return
+    this.meeting = { ...m, picks }
+    this.emit()
+  }
+
+  /** How far through the recording a meeting is being made from. */
+  meetingProgress(done: number, length: number) {
+    const m = this.meeting
+    if (!m?.recording) return
+    this.meeting = { ...m, recording: { ...m.recording, done, length } }
+    this.emit()
+  }
+
+  /**
+   * The last of a meeting's notes, done here rather than by the assistant: what wasn't picked to
+   * keep is taken away, and the transcript card (`card`) goes beside the rest. Returns the card.
+   */
+  tidyMeeting(before: ReadonlySet<Id>, picks: MeetingPicks, card: { text: string; description: string } | null): Id | null {
+    if (this.readOnly) return null
+    let made: Id | null = null
+    this.edit((b) => {
+      const drop = unpicked(b, meetingItems(b, before), picks)
+      let next = drop.length ? B.remove(b, new Set(drop.flatMap((id) => (B.getItem(b, id)?.kind === 'mind' ? [...B.subtree(b, id)] : [id])))) : b
+      if (card) {
+        const box = B.bounds(next, new Set(meetingItems(next, before)))
+        const out = applyOps(next, [{ op: 'createNote', text: card.text, color: 'white', w: 320, h: 320, ...(box ? { at: { x: box.x + box.w + 80, y: box.y } } : {}) }], { measure: this.measure })
+        made = out.results[0]?.id ?? null
+        next = made === null ? out.board : B.updateItem(out.board, made, (i) => ({ ...i, description: card.description }))
+      }
+      return next
+    })
+    return made
   }
 
   /** Puts everything a meeting made into one frame with its title, and shows it; null when it made nothing. */
@@ -411,6 +473,64 @@ export class Editor {
     if (box) this.flyTo(fit(box, this.openView, 80))
     this.emit()
     return frame
+  }
+
+  /** Links a meeting's frame to the file its replay is kept in. */
+  setMeetingReplay(frame: Id, file: string) {
+    if (this.readOnly || B.getItem(this.board, frame)?.kind !== 'frame') return
+    this.edit((b) => B.updateItem(b, frame, (i) => ({ ...i, meeting: { replay: file } })))
+  }
+
+  // ----- a meeting played back ------------------------------------------------------
+
+  /**
+   * Playing a meeting back: the board as it was at each step, read-only. `at` is how far in (ms);
+   * the board shown is rebuilt when a step is passed.
+   */
+  replay: { record: MeetingRecord; frame?: Id; at: number; step: number; board: Board; wasReadOnly: boolean; camera: Camera } | null = null
+
+  startReplay(record: MeetingRecord, frame?: Id) {
+    if (this.replay || this.flow || this.presenting || this.running) return
+    this.finishEditing()
+    this.selection = new Set()
+    this.selectedConnector = null
+    this.setTool('select')
+    this.replay = { record, frame, at: 0, step: 0, board: replayBoard(this.board, record, 0, frame), wasReadOnly: this.readOnly, camera: this.camera }
+    this.readOnly = true
+    // The whole meeting in view: its frame, and everything it made along the way (some of it taken
+    // away at the end), clear of the title at the top and the words and controls at the bottom.
+    const frameBox = frame !== undefined && B.getItem(this.board, frame) ? B.bounds(this.board, new Set([frame])) : null
+    const box = unionAll([...(frameBox ? [frameBox] : []), ...record.steps.flatMap((st) => st.put.map(B.itemBounds))])
+    if (box) {
+      const top = 96
+      const bottom = 190
+      const cam = fit(box, { w: this.viewport.w, h: Math.max(200, this.viewport.h - top - bottom) }, 48)
+      this.flyTo({ ...cam, y: cam.y + top })
+    }
+    this.emit()
+  }
+
+  /** Moves a replay to `at` ms into the meeting; the board changes (and is drawn again) only when a step is passed. */
+  replayTo(at: number) {
+    const r = this.replay
+    if (!r) return
+    const t = Math.max(0, Math.min(at, r.record.length))
+    const step = stepsBy(r.record, t)
+    if (step === r.step) {
+      r.at = t
+      return
+    }
+    this.replay = { ...r, at: t, step, board: replayBoard(this.board, r.record, step, r.frame) }
+    this.emit()
+  }
+
+  stopReplay() {
+    const r = this.replay
+    if (!r) return
+    this.replay = null
+    this.readOnly = r.wasReadOnly
+    this.flyTo(r.camera)
+    this.emit()
   }
 
   /**
@@ -1614,8 +1734,12 @@ export class Editor {
   private masked: { board: Board; me: string; view: Board } | null = null
 
   /** The board as this person may see it: other people's notes in an open brainstorm are blank. */
+  private replayMasked: { board: Board; me: string; view: Board } | null = null
+
   get viewBoard(): Board {
     const me = this.me
+    // A meeting played back shows the board as it was then.
+    if (this.replay) return this.replay.board === this.replayMasked?.board && this.replayMasked.me === me ? this.replayMasked.view : (this.replayMasked = { board: this.replay.board, me, view: BS.maskFor(this.replay.board, me) }).view
     if (this.masked?.board !== this.board || this.masked.me !== me) this.masked = { board: this.board, me, view: BS.maskFor(this.board, me) }
     return this.masked.view
   }

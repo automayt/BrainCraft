@@ -156,6 +156,19 @@ the notes on the board as the meeting goes.
   - decisions, action items and open questions go in one **Decisions and
     actions** table, with who and when.
 - With voices told apart (below), each point carries who said it.
+- **An agenda first.** On a board with things on it, the assistant starts by
+  suggesting an agenda: the things on the board most worth the meeting's
+  time, by its own estimate of their priority (open questions, undecided or
+  waiting items, work that's stuck, things due soon, risks, what has the most
+  votes). It goes on the board as an **Agenda** table, and shows at the top
+  left while you meet; each item gets its tick once it's been talked about,
+  and the summary at the end says what wasn't covered.
+- **Talking to the robot.** Anyone can tell the notes what to do mid-meeting,
+  by calling the assistant (robot, assistant, BrainCraft) or with a
+  note-taking phrase: "robot, note that the budget is fifty thousand",
+  "action item for Brian: book the venue", "strike that", "park this" (it
+  goes under a **Parked** branch), "make that a timeline". It does it on the
+  board without answering out loud.
 - A sign at the top left shows it's listening and for how long. With voices
   told apart, it also has **People**: say how many are in the meeting and it
   never splits them into more voices than that.
@@ -164,15 +177,61 @@ the notes on the board as the meeting goes.
   sense of.
 - It keeps the sound that comes out of the computer's speakers (the others
   on a call), where talking to the assistant takes it away as an echo.
-- **Esc** (or **End meeting**) ends it. What was still being said goes in,
-  the assistant finishes the notes (a **Summary** note, the table complete,
-  the mind map tidied) and names the meeting, and everything the meeting made
-  goes into one frame with that name, such as "Q3 launch planning". Pressing
-  Esc again while it finishes (**Leave now**) skips the last turn; the frame
-  is then named for the day.
+- **Esc** (or **End meeting**) ends it, and asks what the meeting should
+  leave on the board, each ticked at first (it remembers your choice):
+  - **Idea collage:** the ideas placed as they fit best, as flowcharts,
+    sequence diagrams and timelines;
+  - **Kanban:** an **Actions** board with a card for each action item, saying
+    who, with its due date when one was said;
+  - **Notes:** the mind map of every point, and the decisions and actions
+    table.
+
+  Meanwhile what was still being said goes in. Then the assistant finishes
+  what you kept, takes away what you didn't, sums the meeting up and names
+  it, and everything the meeting made goes into one frame with that name,
+  such as "Q3 launch planning". Pressing Esc again (**Leave now**) skips that
+  last turn and keeps everything; the frame is then named for the day.
+- **The transcript** is always kept, as a note in the frame: the summary on
+  the note itself, and every word in its comments (Alt C), each line with
+  when and who said it, and what the assistant noted from each stretch.
 - What was on the board before stays as it was, outside the frame. Several
   meetings on one board each get a frame of their own.
 - **Space** mutes, as in Flowstate.
+
+**From a recording.** **From a recording…** in the panel (or Ctrl K →
+Meeting notes from a recording) takes the notes from a meeting that's already
+happened: choose its audio or video (mp3, m4a, wav, webm, mp4…). The browser
+reads its sound and cuts it into phrases at the pauses; each goes to the
+server's speech to text like a phrase heard through the microphone, voices and
+all, only as fast as the notes keep up. The sign shows how far through it is;
+Space pauses. When it's all been read, you're asked what to keep, as at the
+end of a meeting. It needs the server's speech to text, and the whole
+recording is read into memory, so a few hours at most.
+
+**Watching it again.** A meeting's frame keeps its replay: select the frame
+and press **▶ Replay meeting** (or Ctrl K → Replay this meeting). The board
+goes back to how it was when the meeting started and grows again turn by turn,
+with what was said appearing at the bottom as it was said and what the
+assistant noted at the top. Play and pause (Space), drag to any moment, and
+speed it up (8× at first, up to 32×); Esc closes it. The replay is kept as a
+file with the board (in its files), so everyone with the board can watch it.
+
+### Guided
+
+**Guided** (**Guide me** in the panel, **Or be asked questions** on a blank
+board, or Ctrl K → Guided) is Flowstate turned round: the assistant asks the
+questions. It starts with one (on an empty board, what you'd like to think
+through), shows the question it's asking large at the top, and as you answer:
+
+- puts what you said on the board, as when you talk to it;
+- maps the questions worth answering next as ideas ending in "?", marked
+  *undecided*, under what they're about; once you've answered one, it's
+  marked *done* with your answer under it;
+- asks about what's missing, unclear, risky or taken for granted: who it's
+  for, what happens if…, how you'll know it worked, what comes first.
+
+Ask it for something instead and it does it, then carries on asking. Esc (or
+**Stop**) leaves.
 
 ### Who said what, in a meeting
 
@@ -191,6 +250,12 @@ each person's ideas down as theirs.
   voice to name it ("Sam"). The assistant hears the name, uses it from then on,
   and changes the voice to the name on what it already made. Giving a voice a
   name another voice has makes them one person.
+- **A named voice is remembered.** The server keeps what it sounds like under
+  that name, and from then on knows that voice in every meeting, named from
+  the start: the voice is who someone is. It learns them better each time
+  they're heard. Naming a voice again with another name takes back what was
+  taught to the old one. The assistant's settings list the voices the server
+  knows, each with **Forget**.
 - The assistant gets each line with who said it ("[Sam] let's move it to
   May"), and puts the person on the idea, shown as the people an idea is
   assigned to. It goes only by who said the line, never by guessing from the

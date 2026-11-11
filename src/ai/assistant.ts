@@ -159,10 +159,53 @@ Shape the notes as the meeting goes, and keep shaping them:
 - The notes themselves are a mind map: createMindMap with the meeting's subject in the middle (rename it with update as the subject becomes clear), a branch for each topic discussed, the points under their topic. Grow it with addIdeas; move points with moveIdea, and rename or regroup branches as topics become clear.
 - Draw what people describe as soon as there is enough to draw, and refine it as they go on: the steps of a process or a decision as a flowchart (createFlowchart, then addSteps or setFlowchart); who or what sends what to whom, such as systems, teams, requests and replies, as a sequence diagram (createSequence, then setSequence); dates, deadlines, phases or a schedule as a timeline (createTimeline, then setTimeline); options being compared as a table.
 - Decisions, action items and open questions go in one table titled "Decisions and actions" with the columns Type, What, Who, When (Type is Decision, Action or Question): make it with createTable when the first one comes up, then change it with setTable, giving every row each time.
+- If there's a table titled "Agenda", it's what the meeting set out to cover: once an item on it has been talked about, put ✓ in its Covered cell (setTable, giving every row).
+Someone may speak to you directly, by calling you (robot, assistant, BrainCraft or the like) or by telling the notes what to do: "note that…", "action item for Sam: …", "strike that", "park this", "make that a timeline". Then do what they ask on the board: "strike that" takes back what you noted from what was said just before it, and "park this" puts it under a branch called "Parked". Still answer only with your few words.
 Improve what you made rather than adding copies, and fix what turns out to be wrong. Leave alone what was on the board before the meeting, and don't put a frame around it all: that's done when the meeting ends. Leave out "at", so what you make is placed beside the rest. ` + WHO_NOTE + `]`
 
-/** The meeting is over: the last of the notes, and a title for them. */
-const MEETING_END = `[Meeting notes: the meeting is over. Finish the notes in one last propose_changes: make sure every decision, action item and open question is in the "Decisions and actions" table, tidy the mind map (merge repeated points, give branches clear names), and add a sticky note starting "Summary:" with the few things that matter most. Start what you write with the meeting's title on a line of its own: "Title: " and a few words saying what the meeting was about (like "Title: Q3 launch planning"); it becomes the title of the frame put around the notes. Then call propose_changes, and write nothing after it. ` + WHO_NOTE + `]`
+/** Before a meeting: an agenda from what matters most on the board. */
+const MEETING_AGENDA = `[Meeting notes: a meeting is starting, and you'll take its notes on this board. First suggest an agenda: the things on this board most worth the meeting's time, by your own estimate of their priority (open questions, undecided or waiting items, work stuck or in progress, things due soon or overdue, risks, what has the most votes), the most important first, at most 6. Make it a table titled "Agenda" with the columns Item, Why now and Covered (Covered left empty), and leave out "at" so it's placed beside the rest. Say in a few words what comes first, then call propose_changes once, and write nothing after it. When nothing on the board is worth an agenda, make nothing and say so in a few words.]`
+
+/** What to keep when a meeting ends (see model/meeting.ts). */
+export interface EndPicks {
+  collage: boolean
+  kanban: boolean
+  notes: boolean
+}
+
+/** What to finish when a meeting ends, by what the person chose to keep. */
+export function meetingEnd(picks: EndPicks): string {
+  const todo = [
+    picks.notes &&
+      'The notes: make sure every decision, action item and open question is in the "Decisions and actions" table, and tidy the mind map (merge repeated points, give branches clear names).',
+    picks.collage &&
+      'The idea collage: make sure everything people described is drawn, complete, in the form that fits it best (the steps of a process as a flowchart, who sends what to whom as a sequence diagram, dates and phases as a timeline, options as a table), and arrange ideas that fit a form better than a list that way.',
+    picks.kanban &&
+      'A Kanban board titled "Actions" (createKanban, or setKanban if it\'s there) with the columns To do, Doing and Done: a card for each action item, its title saying what and who (like "Book the venue (Brian)"), with its due date when one was said.',
+  ].filter(Boolean)
+  const not = [!picks.notes && 'the notes (the mind map and its tables)', !picks.collage && 'the flowcharts, sequences, timelines and other drawings', !picks.kanban && 'a Kanban board'].filter(Boolean)
+  return (
+    `[Meeting notes: the meeting is over. Start what you write with the meeting's title on a line of its own: "Title: " and a few words saying what it was about (like "Title: Q3 launch planning"); it becomes the title of the frame put around the notes. Then sum the meeting up in 3 to 8 short points, each on a line starting "- ": what was decided, who does what by when, what's still open, and any agenda items that weren't covered. ` +
+    (todo.length ? `Then finish what they chose to keep, in one last propose_changes:\n- ${todo.join('\n- ')}\n` : 'They chose to keep only the transcript, so change nothing on the board. ') +
+    (not.length ? `They don't want ${not.join(', or ')}: don't add or change those (they're taken away). ` : '') +
+    (todo.length ? 'Then call propose_changes, and write nothing after it. ' : '') +
+    WHO_NOTE +
+    ']'
+  )
+}
+
+/** Guided thinking: the assistant asks questions to draw ideas out, mapping questions and answers as it goes. */
+const GUIDE_NOTE = `[Guided: you're helping the person think something through by asking them questions, and mapping what comes out on the board as you go. Each turn:
+- Put what they just said on the board, as when they talk to you: a mind map grown with addIdeas, or a flowchart, timeline or table when that fits better. Build on what's there rather than starting again.
+- Map the questions: add the questions most worth answering next as ideas ending in "?", with the status undecided, under what they're about (at most 3 new ones a turn). When they've answered one, set it done and put the answer under it, in a few words.
+- Ask about what's missing, unclear, risky or taken for granted: who it's for, what happens if…, how they'll know it worked, what comes first, what it costs, who decides.
+Your words: a few words on what you added, then the one question you most want them to answer now, on a line of its own and short (it's shown large on their screen). Then call propose_changes once (it's applied at once, and they can undo it), and write nothing after it. When they ask you for something instead, do it, then carry on asking.]`
+
+/** Guided thinking, just started. */
+const GUIDE_START = `[Guided: they've just started, and haven't said anything yet. Ask your first question. When the board is empty, ask what they'd like to think through, and change nothing. Otherwise put your first few questions about what's on it on the board, as below, and ask the most important one.]`
+
+/** How a message was said: typed (false), spoken (true), or in one of Flowstate's other ways. */
+export type Live = boolean | 'meeting' | 'meeting-end' | 'meeting-agenda' | 'guide' | 'guide-start'
 
 const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards', 'read_time']
 
@@ -512,7 +555,7 @@ export class Assistant {
    * changes applied as they come; 'meeting' is a stretch of a meeting to take notes on, and
    * 'meeting-end' wraps the meeting's notes up (`text` is then not used).
    */
-  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: boolean | 'meeting' | 'meeting-end' = false): Promise<void> {
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: Live = false, extra: { picks?: EndPicks } = {}): Promise<void> {
     this.checksLeft = 1
     const sel = this.host.selection()
     const others = this.host.others?.()
@@ -544,10 +587,13 @@ export class Assistant {
         {
           type: 'text',
           text:
-            live === 'meeting' || live === 'meeting-end'
+            live === 'meeting' || live === 'meeting-end' || live === 'meeting-agenda'
               ? // A meeting: the whole board comes along (the notes grow long), and what was said, line by line.
-                `${context}\n${live === 'meeting' ? MEETING_NOTE : MEETING_END}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
-              : live
+                `${context}\n${live === 'meeting' ? MEETING_NOTE : live === 'meeting-agenda' ? MEETING_AGENDA : meetingEnd(extra.picks ?? { collage: true, kanban: true, notes: true })}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
+              : live === 'guide' || live === 'guide-start'
+                ? // Guided: the board, and what they said (nothing yet, at the start).
+                  `${context}\n${live === 'guide-start' ? `${GUIDE_START}\n${GUIDE_NOTE}` : GUIDE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 20_000)}${live === 'guide' ? `\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}` : ''}`
+                : live
                 ? // Talking: the board comes along every time, so changes follow it without reading it first.
                   `${context}\n${LIVE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 12_000)}\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}`
                 : `${context}\n\n${text}${linked ? `\n\n${linked}` : ''}`,

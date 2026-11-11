@@ -951,6 +951,10 @@ function EmptyBoard() {
           <strong>Or take notes in a meeting</strong>
           <small>Meeting notes: the assistant listens and writes it all up here</small>
         </button>
+        <button className="flow-start" onClick={() => ui.flow(true, { guide: true })}>
+          <strong>Or be asked questions</strong>
+          <small>Guided: the assistant asks, and maps the answers as you go</small>
+        </button>
       </div>
     </div>
   )

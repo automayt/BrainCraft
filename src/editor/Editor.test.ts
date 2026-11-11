@@ -1431,3 +1431,65 @@ describe('empty new notes', () => {
     expect(e.board.items.map((i) => i.text)).toEqual(['Keep me'])
   })
 })
+
+describe('ending a meeting', () => {
+  const met = () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([{ op: 'createNote', text: 'From before' }])
+    e.setFlow(true, { meeting: true })
+    const m = e.meeting!
+    new BrainCraftAPI(e).apply([
+      { op: 'createMindMap', outline: 'Launch\n  Venue' },
+      { op: 'createTimeline', title: 'Plan' },
+      { op: 'createKanban', title: 'Actions', columns: [{ title: 'To do', cards: ['Book it'] }] },
+    ])
+    return { e, m }
+  }
+
+  it('waits for what to keep, then takes away the rest and adds the transcript beside it all', () => {
+    const { e, m } = met()
+    e.endMeeting()
+    expect(e.meeting!.ending).toBe(true)
+    e.pickMeeting({ collage: false, kanban: true, notes: true })
+    expect(e.meeting!.picks).toEqual({ collage: false, kanban: true, notes: true })
+    const card = e.tidyMeeting(m.before, e.meeting!.picks!, { text: 'Transcript: Launch', description: '[0:01] Jo: hello' })!
+    expect(e.board.items.map((i) => i.kind)).not.toContain('timeline')
+    expect(e.board.items.map((i) => i.kind)).toContain('kanban')
+    const t = B.getItem(e.board, card)!
+    expect(t.text).toBe('Transcript: Launch')
+    expect(t.description).toBe('[0:01] Jo: hello')
+    // Beside what the meeting made, so the frame stays snug.
+    const made = B.bounds(e.board, new Set(e.board.items.filter((i) => !m.before.has(i.id) && i.id !== card).map((i) => i.id)))!
+    expect(t.x).toBeGreaterThan(made.x + made.w)
+    // One undo puts it all back.
+    e.undo()
+    expect(e.board.items.map((i) => i.kind)).toContain('timeline')
+  })
+
+  it('a second end hurries, before or after picking', () => {
+    const { e } = met()
+    e.endMeeting()
+    e.endMeeting()
+    expect(e.meeting!.hurry).toBe(true)
+    // Picking once it hurries changes nothing.
+    e.pickMeeting({ collage: true, kanban: true, notes: true })
+    expect(e.meeting!.picks).toEqual({ collage: true, kanban: true, notes: true })
+  })
+
+  it('links the frame to its replay, and plays it back read-only', () => {
+    const { e, m } = met()
+    const frame = e.frameMeeting('Launch', m.before)!
+    e.setMeetingReplay(frame, 'replay-file-1')
+    expect(B.getItem(e.board, frame)!.meeting).toEqual({ replay: 'replay-file-1' })
+    e.setFlow(false)
+    const made = e.board.items.filter((i) => !m.before.has(i.id) && i.id !== frame)
+    e.startReplay({ v: 1, title: 'Launch', started: 0, length: 10_000, lines: [], steps: [{ at: 5000, put: made, gone: [], links: [], unlinked: [] }] }, frame)
+    expect(e.readOnly).toBe(true)
+    expect(e.viewBoard.items.map((i) => i.text)).toEqual(['From before'])
+    e.replayTo(6000)
+    expect(e.viewBoard.items).toHaveLength(1 + made.length)
+    e.stopReplay()
+    expect(e.readOnly).toBe(false)
+    expect(e.viewBoard.items.some((i) => i.id === frame)).toBe(true)
+  })
+})

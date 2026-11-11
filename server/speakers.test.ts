@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { AiGate } from './aiProxy'
 import { req, res } from './accounts/fakes'
-import { type Embedder, Voices, wavSamples } from './speakers'
+import { type Embedder, VoiceBook, Voices, wavSamples } from './speakers'
 import { Transcriber } from './transcribe'
 
 /** A 16-bit WAV of `seconds` of sound, as the app sends, with `channels` channels. */
@@ -331,5 +331,107 @@ describe('transcribing with voices', () => {
     const { t, sent } = transcriber(() => print(0))
     await post(t, '/api/ai/transcribe?voices=../../x', wav(2))
     expect(sent).toEqual([])
+  })
+})
+
+describe('voices remembered by name', () => {
+  const gate = new AiGate({ password: '', equal: (a, b) => a === b, visitor: () => '1.2.3.4', limit: 1000 })
+  const setup = (book = new VoiceBook()) => {
+    let next = print(0)
+    const voices = new Voices({ book })
+    const t = new Transcriber({
+      baseUrl: 'http://whisper.test/v1',
+      model: 'whisper-1',
+      gate,
+      fetch: (async () => new Response(JSON.stringify({ text: 'hi' }), { status: 200 })) as typeof fetch,
+      voices: { embedder: { embed: () => next }, voices, who: () => 'me', book },
+    })
+    const call = async (method: string, path: string, body?: Buffer) => {
+      const r = res()
+      const chunk = body ?? Buffer.alloc(0)
+      const request = Object.assign(req(method, { 'content-type': body && body[0] === 0x52 ? 'audio/wav' : 'application/json', 'x-braincraft': '1' }), {
+        on(event: string, fn: (x?: unknown) => void) {
+          if (event === 'data' && chunk.length) fn(chunk)
+          if (event === 'end') fn()
+          return this
+        },
+      }) as unknown as IncomingMessage
+      const url = new URL(`http://localhost${path}`)
+      if (url.pathname === '/api/ai/voices') await t.voicesRoute(request, r, url)
+      else await t.handle(request, r, url)
+      const out = await r.reply
+      return { status: out.status, body: out.body as Record<string, unknown> }
+    }
+    const say = async (meeting: string, who: number) => {
+      next = print(who)
+      return (await call('POST', `/api/ai/transcribe?voices=${meeting}`, wav(2))).body
+    }
+    const name = (meeting: string, voice: number, as: string) => call('POST', `/api/ai/voices?voices=${meeting}`, Buffer.from(JSON.stringify({ voice, name: as })))
+    return { book, voices, call, say, name }
+  }
+
+  it('knows a voice named in one meeting in the next', async () => {
+    const { say, name, book } = setup()
+    await say('meeting1', 3)
+    expect((await say('meeting1', 3)).voice).toBe(1)
+    expect((await name('meeting1', 1, 'Brian')).status).toBe(200)
+    expect(book.list().map((v) => v.name)).toEqual(['Brian'])
+    // Another day: once he's been heard enough to count, he's Brian.
+    await say('meeting2', 3)
+    expect(await say('meeting2', 3)).toEqual({ text: 'hi', voice: 1, name: 'Brian' })
+    // Someone else isn't.
+    await say('meeting2', 9)
+    expect(await say('meeting2', 9)).toEqual({ text: 'hi', voice: 2 })
+  })
+
+  it('takes a wrong name back when the voice is named again', async () => {
+    const { say, name, book } = setup()
+    await say('m1-abc', 3)
+    await say('m1-abc', 3)
+    await name('m1-abc', 1, 'Sam')
+    await name('m1-abc', 1, 'Brian')
+    expect(book.list().map((v) => v.name)).toEqual(['Brian'])
+  })
+
+  it('lists and forgets them', async () => {
+    const { say, name, call } = setup()
+    await say('meeting1', 3)
+    await say('meeting1', 3)
+    await name('meeting1', 1, 'Brian')
+    expect((await call('GET', '/api/ai/voices')).body.voices).toEqual([expect.objectContaining({ name: 'Brian' })])
+    expect((await call('DELETE', '/api/ai/voices?name=Brian')).status).toBe(200)
+    expect((await call('GET', '/api/ai/voices')).body.voices).toEqual([])
+    expect((await call('DELETE', '/api/ai/voices?name=Brian')).status).toBe(404)
+  })
+
+  it('refuses a name for a voice that isn’t there, or no name', async () => {
+    const { name, call } = setup()
+    expect((await name('meeting1', 4, 'Sam')).status).toBe(404)
+    expect((await call('POST', '/api/ai/voices?voices=meeting1', Buffer.from('{"voice":1}'))).status).toBe(400)
+    expect((await call('POST', '/api/ai/voices?voices=../x', Buffer.from('{"voice":1,"name":"Sam"}'))).status).toBe(400)
+  })
+
+  it('keeps them in a file, and reads back only what makes sense', () => {
+    let saved: unknown = null
+    const a = new VoiceBook({ save: (list) => (saved = list) })
+    a.learn('Brian', print(3), 4)
+    a.flush()
+    const b = new VoiceBook({ load: () => [...(saved as unknown[]), { name: 'Bad', sum: ['x'] }, { nope: 1 }, { name: '', sum: [1] }] })
+    expect(b.list().map((v) => v.name)).toEqual(['Brian'])
+    expect(b.best(print(3))!.name).toBe('Brian')
+    expect(new VoiceBook({ load: () => 'not a list' }).list()).toEqual([])
+  })
+
+  it('doesn’t give one name to two voices in a meeting', () => {
+    const book = new VoiceBook()
+    book.learn('Brian', at(1, 0), 4)
+    const v = new Voices({ book, threshold: 0.95 })
+    v.place('m', at(1, 0), 2)
+    expect(v.place('m', at(1, 0), 2)).toBe(1)
+    // A second voice that also sounds rather like him (enough to recall him, not to be the same voice here).
+    v.place('m', at(0.8, 0.6), 2)
+    expect(v.place('m', at(0.8, 0.6), 2)).toBe(2)
+    expect(v.nameOf('m', 1)).toBe('Brian')
+    expect(v.nameOf('m', 2)).toBeNull()
   })
 })

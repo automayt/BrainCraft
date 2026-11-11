@@ -85,6 +85,9 @@ export interface VoicesOptions {
   conversations?: number
   forgetMs?: number
   now?: () => number
+  /** The voices known by name across meetings, and how alike a voice must be to one to be recognised as them. */
+  book?: VoiceBook | null
+  recall?: number
 }
 
 interface Voice {
@@ -94,6 +97,10 @@ interface Voice {
   sum: Float32Array
   heard: number
   at: number
+  /** Who it is, when named or recognised. */
+  name?: string
+  /** What of it was taught to that name, to take back if the name turns out wrong. */
+  taught?: { sum: Float32Array; heard: number }
 }
 
 interface Talk {
@@ -146,7 +153,51 @@ export class Voices {
   private talks = new Map<string, Talk>()
 
   constructor(o: VoicesOptions = {}) {
-    this.o = { threshold: 0.35, same: 0.5, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, ...given(o) }
+    this.o = { threshold: 0.35, same: 0.5, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.5, ...given(o) }
+  }
+
+  /** Who a voice in a conversation is, when it's been named or recognised. */
+  nameOf(conversation: string, n: number): string | null {
+    return this.talks.get(conversation)?.voices.find((v) => v.n === n)?.name ?? null
+  }
+
+  /**
+   * Names a voice in a conversation, and teaches the name what it sounds like, so it's known in
+   * later meetings too. A name it was given before is taken back. False when there's no such voice.
+   */
+  name(conversation: string, n: number, name: string): boolean {
+    const v = this.talks.get(conversation)?.voices.find((x) => x.n === n)
+    const clean = cleanName(name)
+    if (!v || !clean) return false
+    if (v.name?.toLowerCase() === clean.toLowerCase()) return true
+    this.untaught(v)
+    v.name = clean
+    this.teach(v)
+    return true
+  }
+
+  private untaught(v: Voice) {
+    if (v.name && v.taught) this.o.book?.unlearn(v.name, v.taught.sum, v.taught.heard)
+    v.taught = undefined
+  }
+
+  /** All of a named voice so far goes to its name. */
+  private teach(v: Voice) {
+    if (!v.name || !this.o.book) return
+    this.o.book.learn(v.name, v.sum, v.heard)
+    v.taught = { sum: Float32Array.from(v.sum), heard: v.heard }
+  }
+
+  /** A voice sure enough to count, and not yet anyone: maybe someone known from another meeting. */
+  private recognise(talk: Talk, v: Voice) {
+    const book = this.o.book
+    if (!book || v.name || !v.n) return
+    const best = book.best(v.sum)
+    if (!best || best.score < this.o.recall) return
+    // Two voices in one meeting can't both be them: the likelier one already has the name.
+    if (talk.voices.some((w) => w !== v && w.name?.toLowerCase() === best.name.toLowerCase())) return
+    v.name = best.name
+    this.teach(v)
   }
 
   /**
@@ -216,15 +267,27 @@ export class Voices {
     for (let i = 0; i < p.length; i++) v.sum[i] += p[i]
     v.heard++
     v.at = now
+    // Someone known: this phrase is more of what they sound like.
+    if (v.name && v.taught && this.o.book) {
+      this.o.book.learn(v.name, p, 1)
+      for (let i = 0; i < p.length; i++) v.taught.sum[i] += p[i]
+      v.taught.heard++
+    }
     if (!v.n) {
       if (v.heard < this.o.heardTimes) return null
       v.n = talk.next++
     }
+    this.recognise(talk, v)
     // Grown like another voice: they were one person all along, and the earlier number stays.
     let into = v
     for (const w of [...talk.voices]) {
       if (w === into || !w.n || !talk.voices.includes(w) || w.sum.length !== into.sum.length || cosine(w.sum, into.sum) < (Math.min(w.heard, into.heard) < YOUNG ? this.o.threshold : this.o.same)) continue
       const [keep, drop] = w.n < into.n ? [w, into] : [into, w]
+      // One person under two names: the earlier voice's name stays, and what the other taught is taken back.
+      if (drop.name && !keep.name) {
+        keep.name = drop.name
+        keep.taught = drop.taught
+      } else this.untaught(drop)
       for (let i = 0; i < keep.sum.length; i++) keep.sum[i] += drop.sum[i]
       keep.heard += drop.heard
       keep.at = now
@@ -251,3 +314,107 @@ export class Voices {
     }
   }
 }
+
+/** A voice remembered by name, across meetings: the running total of its voiceprints. */
+export interface KnownVoice {
+  name: string
+  sum: number[]
+  heard: number
+  updated: number
+}
+
+/**
+ * The voices this server knows by name. Naming a voice in one meeting teaches it here, and from
+ * then on that voice is recognised in every meeting: the voice is who someone is. Kept in a file
+ * (see server.ts); each remembered voice can be forgotten.
+ */
+export class VoiceBook {
+  private people = new Map<string, { name: string; sum: Float32Array; heard: number; updated: number }>()
+  private timer: ReturnType<typeof setTimeout> | null = null
+
+  private o: { load?: () => unknown; save?: (list: KnownVoice[]) => void; now?: () => number; saveAfterMs?: number }
+
+  constructor(o: VoiceBook['o'] = {}) {
+    this.o = o
+    let got: unknown = []
+    try {
+      got = o.load?.() ?? []
+    } catch {
+      got = []
+    }
+    if (!Array.isArray(got)) return
+    for (const v of got as KnownVoice[]) {
+      const name = typeof v?.name === 'string' ? cleanName(v.name) : ''
+      if (!name || !Array.isArray(v.sum) || !v.sum.length || v.sum.length > 4096 || !v.sum.every((x) => Number.isFinite(x))) continue
+      this.people.set(name.toLowerCase(), { name, sum: Float32Array.from(v.sum), heard: Math.max(1, Math.floor(Number(v.heard) || 1)), updated: Number(v.updated) || 0 })
+    }
+  }
+
+  /** The remembered voice a voiceprint (or a total of them) is most like, and how alike (cosine). */
+  best(print: Float32Array): { name: string; score: number } | null {
+    let out: { name: string; score: number } | null = null
+    for (const p of this.people.values()) {
+      if (p.sum.length !== print.length) continue
+      const score = cosine(p.sum, print)
+      if (!out || score > out.score) out = { name: p.name, score }
+    }
+    return out
+  }
+
+  /** Adds what a voice sounds like to a name (a total of `heard` unit voiceprints). */
+  learn(name: string, sum: Float32Array, heard: number) {
+    const clean = cleanName(name)
+    if (!clean || heard <= 0) return
+    const key = clean.toLowerCase()
+    const p = this.people.get(key)
+    if (p && p.sum.length !== sum.length) return
+    const now = (this.o.now ?? Date.now)()
+    if (!p) this.people.set(key, { name: clean, sum: Float32Array.from(sum), heard, updated: now })
+    else {
+      for (let i = 0; i < sum.length; i++) p.sum[i] += sum[i]
+      p.heard += heard
+      p.updated = now
+    }
+    this.changed()
+  }
+
+  /** Takes back what was taught to a name by mistake (a voice that turned out to be someone else). */
+  unlearn(name: string, sum: Float32Array, heard: number) {
+    const key = cleanName(name).toLowerCase()
+    const p = this.people.get(key)
+    if (!p || p.sum.length !== sum.length) return
+    if (p.heard - heard <= 0) this.people.delete(key)
+    else {
+      for (let i = 0; i < sum.length; i++) p.sum[i] -= sum[i]
+      p.heard -= heard
+    }
+    this.changed()
+  }
+
+  /** Forgets a voice; false when there's none by that name. */
+  forget(name: string): boolean {
+    const gone = this.people.delete(cleanName(name).toLowerCase())
+    if (gone) this.changed()
+    return gone
+  }
+
+  list(): { name: string; heard: number; updated: number }[] {
+    return [...this.people.values()].map((p) => ({ name: p.name, heard: p.heard, updated: p.updated })).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /** Writes it all down now (and stops waiting to). */
+  flush() {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
+    this.o.save?.([...this.people.values()].map((p) => ({ name: p.name, sum: Array.from(p.sum, (x) => Math.round(x * 1e5) / 1e5), heard: p.heard, updated: p.updated })))
+  }
+
+  private changed() {
+    if (!this.o.save || this.timer) return
+    this.timer = setTimeout(() => this.flush(), this.o.saveAfterMs ?? 3000)
+    ;(this.timer as { unref?: () => void }).unref?.()
+  }
+}
+
+/** A person's name as kept: one line, no brackets, at most 40 characters. */
+export const cleanName = (name: string) => name.replace(/[[\]\n\r]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)

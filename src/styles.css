@@ -12055,6 +12055,300 @@ button.inbox-entry:focus-visible {
   background: var(--surface);
 }
 
+/* Reading a recording: how far through it is, as a thin line under the sign. */
+.flow-read {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to)) 0 0 / calc(var(--read) * 100%) 100% no-repeat, var(--border);
+}
+
+.flow-meeting:has(.flow-read) {
+  padding-bottom: 9px;
+}
+
+/* The meeting's agenda, under its sign: what's been covered gets its tick. */
+.flow-agenda {
+  position: absolute;
+  top: 62px;
+  left: 18px;
+  width: min(280px, calc(100% - 36px));
+  padding: 10px 14px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  pointer-events: auto;
+}
+
+.flow-agenda h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.flow-agenda ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-agenda li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.flow-agenda li i {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 13px;
+  text-align: center;
+  color: var(--canvas);
+  border: 1.5px solid var(--faint);
+  border-radius: 4px;
+}
+
+.flow-agenda li.covered i {
+  background: var(--brand-to);
+  border-color: var(--brand-to);
+}
+
+.flow-agenda li.covered span {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+}
+
+/* The words at the top keep clear of it. */
+.flow:has(.flow-agenda) .flow-replies {
+  width: min(680px, calc(100% - 620px));
+}
+
+@media (max-width: 960px) {
+  .flow-agenda {
+    display: none;
+  }
+  .flow:has(.flow-agenda) .flow-replies {
+    width: min(760px, calc(100% - 32px));
+  }
+}
+
+/* When a meeting ends: what to keep. */
+.flow-picks {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100% - 32px));
+  padding: 22px 22px 18px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  animation: flow-in 0.28s var(--ease);
+}
+
+.flow-picks h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.flow-picks label {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.flow-picks label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--brand-to) 55%, var(--border));
+}
+
+.flow-picks input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--brand-to);
+}
+
+.flow-picks label span {
+  display: grid;
+  gap: 2px;
+}
+
+.flow-picks small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.flow-picks p {
+  margin: 2px 0 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.flow-picks button {
+  justify-self: end;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.flow-picks kbd {
+  font: inherit;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* A meeting played back: its title and notes at the top, what was said and the controls at the bottom. */
+.replay-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.replay-said {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text);
+  text-shadow:
+    0 0 10px var(--canvas),
+    0 0 3px var(--canvas);
+}
+
+.replay-said li {
+  animation: flow-in 0.28s var(--ease);
+}
+
+.replay-said li.older {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.replay-said b {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.replay-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px 6px 6px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+.replay-bar time {
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-bar input[type='range'] {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--brand-to);
+}
+
+.replay-bar select {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.replay-bar select option {
+  background: var(--surface);
+}
+
+.replay-play {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--canvas);
+  background: linear-gradient(135deg, var(--brand-from), var(--brand-to));
+  border: 0;
+  border-radius: 50%;
+}
+
+.replay-close {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.replay-close:hover {
+  color: var(--text);
+}
+
+.replay-close kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+@media (max-width: 640px) {
+  .replay-bar > time:last-of-type,
+  .replay-close kbd {
+    display: none;
+  }
+}
+
+/* Guided: the question asked now, large. */
+.flow-question {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  text-wrap: balance;
+  text-shadow:
+    0 0 16px var(--canvas),
+    0 0 5px var(--canvas),
+    0 0 2px var(--canvas);
+  animation: flow-in 0.36s var(--ease);
+}
+
 .flow-leave {
   position: absolute;
   top: 18px;
@@ -12108,11 +12402,16 @@ button.inbox-entry:focus-visible {
   .flow:has(.flow-meeting) .flow-replies {
     top: 104px;
   }
+  .flow-question {
+    font-size: 22px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .flow-line,
-  .flow-line.done {
+  .flow-line.done,
+  .flow-question,
+  .flow-picks {
     animation: none;
   }
   .flow-line.done {
@@ -12163,6 +12462,27 @@ button.inbox-entry:focus-visible {
   max-width: 300px;
   margin: 0;
   text-align: center;
+}
+
+/* The voices the server knows by name, in the assistant's settings. */
+.ai-voices h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+}
+
+.ai-voices ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-voices li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
 }
 
 /* Where the conversation moved to another board or wiki. */

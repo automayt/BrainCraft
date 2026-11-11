@@ -345,6 +345,7 @@ export function cleanItem(raw: unknown): Item | null {
   const lang = str(raw.lang, 32)
   if (lang) out.lang = lang
   if (isObj(raw.brainstorm)) out.brainstorm = { by: str(raw.brainstorm.by, 60) ?? '', ...(raw.brainstorm.revealed === true ? { revealed: true } : {}) }
+  if (isObj(raw.meeting) && isFileId(raw.meeting.replay)) out.meeting = { replay: raw.meeting.replay as string }
   if (isObj(raw.wheel)) {
     const s = raw.wheel.spin
     if (isObj(s) && [s.at, s.from, s.to, s.result].every((n) => num(n) !== undefined)) {

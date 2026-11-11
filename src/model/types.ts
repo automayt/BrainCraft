@@ -448,6 +448,8 @@ export interface Item extends Rect {
   flipped?: boolean
   /** On a comment card: a spinner wheel whose options are the card's lines, and its latest spin. */
   wheel?: { spin?: { at: number; from: number; to: number; result: number; label?: string } }
+  /** On a meeting's frame: the file its replay is kept in (see `meetingReplay.ts`). */
+  meeting?: { replay: string }
   /** Set only on the copy drawn for someone a hidden note is hidden from; never saved. */
   masked?: boolean
 }

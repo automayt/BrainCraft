@@ -2,13 +2,14 @@
 
 import { AssistantIcon, MicIcon } from './icons'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
-import { AI_MODELS, type AiImage, type AiModel, Assistant, type Callbacks, type Proposal, TOO_LONG, describeError, makeBackend, quietTimer } from '../ai/assistant'
+import { AI_MODELS, type AiImage, type AiModel, Assistant, type Callbacks, type Live, type Proposal, TOO_LONG, describeError, makeBackend, quietTimer } from '../ai/assistant'
 import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
 import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loadThread, ownerOf, saveThread, toSaved } from '../ai/threadStore'
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
-import { meetingTitle, untitledMeeting } from '../model/meeting'
+import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, howLong, meetingItems, meetingTitle, summaryPoints, transcriptText, untitledMeeting } from '../model/meeting'
+import { type MeetingRecord, type ReplayStep, type Snapshot, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
@@ -16,8 +17,10 @@ import { useEditor } from './useEditor'
 import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
-import { type FlowLine, Flowstate, plainLine } from './Flowstate'
+import { type FlowLine, Flowstate, askedLast, plainLine } from './Flowstate'
 import { VoiceNames } from './VoiceNames'
+import { pickRecording } from './meetingFiles'
+import { KnownVoices } from './KnownVoices'
 
 /** A request that says nothing for this long has stalled. */
 const QUIET_LIMIT = 10 * 60_000
@@ -238,7 +241,7 @@ function keep(t: Thread, k: Keeper) {
  * The assistant: a side panel, or, in Flowstate (`flow`), nothing but the board, its words
  * floating over it while you talk. Both share the board's conversation.
  */
-export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean, o?: { meeting?: boolean; now?: boolean }) => void }) {
+export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; now?: boolean }) => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
@@ -354,16 +357,18 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   // A turn is with the assistant (kept outside React too, so a turn spoken meanwhile waits its go).
   const busy = useRef(false)
   /** Sends a message; resolves with the reply once it's done (null when it couldn't be sent). */
-  const send = async (text: string, images: AiImage[] = [], label?: string, live: boolean | 'meeting' | 'meeting-end' = false): Promise<Turn | null> => {
+  const send = async (text: string, images: AiImage[] = [], label?: string, live: Live = false, extra: { picks?: MeetingPicks } = {}): Promise<Turn | null> => {
     const s = session()
-    if (!s || (!text.trim() && live !== 'meeting-end') || busy.current) return null
+    // The turns that start or end something say nothing of their own.
+    const quiet = live === 'meeting-end' || live === 'meeting-agenda' || live === 'guide-start'
+    if (!s || (!text.trim() && !quiet) || busy.current) return null
     busy.current = true
     // A long built-in request shows as its short label in the chat.
     s.turns.push({ role: 'user', text: label ?? text.trim(), proposals: [], where: here })
     const reply: Turn = { role: 'assistant', text: '', proposals: [], where: here }
     s.turns.push(reply)
     setInput('')
-    await work(s, reply, !!live, (on, signal) => s.assistant.send(text.trim(), on, signal, images, live))
+    await work(s, reply, !!live, (on, signal) => s.assistant.send(text.trim(), on, signal, images, live, extra))
     return reply
   }
 
@@ -446,6 +451,26 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   const [people, setPeople] = useState<number | null>(null)
   /** Leaving a meeting before it's wrapped up: what's still being said goes nowhere. */
   const dropTalk = useRef(false)
+  /**
+   * What a meeting is keeping for its transcript and replay: every line heard, and each turn's
+   * changes to what it made. `last`: how far into it the latest line was (ms).
+   */
+  const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; last: number }>({ lines: [], steps: [], snap: emptySnapshot(), last: 0 })
+  /** How far into the meeting it is (ms): in a recording, as far as it's been read. */
+  const meetingClock = () => {
+    const m = editor.meeting
+    return !m ? 0 : m.recording ? log.current.last : Date.now() - m.started
+  }
+  /** After a turn in a meeting: what it changed, kept for the replay. */
+  const keepStep = (noted?: string) => {
+    const m = editor.meeting
+    if (!m) return
+    const now = snapshot(editor.board, m.before, m.linksBefore)
+    const step = stepBetween(log.current.snap, now, meetingClock(), noted)
+    log.current.snap = now
+    if (step) log.current.steps.push(step)
+  }
+  const wait = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
   const talk = useTalk({
     server: ws.server,
     serverTranscribes: !!server.transcribe,
@@ -455,9 +480,22 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     meeting: !!editor.meeting,
     people: editor.meeting ? people : null,
     say: async (t) => {
+      // A turn of its own (the agenda, the first question) may still be under way.
+      while (busy.current && !dropTalk.current) await wait(250)
       if (dropTalk.current) return
-      await send(t, [], `🎙 ${t}`, editor.meeting ? 'meeting' : true)
+      const how: Live = editor.meeting ? 'meeting' : editor.guide ? 'guide' : true
+      const reply = await send(t, [], `🎙 ${t}`, how)
+      if (how === 'meeting') keepStep(reply ? plainLine(reply.text) : undefined)
     },
+    line: (l) => {
+      const m = editor.meeting
+      if (!m) return
+      const at = l.at ?? Date.now() - m.started
+      log.current.last = Math.max(log.current.last, at)
+      log.current.lines.push({ at, text: l.text, ...(l.voice !== undefined ? { voice: l.voice } : {}) })
+    },
+    progress: (done, length) => editor.meetingProgress(done, length),
+    ended: () => editor.endMeeting(),
   })
   const follow = (to: LinkTarget | null, label: string) => {
     const target = to ?? resolveName(label, editor.board, ws.otherBoards)
@@ -510,40 +548,86 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   if (flow && !wasFlow.current) flowFrom.current = turns.length
   wasFlow.current = flow
   const canTalk = !!connection && !editor.readOnly && !!talk.how
+  const started = useRef(false)
   useEffect(() => {
     if (flow) {
       dropTalk.current = false
-      if (checked && canTalk && !talk.on && !editor.meeting?.ending) void talk.start()
-    } else if (talk.on) talk.stop()
+      const m = editor.meeting
+      if (checked && canTalk && !talk.on && !m?.ending && !started.current) {
+        started.current = true
+        if (m) log.current = { lines: [], steps: [], snap: snapshot(editor.board, m.before, m.linksBefore), last: 0 }
+        void talk.start(m?.recording?.file)
+        // A meeting starts with an agenda from what matters most on the board; a guide with its first question.
+        if (m && !m.recording && m.before.size) void send('', [], '📋 Suggesting an agenda from the board', 'meeting-agenda').then(() => keepStep())
+        else if (editor.guide) void send('', [], '🧭 Your first question', 'guide-start')
+      }
+    } else {
+      started.current = false
+      if (talk.on) talk.stop()
+    }
     // Only when Flowstate starts or ends, or once it's known whether it can listen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, checked, canTalk])
 
-  // A meeting wraps up when it ends: what was still being said, the last of the notes and its
-  // title, then everything it made goes in one frame with that title. Ending it again hurries.
+  // A meeting wraps up when it ends: what to keep is asked while what was still being said is
+  // heard, then come the last of the notes and its title, the transcript, and one frame around it
+  // all (its replay kept with the board). Ending it again hurries.
   const ending = !!(flow && editor.meeting?.ending)
   const hurry = !!(flow && editor.meeting?.hurry)
+  const picked = flow ? (editor.meeting?.picks ?? null) : null
   const wrapping = useRef(false)
   const hurried = useRef<() => void>(() => {})
+  const onPicked = useRef<(p: MeetingPicks) => void>(() => {})
   useEffect(() => {
     const m = editor.meeting
     if (!ending || !m || wrapping.current) return
     wrapping.current = true
     const hurry = new Promise<void>((ok) => (hurried.current = ok))
+    const picks = new Promise<MeetingPicks>((ok) => (onPicked.current = ok))
     void (async () => {
       let title: string | null = null
+      let points: string[] = []
+      let chose: MeetingPicks = ALL_PICKS
       try {
         await Promise.race([talk.finish(), hurry])
+        chose = (await Promise.race([picks, hurry.then(() => null)])) ?? ALL_PICKS
+        // A turn of its own (the agenda) may still be under way: the last one waits for it.
+        while (busy.current && !editor.meeting?.hurry) await wait(250)
         if (!editor.meeting?.hurry && connection && !editor.readOnly && editor.board.items.some((i) => !m.before.has(i.id))) {
-          const reply = await Promise.race([send('', [], '🗒 The meeting is over: finishing the notes', 'meeting-end'), hurry.then(() => null)])
+          const reply = await Promise.race([send('', [], '🗒 The meeting is over: finishing the notes', 'meeting-end', { picks: chose }), hurry.then(() => null)])
           title = reply ? meetingTitle(reply.text) : null
+          points = reply ? summaryPoints(reply.text) : []
+          if (reply) keepStep()
         }
       } catch {
         // Whatever went wrong, what was noted still gets its frame.
       } finally {
         const name = title ?? untitledMeeting(m.started)
+        const { lines, steps } = log.current
+        const length = Math.max(meetingClock(), lines.at(-1)?.at ?? 0)
+        const card = lines.length
+          ? {
+              text: `Transcript: ${name}\n${howLong(length)}${talk.voices.length > 1 ? `, ${talk.voices.length} people` : ''}${points.length ? `\n\n${points.map((p) => `• ${p}`).join('\n')}` : ''}\n\nEvery word is in this note’s comments (Alt C).`,
+              description: transcriptText({ lines, noted: steps.flatMap((st) => (st.noted ? [{ at: st.at, text: st.noted }] : [])), summary: points, who: talk.nameOf }),
+            }
+          : null
+        editor.tidyMeeting(m.before, chose, card)
+        keepStep()
         const framed = editor.frameMeeting(name, m.before)
         editor.setStatus(framed !== null ? `Meeting notes put in the frame “${name}”` : 'Nothing was noted in this meeting')
+        // The replay goes with the board, linked from the frame.
+        if (framed !== null && log.current.steps.length) {
+          const record: MeetingRecord = {
+            v: 1,
+            title: name,
+            started: m.started,
+            length,
+            ...(m.recording ? { recording: m.recording.file.name } : {}),
+            lines: lines.map((l) => ({ at: l.at, text: l.text, ...(l.voice !== undefined ? { who: talk.nameOf(l.voice) } : {}) })),
+            steps: log.current.steps,
+          }
+          void ws.keepMadeFile(`Replay of ${name}.json`, 'application/json', new Blob([JSON.stringify(record)], { type: 'application/json' })).then((id) => id && editor.setMeetingReplay(framed, id))
+        }
         wrapping.current = false
         onFlow?.(false, { now: true })
       }
@@ -551,6 +635,9 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     // Only when it starts to end.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ending])
+  useEffect(() => {
+    if (picked) onPicked.current(picked)
+  }, [picked])
   useEffect(() => {
     if (!hurry) return
     dropTalk.current = true
@@ -589,7 +676,21 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
         problem={problem}
         onLeave={() => onFlow?.(false)}
         voices={<VoiceNames voices={talk.voices} onName={talk.nameVoice} />}
-        meeting={editor.meeting ? { started: editor.meeting.started, ending, people, onPeople: talk.voicesOn ? setPeople : undefined } : undefined}
+        meeting={
+          editor.meeting
+            ? {
+                started: editor.meeting.started,
+                ending,
+                picked: !!editor.meeting.picks,
+                onPick: (p) => editor.pickMeeting(p),
+                people,
+                onPeople: talk.voicesOn ? setPeople : undefined,
+                recording: editor.meeting.recording && { name: editor.meeting.recording.file.name, done: editor.meeting.recording.done, length: editor.meeting.recording.length },
+                agenda: agendaOf(editor.board, meetingItems(editor.board, editor.meeting.before)),
+              }
+            : undefined
+        }
+        question={editor.guide ? askedLast(turns.slice(flowFrom.current)) : null}
       />
     )
   }
@@ -747,6 +848,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
               <p className="muted">The server has to allow this page’s address; vLLM does with <code>--allowed-origins</code>. Pictures need a model that can see them.</p>
             </div>
           )}
+          {ws.server && server.voices && <KnownVoices server={ws.server} password={settings.password} />}
           {!checked && <p className="muted">Checking for a server…</p>}
           {editor.pendingAiPrompt && <p className="ai-waiting">“{editor.pendingAiPrompt.label ?? 'Your question'}” will be sent as soon as the assistant is connected.</p>}
           {connection && setup && (
@@ -926,6 +1028,28 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   onClick={() => onFlow(true, { meeting: true })}
                 >
                   Meeting notes
+                </button>
+              )}
+              {!talk.on && onFlow && !!server.transcribe && (
+                <button
+                  type="button"
+                  className="talk-btn"
+                  disabled={!connection || editor.readOnly || isWiki(editor.board)}
+                  title="Meeting notes from a recording: choose a meeting’s audio or video, and the assistant takes the notes from it"
+                  onClick={() => void pickRecording().then((f) => f && onFlow(true, { recording: f }))}
+                >
+                  From a recording…
+                </button>
+              )}
+              {!talk.on && onFlow && (
+                <button
+                  type="button"
+                  className="talk-btn"
+                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                  title="Guided: the assistant asks you questions to draw your ideas out, and maps the answers as you go"
+                  onClick={() => onFlow(true, { guide: true })}
+                >
+                  Guide me
                 </button>
               )}
               {!talk.on && (

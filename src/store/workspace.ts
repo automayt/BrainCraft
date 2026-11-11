@@ -1579,6 +1579,21 @@ export class Workspace {
     return made
   }
 
+  /** Keeps a file made here (a meeting's replay) with the open board: its id, or null when it can't be kept. */
+  async keepMadeFile(name: string, type: string, data: Blob): Promise<string | null> {
+    const store = this.fileStore
+    if (!store || this.viewOnly) return null
+    const id = randomId()
+    try {
+      await store.put(id, data, type, '')
+    } catch {
+      return null
+    }
+    const by = this.editor.author.trim()
+    this.editor.addFile({ id, name: name.slice(0, 200), type, size: data.size, at: Date.now(), ...(by ? { by } : {}), ...(store.where === 'browser' ? { local: true as const } : {}) })
+    return id
+  }
+
   /** A file's bytes, or null when they aren't reachable from here. */
   async fileBlob(f: BoardFile): Promise<Blob | null> {
     return (await this.storeOf(f)?.get(f.id).catch(() => null)) ?? null
