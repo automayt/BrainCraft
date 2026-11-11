@@ -28,9 +28,9 @@ describe('cutting a recording into phrases', () => {
     expect(spans).toHaveLength(3)
     // To within a frame or two (it looks at the sound 30 ms at a time).
     const want = [
-      [0.85, 3.15],
-      [4.85, 6.65],
-      [8.85, 11.15],
+      [0.75, 3.25],
+      [4.75, 6.75],
+      [8.75, 11.25],
     ]
     secs(spans).forEach(([a, b], k) => {
       expect(Math.abs(a - want[k][0])).toBeLessThan(0.1)
@@ -41,6 +41,11 @@ describe('cutting a recording into phrases', () => {
   it('keeps a short breath inside a phrase, and drops a click', () => {
     const spans = splitPhrases(recording(8, [[1, 2], [2.2, 3.5], [6, 6.05]]))
     expect(spans).toHaveLength(1)
+  })
+
+  it('keeps a pause for thought mid-sentence inside the phrase, so it keeps its sense', () => {
+    expect(splitPhrases(recording(8, [[1, 2.5], [3.1, 4.5]]))).toHaveLength(1)
+    expect(splitPhrases(recording(8, [[1, 2.5], [4, 5.5]]))).toHaveLength(2)
   })
 
   it('cuts a long run of talk at its quietest moment', () => {

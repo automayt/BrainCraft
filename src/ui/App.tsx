@@ -14,6 +14,7 @@ import { Presenter } from './Present'
 import { RunPanel, RunsDialog } from './RunPanel'
 import { MeetingReplay } from './MeetingReplay'
 import { playMeeting } from './meetingFiles'
+import { MeetingPeopleDialog } from './MeetingPeople'
 import { Editor } from '../editor/Editor'
 import * as B from '../model/board'
 import { emptyBoard } from '../model/board'
@@ -87,6 +88,7 @@ function App({ ws }: { ws: Workspace }) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [importTab, setImportTab] = useState<'import' | 'export'>('import')
   const [runsFor, setRunsFor] = useState<number | null>(null)
+  const [peopleOf, setPeopleOf] = useState<number | null>(null)
   const [bridge] = useState(() => new Bridge(ws))
   const [, setBridgeVersion] = useState(0)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -164,7 +166,8 @@ function App({ ws }: { ws: Workspace }) {
         flowLeftTimer.current = setTimeout(() => setFlowLeft(false), 500)
       }
     },
-    replayMeeting: (frame) => void playMeeting(ws, editor, frame),
+    replayMeeting: (frame, at) => void playMeeting(ws, editor, frame, at),
+    openMeetingPeople: (frame) => setPeopleOf(frame),
     ai: bridge,
     menu,
     openMenu: setMenu,
@@ -568,6 +571,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'export' && <ExportDialog onClose={close} />}
           {dialog === 'check' && <CheckDialog onClose={close} />}
           {dialog === 'divide' && <DivideDialog onClose={close} />}
+          {peopleOf !== null && <MeetingPeopleDialog frame={peopleOf} onClose={() => setPeopleOf(null)} />}
           <input
             ref={fileInput}
             type="file"

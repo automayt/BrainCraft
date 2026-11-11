@@ -150,49 +150,47 @@ export interface Callbacks {
 const LIVE_NOTE = `[Live: the person is talking to you while looking at the board, and this is what they just said. Shape the board as they talk, quickly. First say in a few words what you're doing (it appears on their screen as you write it, e.g. "Mind map of the launch, three branches."), then call propose_changes once with everything for this turn; it's applied at once (they can undo it), and that ends your turn, so write nothing after it. Build on what is already there, especially what you made earlier in this conversation: extend, reword, regroup, replace or remove parts of it rather than starting again or adding a copy. Choose the form from what they describe and switch it when they ask: a mind map for ideas around a topic, a flowchart for steps and decisions, sticky notes for a loose list, a table or Kanban board for a plan, a timeline for dates. Build it BrainCraft's way: start a mind map with createMindMap even if it's only the topic so far, then grow it with addIdeas under the idea they name ("add X and Y off Z" is two new ideas under Z, never more words in Z); grow a flowchart with addSteps; change a Kanban board, table or timeline with setKanban, setTable or setTimeline. When they correct themselves ("actually, replace X with Y"), change what you made: rename it with update, or delete it and add the right one. When they are only thinking aloud and there is nothing to add yet, just say a few words and change nothing. Several people may be talking, as in a meeting: then each line starts with who said it, like "[Sam] we should move it to May". Show on the board who each idea came from: give it "who" in addIdeas or createMindMap ({"text", "who": ["Sam"]}), or set assignees with update on an idea already there. Go only by the name at the start of the line, never by guessing from the words, and keep each person's ideas theirs. A line like "[Voice 2 is Sam]" names a voice: use the name from then on, and change that voice to the name on what you made.]`
 
 /** Who said what, as the lines of a meeting show it. */
-const WHO_NOTE = `Each line may start with who said it, like "[Sam] we should move it to May", or "[Not sure who]" when that isn't known. Show on the board who each point came from: give it "who" in addIdeas or createMindMap ({"text", "who": ["Sam"]}), or set assignees with update on an idea already there, and put the name in the Who column of the table. Go only by the name at the start of the line, never by guessing from the words, and keep each person's points theirs; put no name on the points of a "[Not sure who]" line. A line like "[Voice 2 is Sam]" names a voice: use the name from then on, and change that voice to the name on what you made. When the lines have no names, put no names on anything.`
+const WHO_NOTE = `Each line may start with who said it, like "[Sam] we should move it to May", or "[Not sure who]" when that isn't known. Show on the board who each point came from: give it "who" in addIdeas or createMindMap ({"text", "who": ["Sam"]}), or set assignees with update on an idea already there, and put the name in the Who column of the table. Go by the name at the start of the line, and keep each person's points theirs; put no name on the points of a "[Not sure who]" line. A line like "[Voice 2 is Sam]" names a voice: use the name from then on, and change that voice to the name on what you made. When the lines have no names, put no names on anything.
+Work out who the voices are from what's said, as a person taking notes would: when it's clear who a voice is (someone says "thanks, Sam" and Voice 2 answers, someone introduces themselves, someone is asked by name and replies), end your few words with a line of its own, "Who: Voice 2 = Sam". Only when it's clear, never a guess; it names the voice from then on.`
 
-/** Meeting notes: what was just said in a meeting the person is in, for the assistant to take notes on. */
-const MEETING_NOTE = `[Meeting notes: the person is in a meeting and you are taking the notes on this board. What's below was just said by the people in the meeting, to each other, not to you: never answer them or ask them anything. First say in a few words what you noted (it appears on their screen, e.g. "Noted the venue options; started the timeline."), then call propose_changes once with everything for this stretch; it's applied at once, and that ends your turn, so write nothing after it.
-Take thorough notes: every point, proposal, fact, number, name, date, decision, action item, risk and open question, each in a few plain words of your own (never a transcript). Leave things out only when nothing of substance was said (greetings, small talk, "can you hear me").
+/** MeetingNotes: what was just said in a meeting the person is in, for the assistant to take notes on. */
+const MEETING_NOTE = `[MeetingNotes: the person is in a meeting and you are taking the notes on this board. What's below was just said by the people in the meeting, to each other, not to you: never answer them or ask them anything. First say in a few words what you noted (it appears on their screen, e.g. "Noted the venue options; started the timeline."), then call propose_changes once with everything for this stretch; it's applied at once, and that ends your turn, so write nothing after it.
+Take thorough notes: every point, proposal, fact, number, name, date, decision, action item, risk and open question. Each note is a complete idea in a few plain words of your own, never a transcript: "Move the launch to May for the venue", not "move it" or "the venue thing". Never note acknowledgements or filler ("yeah", "right", "okay, so", "can you hear me"), half-finished sentences, or words marked [unclear: …]: when something wasn't clear, wait until it is. When a thought is spread over several lines, or said again, it's one note; improve the one you made rather than adding another.
 Shape the notes as the meeting goes, and keep shaping them:
-- The notes themselves are a mind map: createMindMap with the meeting's subject in the middle (rename it with update as the subject becomes clear), a branch for each topic discussed, the points under their topic. Grow it with addIdeas; move points with moveIdea, and rename or regroup branches as topics become clear.
+- The notes themselves are a mind map: createMindMap with the meeting's subject in the middle (rename it with update as the subject becomes clear), a branch for each main concept discussed, topics within those, and the points under their topic: three or four levels, grouped by meaning, not by when they were said. Grow it with addIdeas; move points with moveIdea, and rename or regroup branches as the concepts become clear. Keep it easy to scan: when an idea has more than about seven points under it, group them under new topics (moveIdea).
 - Draw what people describe as soon as there is enough to draw, and refine it as they go on: the steps of a process or a decision as a flowchart (createFlowchart, then addSteps or setFlowchart); who or what sends what to whom, such as systems, teams, requests and replies, as a sequence diagram (createSequence, then setSequence); dates, deadlines, phases or a schedule as a timeline (createTimeline, then setTimeline); options being compared as a table.
-- Decisions, action items and open questions go in one table titled "Decisions and actions" with the columns Type, What, Who, When (Type is Decision, Action or Question): make it with createTable when the first one comes up, then change it with setTable, giving every row each time.
+- Decisions, proposals, action items, blockers and open questions go in one table titled "Decisions and actions" with the columns Type, What, Who, When: Type is Decision only for what was agreed, Proposal for what was put forward but not agreed, Action, Blocker or Question. Make it with createTable when the first one comes up, then change it with setTable, giving every row each time. An action's Who is the person who took it on; leave it empty when nobody did.
 - If there's a table titled "Agenda", it's what the meeting set out to cover: once an item on it has been talked about, put ✓ in its Covered cell (setTable, giving every row).
 Someone may speak to you directly, by calling you (robot, assistant, BrainCraft or the like) or by telling the notes what to do: "note that…", "action item for Sam: …", "strike that", "park this", "make that a timeline". Then do what they ask on the board: "strike that" takes back what you noted from what was said just before it, and "park this" puts it under a branch called "Parked". Still answer only with your few words.
-Improve what you made rather than adding copies, and fix what turns out to be wrong. Leave alone what was on the board before the meeting, and don't put a frame around it all: that's done when the meeting ends. Leave out "at", so what you make is placed beside the rest. ` + WHO_NOTE + `]`
+Leave alone what was on the board before the meeting, anything locked, and anything someone has changed by hand: build on it, don't change it. Don't put a frame around it all: that's done when the meeting ends. Leave out "at", so what you make is placed beside the rest. ` + WHO_NOTE + `]`
 
-/** Before a meeting: an agenda from what matters most on the board. */
-const MEETING_AGENDA = `[Meeting notes: a meeting is starting, and you'll take its notes on this board. First suggest an agenda: the things on this board most worth the meeting's time, by your own estimate of their priority (open questions, undecided or waiting items, work stuck or in progress, things due soon or overdue, risks, what has the most votes), the most important first, at most 6. Make it a table titled "Agenda" with the columns Item, Why now and Covered (Covered left empty), and leave out "at" so it's placed beside the rest. Say in a few words what comes first, then call propose_changes once, and write nothing after it. When nothing on the board is worth an agenda, make nothing and say so in a few words.]`
+/** Before a meeting: an agenda from what matters most on the board, starting with what's left from the last one. */
+const MEETING_AGENDA = `[MeetingNotes: a meeting is starting, and you'll take its notes on this board. First suggest an agenda: the things on this board most worth the meeting's time, by your own estimate of their priority (open questions, undecided or waiting items, work stuck or in progress, things due soon or overdue, risks, what has the most votes), the most important first, at most 6. When there's something left from the last meeting (below), the agenda starts with the most important of it, saying "Left from last time" in Why now. Make it a table titled "Agenda" with the columns Item, Why now and Covered (Covered left empty), and leave out "at" so it's placed beside the rest. Say in a few words what comes first, then call propose_changes once, and write nothing after it. When nothing on the board is worth an agenda, make nothing and say so in a few words.]`
 
-/** What to keep when a meeting ends (see model/meeting.ts). */
-export interface EndPicks {
-  collage: boolean
-  kanban: boolean
-  notes: boolean
-}
+/**
+ * After a meeting: the whole transcript, read once, written down as one consolidated record that
+ * every view of the meeting is made from (see model/meetingReview.ts for the form it's read in).
+ */
+export const MEETING_REVIEW = `You review the transcript of a meeting that has just ended and write the meeting down once, consolidated, for the notes. Write exactly the form below and nothing else: no introduction, no remarks after.
 
-/** What to finish when a meeting ends, by what the person chose to keep. */
-export function meetingEnd(picks: EndPicks): string {
-  const todo = [
-    picks.notes &&
-      'The notes: make sure every decision, action item and open question is in the "Decisions and actions" table, and tidy the mind map (merge repeated points, give branches clear names).',
-    picks.collage &&
-      'The idea collage: make sure everything people described is drawn, complete, in the form that fits it best (the steps of a process as a flowchart, who sends what to whom as a sequence diagram, dates and phases as a timeline, options as a table), and arrange ideas that fit a form better than a list that way.',
-    picks.kanban &&
-      'A Kanban board titled "Actions" (createKanban, or setKanban if it\'s there) with the columns To do, Doing and Done: a card for each action item, its title saying what and who (like "Book the venue (Brian)"), with its due date when one was said.',
-  ].filter(Boolean)
-  const not = [!picks.notes && 'the notes (the mind map and its tables)', !picks.collage && 'the flowcharts, sequences, timelines and other drawings', !picks.kanban && 'a Kanban board'].filter(Boolean)
-  return (
-    `[Meeting notes: the meeting is over. Start what you write with the meeting's title on a line of its own: "Title: " and a few words saying what it was about (like "Title: Q3 launch planning"); it becomes the title of the frame put around the notes. Then sum the meeting up in 3 to 8 short points, each on a line starting "- ": what was decided, who does what by when, what's still open, and any agenda items that weren't covered. ` +
-    (todo.length ? `Then finish what they chose to keep, in one last propose_changes:\n- ${todo.join('\n- ')}\n` : 'They chose to keep only the transcript, so change nothing on the board. ') +
-    (not.length ? `They don't want ${not.join(', or ')}: don't add or change those (they're taken away). ` : '') +
-    (todo.length ? 'Then call propose_changes, and write nothing after it. ' : '') +
-    WHO_NOTE +
-    ']'
-  )
-}
+Title: a few words saying what the meeting was about
+Speakers:
+- Voice 2 = Sam
+- 12:30 = Brian
+Outcomes:
+- Update: what someone reported | who
+- Decision: what was agreed
+- Proposal: what was put forward but not agreed | who proposed it
+- Action: what is to be done | who took it on | when it's due
+- Blocker: what is in the way | who raised it
+- Question: what is still open | who asked
+Ideas:
+- 4:05 | Brian | Launch > Venue | 1 | Three venues downtown are all under budget
+
+Speakers: the transcript's lines start with who said them, as far as was known when they were heard: a name, a numbered voice ("Voice 2"), or "Not sure who". Work out who they really were from the conversation, as a careful note-taker would: someone is addressed by name and that voice answers, someone introduces themselves, someone refers to what they said earlier, a line clearly continues or answers the one before. For a voice that's clearly someone, write "Voice N = Name" (or "Old name = Right name" when a name was wrong); for a single line whose speaker is clear from what's around it, write its time and the name ("12:30 = Brian"). Only what's clear: never guess. Leave the section empty when there's nothing to correct.
+Outcomes: what the meeting came to. Keep proposals apart from decisions: a Decision is only what was agreed. An Action's owner is who took it on, "?" when nobody did; its due date as said, or as YYYY-MM-DD when a date is clear from the meeting's date. Nothing that wasn't said.
+Ideas: every complete idea people put forward, in the order said, each a full thought in plain words of your own (never a fragment, an acknowledgement, small talk, or words marked [unclear: …]). What was said in several pieces, or repeated, is one idea, at the time it was first said. Who: the person whose idea it is, with the right names from Speakers ("?" if not known). What it's about: a concept, and when a concept has many ideas a topic within it, joined by ">" (3 to 8 concepts for the whole meeting, named in a few words). Weight: 1 for what matters most (decisions, key facts, commitments, risks), 2 for the main points, 3 for supporting detail; about a fifth of the ideas are 1.
+Use the right names throughout, and the language the meeting was in.`
 
 /** Guided thinking: the assistant asks questions to draw ideas out, mapping questions and answers as it goes. */
 const GUIDE_NOTE = `[Guided: you're helping the person think something through by asking them questions, and mapping what comes out on the board as you go. Each turn:
@@ -205,7 +203,7 @@ Your words: a few words on what you added, then the one question you most want t
 const GUIDE_START = `[Guided: they've just started, and haven't said anything yet. Ask your first question. When the board is empty, ask what they'd like to think through, and change nothing. Otherwise put your first few questions about what's on it on the board, as below, and ask the most important one.]`
 
 /** How a message was said: typed (false), spoken (true), or in one of Flowstate's other ways. */
-export type Live = boolean | 'meeting' | 'meeting-end' | 'meeting-agenda' | 'guide' | 'guide-start'
+export type Live = boolean | 'meeting' | 'meeting-agenda' | 'guide' | 'guide-start'
 
 const READ_TOOLS = ['read_board', 'get_object', 'find', 'list_pages', 'read_page', 'page_history', 'list_boards', 'read_time']
 
@@ -553,9 +551,10 @@ export class Assistant {
   /**
    * Sends a message and runs the conversation until the model has answered. `live`: spoken, its
    * changes applied as they come; 'meeting' is a stretch of a meeting to take notes on, and
-   * 'meeting-end' wraps the meeting's notes up (`text` is then not used).
+   * 'meeting-agenda' starts one with an agenda (`text` is then not used; `extra.carry` is what's
+   * left from the last meeting).
    */
-  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: Live = false, extra: { picks?: EndPicks } = {}): Promise<void> {
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: Live = false, extra: { carry?: { title: string; items: string[] } } = {}): Promise<void> {
     this.checksLeft = 1
     const sel = this.host.selection()
     const others = this.host.others?.()
@@ -587,9 +586,9 @@ export class Assistant {
         {
           type: 'text',
           text:
-            live === 'meeting' || live === 'meeting-end' || live === 'meeting-agenda'
+            live === 'meeting' || live === 'meeting-agenda'
               ? // A meeting: the whole board comes along (the notes grow long), and what was said, line by line.
-                `${context}\n${live === 'meeting' ? MEETING_NOTE : live === 'meeting-agenda' ? MEETING_AGENDA : meetingEnd(extra.picks ?? { collage: true, kanban: true, notes: true })}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
+                `${context}\n${live === 'meeting' ? MEETING_NOTE : `${MEETING_AGENDA}${extra.carry?.items.length ? `\n\n[Left from the last meeting, “${extra.carry.title}”:]\n${extra.carry.items.map((x) => `- ${x}`).join('\n')}` : ''}`}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
               : live === 'guide' || live === 'guide-start'
                 ? // Guided: the board, and what they said (nothing yet, at the start).
                   `${context}\n${live === 'guide-start' ? `${GUIDE_START}\n${GUIDE_NOTE}` : GUIDE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 20_000)}${live === 'guide' ? `\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}` : ''}`

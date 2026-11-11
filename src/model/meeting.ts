@@ -1,5 +1,5 @@
 /**
- * Meeting notes: while a meeting is heard, the assistant takes notes on the board, and when it
+ * MeetingNotes: while a meeting is heard, the assistant takes notes on the board, and when it
  * ends everything the meeting made goes into one frame, titled for what it was about.
  */
 
@@ -42,14 +42,18 @@ export function untitledMeeting(at: number, locale?: string): string {
   return `Meeting, ${new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
 
-/** What to keep when a meeting ends: the ideas drawn out (flows, timelines…), a Kanban board of the actions, the notes. */
+/**
+ * What to keep when a meeting ends: the ideas drawn out (flows, timelines…), a Kanban board of the
+ * actions, the notes (overview, decisions table, mind map), and a timeline of who said what.
+ */
 export interface MeetingPicks {
   collage: boolean
   kanban: boolean
   notes: boolean
+  timeline: boolean
 }
 
-export const ALL_PICKS: MeetingPicks = { collage: true, kanban: true, notes: true }
+export const ALL_PICKS: MeetingPicks = { collage: true, kanban: true, notes: true, timeline: true }
 
 /**
  * What a meeting made, by what it's for: the notes (mind maps, the "Decisions and actions" table,
@@ -105,6 +109,31 @@ export interface MeetingLine {
   at: number
   voice?: number
   text: string
+  /** Speech to text wasn't sure of some of it (marked "[unclear: …]" in the text). */
+  unclear?: true
+}
+
+/** Ends a sentence (closing quotes and brackets allowed after). */
+const ENDED = /[.!?…。！？]["”’)\]]*$/
+
+/**
+ * Lines cut at a pause mid-sentence, put back together: a line that doesn't end a sentence,
+ * followed soon by more from the same person, becomes one line with it.
+ */
+export function joinFragments<L extends { at: number; text: string; voice?: number; who?: string; unclear?: true }>(lines: readonly L[], gapMs = 8000): L[] {
+  const out: L[] = []
+  let lastAt = -Infinity
+  for (const l of lines) {
+    const prev = out.at(-1)
+    const next = l.text.trim()
+    if (prev && prev.voice === l.voice && prev.who === l.who && !ENDED.test(prev.text.trim()) && l.at - lastAt <= gapMs && prev.text.length + next.length < 1500) {
+      // Cut mid-sentence by a pause, the rest was written as a new sentence.
+      const go = /^[A-Z][a-z]/.test(next) && !/^I\b/.test(next) ? next[0].toLowerCase() + next.slice(1) : next
+      out[out.length - 1] = { ...prev, text: `${prev.text.trim()} ${go}`, ...(l.unclear ? { unclear: true as const } : {}) }
+    } else out.push({ ...l, text: next })
+    lastAt = l.at
+  }
+  return out
 }
 
 /** The few points the assistant summed a meeting up with: the list lines after its title. */
@@ -139,26 +168,57 @@ export interface MeetingNoted {
 }
 
 /**
- * The transcript of a meeting, as written on its transcript card: the summary first, then every
- * line with when and who, and what the assistant noted from each stretch as it went.
+ * The transcript of a meeting, as written on its transcript card: every line with when and who
+ * said it, people's words only (what the assistant did is kept apart, in the meeting's record).
  */
-export function transcriptText(o: { lines: readonly MeetingLine[]; noted?: readonly MeetingNoted[]; summary?: readonly string[]; who: (voice: number) => string; max?: number }): string {
-  const parts: string[] = []
-  if (o.summary?.length) parts.push('Summary', ...o.summary.map((s) => `- ${s}`), '')
-  parts.push('Transcript')
-  const noted = [...(o.noted ?? [])].sort((a, b) => a.at - b.at)
-  let n = 0
+export function transcriptText(o: { lines: readonly { at: number; text: string; who?: string }[]; max?: number }): string {
+  const parts: string[] = ['Transcript']
   let last = ''
   for (const l of o.lines) {
-    while (n < noted.length && noted[n].at <= l.at) parts.push(`  → ${noted[n++].text}`)
-    const who = l.voice !== undefined ? o.who(l.voice) : ''
+    const who = l.who ?? ''
     // The same person going on is one paragraph.
     const head = who && who !== last ? `${who}: ` : ''
     last = who || last
     parts.push(`[${clock(l.at)}] ${head}${l.text}`)
   }
-  while (n < noted.length) parts.push(`  → ${noted[n++].text}`)
   const text = parts.join('\n')
   const max = o.max ?? 100_000
   return text.length <= max ? text : `${text.slice(0, max - 60).replace(/\n[^\n]*$/, '')}\n… (the rest is in the meeting’s replay)`
 }
+
+/**
+ * The names and terms in use on a board, for speech to text to spell right: people's names, then
+ * words that stand out in what's written (names of things, acronyms, words with numbers in them).
+ */
+export function glossaryOf(b: Board, names: readonly string[] = [], max = 40): string[] {
+  const out = new Map<string, string>()
+  const add = (w: string) => {
+    const t = w.trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    if (t.length < 2 || t.length > 40 || out.has(t.toLowerCase())) return
+    out.set(t.toLowerCase(), t)
+  }
+  for (const n of names) if (!/^voice \d+$/i.test(n)) add(n)
+  for (const i of b.items) for (const a of i.assignees ?? []) add(a)
+  for (const i of b.items) {
+    if (out.size >= max) break
+    if (!i.text || i.kind === 'pen' || i.kind === 'image') continue
+    // Words written with a capital mid-sentence, in capitals, or with digits: the names of things.
+    for (const line of i.text.split('\n')) {
+      const words = line.split(/\s+/).filter(Boolean)
+      words.forEach((w, k) => {
+        const clean = w.replace(/[^\p{L}\p{N}'’-]/gu, '')
+        const first = k === 0 || /[.!?:•]$/.test(words[k - 1] ?? '') || /^[-•*]$/.test(words[k - 1] ?? '')
+        if (COMMON.has(clean.toLowerCase()) || /^(ctrl|alt|shift|cmd|esc|tab|enter)/i.test(clean)) return
+        if (/^\p{Lu}{2,}\d*$/u.test(clean) || /\p{L}\d|\d\p{L}/u.test(clean) || (!first && /^\p{Lu}\p{Ll}/u.test(clean)) || /\p{Ll}\p{Lu}/u.test(clean)) add(clean)
+      })
+    }
+  }
+  return [...out.values()].slice(0, max)
+}
+
+/** Words written with a capital for emphasis or as a label, that speech to text spells right anyway. */
+const COMMON = new Set(
+  'the a an and or but if of to in on at by for with from up out new your you our we they it this that these those my me is are was be been not no yes all any some more most other one two three first last next here there what when where who why how help open close save edit add delete done todo to-do key keys note notes item items page pages board boards wiki map mind idea ideas see show hide decided proposed actions action question questions blockers updates update overview summary transcript every alt monday tuesday wednesday thursday friday saturday sunday today tomorrow yesterday week month year january february march april may june july august september october november december'.split(
+    ' ',
+  ),
+)

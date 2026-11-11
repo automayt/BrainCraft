@@ -1450,8 +1450,8 @@ describe('ending a meeting', () => {
     const { e, m } = met()
     e.endMeeting()
     expect(e.meeting!.ending).toBe(true)
-    e.pickMeeting({ collage: false, kanban: true, notes: true })
-    expect(e.meeting!.picks).toEqual({ collage: false, kanban: true, notes: true })
+    e.pickMeeting({ collage: false, kanban: true, notes: true, timeline: true })
+    expect(e.meeting!.picks).toEqual({ collage: false, kanban: true, notes: true, timeline: true })
     const card = e.tidyMeeting(m.before, e.meeting!.picks!, { text: 'Transcript: Launch', description: '[0:01] Jo: hello' })!
     expect(e.board.items.map((i) => i.kind)).not.toContain('timeline')
     expect(e.board.items.map((i) => i.kind)).toContain('kanban')
@@ -1472,8 +1472,8 @@ describe('ending a meeting', () => {
     e.endMeeting()
     expect(e.meeting!.hurry).toBe(true)
     // Picking once it hurries changes nothing.
-    e.pickMeeting({ collage: true, kanban: true, notes: true })
-    expect(e.meeting!.picks).toEqual({ collage: true, kanban: true, notes: true })
+    e.pickMeeting({ collage: true, kanban: true, notes: true, timeline: true })
+    expect(e.meeting!.picks).toEqual({ collage: true, kanban: true, notes: true, timeline: true })
   })
 
   it('links the frame to its replay, and plays it back read-only', () => {
@@ -1491,5 +1491,52 @@ describe('ending a meeting', () => {
     e.stopReplay()
     expect(e.readOnly).toBe(false)
     expect(e.viewBoard.items.some((i) => i.id === frame)).toBe(true)
+  })
+})
+
+describe('the assistant’s notes in a meeting', () => {
+  /** A change the assistant proposes: `f` applied to the board as it is. */
+  const ai = (e: Editor, id: string, f: (b: typeof e.board) => typeof e.board) => e.applyAi(id, id, diff(e.board, f(e.board)))
+
+  it('leave alone what was there before, what’s locked, and what someone changed by hand', () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([{ op: 'createNote', text: 'From before' }])
+    const before = e.board.items[0].id
+    e.setFlow(true, { meeting: true })
+    // The assistant makes two notes.
+    ai(e, 'a1', (b) => applyOps(b, [{ op: 'createNote', text: 'Venue' }, { op: 'createNote', text: 'Budget' }], { measure: fakeMeasure }).board)
+    const [venue, budget] = e.board.items.filter((i) => i.id !== before).map((i) => i.id)
+    // Someone changes one by hand, and locks… nothing else.
+    e.edit((b) => B.updateItem(b, venue, (i) => ({ ...i, text: 'Venue: the hall' })))
+    expect([...e.meetingTouched()]).toEqual([venue])
+    // The assistant then rewrites all three.
+    ai(e, 'a2', (b) => B.updateItems(b, new Set([before, venue, budget]), (i) => ({ ...i, text: `${i.text}!` })))
+    expect(B.getItem(e.board, before)!.text).toBe('From before')
+    expect(B.getItem(e.board, venue)!.text).toBe('Venue: the hall')
+    expect(B.getItem(e.board, budget)!.text).toBe('Budget!')
+    expect(e.status).toContain('Kept your changes to 2 objects')
+  })
+
+  it('glow where they are, without moving the view once the notes are in sight', () => {
+    const e = editor()
+    e.setFlow(true, { meeting: true })
+    ai(e, 'a1', (b) => applyOps(b, [{ op: 'createNote', text: 'Venue', at: { x: 0, y: 0 } }], { measure: fakeMeasure }).board)
+    const cam = { ...e.camera }
+    ai(e, 'a2', (b) => applyOps(b, [{ op: 'createNote', text: 'Far away', at: { x: 9000, y: 9000 } }], { measure: fakeMeasure }).board)
+    expect(e.camera).toEqual(cam)
+    expect(e.selection.size).toBe(0)
+    expect(e.pulse!.ids.map((id) => B.getItem(e.board, id)!.text)).toEqual(['Far away'])
+  })
+})
+
+describe('laying mind maps out again once fonts load', () => {
+  it('keeps every map where it was, time after time', () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([{ op: 'createMindMap', outline: 'Launch planning for May\n  Venue\n  Budget', at: { x: 1000, y: 0 } }])
+    const where = () => e.board.items.filter((i) => i.kind === 'mind').map((i) => [i.x, i.y])
+    const before = where()
+    e.relayout()
+    e.relayout()
+    expect(where()).toEqual(before)
   })
 })

@@ -442,14 +442,25 @@ Admin, next:
 Done: an agenda from the board's priorities, instructions to the robot,
 picking what a meeting leaves (idea collage, Kanban, notes), the transcript
 with its summary, notes from a recording, playing a meeting back, voices
-remembered by name, and Guided (the assistant asking the questions). Next:
+remembered by name, and Guided (the assistant asking the questions). Then,
+from trying it on an hour-long meeting: the review of the whole transcript
+in the background, one meeting record every view is made from (overview,
+decisions, actions, mind map, speaker timeline), Important / Normal /
+Verbose detail, ideas that lead back to when they were said, voices worked
+out from what's said and one correction for a whole meeting, edits and
+locks left alone, a still view with a glow on what's new, speech to text
+given the board's names and terms, and the next agenda starting with what
+the last meeting left. Next:
 
-- [ ] **Remember the last meeting.** When the same people meet again, start
-  with what's still open from their last frame ("Brian was booking the venue:
-  done?"). The catch: who's there is only known once they've spoken, so it
-  would wait for the first few voices it knows, then bring up what's open for
-  them, or ask "Is this the launch group again?" at the start.
-- [ ] **One phone per person,** for a room where everyone's in the same
+- [ ] **Remember who was there.** The agenda already starts with what the
+  board's last meeting left; with voices known, it could start with what's
+  open for the people actually in the room ("Brian was booking the venue:
+  done?"), once their voices have been heard.
+- [ ] **Voices sorted out again at the end.** The server keeps each phrase's
+  voiceprint for the conversation; once the meeting is over it could group
+  them all again at once (more surely than one at a time, as they come) and
+  hand the review its corrections alongside the words.
+- [ ] **One phone per person, for a room where everyone's in the same
   place. On calls it doesn't help: each microphone picks up everyone else
   from the speakers, so the voices model stays the way to tell people apart.
 - [ ] **Voices and accounts.** A remembered voice tied to a signed-in person,
@@ -457,6 +468,10 @@ remembered by name, and Guided (the assistant asking the questions). Next:
 - [ ] **A recording too long for memory** (several hours of video): read it a
   piece at a time instead of all at once.
 - [ ] **Talk time.** How long each person spoke, on the transcript note.
+- [ ] **A topic's thread.** Click a topic in the speaker timeline's key to
+  light up its ideas across every row and in the mind map.
+- [ ] **Review with a picture of the board.** Give the review what was drawn
+  (flowcharts, sequences) as well as the words, so it can tidy those too.
 
 ## From the design review (November 2026)
 

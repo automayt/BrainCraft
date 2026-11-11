@@ -1248,6 +1248,13 @@ button.on,
   padding: 14px;
 }
 
+.item-text.centered.page {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 18px 20px;
+}
+
 .item-text.ellipse {
   padding: 15% 18%;
 }
@@ -6601,11 +6608,44 @@ button.inbox-entry:focus-visible {
 }
 
 .ai-compose-foot {
+  flex-wrap: wrap;
   margin-top: 6px;
 }
 
-.ai-compose-foot small {
+/* What it runs on: one line of its own, cut short with … rather than squeezed into a column. */
+.ai-compose-meta {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-compose-meta small {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ways to talk wrap onto as many rows as the panel needs; Talk and Send keep to the right. */
+.ai-compose-modes {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-compose-send {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ai-compose-foot button {
+  white-space: nowrap;
 }
 
 .ai-setup {
@@ -6695,6 +6735,35 @@ button.inbox-entry:focus-visible {
 .ai-history li.undone strong {
   text-decoration: line-through;
   color: var(--muted);
+}
+
+/* What the assistant just added: a glow that swells once and fades. */
+.ai-pulse rect {
+  fill: none;
+  stroke: var(--accent);
+  pointer-events: none;
+  opacity: 0;
+  animation: ai-pulse 1.8s ease-out;
+}
+
+@keyframes ai-pulse {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Nothing moving: a still outline for the moment it shows. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-pulse rect {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 /* Proposal previews on the canvas. */

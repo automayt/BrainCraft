@@ -398,6 +398,26 @@ export class VoiceBook {
     return gone
   }
 
+  /**
+   * A remembered voice called by another name (a name corrected after a meeting); a name another
+   * remembered voice has makes them one. False when there's none by the old name.
+   */
+  rename(from: string, to: string): boolean {
+    const key = cleanName(from).toLowerCase()
+    const name = cleanName(to)
+    const p = this.people.get(key)
+    if (!p || !name) return false
+    const into = this.people.get(name.toLowerCase())
+    this.people.delete(key)
+    if (into && into !== p && into.sum.length === p.sum.length) {
+      for (let i = 0; i < p.sum.length; i++) into.sum[i] += p.sum[i]
+      into.heard += p.heard
+      into.updated = (this.o.now ?? Date.now)()
+    } else this.people.set(name.toLowerCase(), { ...p, name, updated: (this.o.now ?? Date.now)() })
+    this.changed()
+    return true
+  }
+
   list(): { name: string; heard: number; updated: number }[] {
     return [...this.people.values()].map((p) => ({ name: p.name, heard: p.heard, updated: p.updated })).sort((a, b) => a.name.localeCompare(b.name))
   }

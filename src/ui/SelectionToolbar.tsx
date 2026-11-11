@@ -18,6 +18,9 @@ import { canLink, describeLink, type ItemLink } from '../model/itemLink'
 import { mentionCandidates, objectLabel } from '../model/notes'
 import { targetFromUrl } from '../store/deepLink'
 import { useWorkspace } from './useWorkspace'
+import { meetingFrameOf, reviewMeeting, showDetail } from './meetingFiles'
+import { clock } from '../model/meeting'
+import { DETAILS, type Detail } from '../model/meetingReview'
 import { followLink } from './followLink'
 import { useUi } from './uiContext'
 import { useEditor } from './useEditor'
@@ -366,11 +369,7 @@ export function SelectionToolbar() {
             ↻ Turn over
           </button>
         )}
-        {items.length === 1 && items[0].kind === 'frame' && items[0].meeting && (
-          <button title="Play the meeting back: how its notes grew, with what was said" onClick={() => ui.replayMeeting(items[0].id)}>
-            ▶ Replay meeting
-          </button>
-        )}
+        {items.length === 1 && <MeetingTools id={items[0].id} />}
         {items.length === 1 && isDrawing(items[0]) && (
           <button title="Open this drawing in Excalidraw (or double-click it)" onClick={() => editor.openDrawing(items[0].id)}>
             {editor.readOnly ? 'Open drawing' : 'Edit drawing'}
@@ -768,5 +767,59 @@ function LineStyleIcon({ style }: { style: 'straight' | 'elbow' | 'curved' }) {
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  )
+}
+
+/**
+ * A meeting's frame: play it back, show its views at another level of detail, correct who was
+ * who, and review it again. An idea from a meeting: play it back from when it was said.
+ */
+function MeetingTools({ id }: { id: number }) {
+  const editor = useEditor()
+  const ui = useUi()
+  const ws = useWorkspace()
+  const item = editor.board.items.find((i) => i.id === id)
+  if (!item?.meeting) return null
+  if (item.kind === 'frame' && item.meeting.replay) {
+    const busy = editor.reviewing.has(id)
+    return (
+      <>
+        <button title="Play the meeting back: how its notes grew, with what was said" onClick={() => ui.replayMeeting(id)}>
+          ▶ Replay
+        </button>
+        {item.meeting.detail && (
+          <select
+            className="meeting-detail"
+            aria-label="Detail"
+            title="How much the mind map and speaker timeline show (the transcript keeps every word)"
+            value={item.meeting.detail}
+            disabled={editor.readOnly || busy}
+            onChange={(e) => void showDetail(ws, editor, id, Number(e.target.value) as Detail)}
+          >
+            {DETAILS.map((d) => (
+              <option key={d.level} value={d.level} title={d.hint}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button title="Who was in the meeting: correct a name once, and it changes everywhere in it" onClick={() => ui.openMeetingPeople(id)}>
+          People
+        </button>
+        {!editor.readOnly && (
+          <button title="Read the whole transcript again and update the overview, mind map, timeline and actions (anything you changed by hand stays as it is)" disabled={busy} onClick={() => void reviewMeeting(ws, editor, id)}>
+            {busy ? 'Reviewing…' : item.meeting.detail ? 'Review again' : 'Review'}
+          </button>
+        )}
+      </>
+    )
+  }
+  const at = item.meeting.at
+  const frame = at !== undefined ? meetingFrameOf(editor, id) : null
+  if (at === undefined || frame === null) return null
+  return (
+    <button title="Play the meeting back from when this was said" onClick={() => ui.replayMeeting(frame, at)}>
+      ▶ From {clock(at)}
+    </button>
   )
 }

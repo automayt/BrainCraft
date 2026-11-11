@@ -6,6 +6,7 @@
  */
 
 import type { MeetingLine } from './meeting'
+import { type Review, cleanReview } from './meetingReview'
 import { cleanConnector, cleanItem } from './sanitize'
 import type { Board, Connector, Id, Item } from './types'
 
@@ -19,18 +20,31 @@ export interface ReplayStep {
   noted?: string
 }
 
+/**
+ * A meeting's record, kept as a file with the board: what was said (people's words only), what
+ * the assistant did as it went (apart from them), how the notes grew, and once it's been reviewed,
+ * the meeting written down once (see meetingReview.ts), which every view in its frame is made from.
+ */
 export interface MeetingRecord {
-  v: 1
+  v: 1 | 2
   title: string
   /** When it started (ms since the epoch), and how long it went on (ms). */
   started: number
   length: number
   /** Made from a recording rather than heard live: its file name. */
   recording?: string
-  /** What was said, with who already put as a name. */
-  lines: (Omit<MeetingLine, 'voice'> & { who?: string })[]
+  /** What was said, with who already put as a name; `unclear`: words speech to text wasn't sure of. */
+  lines: RecordLine[]
   steps: ReplayStep[]
+  /** What the assistant did as the meeting went on, kept apart from what people said. */
+  log?: { at: number; text: string }[]
+  /** The meeting written down once, after it ended. */
+  review?: Review
+  /** What was chosen to keep. */
+  picks?: { collage: boolean; kanban: boolean; notes: boolean; timeline?: boolean }
 }
+
+export type RecordLine = Omit<MeetingLine, 'voice'> & { who?: string }
 
 /** What the meeting has made so far: its objects and links, each as it is now. */
 export interface Snapshot {
@@ -101,7 +115,7 @@ export function stepsBy(r: MeetingRecord, at: number): number {
 export function readRecord(text: string): MeetingRecord | null {
   try {
     const r = JSON.parse(text) as MeetingRecord
-    if (r?.v !== 1 || !Array.isArray(r.steps) || !Array.isArray(r.lines) || typeof r.started !== 'number' || typeof r.length !== 'number') return null
+    if ((r?.v !== 1 && r?.v !== 2) || !Array.isArray(r.steps) || !Array.isArray(r.lines) || typeof r.started !== 'number' || typeof r.length !== 'number') return null
     const okStep = (s: ReplayStep) => s && typeof s.at === 'number' && [s.put, s.gone, s.links, s.unlinked].every(Array.isArray)
     if (!r.steps.every(okStep)) return null
     // From a shared board's files: what it puts on the board is checked like anything else that arrives.
@@ -116,8 +130,23 @@ export function readRecord(text: string): MeetingRecord | null {
     }))
     const lines = r.lines
       .filter((l) => l && typeof l.at === 'number' && typeof l.text === 'string')
-      .map((l) => ({ at: l.at, text: l.text.slice(0, 20_000), ...(typeof l.who === 'string' ? { who: l.who.slice(0, 60) } : {}) }))
-    return { v: 1, title: typeof r.title === 'string' ? r.title.slice(0, 200) : 'Meeting', started: r.started, length: r.length, ...(typeof r.recording === 'string' ? { recording: r.recording.slice(0, 200) } : {}), lines, steps }
+      .map((l) => ({ at: l.at, text: l.text.slice(0, 20_000), ...(typeof l.who === 'string' ? { who: l.who.slice(0, 60) } : {}), ...(l.unclear === true ? { unclear: true as const } : {}) }))
+    const log = Array.isArray(r.log) ? r.log.filter((x) => x && typeof x.at === 'number' && typeof x.text === 'string').map((x) => ({ at: x.at, text: x.text.slice(0, 2000) })) : undefined
+    const review = cleanReview(r.review)
+    const p = r.picks
+    const picks = p && typeof p === 'object' ? { collage: p.collage === true, kanban: p.kanban === true, notes: p.notes === true, ...(p.timeline === true ? { timeline: true } : {}) } : undefined
+    return {
+      v: r.v,
+      title: typeof r.title === 'string' ? r.title.slice(0, 200) : 'Meeting',
+      started: r.started,
+      length: r.length,
+      ...(typeof r.recording === 'string' ? { recording: r.recording.slice(0, 200) } : {}),
+      lines,
+      steps,
+      ...(log ? { log } : {}),
+      ...(review ? { review } : {}),
+      ...(picks ? { picks } : {}),
+    }
   } catch {
     return null
   }

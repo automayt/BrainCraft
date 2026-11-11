@@ -93,7 +93,7 @@ flowchart", "move the press release first".
 - In a meeting it can tell who said what, when the server has a speaker
   model: see [Who said what, in a meeting](#who-said-what-in-a-meeting). To
   have it take a meeting's notes rather than build what you ask, see
-  [Meeting notes](#meeting-notes).
+  [MeetingNotes](#meetingnotes).
 - The microphone needs the page on https or on this computer (localhost); see
   [HTTPS.md](HTTPS.md).
 
@@ -138,31 +138,38 @@ window to itself. Just talk.
   becomes its own idea in the right place, never more words crammed into one
   box (see [Building things properly](#building-things-properly)).
 
-### Meeting notes
+### MeetingNotes
 
-**Meeting notes** (**Meeting notes** in the panel, **Or take notes in a
-meeting** on a blank board, or Ctrl K → Meeting notes) is Flowstate for a
+**MeetingNotes** (**MeetingNotes** in the panel, **Or take notes in a
+meeting** on a blank board, or Ctrl K → MeetingNotes) is Flowstate for a
 meeting: you're talking to other people, not to the assistant, and it takes
 the notes on the board as the meeting goes.
 
 - It writes down every point, proposal, number, date, decision, action item
-  and open question, in a few words each, and keeps shaping them:
+  and open question, each a complete idea in a few words of its own (never
+  "yeah", half a sentence, or words speech to text wasn't sure of), and keeps
+  shaping them:
   - the notes themselves are a mind map, with the meeting's subject in the
-    middle and a branch for each topic;
+    middle, a branch for each main concept, topics within those, and the
+    points under them, grouped by meaning; a branch with more than about
+    seven points is split into topics;
   - what people describe gets drawn as soon as there's enough of it, and
     redrawn as they go on: the steps of a process as a flowchart, who sends
     what to whom as a sequence diagram, dates and phases as a timeline,
     options as a table;
-  - decisions, action items and open questions go in one **Decisions and
-    actions** table, with who and when.
+  - decisions, proposals, action items, blockers and open questions go in
+    one **Decisions and actions** table, with who and when; a Decision is
+    only what was agreed, and what was only put forward is a Proposal.
 - With voices told apart (below), each point carries who said it.
 - **An agenda first.** On a board with things on it, the assistant starts by
   suggesting an agenda: the things on the board most worth the meeting's
   time, by its own estimate of their priority (open questions, undecided or
   waiting items, work that's stuck, things due soon, risks, what has the most
-  votes). It goes on the board as an **Agenda** table, and shows at the top
-  left while you meet; each item gets its tick once it's been talked about,
-  and the summary at the end says what wasn't covered.
+  votes). When the board has an earlier meeting, the agenda starts with what
+  it left unfinished (actions, blockers, open questions, proposals not yet
+  agreed), marked "Left from last time". It goes on the board as an
+  **Agenda** table, and shows at the top left while you meet; each item gets
+  its tick once it's been talked about.
 - **Talking to the robot.** Anyone can tell the notes what to do mid-meeting,
   by calling the assistant (robot, assistant, BrainCraft) or with a
   note-taking phrase: "robot, note that the budget is fifty thousand",
@@ -177,29 +184,68 @@ the notes on the board as the meeting goes.
   sense of.
 - It keeps the sound that comes out of the computer's speakers (the others
   on a call), where talking to the assistant takes it away as an echo.
+- **The view stays still.** What the notes add glows briefly where it is
+  (a still outline instead, when the computer is set to reduce motion); the
+  board only moves by itself when none of the notes are in view yet.
+- **Your changes stay yours.** The notes never change what was on the board
+  before the meeting, anything locked, or anything someone in the meeting
+  changed by hand: they build on it instead, and say so. Every change the
+  assistant makes is in its **History**, to take back, and Ctrl Z undoes it.
 - **Esc** (or **End meeting**) ends it, and asks what the meeting should
   leave on the board, each ticked at first (it remembers your choice):
   - **Idea collage:** the ideas placed as they fit best, as flowcharts,
     sequence diagrams and timelines;
   - **Kanban:** an **Actions** board with a card for each action item, saying
     who, with its due date when one was said;
-  - **Notes:** the mind map of every point, and the decisions and actions
-    table.
+  - **Notes:** an overview of what the meeting came to, the decisions and
+    actions table, and a mind map of the ideas;
+  - **Speaker timeline:** a row for each person, their ideas in the order
+    they were said, coloured by topic, with a key to the colours.
 
-  Meanwhile what was still being said goes in. Then the assistant finishes
-  what you kept, takes away what you didn't, sums the meeting up and names
-  it, and everything the meeting made goes into one frame with that name,
-  such as "Q3 launch planning". Pressing Esc again (**Leave now**) skips that
-  last turn and keeps everything; the frame is then named for the day.
-- **The transcript** is always kept, as a note in the frame: the summary on
-  the note itself, and every word in its comments (Alt C), each line with
-  when and who said it, and what the assistant noted from each stretch.
+  Meanwhile what was still being said goes in. Then everything the meeting
+  made goes into one frame with the transcript, and MeetingNotes closes: you
+  can carry on. Pressing Esc again (**Leave now**) skips the question and
+  keeps everything.
+- **The review.** Once the frame is made, the assistant reads the whole
+  transcript again, in the background (the frame's **Review** button says
+  **Reviewing…** meanwhile), and writes the meeting down once: who really
+  spoke, every complete idea (with when, who, what it's about and how much it
+  matters), and what the meeting came to. Every view in the frame is made
+  from that one record, so they agree:
+  - **Overview:** a note with the key updates, what was decided, what was
+    proposed but not agreed, each action with its owner ("owner not agreed"
+    when nobody took it) and due date, blockers and open questions;
+  - the **Decisions and actions** table and the **Actions** board, from the
+    same outcomes;
+  - the **mind map**, rebuilt from the complete ideas, grouped by concept
+    and topic, reading left to right like an outline (fold a branch with its
+    − button, or /);
+  - the **speaker timeline**.
+
+  The frame is named for what the meeting was about and laid out: the
+  overview, transcript, decisions and actions along the top, then the
+  timeline, the mind map, and everything else the meeting made. Anything you
+  changed by hand or locked (during the meeting or since) is left as it is,
+  and the status says which views were kept. **Review again** on the frame
+  does it all again, updating the same objects rather than adding copies.
+- **Detail.** The frame's **Detail** menu shows the mind map and the speaker
+  timeline at **Important** (only what matters most), **Normal** or
+  **Verbose** (every idea). A long meeting starts at Important. The
+  transcript always keeps every word.
+- **Where an idea came from.** Each idea in the mind map and timeline says
+  who said it, when, and their words (in its description, Alt C); select it
+  and **▶ From 4:05** plays the meeting back from that moment.
+- **The transcript** is always kept, as a note in the frame: what people
+  said and nothing else, every line with when and who said it, in its
+  comments (Alt C). Lines cut at a pause mid-sentence are joined back up.
+  Words speech to text wasn't sure of are marked "[unclear: …]". What the
+  assistant did along the way is kept apart, in the meeting's record.
 - What was on the board before stays as it was, outside the frame. Several
   meetings on one board each get a frame of their own.
 - **Space** mutes, as in Flowstate.
 
 **From a recording.** **From a recording…** in the panel (or Ctrl K →
-Meeting notes from a recording) takes the notes from a meeting that's already
+MeetingNotes from a recording) takes the notes from a meeting that's already
 happened: choose its audio or video (mp3, m4a, wav, webm, mp4…). The browser
 reads its sound and cuts it into phrases at the pauses; each goes to the
 server's speech to text like a phrase heard through the microphone, voices and
@@ -208,13 +254,20 @@ Space pauses. When it's all been read, you're asked what to keep, as at the
 end of a meeting. It needs the server's speech to text, and the whole
 recording is read into memory, so a few hours at most.
 
-**Watching it again.** A meeting's frame keeps its replay: select the frame
-and press **▶ Replay meeting** (or Ctrl K → Replay this meeting). The board
+**Watching it again.** A meeting's frame keeps its record: select the frame
+and press **▶ Replay** (or Ctrl K → Replay this meeting). The board
 goes back to how it was when the meeting started and grows again turn by turn,
 with what was said appearing at the bottom as it was said and what the
 assistant noted at the top. Play and pause (Space), drag to any moment, and
-speed it up (8× at first, up to 32×); Esc closes it. The replay is kept as a
+speed it up (8× at first, up to 32×); Esc closes it. The record is kept as a
 file with the board (in its files), so everyone with the board can watch it.
+
+**Hearing it right.** Each phrase goes to speech to text with the names and
+terms in use on the board (people's names, and words written as names of
+things, such as product names and acronyms) and what was said just before,
+so names and terms come out spelled as you write them. A pause of about a
+second ends a phrase in a meeting (a breath mid-sentence doesn't), and what
+speech to text makes up over silence ("Thanks for watching!") is left out.
 
 ### Guided
 
@@ -258,12 +311,21 @@ each person's ideas down as theirs.
   knows, each with **Forget**.
 - The assistant gets each line with who said it ("[Sam] let's move it to
   May"), and puts the person on the idea, shown as the people an idea is
-  assigned to. It goes only by who said the line, never by guessing from the
-  words.
+  assigned to. It goes by who said the line.
+- **Worked out from what's said.** When the conversation makes it clear who a
+  voice is (someone says "thanks, Sam" and Voice 2 answers, or someone
+  introduces themselves), the assistant names that voice for the meeting. It
+  isn't remembered by the server, as nobody named it. At the end, the review
+  reads the whole transcript and names voices and lines it can tell from
+  what's around them, everywhere in the meeting.
+- **One correction, everywhere.** **People** on a meeting's frame (or Ctrl K
+  → People in this meeting) lists who spoke; renaming one changes the name
+  on everything in the frame, in the transcript and in the meeting's record,
+  and a voice the server remembers is known by the new name from then on.
 - Talking on your own, nothing changes: one voice is just you.
 - It needs to hear everyone: a laptop in a meeting room, or a call on the
   computer's speakers. Over headphones it only hears you.
-- In Meeting notes, setting **People** keeps it to that many voices, the
+- In MeetingNotes, setting **People** keeps it to that many voices, the
   surest way to stop one person turning into two.
 - Short phrases ("yeah, and the budget") are the hardest to place: one under
   about a second never starts a new voice, and goes to the nearest one already

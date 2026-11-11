@@ -107,14 +107,14 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     { id: 'flowstate', label: 'Flowstate: build the board by talking', group: 'Board', keys: 'Ctrl Shift F', aliases: 'voice talk speak dictate microphone live immersive focus full screen', run: () => ui.flow(true) },
     {
       id: 'meeting',
-      label: 'Meeting notes: the assistant takes the notes as you meet',
+      label: 'MeetingNotes: the assistant takes the notes as you meet',
       group: 'Board',
-      aliases: 'meeting call transcribe transcript minutes notes record listen webex zoom teams standup',
+      aliases: 'meeting notes meetingnotes call transcribe transcript minutes record listen webex zoom teams standup',
       run: () => ui.flow(true, { meeting: true }),
     },
     {
       id: 'meeting-recording',
-      label: 'Meeting notes from a recording…',
+      label: 'MeetingNotes from a recording…',
       group: 'Board',
       aliases: 'meeting recording audio video file upload transcribe transcript minutes notes past call mp3 m4a mp4 wav',
       run: () => void pickRecording().then((f) => f && ui.flow(true, { recording: f })),
@@ -126,8 +126,11 @@ export function commands(editor: Editor, ui: Ui): Command[] {
       aliases: 'guide guided questions ask interview coach socratic think through brainstorm prompt help me think',
       run: () => ui.flow(true, { guide: true }),
     },
-    ...(editor.single?.kind === 'frame' && editor.single.meeting
-      ? [{ id: 'replay', label: 'Replay this meeting', group: 'Board', aliases: 'replay play back playback meeting watch again catch up timelapse history', run: () => ui.replayMeeting(editor.single!.id) }]
+    ...(editor.single?.kind === 'frame' && editor.single.meeting?.replay
+      ? [
+          { id: 'replay', label: 'Replay this meeting', group: 'Board', aliases: 'replay play back playback meeting watch again catch up timelapse history', run: () => ui.replayMeeting(editor.single!.id) },
+          { id: 'meeting-people', label: 'People in this meeting…', group: 'Board', aliases: 'rename speaker voice who name correct fix person people meeting', run: () => ui.openMeetingPeople(editor.single!.id) },
+        ]
       : []),
     { id: 'ai', label: 'Connect an AI assistant…', group: 'Board', aliases: 'mcp claude codex cursor llm agent pair', run: ui.openAi },
     { id: 'versions', label: 'Version history…', group: 'Board', aliases: 'restore backup undo older snapshot time', run: ui.openVersions },

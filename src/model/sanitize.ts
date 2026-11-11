@@ -30,7 +30,7 @@ import type {
   TableData,
   TimelineData,
 } from './types'
-import { type Automation, defaultColor, defaultFontSize } from './types'
+import { type Automation, MEETING_VIEWS, type MeetingView, defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { cleanFile, isFileId } from './files'
 import { cleanAssignees, cleanEntry, isEntryId } from './timeTracking'
@@ -345,7 +345,19 @@ export function cleanItem(raw: unknown): Item | null {
   const lang = str(raw.lang, 32)
   if (lang) out.lang = lang
   if (isObj(raw.brainstorm)) out.brainstorm = { by: str(raw.brainstorm.by, 60) ?? '', ...(raw.brainstorm.revealed === true ? { revealed: true } : {}) }
-  if (isObj(raw.meeting) && isFileId(raw.meeting.replay)) out.meeting = { replay: raw.meeting.replay as string }
+  if (isObj(raw.meeting)) {
+    const m = raw.meeting
+    const at = num(m.at)
+    const sig = str(m.sig, 16)
+    const meeting: NonNullable<Item['meeting']> = {
+      ...(isFileId(m.replay) ? { replay: m.replay } : {}),
+      ...(m.detail === 1 || m.detail === 2 || m.detail === 3 ? { detail: m.detail } : {}),
+      ...(typeof m.view === 'string' && MEETING_VIEWS.has(m.view) ? { view: m.view as MeetingView } : {}),
+      ...(sig && /^[a-z0-9]+$/.test(sig) ? { sig } : {}),
+      ...(at !== undefined && at >= 0 ? { at: Math.min(Math.round(at), 1e9) } : {}),
+    }
+    if (Object.keys(meeting).length) out.meeting = meeting
+  }
   if (isObj(raw.wheel)) {
     const s = raw.wheel.spin
     if (isObj(s) && [s.at, s.from, s.to, s.result].every((n) => num(n) !== undefined)) {

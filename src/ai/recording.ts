@@ -1,5 +1,5 @@
 /**
- * Meeting notes from a recording: a meeting's audio (or a video of it) is read in the browser,
+ * MeetingNotes from a recording: a meeting's audio (or a video of it) is read in the browser,
  * cut into phrases at its pauses, and each phrase goes to the server's speech to text like a
  * phrase heard through the microphone, voices and all. It goes only as fast as the notes keep up.
  */
@@ -41,10 +41,11 @@ export function splitPhrases(samples: Float32Array, rate = RATE, o: SplitOptions
   const floor = sorted[Math.floor(frames * 0.15)]
   const loud = sorted[Math.floor(frames * 0.95)]
   const gate = Math.max(0.004, floor + (loud - floor) * 0.12, floor * 2)
-  const pauseFrames = Math.round((o.pause ?? 0.45) / 0.03)
+  // A breath mid-sentence isn't the end of it: phrases cut too short lose their sense (and names).
+  const pauseFrames = Math.round((o.pause ?? 0.8) / 0.03)
   const shortest = Math.round((o.shortest ?? 0.3) / 0.03)
   const longest = Math.round((o.longest ?? 25) / 0.03)
-  const pad = Math.round(0.15 / 0.03)
+  const pad = Math.round(0.25 / 0.03)
   const spans: [number, number][] = []
   let start = -1
   let quiet = 0
@@ -133,7 +134,7 @@ export async function fileEar(file: Blob, o: FileEarOptions, on: Hearing): Promi
       if (stopped || !heard) break
       if (heard.merged?.length) on.merged?.(heard.merged)
       if (heard.voice !== undefined && heard.name) on.named?.(heard.voice, heard.name)
-      if (/[\p{L}\p{N}]/u.test(heard.text)) on.final(heard.text.trim(), heard.voice, Math.round((spans[k].start / RATE) * 1000))
+      if (/[\p{L}\p{N}]/u.test(heard.text)) on.final(heard.text.trim(), heard.voice, Math.round((spans[k].start / RATE) * 1000), heard.unclear)
       o.progress?.(Math.round((spans[k].end / RATE) * 1000), length)
       while (!stopped && (paused || o.backlog?.())) await sleep(300)
     }

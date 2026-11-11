@@ -3,7 +3,7 @@
  * assistant's few words float at the top as it works; what you're saying shows faintly at the
  * bottom. It stays in the window unless you ask for full screen. Esc ends it.
  *
- * Meeting notes is Flowstate hearing a meeting: the assistant takes the notes, a small sign at the
+ * MeetingNotes is Flowstate hearing a meeting: the assistant takes the notes, a small sign at the
  * top left says it's listening and for how long (or how far through a recording it is), the agenda
  * shows under it with what's been covered, and Esc ends the meeting: what to keep is asked, then
  * the notes are finished and framed, and it leaves.
@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import type { AgendaItem, MeetingPicks } from '../model/meeting'
+import { ALL_PICKS, type AgendaItem, type MeetingPicks } from '../model/meeting'
 import { flowFullScreen } from './flowFullScreen'
 import { PushToMute } from './pushToMute'
 import { useEditor } from './useEditor'
@@ -64,17 +64,18 @@ export function askedLast(turns: readonly { role: string; text: string }[]): str
 function lastPicks(): MeetingPicks {
   try {
     const v = JSON.parse(localStorage.getItem('braincraft.meetingPicks') ?? 'null') as Partial<MeetingPicks> | null
-    if (v && typeof v === 'object') return { collage: v.collage !== false, kanban: v.kanban !== false, notes: v.notes !== false }
+    if (v && typeof v === 'object') return { collage: v.collage !== false, kanban: v.kanban !== false, notes: v.notes !== false, timeline: v.timeline !== false }
   } catch {
     // Not kept here: everything, as at first.
   }
-  return { collage: true, kanban: true, notes: true }
+  return { ...ALL_PICKS }
 }
 
 const PICKS: { key: keyof MeetingPicks; label: string; hint: string }[] = [
   { key: 'collage', label: 'Idea collage', hint: 'The ideas placed as they fit best: flows, sequences, timelines' },
   { key: 'kanban', label: 'Kanban', hint: 'A card for each action, with who and when' },
-  { key: 'notes', label: 'Notes', hint: 'The mind map of every point, and the decisions and actions' },
+  { key: 'notes', label: 'Notes', hint: 'An overview of what was decided and who does what, the decisions table, and a mind map of the ideas' },
+  { key: 'timeline', label: 'Speaker timeline', hint: 'A row for each person, their ideas in the order said, coloured by topic' },
 ]
 
 /** Asked when a meeting ends: what to keep. The transcript is always kept. */
@@ -125,7 +126,7 @@ function MeetingPicker({ onPick }: { onPick: (p: MeetingPicks) => void }) {
           </span>
         </label>
       ))}
-      <p>The transcript is always kept, with a summary, and the meeting can be played back.</p>
+      <p>The transcript is always kept, and the meeting can be played back. The notes are then reviewed against the whole transcript while you carry on.</p>
       <button ref={first} type="submit" className="primary">
         Finish the notes <kbd>Enter</kbd>
       </button>
@@ -174,9 +175,9 @@ function MeetingSign({ started, ending, picked, people, onPeople, listening, rec
   }, [])
   const read = recording && recording.length ? Math.min(1, recording.done / recording.length) : 0
   return (
-    <div className={`flow-meeting${listening && !ending ? ' on' : ''}`} role="status" aria-label="Meeting notes">
+    <div className={`flow-meeting${listening && !ending ? ' on' : ''}`} role="status" aria-label="MeetingNotes">
       <i aria-hidden="true" />
-      <span>{ending ? (picked ? 'Finishing the notes…' : recording ? 'The recording is over' : 'The meeting is over') : recording ? `Notes from ${recording.name}` : 'Meeting notes'}</span>
+      <span>{ending ? (picked ? 'Finishing the notes…' : recording ? 'The recording is over' : 'The meeting is over') : recording ? `Notes from ${recording.name}` : 'MeetingNotes'}</span>
       {!ending &&
         (recording ? (
           <time title="How far through the recording">
@@ -217,7 +218,7 @@ export function Flowstate(props: {
   onLeave: () => void
   /** In a meeting, the voices heard, to name them. */
   voices?: React.ReactNode
-  /** Meeting notes: when it started, whether it's being wrapped up, how many people are in it (when the server tells voices apart), its agenda. */
+  /** MeetingNotes: when it started, whether it's being wrapped up, how many people are in it (when the server tells voices apart), its agenda. */
   meeting?: MeetingProps
   /** Guided: the question the assistant asks now. */
   question?: string | null

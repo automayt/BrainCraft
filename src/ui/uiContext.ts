@@ -47,14 +47,16 @@ export interface Ui {
   /** Presents the board's frames as slides, full screen. */
   present: () => void
   /**
-   * Flowstate: just the board, built by talking to the assistant; with `meeting`, Meeting notes
+   * Flowstate: just the board, built by talking to the assistant; with `meeting`, MeetingNotes
    * (the assistant taking notes on a meeting), or with `recording`, notes from a recording of one;
    * with `guide`, the assistant asking the questions. Leaving a meeting wraps it up first (what to
-   * keep, its last notes, then its frame), unless `now`.
+   * keep, then its frame and review), unless `now`.
    */
   flow: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; now?: boolean }) => void
-  /** Plays back the meeting a frame holds (see MeetingReplay). */
-  replayMeeting: (frame: number) => void
+  /** Plays back the meeting a frame holds (see MeetingReplay), from `at` ms in. */
+  replayMeeting: (frame: number, at?: number) => void
+  /** Who was in a meeting, to correct a name everywhere in it. */
+  openMeetingPeople: (frame: number) => void
   /** The recorded runs of the flowchart containing `id`. */
   openRuns: (id: number) => void
   /** The link to AI assistants through the MCP server. */

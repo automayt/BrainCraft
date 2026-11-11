@@ -333,6 +333,7 @@ export function Canvas() {
           <DragPreview editor={editor} />
           <MagnetPreview editor={editor} />
           {editor.aiPreview && <AiPreview editor={editor} />}
+          {editor.pulse && <AiPulse editor={editor} />}
         </g>
         <Overlays editor={editor} />
         {editor.running && <RunOverlay editor={editor} />}
@@ -457,6 +458,25 @@ function cullArea(editor: Editor): Rect | null {
 }
 
 /** An AI proposal before it's applied: new and changed objects as ghosts, removed ones crossed out. */
+/**
+ * What the assistant just added, glowing for a moment so it's easy to spot as the board grows
+ * (a still outline instead, for those who'd rather nothing moved).
+ */
+function AiPulse({ editor }: { editor: Editor }) {
+  const z = editor.camera.zoom
+  const p = editor.pulse!
+  const pad = 8 / z
+  return (
+    <g key={p.key} className="ai-pulse" aria-hidden="true">
+      {p.ids.map((id) => {
+        const i = B.getItem(editor.board, id)
+        if (!i || editor.hidden.has(id)) return null
+        return <rect key={id} x={i.x - pad} y={i.y - pad} width={i.w + 2 * pad} height={i.h + 2 * pad} rx={10 / z} strokeWidth={3 / z} />
+      })}
+    </g>
+  )
+}
+
 function AiPreview({ editor }: { editor: Editor }) {
   const z = editor.camera.zoom
   const patches = editor.aiPreview!.patches
@@ -949,7 +969,7 @@ function EmptyBoard() {
         </button>
         <button className="flow-start" onClick={() => ui.flow(true, { meeting: true })}>
           <strong>Or take notes in a meeting</strong>
-          <small>Meeting notes: the assistant listens and writes it all up here</small>
+          <small>MeetingNotes: the assistant listens and writes it all up here</small>
         </button>
         <button className="flow-start" onClick={() => ui.flow(true, { guide: true })}>
           <strong>Or be asked questions</strong>

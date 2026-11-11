@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps } from '../api/ops'
 import { emptyBoard } from './board'
-import { agendaOf, clock, meetingItems, meetingParts, meetingTitle, summaryPoints, transcriptText, unpicked, untitledMeeting } from './meeting'
+import { agendaOf, clock, glossaryOf, joinFragments, meetingItems, meetingParts, meetingTitle, summaryPoints, transcriptText, unpicked, untitledMeeting } from './meeting'
 import { fakeMeasure } from './test-helpers'
 
 const ctx = { measure: fakeMeasure }
@@ -89,8 +89,8 @@ describe('what to keep when a meeting ends', () => {
 
   it('takes away only what wasn’t picked, never the transcript', () => {
     const { board, ids, transcript } = made()
-    expect(unpicked(board, ids, { collage: true, kanban: true, notes: true }, new Set([transcript]))).toEqual([])
-    const drop = unpicked(board, ids, { collage: false, kanban: true, notes: false }, new Set([transcript]))
+    expect(unpicked(board, ids, { collage: true, kanban: true, notes: true, timeline: true }, new Set([transcript]))).toEqual([])
+    const drop = unpicked(board, ids, { collage: false, kanban: true, notes: false, timeline: false }, new Set([transcript]))
     expect(drop.map((id) => board.items.find((i) => i.id === id)!.kind).sort()).toEqual(['mind', 'mind', 'table', 'table', 'timeline'])
     expect(drop).not.toContain(transcript)
   })
@@ -110,24 +110,35 @@ describe('a meeting’s transcript', () => {
     expect(summaryPoints('Title: Launch\n- Moved to **May**\n* Brian books the venue\nThen some words.\n1. Budget open')).toEqual(['Moved to May', 'Brian books the venue', 'Budget open'])
   })
 
-  it('has the summary, then every line with when and who, and what was noted along the way', () => {
+  it('has every line with when and who said it, and people’s words only', () => {
     const text = transcriptText({
       lines: [
-        { at: 1000, voice: 1, text: 'Shall we move it?' },
-        { at: 4000, voice: 1, text: 'To May, I mean.' },
-        { at: 65_000, voice: 2, text: 'Yes.' },
+        { at: 1000, who: 'Jo', text: 'Shall we move it?' },
+        { at: 4000, who: 'Jo', text: 'To May, I mean.' },
+        { at: 65_000, who: 'Brian', text: 'Yes.' },
         { at: 70_000, text: 'Who said that?' },
       ],
-      noted: [{ at: 5000, text: 'Noted the move to May.' }],
-      summary: ['Launch moves to May'],
-      who: (v) => (v === 1 ? 'Jo' : 'Brian'),
     })
-    expect(text).toBe(['Summary', '- Launch moves to May', '', 'Transcript', '[0:01] Jo: Shall we move it?', '[0:04] To May, I mean.', '  → Noted the move to May.', '[1:05] Brian: Yes.', '[1:10] Who said that?'].join('\n'))
+    expect(text).toBe(['Transcript', '[0:01] Jo: Shall we move it?', '[0:04] To May, I mean.', '[1:05] Brian: Yes.', '[1:10] Who said that?'].join('\n'))
+  })
+
+  it('puts back together lines a pause cut mid-sentence', () => {
+    const lines = joinFragments([
+      { at: 0, voice: 1, text: 'We should move the launch' },
+      { at: 2000, voice: 1, text: 'To May because of the venue.' },
+      { at: 4000, voice: 1, text: 'Agreed?' },
+      { at: 5000, voice: 2, text: 'I think' },
+      { at: 30_000, voice: 2, text: 'so, later.' },
+      { at: 31_000, voice: 1, text: 'And the budget' },
+      { at: 32_000, voice: 2, text: 'is fine.' },
+    ])
+    expect(lines.map((l) => l.text)).toEqual(['We should move the launch to May because of the venue.', 'Agreed?', 'I think', 'so, later.', 'And the budget', 'is fine.'])
+    expect(lines[0].at).toBe(0)
   })
 
   it('stops short of what a note can hold', () => {
     const lines = Array.from({ length: 500 }, (_, k) => ({ at: k * 1000, text: 'words '.repeat(20) }))
-    const text = transcriptText({ lines, who: () => '', max: 5000 })
+    const text = transcriptText({ lines, max: 5000 })
     expect(text.length).toBeLessThanOrEqual(5000)
     expect(text.endsWith('(the rest is in the meeting’s replay)')).toBe(true)
   })
@@ -136,5 +147,20 @@ describe('a meeting’s transcript', () => {
     expect(clock(0)).toBe('0:00')
     expect(clock(65_400)).toBe('1:05')
     expect(clock(3_725_000)).toBe('1:02:05')
+  })
+})
+
+describe('the words in use, for speech to text', () => {
+  it('takes people’s names and the names of things, not common words, keys or sentence starts', () => {
+    const b = applyOps(
+      emptyBoard(),
+      [
+        { op: 'createNote', text: 'Press Ctrl K to open Your boards' },
+        { op: 'createNote', text: 'Move the Kubernetes cluster to AWS before Q3.\nThe GraphQL gateway stays' },
+        { op: 'createNote', text: '• Decided\n• Launch with Acme Corp' },
+      ],
+      ctx,
+    ).board
+    expect(glossaryOf(b, ['Sam', 'Voice 2'])).toEqual(['Sam', 'Kubernetes', 'AWS', 'Q3', 'GraphQL', 'Acme', 'Corp'])
   })
 })

@@ -448,13 +448,22 @@ export interface Item extends Rect {
   flipped?: boolean
   /** On a comment card: a spinner wheel whose options are the card's lines, and its latest spin. */
   wheel?: { spin?: { at: number; from: number; to: number; result: number; label?: string } }
-  /** On a meeting's frame: the file its replay is kept in (see `meetingReplay.ts`). */
-  meeting?: { replay: string }
+  /**
+   * Made by MeetingNotes. On a meeting's frame: the file its record and replay are kept in, and the
+   * detail its views are shown at. On a view made from the meeting's review (see
+   * `meetingReview.ts`): which view it belongs to, the fingerprint it was made with (a hand edit
+   * changes it, and a later review leaves it alone), and for an idea, when in the meeting it was said.
+   */
+  meeting?: { replay?: string; detail?: 1 | 2 | 3; view?: MeetingView; sig?: string; at?: number }
   /** Set only on the copy drawn for someone a hidden note is hidden from; never saved. */
   masked?: boolean
 }
 
-/** A dot vote: each person spreads `each` votes over the options; totals hidden until revealed. */
+/** The views a meeting's review makes in its frame ('made': something else the meeting made). */
+export type MeetingView = 'overview' | 'map' | 'timeline' | 'outcomes' | 'actions' | 'transcript' | 'made'
+export const MEETING_VIEWS: ReadonlySet<string> = new Set(['overview', 'map', 'timeline', 'outcomes', 'actions', 'transcript', 'made'])
+
+/** A dot vote:each person spreads `each` votes over the options; totals hidden until revealed. */
 export interface Poll {
   options: Id[]
   each: number

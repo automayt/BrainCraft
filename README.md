@@ -758,16 +758,20 @@ shares live exactly like a board.
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.
-- **Meeting notes:** Flowstate for a meeting. The assistant listens and takes
+- **MeetingNotes:** Flowstate for a meeting. The assistant listens and takes
   the notes on the board as you meet: a mind map of every point, the flows,
   sequences and timelines people describe drawn as they go, and a table of
   decisions and actions with who and when. When it ends, it all goes in one
   frame named for the meeting, with its transcript. It starts with an
-  agenda from what matters most on the board, takes instructions ("robot,
-  note that…"), asks what to keep at the end (idea collage, Kanban, notes),
-  can work from a recording, and can be played back to see how it grew.
-  Voices, once named, are known in every meeting after. See
-  [docs/AI.md](docs/AI.md#meeting-notes).
+  agenda from what matters most on the board (what the last meeting left
+  unfinished first), takes instructions ("robot, note that…"), asks what to
+  keep at the end (idea collage, Kanban, notes, speaker timeline), then
+  reviews the whole transcript in the background into an overview of what
+  was decided, proposed and set to do, a mind map and a timeline of who said
+  what, at the level of detail you choose. It can work from a recording, and
+  be played back to see how it grew. Voices, once named, are known in every
+  meeting after, and a name corrected once changes everywhere. See
+  [docs/AI.md](docs/AI.md#meetingnotes).
 - **Guided:** the assistant asks you questions to draw your ideas out, and
   maps the questions and answers as you go.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or

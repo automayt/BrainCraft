@@ -8,7 +8,7 @@ import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loa
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
-import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, howLong, meetingItems, meetingTitle, summaryPoints, transcriptText, untitledMeeting } from '../model/meeting'
+import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, glossaryOf, howLong, joinFragments, meetingItems, transcriptText, untitledMeeting } from '../model/meeting'
 import { type MeetingRecord, type ReplayStep, type Snapshot, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
@@ -19,7 +19,7 @@ import { useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, askedLast, plainLine } from './Flowstate'
 import { VoiceNames } from './VoiceNames'
-import { pickRecording } from './meetingFiles'
+import { carryOver, pickRecording, reviewMeeting, saveRecord } from './meetingFiles'
 import { KnownVoices } from './KnownVoices'
 
 /** A request that says nothing for this long has stalled. */
@@ -357,10 +357,10 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   // A turn is with the assistant (kept outside React too, so a turn spoken meanwhile waits its go).
   const busy = useRef(false)
   /** Sends a message; resolves with the reply once it's done (null when it couldn't be sent). */
-  const send = async (text: string, images: AiImage[] = [], label?: string, live: Live = false, extra: { picks?: MeetingPicks } = {}): Promise<Turn | null> => {
+  const send = async (text: string, images: AiImage[] = [], label?: string, live: Live = false, extra: { carry?: { title: string; items: string[] } } = {}): Promise<Turn | null> => {
     const s = session()
-    // The turns that start or end something say nothing of their own.
-    const quiet = live === 'meeting-end' || live === 'meeting-agenda' || live === 'guide-start'
+    // The turns that start something say nothing of their own.
+    const quiet = live === 'meeting-agenda' || live === 'guide-start'
     if (!s || (!text.trim() && !quiet) || busy.current) return null
     busy.current = true
     // A long built-in request shows as its short label in the chat.
@@ -455,7 +455,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
    * What a meeting is keeping for its transcript and replay: every line heard, and each turn's
    * changes to what it made. `last`: how far into it the latest line was (ms).
    */
-  const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; last: number }>({ lines: [], steps: [], snap: emptySnapshot(), last: 0 })
+  const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; last: number; did: { at: number; text: string }[] }>({ lines: [], steps: [], snap: emptySnapshot(), last: 0, did: [] })
   /** How far into the meeting it is (ms): in a recording, as far as it's been read. */
   const meetingClock = () => {
     const m = editor.meeting
@@ -485,14 +485,31 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       if (dropTalk.current) return
       const how: Live = editor.meeting ? 'meeting' : editor.guide ? 'guide' : true
       const reply = await send(t, [], `🎙 ${t}`, how)
-      if (how === 'meeting') keepStep(reply ? plainLine(reply.text) : undefined)
+      if (how !== 'meeting') return
+      // Voices worked out from what was said ("Who: Voice 2 = Sam").
+      const words = reply?.text ?? ''
+      for (const m of words.matchAll(/^\s*who\s*:\s*(.+?)\s*=\s*(.+?)\s*$/gim)) talk.guessVoice(m[1], m[2])
+      // What it did, kept apart from what people said (a turn that failed did nothing).
+      const noted = plainLine(words.replace(/^\s*who\s*:.*$/gim, ''))
+      if (reply && noted) log.current.did.push({ at: meetingClock(), text: noted })
+      keepStep(reply ? noted || undefined : undefined)
     },
     line: (l) => {
       const m = editor.meeting
       if (!m) return
       const at = l.at ?? Date.now() - m.started
       log.current.last = Math.max(log.current.last, at)
-      log.current.lines.push({ at, text: l.text, ...(l.voice !== undefined ? { voice: l.voice } : {}) })
+      log.current.lines.push({ at, text: l.text, ...(l.voice !== undefined ? { voice: l.voice } : {}), ...(l.unclear ? { unclear: true } : {}) })
+    },
+    // Names and terms in use, then what was said just before: speech to text spells them right.
+    context: () => {
+      if (!editor.meeting && !editor.guide) return ''
+      const terms = glossaryOf(editor.board, talk.voices.map((v) => v.name)).join(', ')
+      const before = log.current.lines
+        .slice(-3)
+        .map((l) => l.text.replace(/\[unclear: [^\]]*\]/g, ''))
+        .join(' ')
+      return `${terms ? `${terms}. ` : ''}${before}`.trim()
     },
     progress: (done, length) => editor.meetingProgress(done, length),
     ended: () => editor.endMeeting(),
@@ -555,10 +572,15 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       const m = editor.meeting
       if (checked && canTalk && !talk.on && !m?.ending && !started.current) {
         started.current = true
-        if (m) log.current = { lines: [], steps: [], snap: snapshot(editor.board, m.before, m.linksBefore), last: 0 }
+        if (m) log.current = { lines: [], steps: [], snap: snapshot(editor.board, m.before, m.linksBefore), last: 0, did: [] }
         void talk.start(m?.recording?.file)
-        // A meeting starts with an agenda from what matters most on the board; a guide with its first question.
-        if (m && !m.recording && m.before.size) void send('', [], '📋 Suggesting an agenda from the board', 'meeting-agenda').then(() => keepStep())
+        // A meeting starts with an agenda from what matters most on the board (what's left from
+        // the last meeting first); a guide with its first question.
+        if (m && !m.recording && m.before.size)
+          void carryOver(ws, editor)
+            .catch(() => null)
+            .then((carry) => send('', [], carry ? '📋 Suggesting an agenda, starting with what’s left from last time' : '📋 Suggesting an agenda from the board', 'meeting-agenda', carry ? { carry } : {}))
+            .then(() => keepStep())
         else if (editor.guide) void send('', [], '🧭 Your first question', 'guide-start')
       }
     } else {
@@ -570,8 +592,9 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   }, [flow, checked, canTalk])
 
   // A meeting wraps up when it ends: what to keep is asked while what was still being said is
-  // heard, then come the last of the notes and its title, the transcript, and one frame around it
-  // all (its replay kept with the board). Ending it again hurries.
+  // heard, then everything it made goes in one frame with its transcript, and MeetingNotes closes.
+  // The meeting is then reviewed against its whole transcript in the background, and the frame's
+  // views made from that. Ending it again hurries.
   const ending = !!(flow && editor.meeting?.ending)
   const hurry = !!(flow && editor.meeting?.hurry)
   const picked = flow ? (editor.meeting?.picks ?? null) : null
@@ -585,48 +608,46 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     const hurry = new Promise<void>((ok) => (hurried.current = ok))
     const picks = new Promise<MeetingPicks>((ok) => (onPicked.current = ok))
     void (async () => {
-      let title: string | null = null
-      let points: string[] = []
       let chose: MeetingPicks = ALL_PICKS
       try {
         await Promise.race([talk.finish(), hurry])
         chose = (await Promise.race([picks, hurry.then(() => null)])) ?? ALL_PICKS
-        // A turn of its own (the agenda) may still be under way: the last one waits for it.
+        // The last stretch said is still being noted: let it finish.
         while (busy.current && !editor.meeting?.hurry) await wait(250)
-        if (!editor.meeting?.hurry && connection && !editor.readOnly && editor.board.items.some((i) => !m.before.has(i.id))) {
-          const reply = await Promise.race([send('', [], '🗒 The meeting is over: finishing the notes', 'meeting-end', { picks: chose }), hurry.then(() => null)])
-          title = reply ? meetingTitle(reply.text) : null
-          points = reply ? summaryPoints(reply.text) : []
-          if (reply) keepStep()
-        }
       } catch {
         // Whatever went wrong, what was noted still gets its frame.
       } finally {
-        const name = title ?? untitledMeeting(m.started)
-        const { lines, steps } = log.current
-        const length = Math.max(meetingClock(), lines.at(-1)?.at ?? 0)
+        const name = untitledMeeting(m.started)
+        const { steps, did } = log.current
+        const length = Math.max(meetingClock(), log.current.lines.at(-1)?.at ?? 0)
+        // Who said each line, by the names the voices ended up with.
+        const lines = log.current.lines.map((l) => ({ at: l.at, text: l.text, ...(l.voice !== undefined ? { who: talk.nameOf(l.voice) } : {}), ...(l.unclear ? { unclear: true as const } : {}) }))
+        const touched = editor.meetingTouched()
+        const people = talk.voices.length > 1 ? `, ${talk.voices.length} people` : ''
         const card = lines.length
-          ? {
-              text: `Transcript: ${name}\n${howLong(length)}${talk.voices.length > 1 ? `, ${talk.voices.length} people` : ''}${points.length ? `\n\n${points.map((p) => `• ${p}`).join('\n')}` : ''}\n\nEvery word is in this note’s comments (Alt C).`,
-              description: transcriptText({ lines, noted: steps.flatMap((st) => (st.noted ? [{ at: st.at, text: st.noted }] : [])), summary: points, who: talk.nameOf }),
-            }
+          ? { text: `Transcript: ${name}\n${howLong(length)}${people}\n\nEvery word is in this note’s comments (Alt C).`, description: transcriptText({ lines: joinFragments(lines) }) }
           : null
         editor.tidyMeeting(m.before, chose, card)
         keepStep()
         const framed = editor.frameMeeting(name, m.before)
-        editor.setStatus(framed !== null ? `Meeting notes put in the frame “${name}”` : 'Nothing was noted in this meeting')
-        // The replay goes with the board, linked from the frame.
-        if (framed !== null && log.current.steps.length) {
+        const reviews = framed !== null && lines.length > 0 && !!connection && !editor.readOnly
+        editor.setStatus(framed === null ? 'Nothing was noted in this meeting' : reviews ? 'MeetingNotes framed; reviewing them against the whole transcript…' : `MeetingNotes put in the frame “${name}”`)
+        if (framed !== null) {
           const record: MeetingRecord = {
-            v: 1,
+            v: 2,
             title: name,
             started: m.started,
             length,
             ...(m.recording ? { recording: m.recording.file.name } : {}),
-            lines: lines.map((l) => ({ at: l.at, text: l.text, ...(l.voice !== undefined ? { who: talk.nameOf(l.voice) } : {}) })),
-            steps: log.current.steps,
+            lines,
+            steps,
+            log: did,
+            picks: chose,
           }
-          void ws.keepMadeFile(`Replay of ${name}.json`, 'application/json', new Blob([JSON.stringify(record)], { type: 'application/json' })).then((id) => id && editor.setMeetingReplay(framed, id))
+          // The record goes with the board (linked from the frame), then the review, in the background.
+          void saveRecord(ws, editor, framed, record).then(() => {
+            if (reviews) void reviewMeeting(ws, editor, framed, { record, picks: chose, touched, arrange: true })
+          })
         }
         wrapping.current = false
         onFlow?.(false, { now: true })
@@ -983,101 +1004,104 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 }
               }}
             />
+            {/* What it runs on, then the ways to talk (wrapping as the panel narrows), then Talk and Send. */}
             <div className="ai-compose-foot">
-              <small className="muted" title={state?.assistant ? usageTitle(state.assistant.usage) : undefined}>
-                {connection ? makeBackend(connection, settings.model).label : ''}
-                {state?.assistant && usageLine(state.assistant.usage)}
-              </small>
-              {turns.length > 0 && !running && (
-                <button
-                  type="button"
-                  className="link"
-                  onClick={() => {
-                    // Starts over everywhere (it's one conversation), and forgets the kept copy.
-                    clearTimeout(saving)
-                    if (thread) {
-                      thread.turns = []
-                      thread.kept = null
-                      thread.assistant?.reset()
-                    }
-                    void forgetThread(keeper)
-                    editor.previewAi(null)
-                    refresh()
-                  }}
-                >
-                  New chat
-                </button>
-              )}
-              {!talk.on && onFlow && (
-                <button
-                  type="button"
-                  className="talk-btn"
-                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
-                  title="Flowstate: just the board, built as you talk (Ctrl Shift F)"
-                  onClick={() => onFlow(true)}
-                >
-                  Flowstate
-                </button>
-              )}
-              {!talk.on && onFlow && (
-                <button
-                  type="button"
-                  className="talk-btn"
-                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
-                  title="Meeting notes: the assistant listens to your meeting and takes the notes on this board, with diagrams, then frames them when it ends"
-                  onClick={() => onFlow(true, { meeting: true })}
-                >
-                  Meeting notes
-                </button>
-              )}
-              {!talk.on && onFlow && !!server.transcribe && (
-                <button
-                  type="button"
-                  className="talk-btn"
-                  disabled={!connection || editor.readOnly || isWiki(editor.board)}
-                  title="Meeting notes from a recording: choose a meeting’s audio or video, and the assistant takes the notes from it"
-                  onClick={() => void pickRecording().then((f) => f && onFlow(true, { recording: f }))}
-                >
-                  From a recording…
-                </button>
-              )}
-              {!talk.on && onFlow && (
-                <button
-                  type="button"
-                  className="talk-btn"
-                  disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
-                  title="Guided: the assistant asks you questions to draw your ideas out, and maps the answers as you go"
-                  onClick={() => onFlow(true, { guide: true })}
-                >
-                  Guide me
-                </button>
-              )}
-              {!talk.on && (
-                <button
-                  type="button"
-                  className="talk-btn"
-                  disabled={!connection || editor.readOnly || !talk.how}
-                  title={
-                    !talk.how
-                      ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari'
-                      : 'Talk: the assistant builds the board as you speak, no need to send'
-                  }
-                  onClick={() => void talk.start()}
-                >
-                  <MicIcon size={15} /> Talk
-                </button>
-              )}
-              {running && !talk.on ? (
-                <button type="button" onClick={() => abort.current?.abort()}>
-                  Stop
-                </button>
-              ) : (
-                !talk.on && (
-                  <button className="primary" type="submit" disabled={!input.trim()}>
-                    Send
+              <div className="ai-compose-meta">
+                <small className="muted" title={`${connection ? makeBackend(connection, settings.model).label : ''}${state?.assistant ? `\n${usageTitle(state.assistant.usage)}` : ''}`}>
+                  {connection ? makeBackend(connection, settings.model).label : ''}
+                  {state?.assistant && usageLine(state.assistant.usage)}
+                </small>
+                {turns.length > 0 && !running && (
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => {
+                      // Starts over everywhere (it's one conversation), and forgets the kept copy.
+                      clearTimeout(saving)
+                      if (thread) {
+                        thread.turns = []
+                        thread.kept = null
+                        thread.assistant?.reset()
+                      }
+                      void forgetThread(keeper)
+                      editor.previewAi(null)
+                      refresh()
+                    }}
+                  >
+                    New chat
                   </button>
-                )
+                )}
+              </div>
+              {!talk.on && onFlow && (
+                <div className="ai-compose-modes" role="group" aria-label="Ways to work by talking">
+                  <button
+                    type="button"
+                    className="talk-btn"
+                    disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                    title="Flowstate: just the board, built as you talk (Ctrl Shift F)"
+                    onClick={() => onFlow(true)}
+                  >
+                    Flowstate
+                  </button>
+                  <button
+                    type="button"
+                    className="talk-btn"
+                    disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                    title="MeetingNotes: the assistant listens to your meeting and takes the notes on this board, then frames them and reviews them against the whole transcript"
+                    onClick={() => onFlow(true, { meeting: true })}
+                  >
+                    MeetingNotes
+                  </button>
+                  {!!server.transcribe && (
+                    <button
+                      type="button"
+                      className="talk-btn"
+                      disabled={!connection || editor.readOnly || isWiki(editor.board)}
+                      title="MeetingNotes from a recording: choose a meeting’s audio or video, and the assistant takes the notes from it"
+                      onClick={() => void pickRecording().then((f) => f && onFlow(true, { recording: f }))}
+                    >
+                      From a recording…
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="talk-btn"
+                    disabled={!connection || editor.readOnly || !talk.how || isWiki(editor.board)}
+                    title="Guided: the assistant asks you questions to draw your ideas out, and maps the answers as you go"
+                    onClick={() => onFlow(true, { guide: true })}
+                  >
+                    Guide me
+                  </button>
+                </div>
               )}
+              <div className="ai-compose-send">
+                {!talk.on && (
+                  <button
+                    type="button"
+                    className="talk-btn"
+                    disabled={!connection || editor.readOnly || !talk.how}
+                    title={
+                      !talk.how
+                        ? 'This browser can’t hear you here: the server needs speech to text (BRAINCRAFT_TRANSCRIBE_URL), or use Chrome, Edge or Safari'
+                        : 'Talk: the assistant builds the board as you speak, no need to send'
+                    }
+                    onClick={() => void talk.start()}
+                  >
+                    <MicIcon size={15} /> Talk
+                  </button>
+                )}
+                {running && !talk.on ? (
+                  <button type="button" onClick={() => abort.current?.abort()}>
+                    Stop
+                  </button>
+                ) : (
+                  !talk.on && (
+                    <button className="primary" type="submit" disabled={!input.trim()}>
+                      Send
+                    </button>
+                  )
+                )}
+              </div>
             </div>
             {talk.error && <p className="talk-error">{talk.error}</p>}
           </form>

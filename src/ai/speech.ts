@@ -13,8 +13,11 @@
 import { Downsampler, Phrases, wav } from './phrases'
 
 export interface Hearing {
-  /** A finished phrase, which voice said it (when the server can tell voices apart), and when, in a recording (ms). */
-  final(text: string, voice?: number, at?: number): void
+  /**
+   * A finished phrase, which voice said it (when the server can tell voices apart), when, in a
+   * recording (ms), and whether speech to text wasn't sure of some of it (marked "[unclear: …]").
+   */
+  final(text: string, voice?: number, at?: number, unclear?: boolean): void
   /** The server knows who a voice is: named here, or in an earlier meeting. */
   named?(voice: number, name: string): void
   /** Voices the server found to be one person: each [later, earlier] is the earlier one from now on. */
@@ -129,6 +132,8 @@ export interface Heard {
   name?: string
   /** Voices found to be one person since the last phrase: [the later one, the one it went into]. */
   merged?: [number, number][]
+  /** Some of it wasn't heard clearly (marked "[unclear: …]" in the text). */
+  unclear?: boolean
 }
 
 export interface ServerEarOptions {
@@ -221,7 +226,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
                 on.interim?.('')
                 if (t.merged?.length) on.merged?.(t.merged)
                 if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
-                if (words(t.text)) on.final(t.text.trim(), t.voice)
+                if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear)
               },
               (err: Error) => {
                 if (!stopped) on.error(err.message)

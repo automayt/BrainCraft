@@ -404,6 +404,19 @@ describe('voices remembered by name', () => {
     expect((await call('DELETE', '/api/ai/voices?name=Brian')).status).toBe(404)
   })
 
+  it('takes a corrected name, and knows the voice by it in the next meeting', async () => {
+    const { say, name, call } = setup()
+    await say('meeting1', 3)
+    await say('meeting1', 3)
+    await name('meeting1', 1, 'Brain')
+    expect((await call('PATCH', '/api/ai/voices?name=Brain', Buffer.from(JSON.stringify({ name: 'Brian' })))).status).toBe(200)
+    expect((await call('GET', '/api/ai/voices')).body.voices).toEqual([expect.objectContaining({ name: 'Brian' })])
+    await say('meeting2', 3)
+    expect((await say('meeting2', 3)).name).toBe('Brian')
+    expect((await call('PATCH', '/api/ai/voices?name=Nobody', Buffer.from(JSON.stringify({ name: 'X' })))).status).toBe(404)
+    expect((await call('PATCH', '/api/ai/voices?name=Brian', Buffer.from('{}'))).status).toBe(400)
+  })
+
   it('refuses a name for a voice that isn’t there, or no name', async () => {
     const { name, call } = setup()
     expect((await name('meeting1', 4, 'Sam')).status).toBe(404)

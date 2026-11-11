@@ -46,6 +46,8 @@ import * as W from '../model/wiki'
 import * as FS from '../model/files'
 import { type MeetingPicks, meetingItems, unpicked } from '../model/meeting'
 import { type MeetingRecord, replayBoard, stepsBy } from '../model/meetingReplay'
+import { contentSig } from '../model/meetingReview'
+import { type Polish, polishMeeting, renameInFrame } from './meetingViews'
 import type { PagePlan } from '../files/toWiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys, toggleTask } from '../model/markdown'
@@ -369,7 +371,7 @@ export class Editor {
    */
   flow = false
   /**
-   * Meeting notes: Flowstate hearing a meeting, the assistant taking notes on the board. What was
+   * MeetingNotes: Flowstate hearing a meeting, the assistant taking notes on the board. What was
    * on the board when it started is kept, so what the meeting made can be framed when it ends.
    * `ending`: wrapping up; `picks`: what to keep, once chosen; `hurry`: asked to leave before
    * that's done. `recording`: notes from a recording rather than a meeting heard now, and how far
@@ -402,6 +404,7 @@ export class Editor {
             recording: o.recording ? { file: o.recording, done: 0, length: 0 } : null,
           }
         : null
+    if (this.meeting) this.aiLeft = new Map()
     this.guide = on && !this.meeting && !!o.guide
     if (on) {
       this.finishEditing()
@@ -449,7 +452,10 @@ export class Editor {
         const box = B.bounds(next, new Set(meetingItems(next, before)))
         const out = applyOps(next, [{ op: 'createNote', text: card.text, color: 'white', w: 320, h: 320, ...(box ? { at: { x: box.x + box.w + 80, y: box.y } } : {}) }], { measure: this.measure })
         made = out.results[0]?.id ?? null
-        next = made === null ? out.board : B.updateItem(out.board, made, (i) => ({ ...i, description: card.description }))
+        next = made === null ? out.board : B.updateItem(out.board, made, (i) => {
+          const t: Item = { ...i, description: card.description, meeting: { view: 'transcript' } }
+          return { ...t, meeting: { view: 'transcript', sig: contentSig(t) } }
+        })
       }
       return next
     })
@@ -475,10 +481,101 @@ export class Editor {
     return frame
   }
 
-  /** Links a meeting's frame to the file its replay is kept in. */
+  /** Links a meeting's frame to the file its record and replay are kept in. */
   setMeetingReplay(frame: Id, file: string) {
     if (this.readOnly || B.getItem(this.board, frame)?.kind !== 'frame') return
-    this.edit((b) => B.updateItem(b, frame, (i) => ({ ...i, meeting: { replay: file } })))
+    this.edit((b) => B.updateItem(b, frame, (i) => ({ ...i, meeting: { ...i.meeting, replay: file } })))
+  }
+
+  /**
+   * While MeetingNotes takes notes, what the assistant left each object it made or changed saying
+   * (a fingerprint): an object saying something else since was changed by hand.
+   */
+  private aiLeft = new Map<Id, string>()
+
+  /**
+   * The objects of a meeting changed by hand while it went on: made by a person rather than the
+   * assistant, or changed since the assistant last did.
+   */
+  meetingTouched(): Set<Id> {
+    const m = this.meeting
+    const out = new Set<Id>()
+    if (!m) return out
+    for (const i of this.board.items) {
+      if (m.before.has(i.id)) continue
+      const left = this.aiLeft.get(i.id)
+      if (left === undefined || left !== contentSig(i) || i.locked) out.add(i.id)
+    }
+    return out
+  }
+
+  /**
+   * In a meeting, the assistant changes only what it made and nobody has changed since: what was
+   * on the board before, what's locked and what someone changed by hand are built on, not changed
+   * (their place may still move with a map's layout). Returns the changes it may make, and how many
+   * objects were kept from it.
+   */
+  private guardMeeting(patches: Patch[]): { patches: Patch[]; kept: number } {
+    const m = this.meeting
+    if (!m) return { patches, kept: 0 }
+    const kept = new Set<Id>()
+    const out = patches.filter((p) => {
+      if (p.k === 'conn') return !(m.linksBefore.has(p.id) && !p.v)
+      if (p.k !== 'item') return true
+      const now = B.getItem(this.board, p.id)
+      if (!now) return true
+      const same = !!p.v && contentSig(p.v) === contentSig(now)
+      if (same) return true
+      const left = this.aiLeft.get(p.id)
+      const mine = !m.before.has(p.id) && !now.locked && left !== undefined && left === contentSig(now)
+      if (!mine) kept.add(p.id)
+      return mine
+    })
+    return { patches: out, kept: kept.size }
+  }
+
+  /** New objects from the assistant, shown with a brief glow (taken away after a moment). */
+  pulse: { ids: Id[]; key: number } | null = null
+  private pulseTimer: ReturnType<typeof setTimeout> | null = null
+  private glow(ids: Id[]) {
+    if (!ids.length) return
+    this.pulse = { ids, key: (this.pulse?.key ?? 0) + 1 }
+    if (this.pulseTimer) clearTimeout(this.pulseTimer)
+    this.pulseTimer = setTimeout(() => {
+      this.pulse = null
+      this.emit()
+    }, 2200)
+  }
+
+  /** Meetings whose review is under way (by frame), for their toolbar to say so. */
+  reviewing = new Set<Id>()
+  setReviewing(frame: Id, on: boolean) {
+    const next = new Set(this.reviewing)
+    if (on) next.add(frame)
+    else next.delete(frame)
+    this.reviewing = next
+    this.emit()
+  }
+
+  /**
+   * A meeting's views made or updated from its review, as one undoable step. Returns the views kept
+   * as they were because someone changed them by hand, or null when nothing could be done.
+   */
+  polishMeeting(o: Polish): string[] | null {
+    if (this.readOnly || B.getItem(this.board, o.frame)?.kind !== 'frame') return null
+    let kept: string[] = []
+    this.edit((b) => {
+      const out = polishMeeting(b, o, this.measure)
+      kept = out.kept
+      return out.board
+    })
+    return kept
+  }
+
+  /** One name corrected everywhere in a meeting's frame, as one undoable step. */
+  renameInMeeting(frame: Id, from: string, to: string) {
+    if (this.readOnly || B.getItem(this.board, frame)?.kind !== 'frame' || !from.trim() || !to.trim()) return
+    this.edit((b) => renameInFrame(b, frame, from.trim(), to.trim()))
   }
 
   // ----- a meeting played back ------------------------------------------------------
@@ -794,7 +891,9 @@ export class Editor {
   /** Measures text again (e.g. once web fonts load) and re-lays out mind maps. */
   relayout() {
     this.measureCache?.()
-    const next = M.layoutAll({ ...this.board, items: this.board.items.map((i) => (i.kind === 'mind' ? { ...i, w: 0 } : i)) }, this.measure)
+    // Every idea measured afresh. A central idea keeps its centre (layout grows it about its centre,
+    // so its width can't simply go to nothing: it would move left by half its width each time).
+    const next = M.layoutAll({ ...this.board, items: this.board.items.map((i) => (i.kind !== 'mind' ? i : i.parent === undefined ? { ...i, x: i.x + i.w / 2, w: 0 } : { ...i, w: 0 })) }, this.measure)
     this.board = next
     this.emit()
   }
@@ -994,6 +1093,9 @@ export class Editor {
     }
     this.finishEditing()
     this.aiPreview = null
+    const guarded = this.guardMeeting(patches)
+    patches = guarded.patches
+    if (guarded.kept) this.setStatus(guarded.kept === 1 ? 'Kept your change to one object: the notes build on it instead' : `Kept your changes to ${guarded.kept} objects: the notes build on them instead`)
     const start = this.board
     this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
     if (merged.size) this.saveVersions(merged, { at: Date.now(), by: 'AI', note: summary })
@@ -1003,8 +1105,22 @@ export class Editor {
     this.onAiHistory?.(this.aiHistory)
     // Show what arrived.
     const added = change.forward.flatMap((p) => (p.k === 'item' && p.v ? [p.id] : []))
-    if (added.length) this.selection = new Set(added.filter((x) => B.getItem(this.board, x)))
+    const shown = added.filter((x) => B.getItem(this.board, x))
+    if (this.meeting) {
+      // A meeting's notes grow where they are: what's new glows briefly, and the view stays put
+      // (unless none of the notes are in view yet).
+      for (const id of shown) this.aiLeft.set(id, contentSig(B.getItem(this.board, id)!))
+      const fresh = shown.filter((id) => !before.items.some((i) => i.id === id && contentSig(i) === this.aiLeft.get(id)))
+      this.glow(fresh)
+      const seen = this.visibleWorld
+      const any = this.board.items.some((i) => !this.meeting!.before.has(i.id) && intersects(seen, B.itemBounds(i)))
+      if (!any) this.frameFlow(B.bounds(this.board, new Set(shown)))
+      this.emit()
+      return true
+    }
+    if (shown.length) this.selection = new Set(shown)
     const box = added.length ? B.bounds(this.board, this.selection) : null
+    this.glow(shown)
     if (this.flow) this.frameFlow(box)
     else if (box) this.flyTo(fit(box, this.openView, 120))
     this.emit()

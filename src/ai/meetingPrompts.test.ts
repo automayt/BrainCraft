@@ -1,29 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { askedLast } from '../ui/Flowstate'
-import { meetingEnd } from './assistant'
+import { MEETING_REVIEW } from './assistant'
+import { parseReview } from '../model/meetingReview'
 
-describe('the end of a meeting, as the assistant is told it', () => {
-  it('asks for a title and a summary, and finishes what was picked', () => {
-    const all = meetingEnd({ collage: true, kanban: true, notes: true })
-    expect(all).toContain('"Title: "')
-    expect(all).toContain('"- "')
-    expect(all).toContain('Decisions and actions')
-    expect(all).toContain('A Kanban board titled "Actions"')
-    expect(all).toContain('The idea collage')
-    expect(all).not.toContain('They don\'t want')
+describe('the review of a meeting, as the assistant is asked for it', () => {
+  it('asks for the form the review is read in', () => {
+    for (const part of ['Title:', 'Speakers:', 'Outcomes:', 'Ideas:', 'Voice 2 = Sam', '12:30 = Brian', '| 1 |']) expect(MEETING_REVIEW).toContain(part)
+    // Proposals are kept apart from what was agreed, and only what's clear names a voice.
+    expect(MEETING_REVIEW).toContain('a Decision is only what was agreed')
+    expect(MEETING_REVIEW).toContain('never guess')
   })
 
-  it('says what not to make', () => {
-    const some = meetingEnd({ collage: false, kanban: true, notes: false })
-    expect(some).toContain('A Kanban board titled "Actions"')
-    expect(some).not.toContain('The idea collage:')
-    expect(some).toContain("They don't want the notes (the mind map and its tables), or the flowcharts, sequences, timelines and other drawings")
-  })
-
-  it('changes nothing when only the transcript is kept', () => {
-    const none = meetingEnd({ collage: false, kanban: false, notes: false })
-    expect(none).toContain('change nothing on the board')
-    expect(none).not.toContain('Then call propose_changes')
+  it('reads back the example it gives', () => {
+    const example = MEETING_REVIEW.slice(MEETING_REVIEW.indexOf('Title:'), MEETING_REVIEW.indexOf('\n\nSpeakers:'))
+    const r = parseReview(example)
+    expect(r.title).toBe('a few words saying what the meeting was about')
+    expect(r.renames).toEqual([{ from: 'Voice 2', to: 'Sam' }])
+    expect(r.lineWho).toEqual([{ at: 750_000, who: 'Brian' }])
+    expect(r.outcomes.map((o) => o.kind)).toEqual(['update', 'decision', 'proposal', 'action', 'blocker', 'question'])
+    expect(r.ideas).toEqual([{ at: 245_000, who: 'Brian', path: ['Launch', 'Venue'], weight: 1, text: 'Three venues downtown are all under budget' }])
   })
 })
 

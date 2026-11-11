@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AiGate } from './aiProxy'
-import { Transcriber } from './transcribe'
+import { Transcriber, contextOf, readTranscript } from './transcribe'
 
 describe('speech to text for talking to the assistant', () => {
   const asked: { url: string; auth?: string; model?: string; language?: string; file?: { type: string; name: string; size: number } }[] = []
@@ -60,5 +60,65 @@ describe('speech to text for talking to the assistant', () => {
     const r = await post(new Uint8Array(400))
     expect(r.status).toBe(502)
     expect(((await r.json()) as { error: string }).error).toMatch(/503: model not loaded/)
+  })
+
+  it('asks how sure it was, with what came before, and falls back when the endpoint can’t say', async () => {
+    const formats: string[] = []
+    const prompts: string[] = []
+    let detailed = true
+    const t2 = new Transcriber({
+      baseUrl: 'http://stt.local/v1',
+      model: 'w',
+      gate: new AiGate({ equal: (a, b) => a === b }),
+      fetch: (async (_url: string, init: RequestInit) => {
+        const form = init.body as FormData
+        formats.push(String(form.get('response_format')))
+        prompts.push(String(form.get('prompt') ?? ''))
+        if (form.get('response_format') === 'verbose_json' && !detailed) return new Response('unknown format', { status: 400 })
+        if (form.get('response_format') === 'json') return Response.json({ text: 'Book Kubernetes venue' })
+        return Response.json({ text: 'Book Kubernetes venue', segments: [{ text: ' Book the venue.', avg_logprob: -0.2, no_speech_prob: 0.01, compression_ratio: 1.2 }] })
+      }) as typeof fetch,
+    })
+    const s2 = createServer((req, res) => void t2.handle(req, res, new URL(req.url ?? '/', 'http://x')))
+    await new Promise<void>((ok) => s2.listen(0, '127.0.0.1', ok))
+    const a = s2.address()
+    const url = `http://127.0.0.1:${typeof a === 'object' && a ? a.port : 0}/api/ai/transcribe`
+    const say = () => fetch(url, { method: 'POST', body: new Uint8Array(400).fill(1), headers: { 'content-type': 'audio/wav', 'x-transcribe-context': encodeURIComponent('Sam, Kubernetes. We were saying') } })
+    expect(await (await say()).json()).toEqual({ text: 'Book the venue.' })
+    expect(formats).toEqual(['verbose_json'])
+    expect(prompts).toEqual(['Sam, Kubernetes. We were saying'])
+    detailed = false
+    expect(await (await say()).json()).toEqual({ text: 'Book Kubernetes venue' })
+    // Asked once more in detail, then plainly from then on.
+    expect(formats).toEqual(['verbose_json', 'verbose_json', 'json'])
+    await say()
+    expect(formats.at(-1)).toBe('json')
+    s2.close()
+  })
+})
+
+describe('reading what speech to text heard', () => {
+  it('marks what it wasn’t sure of, and drops what it made up over silence', () => {
+    expect(
+      readTranscript({
+        text: 'whole',
+        segments: [
+          { text: ' We move the launch to May.', avg_logprob: -0.3, no_speech_prob: 0.02, compression_ratio: 1.3 },
+          { text: ' Cooper Netties cluster', avg_logprob: -1.4, no_speech_prob: 0.1, compression_ratio: 1.1 },
+          { text: ' Thank you.', avg_logprob: -0.9, no_speech_prob: 0.8, compression_ratio: 1 },
+          { text: ' Thanks for watching!', avg_logprob: -0.2, no_speech_prob: 0.1, compression_ratio: 1 },
+        ],
+      }),
+    ).toEqual({ text: 'We move the launch to May. [unclear: Cooper Netties cluster]', unclear: true })
+    expect(readTranscript({ text: ' Thanks for watching! ' })).toEqual({ text: '', unclear: false })
+    expect(readTranscript({ text: ' hello ' })).toEqual({ text: 'hello', unclear: false })
+    expect(readTranscript(null)).toEqual({ text: '', unclear: false })
+  })
+
+  it('takes the context the app sent, as plain words', () => {
+    expect(contextOf(encodeURIComponent('Sam, Brian.\nWe said'))).toBe('Sam, Brian. We said')
+    expect(contextOf('%E0%A4%A')).toBe('')
+    expect(contextOf(undefined)).toBe('')
+    expect(contextOf(encodeURIComponent('x'.repeat(2000)))).toHaveLength(800)
   })
 })

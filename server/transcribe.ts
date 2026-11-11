@@ -16,6 +16,11 @@
  *   POST /api/ai/voices?voices=ID   {"voice": 2, "name": "Sam"}   names a voice, and remembers it
  *   GET /api/ai/voices                                            the voices remembered: [{name, heard, updated}]
  *   DELETE /api/ai/voices?name=Sam                                forgets one
+ *   PATCH /api/ai/voices?name=Sam   {"name": "Samira"}            corrects a remembered name
+ *
+ * An X-Transcribe-Context header (URI-encoded) is passed on as the endpoint's prompt: the names and
+ * terms in use and what was said just before, so each phrase is heard in context. Words the
+ * endpoint wasn't sure of come back marked "[unclear: …]" (with "unclear": true).
  *
  * Settings: BRAINCRAFT_TRANSCRIBE_URL (the endpoint's base, e.g. http://localhost:8000/v1),
  * BRAINCRAFT_TRANSCRIBE_MODEL (default whisper-1), BRAINCRAFT_TRANSCRIBE_KEY (if it needs one).
@@ -64,8 +69,51 @@ function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
   })
 }
 
+/** The context the app sent for a phrase (URI-encoded, as headers carry only plain text), at most 800 characters. */
+export function contextOf(header: string | string[] | undefined): string {
+  const raw = Array.isArray(header) ? header[0] : header
+  if (!raw) return ''
+  try {
+    return decodeURIComponent(raw).replace(/[\u0000-\u001f]+/g, ' ').trim().slice(-800)
+  } catch {
+    return ''
+  }
+}
+
+/** What speech to text makes of silence and noise when it has to say something. */
+const MADE_UP = /^\W*(thanks? (you )?(so much )?for watching|please subscribe|subtitles? by|transcribed by|amara\.org|♪+)\W*$/i
+
+/**
+ * The words from a transcription endpoint's answer. With its stretches (verbose_json), those it
+ * was likely making up over silence are left out, and those it wasn't sure of are marked
+ * "[unclear: …]" so the notes don't take them for what was said.
+ */
+export function readTranscript(out: unknown): { text: string; unclear: boolean } {
+  const o = (out ?? {}) as { text?: unknown; segments?: unknown }
+  const whole = typeof o.text === 'string' ? o.text.trim() : ''
+  if (!Array.isArray(o.segments) || !o.segments.length) return { text: MADE_UP.test(whole) ? '' : whole, unclear: false }
+  const kept: string[] = []
+  let unclear = false
+  for (const s of o.segments as { text?: unknown; avg_logprob?: unknown; no_speech_prob?: unknown; compression_ratio?: unknown }[]) {
+    const t = typeof s?.text === 'string' ? s.text.trim() : ''
+    if (!t || MADE_UP.test(t)) continue
+    const sure = typeof s.avg_logprob === 'number' ? s.avg_logprob : 0
+    const silent = typeof s.no_speech_prob === 'number' ? s.no_speech_prob : 0
+    const loops = typeof s.compression_ratio === 'number' ? s.compression_ratio : 1
+    // Most likely silence it put words to.
+    if (silent > 0.6 && sure < -0.7) continue
+    if (sure < -1 || loops > 2.4) {
+      unclear = true
+      kept.push(`[unclear: ${t.replace(/[[\]]/g, '')}]`)
+    } else kept.push(t)
+  }
+  return { text: kept.join(' ').replace(/\s+/g, ' ').trim(), unclear }
+}
+
 export class Transcriber {
-  private o: Required<Omit<TranscribeOptions, 'apiKey' | 'voices'>> & Pick<TranscribeOptions, 'apiKey' | 'voices'>
+  /** Asks for how sure it was of each stretch, until the endpoint says it can't. */
+  private detailed = true
+  private o:Required<Omit<TranscribeOptions, 'apiKey' | 'voices'>> & Pick<TranscribeOptions, 'apiKey' | 'voices'>
 
   constructor(o: TranscribeOptions) {
     this.o = { maxBytes: 15 * 1024 * 1024, timeoutMs: 60_000, fetch: globalThis.fetch.bind(globalThis), ...o, baseUrl: o.baseUrl.replace(/\/+$/, '') }
@@ -86,24 +134,37 @@ export class Transcriber {
       throw err
     }
     if (audio.length < 100) return json(res, 400, { error: 'The recording is empty' })
-    const form = new FormData()
-    form.append('file', new Blob([new Uint8Array(audio)], { type }), `speech.${ext}`)
-    form.append('model', this.o.model)
-    form.append('response_format', 'json')
     // "en-US" → "en": the language the speaker set, so short phrases aren't misheard as another.
     const lang = /^([a-z]{2,3})(?:[-_][A-Za-z]{2,4})?$/.exec(url.searchParams.get('lang') ?? '')?.[1]
-    if (lang) form.append('language', lang)
+    // What was said just before and the words in use (names, terms on the board): each phrase is
+    // heard on its own, and without these, names and terms come out garbled.
+    const context = contextOf(req.headers['x-transcribe-context'])
+    const ask = (format: 'verbose_json' | 'json') => {
+      const form = new FormData()
+      form.append('file', new Blob([new Uint8Array(audio)], { type }), `speech.${ext}`)
+      form.append('model', this.o.model)
+      form.append('response_format', format)
+      form.append('temperature', '0')
+      if (lang) form.append('language', lang)
+      if (context) form.append('prompt', context)
+      return this.o.fetch(`${this.o.baseUrl}/audio/transcriptions`, {
+        method: 'POST',
+        headers: this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {},
+        body: form,
+        signal: AbortSignal.timeout(this.o.timeoutMs),
+      })
+    }
     let r: Response
-    const asked = this.o.fetch(`${this.o.baseUrl}/audio/transcriptions`, {
-      method: 'POST',
-      headers: this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {},
-      body: form,
-      signal: AbortSignal.timeout(this.o.timeoutMs),
-    })
+    // How sure it was of each stretch comes with the detailed answer, when the endpoint gives one.
+    const asked = ask(this.detailed ? 'verbose_json' : 'json')
     // While the words are worked out elsewhere: whose voice it is.
     const heard = this.voiceOf(req, url, audio)
     try {
       r = await asked
+      if (!r.ok && this.detailed && (r.status === 400 || r.status === 422)) {
+        this.detailed = false
+        r = await ask('json')
+      }
     } catch (err) {
       return json(res, 502, { error: `Couldn’t reach the transcription server (${(err as Error).message})` })
     }
@@ -111,9 +172,10 @@ export class Transcriber {
       const said = await r.text().catch(() => '')
       return json(res, 502, { error: `The transcription server said ${r.status}${said ? `: ${said.slice(0, 200)}` : ''}` })
     }
-    const out = (await r.json().catch(() => ({}))) as { text?: unknown }
+    const words = readTranscript(await r.json().catch(() => ({})))
     return json(res, 200, {
-      text: typeof out.text === 'string' ? out.text.trim() : '',
+      text: words.text,
+      ...(words.unclear ? { unclear: true } : {}),
       ...(heard?.voice ? { voice: heard.voice } : {}),
       ...(heard?.name ? { name: heard.name } : {}),
       ...(heard?.merged.length ? { merged: heard.merged } : {}),
@@ -131,6 +193,19 @@ export class Transcriber {
       const name = cleanName(url.searchParams.get('name') ?? '')
       if (!name) return json(res, 400, { error: 'Say which voice to forget (?name=)' })
       return v.book?.forget(name) ? json(res, 200, { forgot: name }) : json(res, 404, { error: `No voice called “${name}” is remembered` })
+    }
+    if (req.method === 'PATCH') {
+      // A remembered voice's name corrected: ?name=Old with {"name": "New"}.
+      const from = cleanName(url.searchParams.get('name') ?? '')
+      let to = ''
+      try {
+        const body = JSON.parse((await readRaw(req, 2048)).toString('utf8') || '{}') as { name?: unknown }
+        to = typeof body.name === 'string' ? cleanName(body.name) : ''
+      } catch {
+        to = ''
+      }
+      if (!from || !to) return json(res, 400, { error: 'Send ?name=Old with {"name": "New"}' })
+      return v.book?.rename(from, to) ? json(res, 200, { renamed: from, name: to }) : json(res, 404, { error: `No voice called “${from}” is remembered` })
     }
     if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' })
     const talk = url.searchParams.get('voices') ?? ''
