@@ -70,6 +70,14 @@ export function wavSamples(buf: Buffer): { samples: Float32Array; rate: number }
   return null
 }
 
+/*
+ * How alike is alike: a speaker model's voiceprints all lean the same way, so two different people
+ * are far from unlike. Measured with the model docs/AI.md suggests, on recordings of 26 people,
+ * as they were and through a call's sound: one phrase against another is about 0.5 for different
+ * people and 0.78 for the same person; a voice of a few phrases against another is about 0.6 for
+ * different people (never above 0.9) and 0.95 for the same person. The defaults below sit between.
+ */
+
 export interface VoicesOptions {
   /** How alike a phrase must be to a voice to be that voice (cosine similarity, 0–1). */
   threshold?: number
@@ -116,8 +124,6 @@ interface Talk {
 /** Maybes kept per conversation, and how long one waits to be heard again. */
 const MAYBES = 8
 const MAYBE_MS = 10 * 60_000
-/** A voice heard fewer times than this is still young: what it sounds like isn't settled, so it's put with another more readily. */
-const YOUNG = 5
 
 const unit = (v: Float32Array) => {
   let s = 0
@@ -153,7 +159,7 @@ export class Voices {
   private talks = new Map<string, Talk>()
 
   constructor(o: VoicesOptions = {}) {
-    this.o = { threshold: 0.35, same: 0.5, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.5, ...given(o) }
+    this.o = { threshold: 0.72, same: 0.85, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.9, ...given(o) }
   }
 
   /** Who a voice in a conversation is, when it's been named or recognised. */
@@ -240,13 +246,13 @@ export class Voices {
       // Only a phrase that sounds like them shapes what they sound like.
       return score >= this.o.threshold ? this.join(talk, best, p, now) : best.n
     }
-    // A voice already known has first claim; a maybe gets only what no one known sounds like.
-    const mine = nearest(known)
-    if (mine.best && mine.score >= this.o.threshold) return this.join(talk, mine.best, p, now)
-    const maybe = nearest(fits.filter((v) => !v.n))
-    if (maybe.best && maybe.score >= this.o.threshold) return this.join(talk, maybe.best, p, now)
+    // Whichever voice, or maybe, it's most like takes it, when it's like enough. (Once, a voice
+    // already known came first: someone new who sounded a little like them went to them, and
+    // the voice grew to sound like everyone.)
+    const { best, score } = nearest(fits)
+    if (best && score >= this.o.threshold) return this.join(talk, best, p, now)
     // Too short to be sure it's someone new: the nearest voice already known, left as it was.
-    if (seconds < this.o.shortest) return mine.best?.n ?? null
+    if (seconds < this.o.shortest) return nearest(known).best?.n ?? null
     // Maybe someone new: a voice once heard again.
     talk.voices.push({ n: 0, sum: Float32Array.from(p), heard: 1, at: now })
     const maybes = talk.voices.filter((v) => !v.n)
@@ -281,7 +287,7 @@ export class Voices {
     // Grown like another voice: they were one person all along, and the earlier number stays.
     let into = v
     for (const w of [...talk.voices]) {
-      if (w === into || !w.n || !talk.voices.includes(w) || w.sum.length !== into.sum.length || cosine(w.sum, into.sum) < (Math.min(w.heard, into.heard) < YOUNG ? this.o.threshold : this.o.same)) continue
+      if (w === into || !w.n || !talk.voices.includes(w) || w.sum.length !== into.sum.length || cosine(w.sum, into.sum) < this.o.same) continue
       const [keep, drop] = w.n < into.n ? [w, into] : [into, w]
       // One person under two names: the earlier voice's name stays, and what the other taught is taken back.
       if (drop.name && !keep.name) {

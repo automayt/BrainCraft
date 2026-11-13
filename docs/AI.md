@@ -346,7 +346,8 @@ each person's ideas down as theirs.
   and a voice the server remembers is known by the new name from then on.
 - Talking on your own, nothing changes: one voice is just you.
 - It needs to hear everyone: a laptop in a meeting room, or a call on the
-  computer's speakers. Over headphones it only hears you.
+  computer's speakers. With headphones on a call, use **Hear the call too**,
+  so the call's voices are heard as well as yours.
 - In MeetingNotes, setting **People** keeps it to that many voices, the
   surest way to stop one person turning into two.
 - Short phrases ("yeah, and the budget") are the hardest to place: one under
@@ -365,9 +366,14 @@ the processor, through the sherpa-onnx library; there's nothing else to run.
    couldn't be loaded; `/api/health` says `"voices": true` when it's on.
 
 It works alongside speech to text (`BRAINCRAFT_TRANSCRIBE_URL`), which it needs.
-`BRAINCRAFT_SPEAKER_THRESHOLD` (default 0.35) is how alike a phrase must be
+`BRAINCRAFT_SPEAKER_THRESHOLD` (default 0.72) is how alike a phrase must be
 to a voice to count as it: raise it if different people are taken for one,
-lower it if one person keeps turning into several.
+lower it if one person keeps turning into several. A speaker model rates
+everyone fairly alike: with the model above, two different people's phrases
+score about 0.5 and two of the same person's about 0.78, through a call's
+sound too, so the default sits between. A different model may need its own
+setting. (Until it was measured, the default was 0.35, and almost everyone
+was heard as one person; if you set it low then, leave it unset now.)
 
 ### Building things properly
 

@@ -58,10 +58,60 @@ function person(seed: number, dim = 64): Float32Array {
   return Float32Array.from({ length: dim }, () => gauss(r))
 }
 
-/** One phrase of theirs: their voice plus noise (`noise` 1 is as much noise as voice, as in a short phrase through a laptop). */
-function phrase(of: Float32Array, r: () => number, noise: number): Float32Array {
-  const len = Math.hypot(...of)
-  return of.map((x) => x / len + (gauss(r) * noise) / Math.sqrt(of.length))
+/**
+ * What every voiceprint from a real speaker model leans towards. Measured on recordings of 26
+ * people, as they were and through a call's sound: two different people's phrases are about 0.5
+ * alike, and two of the same person's about 0.78. These made-up phrases are the same: half the
+ * lean, a little over a quarter the person, the rest noise.
+ */
+const LEAN = person(999)
+
+/** One phrase of theirs, as a real speaker model hears it. */
+function phrase(of: Float32Array, r: () => number): Float32Array {
+  const u = (v: Float32Array) => v.map((x) => x / Math.hypot(...v))
+  const [lean, me] = [u(LEAN), u(of)]
+  const noise = u(Float32Array.from(of, () => gauss(r)))
+  return lean.map((x, k) => Math.sqrt(0.5) * x + Math.sqrt(0.28) * me[k] + Math.sqrt(0.22) * noise[k])
+}
+
+/**
+ * A meeting played through: who said each phrase, which voice each was put to, and voices found to
+ * be one person. `people`: how many the app says there are.
+ */
+function meeting(v: Voices, talk: string, voices: Float32Array[], phrases: number, r: () => number, people?: number) {
+  const heard: (number | null)[] = []
+  const said: number[] = []
+  const merged: [number, number][] = []
+  // Taking turns of one to three phrases, each a few seconds long.
+  for (let turn = 0, last = -1; heard.length < phrases; turn++) {
+    let who = Math.floor(r() * voices.length)
+    if (who === last) who = (who + 1) % voices.length
+    last = who
+    for (let k = 1 + Math.floor(r() * 3); k > 0; k--) {
+      said.push(who)
+      heard.push(v.place(talk, phrase(voices[who], r), 1.5 + r() * 4.5, people))
+      merged.push(...v.merged(talk))
+    }
+  }
+  return tally(heard, said, merged)
+}
+
+/** How a meeting came out: voices, people told apart, phrases put to the right one and phrases put to anyone. */
+function tally(heard: (number | null)[], said: number[], merged: [number, number][]) {
+  const into = new Map(merged)
+  const final = (x: number): number => (into.has(x) ? final(into.get(x)!) : x)
+  const by = new Map<number, Map<number, number>>()
+  heard.forEach((v, k) => {
+    if (v === null) return
+    const c = by.get(final(v)) ?? new Map<number, number>()
+    c.set(said[k], (c.get(said[k]) ?? 0) + 1)
+    by.set(final(v), c)
+  })
+  // Each voice is whoever said most of it.
+  const owner = new Map([...by].map(([n, c]) => [n, [...c].sort((a, b) => b[1] - a[1])[0][0]]))
+  const placed = heard.filter((v) => v !== null).length
+  const right = heard.filter((v, k) => v !== null && owner.get(final(v)) === said[k]).length
+  return { voices: by.size, people: new Set(owner.values()).size, right: right / Math.max(1, placed), placed: placed / heard.length }
 }
 
 describe('reading the app’s recordings', () => {
@@ -111,29 +161,34 @@ describe('telling voices apart', () => {
   })
 
   it('hears two people as two voices, however much each phrase wobbles', () => {
-    const v = new Voices()
-    const r = random(7)
-    const me = person(1)
-    const brian = person(2)
-    const heard: (number | null)[] = []
-    // Voices found to be one person are one, as the app takes them.
-    const into = new Map<number, number>()
-    // Back and forth for a while, each phrase a few seconds long and noisy.
-    for (let k = 0; k < 120; k++) {
-      heard.push(v.place('m', phrase(k % 3 ? me : brian, r, 1.4), 2 + (k % 4)))
-      for (const [from, to] of v.merged('m')) into.set(from, to)
+    const t = meeting(new Voices(), 'm', [person(1), person(2)], 120, random(7))
+    expect(t).toMatchObject({ voices: 2, people: 2 })
+    // Most phrases are put to someone, and nearly all to the right one.
+    expect(t.placed).toBeGreaterThan(0.85)
+    expect(t.right).toBeGreaterThan(0.95)
+  })
+
+  it('tells the people on a call apart, though every voiceprint leans the same way', () => {
+    // Two different people's phrases are about 0.5 alike. When half as alike was enough, the first
+    // voice heard took everyone: the whole call was one person.
+    const r = random(11)
+    let apart = 0
+    for (let m = 0; m < 10; m++) {
+      const people = Array.from({ length: 2 + (m % 4) }, (_, k) => person(20 + m * 5 + k))
+      const t = meeting(new Voices(), `call${m}`, people, 90, r)
+      if (t.people === people.length) apart++
+      expect(t.people).toBeGreaterThan(1)
+      expect(t.voices).toBeLessThanOrEqual(people.length + 1)
+      expect(t.right).toBeGreaterThan(0.85)
     }
-    const final = (x: number): number => (into.has(x) ? final(into.get(x)!) : x)
-    const said = heard.map((x) => (x === null ? null : final(x)))
-    expect([...new Set(said.filter((x) => x !== null))].sort()).toEqual([1, 2])
-    // Few phrases are left as no one known.
-    expect(heard.filter((x) => x === null).length).toBeLessThan(15)
-    // Nearly every phrase is put to the right one.
-    const mine = said.filter((x, k) => k % 3 && x !== null)
-    expect(mine.filter((x) => x === mine[0]).length / mine.length).toBeGreaterThan(0.95)
-    const his = said.filter((x, k) => !(k % 3) && x !== null)
-    expect(his.filter((x) => x === his[0]).length / his.length).toBeGreaterThan(0.95)
-    expect(his[0]).not.toBe(mine[0])
+    expect(apart).toBeGreaterThanOrEqual(8)
+  })
+
+  it('keeps one person one voice, call after call', () => {
+    const v = new Voices()
+    const r = random(5)
+    const them = [person(40)]
+    for (let m = 0; m < 4; m++) expect(meeting(v, `one${m}`, them, 40, r)).toMatchObject({ voices: 1, people: 1 })
   })
 
   it('won’t make a voice of one odd phrase', () => {
@@ -151,20 +206,18 @@ describe('telling voices apart', () => {
     const v = new Voices()
     expect(v.place('m', print(0), 0.6)).toBeNull()
     expect(v.place('m', print(0), 2)).toBeNull()
-    expect(v.place('m', print(0, 0.15), 2)).toBe(1)
-    expect(v.place('m', print(0, 0.15), 0.6)).toBe(1)
+    expect(v.place('m', print(0, 0.12), 2)).toBe(1)
+    expect(v.place('m', print(0, 0.12), 0.6)).toBe(1)
     expect(v.place('m', print(3), 0.6)).toBe(1)
   })
 
-  it('puts a young voice with one it sounds like', () => {
+  it('gives a phrase to whichever voice or maybe it’s most like', () => {
     const v = new Voices({ threshold: 0.6, same: 0.95 })
-    v.place('m', at(1, 0), 3)
-    for (let k = 0; k < 6; k++) v.place('m', at(1, 0), 3)
-    // Something like it but not quite, twice: a voice of its own for a moment, then known for the same one.
-    v.place('m', at(0.55, 0.835), 3)
-    v.place('m', at(0.55, 0.835), 3)
-    expect(v.place('m', at(0.7, 0.714), 3)).toBe(1)
-    expect(v.merged('m')).toEqual([[2, 1]])
+    for (let k = 0; k < 4; k++) v.place('m', at(1, 0), 3)
+    // Someone new, heard once: a maybe.
+    expect(v.place('m', at(0.5, 0.866), 3)).toBeNull()
+    // Like enough to voice 1, but more like the maybe: theirs, and now a voice of its own.
+    expect(v.place('m', at(0.6, 0.8), 3)).toBe(2)
   })
 
   it('puts together voices that turn out to be one person, and says so once, as [the later, the one it went into]', () => {
@@ -384,6 +437,23 @@ describe('voices remembered by name', () => {
     expect(await say('meeting2', 9)).toEqual({ text: 'hi', voice: 2 })
   })
 
+  it('doesn’t name someone new after a person they only sound rather like', () => {
+    // Different people's voices are about 0.6 alike, the same person's about 0.95: once, half as
+    // alike was enough, and a stranger was taken for someone known.
+    const book = new VoiceBook()
+    const r = random(9)
+    const brian = person(50)
+    const known = new Voices({ book })
+    for (let k = 0; k < 6; k++) known.place('before', phrase(brian, r), 3)
+    known.name('before', 1, 'Brian')
+    const v = new Voices({ book })
+    for (let k = 0; k < 8; k++) v.place('now', phrase(person(51), r), 3)
+    expect(v.nameOf('now', 1)).toBeNull()
+    // Brian himself is.
+    for (let k = 0; k < 8; k++) v.place('now', phrase(brian, r), 3)
+    expect(v.nameOf('now', 2)).toBe('Brian')
+  })
+
   it('takes a wrong name back when the voice is named again', async () => {
     const { say, name, book } = setup()
     await say('m1-abc', 3)
@@ -438,7 +508,7 @@ describe('voices remembered by name', () => {
   it('doesn’t give one name to two voices in a meeting', () => {
     const book = new VoiceBook()
     book.learn('Brian', at(1, 0), 4)
-    const v = new Voices({ book, threshold: 0.95 })
+    const v = new Voices({ book, threshold: 0.95, recall: 0.75 })
     v.place('m', at(1, 0), 2)
     expect(v.place('m', at(1, 0), 2)).toBe(1)
     // A second voice that also sounds rather like him (enough to recall him, not to be the same voice here).
