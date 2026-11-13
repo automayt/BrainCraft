@@ -7,6 +7,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { type VoiceSettings, cleanVoiceSettings } from '../speakers'
 import { type BoardAccess, type Grant, type Group, LEVELS, type User, isPermission } from './types'
 
 const id = () => randomBytes(9).toString('base64url')
@@ -84,6 +85,8 @@ export interface ServerSettings {
   appName?: string
   /** A line every signed-in person sees at the top of the app (maintenance, a new feature, a deadline). */
   notice?: string
+  /** How alike voices in a meeting must be (see speakers.ts); those not set are the server's own. */
+  voices?: Partial<VoiceSettings>
 }
 
 /** At most this long. */
@@ -132,7 +135,12 @@ export class AccountStore {
     this.groups = readJson<Group[]>(this.file('groups'), []).filter((g) => g && typeof g.id === 'string')
     this.boards = readJson<Record<string, BoardEntry>>(this.file('boards'), {})
     const settings = readJson<ServerSettings>(this.file('settings'), {})
-    this.settings = { ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}), ...(cleanNotice(settings.notice) ? { notice: cleanNotice(settings.notice) } : {}) }
+    const voices = cleanVoiceSettings(settings.voices)
+    this.settings = {
+      ...(cleanAppName(settings.appName) ? { appName: cleanAppName(settings.appName) } : {}),
+      ...(cleanNotice(settings.notice) ? { notice: cleanNotice(settings.notice) } : {}),
+      ...(Object.keys(voices).length ? { voices } : {}),
+    }
     this.tokens = readJson<Token[]>(this.file('sessions'), []).filter((t) => t && t.expires > now())
     // Everyone is in this group. Out of the box it may make boards, share them with the people it can
     // see (everyone on the server) and use the AI: friends planning together need no admin to start.

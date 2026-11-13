@@ -22,6 +22,20 @@ import { can, groupsAdminOf, groupsOf, looksAfter, permissionsOf } from './acces
 import { type Actor, AUDIT_KINDS, type AuditInput, type AuditKind, AuditLog, type AuditTarget, changesOf, changeText } from './audit'
 import { AccountStore, checkPassword, cleanAppName, cleanNotice, DEFAULT_APP_NAME, hashPassword, normalEmail, SESSION_MS, validEmail, weakPassword } from './store'
 import { type AccountRole, type Group, isPermission, PERMISSIONS, type Permission, publicUser, type User } from './types'
+import { VOICE_KEYS, VOICE_MAX, VOICE_MIN, type VoiceSettings } from '../speakers'
+
+/** How the server tells voices apart in meetings, for admins to change (see useVoices). */
+export interface VoicesHook {
+  /** Whether it does: a speaker model and speech to text. */
+  on: boolean
+  /** How alike is alike when no admin has said (built in, or from the environment). */
+  defaults: VoiceSettings
+  /** Takes an admin's settings, from the next phrase on. */
+  use: (s: Partial<VoiceSettings>) => void
+}
+
+/** What each voice setting is called in the activity log. */
+const VOICE_WORDS: Record<keyof VoiceSettings, string> = { threshold: 'a phrase is someone’s at', same: 'two voices are one person at', recall: 'a remembered name is given at' }
 
 export const COOKIE = 'braincraft_session'
 
@@ -106,6 +120,7 @@ export class Accounts {
   now: () => number
   private loginByVisitor: (k: string) => boolean
   private loginByEmail: (k: string) => boolean
+  private voices: VoicesHook | null = null
 
   constructor(o: AccountsOptions) {
     this.o = { admins: [], trustProxy: false, visitor: (req) => req.socket.remoteAddress ?? '', now: Date.now, allowedDomains: [], ...o }
@@ -117,6 +132,12 @@ export class Accounts {
     this.sso = o.sso ?? null
     this.loginByVisitor = limiter(30, 10 * 60_000, this.o.now)
     this.loginByEmail = limiter(10, 10 * 60_000, this.o.now)
+  }
+
+  /** The server's voices in meetings, which admins can tune: what they set before is used at once. */
+  useVoices(hook: VoicesHook) {
+    this.voices = hook
+    hook.use(this.store.settings.voices ?? {})
   }
 
   // ----- who is asking ----------------------------------------------------------------------------------
@@ -607,12 +628,47 @@ export class Accounts {
     const admins = () => s.users.filter((u) => u.role === 'admin' && !u.disabled)
 
     if (p[0] === 'settings' && !p[1]) {
-      const shown = () => ({ appName: s.settings.appName ?? '', defaultName: this.o.appName ?? DEFAULT_APP_NAME, notice: s.settings.notice ?? '' })
+      const voices = () => {
+        const v = this.voices
+        if (!v) return null
+        return { on: v.on, defaults: v.defaults, ...v.defaults, ...s.settings.voices, min: VOICE_MIN, max: VOICE_MAX }
+      }
+      const shown = () => ({ appName: s.settings.appName ?? '', defaultName: this.o.appName ?? DEFAULT_APP_NAME, notice: s.settings.notice ?? '', voices: voices() })
       if (m === 'GET') return json(res, 200, shown())
       if (m === 'PUT') {
         const b = await read()
         if (b.appName !== undefined && typeof b.appName !== 'string') return json(res, 400, { error: 'The name must be text' })
         if (b.notice !== undefined && typeof b.notice !== 'string') return json(res, 400, { error: 'The announcement must be text' })
+        if (b.voices !== undefined) {
+          const asked = b.voices as Record<string, unknown> | null
+          if (!asked || typeof asked !== 'object' || Array.isArray(asked)) return json(res, 400, { error: 'Say how alike voices must be' })
+          // A number sets one; null or nothing goes back to the server's own.
+          for (const k of VOICE_KEYS)
+            if (k in asked && asked[k] !== null && (typeof asked[k] !== 'number' || !Number.isFinite(asked[k]) || (asked[k] as number) < VOICE_MIN || (asked[k] as number) > VOICE_MAX))
+              return json(res, 400, { error: `Each must be between ${VOICE_MIN} and ${VOICE_MAX}` })
+          const was = voices()
+          const next: Partial<VoiceSettings> = { ...s.settings.voices }
+          for (const k of VOICE_KEYS)
+            if (k in asked) {
+              const value = asked[k] as number | null
+              if (value === null || Math.round(value * 100) / 100 === this.voices?.defaults[k]) delete next[k]
+              else next[k] = Math.round(value * 100) / 100
+            }
+          if (Object.keys(next).length) s.settings.voices = next
+          else delete s.settings.voices
+          this.voices?.use(next)
+          const now = voices()
+          const changes: Record<string, [string, string]> = {}
+          if (was && now) for (const k of VOICE_KEYS) if (was[k] !== now[k]) changes[`voices.${k}`] = [String(was[k]), String(now[k])]
+          if (Object.keys(changes).length)
+            this.log(req, me, {
+              action: 'settings.change',
+              changes,
+              text: `${me.name} changed how voices are told apart: ${VOICE_KEYS.filter((k) => `voices.${k}` in changes)
+                .map((k) => `${VOICE_WORDS[k]} ${now![k]}`)
+                .join(', ')}`,
+            })
+        }
         const before = this.appName()
         if ('appName' in b) {
           const name = cleanAppName(b.appName)

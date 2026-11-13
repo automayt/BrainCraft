@@ -11574,6 +11574,45 @@ button.inbox-entry:focus-visible {
   font-weight: 600;
 }
 
+/* ----- admin: how voices are told apart in meetings ----- */
+
+.admin-voice {
+  display: grid;
+  grid-template-columns: 1fr 3.5em;
+  align-items: center;
+  gap: 2px 12px;
+}
+
+.admin-voice label {
+  grid-column: 1 / -1;
+}
+
+.admin-voice input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.admin-voice output {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.admin-voice p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.admin-voices-off {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
 .brand-preview {
   display: flex;
   flex-wrap: wrap;

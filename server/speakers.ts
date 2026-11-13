@@ -78,6 +78,32 @@ export function wavSamples(buf: Buffer): { samples: Float32Array; rate: number }
  * different people (never above 0.9) and 0.95 for the same person. The defaults below sit between.
  */
 
+/** What an admin can change in the app (Admin → Meetings): how alike is alike. */
+export interface VoiceSettings {
+  /** A phrase is a voice's when it's at least this alike. */
+  threshold: number
+  /** Two voices are one person when they're at least this alike. */
+  same: number
+  /** A voice is someone remembered from another meeting when it's at least this alike to them. */
+  recall: number
+}
+
+export const VOICE_KEYS = ['threshold', 'same', 'recall'] as const
+/** The range an admin can set each in: below it, everyone is one person; above it, no one is anyone. */
+export const VOICE_MIN = 0.3
+export const VOICE_MAX = 0.99
+
+/** The settings in some saved or sent data that make sense (numbers in range), rounded to hundredths. */
+export function cleanVoiceSettings(x: unknown): Partial<VoiceSettings> {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+  const out: Partial<VoiceSettings> = {}
+  for (const k of VOICE_KEYS) {
+    const v = o[k]
+    if (typeof v === 'number' && Number.isFinite(v) && v >= VOICE_MIN && v <= VOICE_MAX) out[k] = Math.round(v * 100) / 100
+  }
+  return out
+}
+
 export interface VoicesOptions {
   /** How alike a phrase must be to a voice to be that voice (cosine similarity, 0–1). */
   threshold?: number
@@ -158,8 +184,27 @@ export class Voices {
   private o: Required<VoicesOptions>
   private talks = new Map<string, Talk>()
 
+  /** The settings it started with (its defaults, or the server's environment), to go back to. */
+  private base: VoiceSettings
+
   constructor(o: VoicesOptions = {}) {
     this.o = { threshold: 0.72, same: 0.85, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.9, ...given(o) }
+    this.base = this.settings()
+  }
+
+  /** How alike is alike now. */
+  settings(): VoiceSettings {
+    return { threshold: this.o.threshold, same: this.o.same, recall: this.o.recall }
+  }
+
+  /** What it started with. */
+  defaults(): VoiceSettings {
+    return { ...this.base }
+  }
+
+  /** An admin's settings, from the next phrase on; any left out are as it started. */
+  use(s: Partial<VoiceSettings>) {
+    this.o = { ...this.o, ...this.base, ...cleanVoiceSettings(s) }
   }
 
   /** Who a voice in a conversation is, when it's been named or recognised. */

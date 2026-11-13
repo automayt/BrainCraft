@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { groupsOf, levelFor, permissionsOf, roleOf } from './access'
 import { cookieOf, req, res, tempDir } from './fakes'
+import { Voices } from '../speakers'
 import { Accounts } from './service'
 import { checkPassword, hashPassword } from './store'
 import type { Group, User } from './types'
@@ -144,7 +145,7 @@ describe('admins', () => {
     const a = new Accounts({ dir })
     const cookie = cookieOf(await call(a, 'POST', '/api/auth/setup', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
     expect(a.appName()).toBe('BrainCraft')
-    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body).toEqual({ appName: '', defaultName: 'BrainCraft', notice: '' })
+    expect((await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body).toEqual({ appName: '', defaultName: 'BrainCraft', notice: '', voices: null })
     // Tidied: one line, no markup characters, at most 40 long.
     const put = await call(a, 'PUT', '/api/admin/settings', { appName: '  Acme <b>Notes</b>\n  ' }, { cookie })
     expect(put.body).toMatchObject({ appName: 'Acme bNotes/b' })
@@ -187,6 +188,39 @@ describe('admins', () => {
     expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.notice).toBeUndefined()
     const log = (await call(a, 'GET', '/api/admin/audit', undefined, { cookie })).body.entries as { text: string }[]
     expect(log.map((e) => e.text)).toEqual(expect.arrayContaining([expect.stringMatching(/set the announcement/), expect.stringMatching(/took the announcement down/)]))
+  })
+
+  it('let admins tune how voices are told apart in meetings, from the next phrase on', async () => {
+    const dir = tempDir()
+    const a = new Accounts({ dir })
+    const voices = new Voices({ threshold: 0.7 })
+    a.useVoices({ on: true, defaults: voices.defaults(), use: (s) => voices.use(s) })
+    const cookie = cookieOf(await call(a, 'POST', '/api/auth/setup', { email: 'ann@x.org', name: 'Ann', password: 'a long password' }))
+    const shown = (await call(a, 'GET', '/api/admin/settings', undefined, { cookie })).body.voices
+    // The server's own: from its environment where set, built in otherwise.
+    expect(shown).toEqual({ on: true, defaults: { threshold: 0.7, same: 0.85, recall: 0.9 }, threshold: 0.7, same: 0.85, recall: 0.9, min: 0.3, max: 0.99 })
+    const put = await call(a, 'PUT', '/api/admin/settings', { voices: { threshold: 0.764, recall: 0.92 } }, { cookie })
+    expect(put.body.voices).toMatchObject({ threshold: 0.76, same: 0.85, recall: 0.92 })
+    expect(voices.settings()).toEqual({ threshold: 0.76, same: 0.85, recall: 0.92 })
+    // Out of range, or not a number: refused, and nothing changes.
+    for (const bad of [{ threshold: 0.1 }, { same: 1.5 }, { recall: '0.8' }, 'loud', [0.8]])
+      expect((await call(a, 'PUT', '/api/admin/settings', { voices: bad }, { cookie })).status).toBe(400)
+    expect(voices.settings().threshold).toBe(0.76)
+    // Kept across a restart, and used at once.
+    const again = new Voices({ threshold: 0.7 })
+    new Accounts({ dir }).useVoices({ on: true, defaults: again.defaults(), use: (s) => again.use(s) })
+    expect(again.settings()).toEqual({ threshold: 0.76, same: 0.85, recall: 0.92 })
+    // Back to the server's own, one or all.
+    await call(a, 'PUT', '/api/admin/settings', { voices: { threshold: null, recall: null } }, { cookie })
+    expect(voices.settings()).toEqual({ threshold: 0.7, same: 0.85, recall: 0.9 })
+    expect(a.store.settings.voices).toBeUndefined()
+    // In the activity log, in words.
+    const log = (await call(a, 'GET', '/api/admin/audit', undefined, { cookie })).body.entries as { text: string }[]
+    expect(log.map((e) => e.text)).toContain('Ann changed how voices are told apart: a phrase is someone’s at 0.76, a remembered name is given at 0.92')
+    // Only admins.
+    const made = await call(a, 'POST', '/api/admin/users', { email: 'sam@x.org', name: 'Sam' }, { cookie })
+    const sam = cookieOf(await call(a, 'POST', '/api/auth/reset', { token: String(made.body.link).split('#reset=')[1], password: 'sams long password' }))
+    expect((await call(a, 'PUT', '/api/admin/settings', { voices: { threshold: 0.5 } }, { cookie: sam })).status).toBe(403)
   })
 
   it('lets everyone share and find people on a new server', async () => {

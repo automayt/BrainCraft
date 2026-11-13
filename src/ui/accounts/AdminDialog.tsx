@@ -7,12 +7,13 @@ import { appName } from '../../store/brand'
 import { UsagePanel } from './UsagePanel'
 import { type BackupStatus, backupNow, backupStatus, sizeLabel } from '../../store/serverBackups'
 
-type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'backups' | 'notice' | 'signin' | 'branding'
+type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'backups' | 'notice' | 'meetings' | 'signin' | 'branding'
 
 /**
  * Admins: people (add, role, groups, turn off, password links), groups (what their members may
  * do, who's in them, which sign-in provider groups map to them), boards waiting for an owner, the
- * activity log, backups, how this server signs people in, and what the app is called here.
+ * activity log, backups, how voices are told apart in meetings, how this server signs people in,
+ * and what the app is called here.
  */
 export function AdminDialog({ onClose }: { onClose: () => void }) {
   const ws = useWorkspace()
@@ -41,6 +42,7 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
     ['activity', 'Activity'],
     ['backups', 'Backups'],
     ['notice', 'Announcement'],
+    ['meetings', 'Meetings'],
     ['signin', 'Sign-in'],
     ['branding', 'Branding'],
   ]
@@ -90,6 +92,8 @@ export function AdminDialog({ onClose }: { onClose: () => void }) {
           <Announcement />
         ) : tab === 'branding' ? (
           <Branding />
+        ) : tab === 'meetings' ? (
+          <MeetingVoices />
         ) : (
           <SignInInfo />
         )}
@@ -228,6 +232,104 @@ function Announcement() {
         <span className="spacer" />
         <button className="primary" disabled={busy || text.trim() === saved}>
           {busy ? 'Saving…' : saved ? 'Change it' : 'Show it'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+type VoiceKey = 'threshold' | 'same' | 'recall'
+type VoiceSettings = Record<VoiceKey, number>
+interface VoicesShown extends VoiceSettings {
+  on: boolean
+  defaults: VoiceSettings
+  min: number
+  max: number
+}
+
+const VOICE_CONTROLS: { key: VoiceKey; label: string; hint: string }[] = [
+  { key: 'threshold', label: 'A phrase is someone’s at', hint: 'Raise it if different people are heard as one person; lower it if one person keeps turning into several.' },
+  { key: 'same', label: 'Two voices are one person at', hint: 'Voices that grow this alike are put together. Lower it if one person still ends up as two.' },
+  { key: 'recall', label: 'A remembered name is given at', hint: 'A voice named in an earlier meeting is known again from this. Raise it if someone new is given a known person’s name.' },
+]
+
+/** How alike voices must sound in MeetingNotes to be one person, or someone remembered. */
+function MeetingVoices() {
+  const ws = useWorkspace()
+  const [saved, setSaved] = useState<VoicesShown | null | undefined>(undefined)
+  const [draft, setDraft] = useState<VoiceSettings | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const take = (v: VoicesShown | null) => {
+    setSaved(v)
+    setDraft(v && { threshold: v.threshold, same: v.same, recall: v.recall })
+  }
+  useEffect(() => {
+    void call<{ voices: VoicesShown | null }>(ws.server!, 'api/admin/settings').then(
+      (r) => take(r.voices ?? null),
+      (e: Error) => setMsg(e.message),
+    )
+  }, [ws.server])
+  const save = async (e: FormEvent | undefined, value: Partial<Record<VoiceKey, number | null>>, said: string) => {
+    e?.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = await call<{ voices: VoicesShown | null }>(ws.server!, 'api/admin/settings', 'PUT', { voices: value })
+      take(r.voices ?? null)
+      ws.editor.setStatus(said)
+    } catch (err) {
+      setMsg((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (saved === undefined) return msg ? <p className="signin-error">{msg}</p> : <p className="muted">Loading…</p>
+  if (!saved || !draft) return <p className="muted">This server doesn’t tell voices apart.</p>
+  const keys = VOICE_CONTROLS.map((c) => c.key)
+  const changed = keys.some((k) => draft[k] !== saved[k])
+  const own = keys.every((k) => saved[k] === saved.defaults[k])
+  return (
+    <form className="admin-branding admin-voices" onSubmit={(e) => void save(e, draft, 'Voices are told apart with the new settings from the next phrase')}>
+      <p className="muted">
+        In MeetingNotes, the server puts each phrase to a voice, so the notes know who said what. These say how alike two phrases must sound to be the same
+        person. Different people usually come out about 0.5 to 0.6 alike, and the same person about 0.8 to 0.95. Changes apply from the next phrase heard.
+      </p>
+      {!saved.on && <p className="admin-voices-off">This server isn’t telling voices apart yet: it needs a speaker model as well as speech to text (see the server guide). What you set here applies once it does.</p>}
+      {VOICE_CONTROLS.map((c) => (
+        <div className="admin-voice" key={c.key}>
+          <label htmlFor={`voice-${c.key}`}>{c.label}</label>
+          <input
+            id={`voice-${c.key}`}
+            type="range"
+            min={saved.min}
+            max={saved.max}
+            step={0.01}
+            value={draft[c.key]}
+            aria-describedby={`voice-${c.key}-hint`}
+            onChange={(e) => setDraft({ ...draft, [c.key]: Number(e.target.value) })}
+          />
+          <output htmlFor={`voice-${c.key}`}>{draft[c.key].toFixed(2)}</output>
+          <p className="muted small" id={`voice-${c.key}-hint`}>
+            {c.hint} The server’s own: {saved.defaults[c.key].toFixed(2)}.
+          </p>
+        </div>
+      ))}
+      {msg && <p className="signin-error">{msg}</p>}
+      <div className="account-actions">
+        {!own && (
+          <button type="button" disabled={busy} onClick={() => void save(undefined, { threshold: null, same: null, recall: null }, 'Voices are told apart with the server’s own settings')}>
+            Use the server’s own
+          </button>
+        )}
+        <span className="spacer" />
+        {changed && (
+          <button type="button" disabled={busy} onClick={() => take(saved)}>
+            Undo changes
+          </button>
+        )}
+        <button className="primary" disabled={busy || !changed}>
+          {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
     </form>

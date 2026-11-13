@@ -375,6 +375,14 @@ sound too, so the default sits between. A different model may need its own
 setting. (Until it was measured, the default was 0.35, and almost everyone
 was heard as one person; if you set it low then, leave it unset now.)
 
+With accounts, admins can change this in the app instead: **Admin →
+Meetings** has a slider for each of how alike a phrase must be to be
+someone's, how alike two voices must grow to be put together as one person
+(default 0.85), and how alike a voice must be to someone remembered from an
+earlier meeting to be given their name (default 0.9). They apply from the
+next phrase, are kept across restarts, go in the activity log, and **Use the
+server's own** goes back to the environment's or built-in values.
+
 ### Building things properly
 
 Spoken turns change the board straight away, so what the assistant makes has

@@ -45,7 +45,7 @@ docker run -p 8080:8080 -v braincraft-data:/data braincraft
 | `BRAINCRAFT_AI_PASSWORD` | — | With AI set up: people must enter this password before using the assistant. |
 | `BRAINCRAFT_TRANSCRIBE_URL`, `BRAINCRAFT_TRANSCRIBE_MODEL`, `BRAINCRAFT_TRANSCRIBE_KEY` | — | Speech to text for talking to the assistant in any browser (Firefox needs it): an OpenAI-compatible `/v1` address such as Whisper on vLLM, the model (default `whisper-1`) and its key. See [AI.md](AI.md#talking-to-it). |
 | `BRAINCRAFT_SPEAKER_MODEL` | — | A speaker-recognition model file (`.onnx`), so in a meeting the assistant knows who said what. Needs speech to text and `sherpa-onnx-node` (installed by `npm install`). See [AI.md](AI.md#who-said-what-in-a-meeting). |
-| `BRAINCRAFT_SPEAKER_THRESHOLD`, `BRAINCRAFT_SPEAKER_THREADS` | 0.72, 1 | How alike a phrase must be to a voice to be it (0–1), and processor threads for the model. |
+| `BRAINCRAFT_SPEAKER_THRESHOLD`, `BRAINCRAFT_SPEAKER_THREADS` | 0.72, 1 | How alike a phrase must be to a voice to be it (0–1), and processor threads for the model. With accounts, admins can change it, and two more like it, in Admin → Meetings. |
 | `BRAINCRAFT_TRANSCRIBE_PREVIEW` | off | `1`: words appear while you speak (the phrase so far is transcribed about once a second; best when you run the speech-to-text server yourself). |
 | `BRAINCRAFT_ACCOUNTS` | off | `1`: people sign in, groups carry permissions, boards have owners and access lists, and share links stop working. See [ACCOUNTS.md](ACCOUNTS.md). |
 | `BRAINCRAFT_ADMINS` | — | Emails that are always admins (with accounts on). |
