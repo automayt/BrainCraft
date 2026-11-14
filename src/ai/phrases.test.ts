@@ -56,6 +56,24 @@ describe('cutting speech into phrases', () => {
     expect(previews.length).toBe(3)
   })
 
+  it('says where in the sound each phrase began, and its previews', () => {
+    const began: number[] = []
+    const previews: number[] = []
+    const got: Float32Array[] = []
+    const p = new Phrases({ pauseMs: 700, previewMs: 500 }, { phrase: (a, _id, at) => (got.push(a), began.push(at)), preview: (_a, _id, at) => previews.push(at) })
+    feed(p, 3000, false)
+    feed(p, 1500, true)
+    feed(p, 2000, false)
+    feed(p, 1000, true)
+    feed(p, 1000, false)
+    // The first began a moment (0.4 s) before its speech, three seconds in; the second likewise, at 6.5 s.
+    expect(began.map((at) => Math.round(at / RATE / 0.1) / 10)).toEqual([2.6, 6.1])
+    // Previews of a phrase begin where it does.
+    expect(new Set(previews.map((at) => Math.round(at / RATE / 0.1) / 10))).toEqual(new Set([2.6, 6.1]))
+    // And the phrase is the sound from there on.
+    expect(seconds(got[0])).toBeCloseTo(0.4 + 1.5 + 0.3, 1)
+  })
+
   it('ends what was being said when stopped', () => {
     const got: Float32Array[] = []
     const p = new Phrases({}, { phrase: (a) => got.push(a) })

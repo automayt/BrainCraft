@@ -10,10 +10,12 @@
  *   behind a setting); it shows words as they're said. Used when the server has none.
  *
  * In a meeting on a call, either can hear the call's own sound too (see callAudio.ts), the
- * microphone then keeping to the speaker's own voice.
+ * microphone then keeping to the speaker's own voice: what the browser leaves of the call in it
+ * is taken out here before it's sent (see echo.ts).
  */
 
 import { MIC_ON_CALL, mixed } from './callAudio'
+import { Echo, Recent } from './echo'
 import { Downsampler, Phrases, wav } from './phrases'
 
 /** Where a phrase was heard, once the call is heard too: the microphone (the person here) or the call. */
@@ -209,7 +211,8 @@ registerProcessor('braincraft-tap', Tap)`
 /**
  * Listens through the server: the sound is cut into phrases, each sent as WAV and turned into
  * words. Phrases are transcribed side by side but heard in the order they were said. With the call
- * heard too, the microphone and the call are cut into phrases each on their own.
+ * heard too, the microphone and the call are cut into phrases each on their own, and the call is
+ * taken out of the microphone's: what it said is heard once, from the call.
  */
 export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> {
   const first = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !o.meeting, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
@@ -234,8 +237,14 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
   /** A sound being listened to: cut into phrases, each sent to be turned into words. */
   interface Tap {
     phrases: Phrases
+    /** Its last while, to find the call in the microphone with. */
+    recent: Recent
     end(): void
   }
+  /** Takes the call out of the microphone's phrases, once the call is heard too. */
+  const echo = new Echo()
+  /** The call's own sound, once it's heard too. */
+  let call: Tap | null = null
   const tap = async (stream: MediaStream, from?: HeardFrom): Promise<Tap> => {
     // Each sound at its own rate (Firefox won't connect a sound to a context at another), brought
     // down to 16 kHz here.
@@ -260,13 +269,25 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     node.connect(silent).connect(ctx.destination)
     if (ctx.state === 'suspended') await ctx.resume()
     const down = new Downsampler(ctx.sampleRate)
+    const recent = new Recent()
+    /** Samples heard but not cut into phrases (while muted): a phrase began that much later in the sound than in what was cut. */
+    let skipped = 0
+    /** A microphone phrase without the call in it: null when the call was all there was. */
+    const own = (audio: Float32Array, at: number, look: boolean): Float32Array | null => {
+      if (from !== 'me' || !call) return audio
+      const cleaned = echo.clean(recent, call.recent, at + skipped, at + skipped + audio.length, look)
+      return cleaned.allCall ? null : cleaned.audio
+    }
     const phrases: Phrases = new Phrases(
       { pauseMs: o.pauseMs, previewMs: o.preview ? 1000 : 0 },
       {
         started: opened,
         dropped: closed,
         level: (v) => on.level?.(v),
-        phrase: (audio) => {
+        phrase: (heard, _id, at) => {
+          // Only the call coming out of the speakers: it's heard from the call itself.
+          const audio = own(heard, at, true)
+          if (!audio) return closed()
           on.state?.('transcribing')
           const text = o.transcribe(wav(audio), false, from)
           delivered = delivered.then(() =>
@@ -286,8 +307,10 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
           )
         },
         // One at a time: when the server is slow, previews just come less often.
-        preview: (audio, id) => {
+        preview: (heard, id, at) => {
           if (previewing || stopped) return
+          const audio = own(heard, at, false)
+          if (!audio) return
           previewing = true
           o.transcribe(wav(audio), true, from)
             .then((t) => {
@@ -299,10 +322,14 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       },
     )
     node.port.onmessage = (e: MessageEvent<Float32Array>) => {
-      if (!stopped && !muted) phrases.feed(down.push(e.data))
+      const batch = down.push(e.data)
+      recent.push(batch, performance.now())
+      if (!stopped && !muted) phrases.feed(batch)
+      else skipped += batch.length
     }
     return {
       phrases,
+      recent,
       end() {
         // What was being said still counts.
         phrases.end()
@@ -315,7 +342,6 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
   }
 
   let mic = await tap(first)
-  let call: Tap | null = null
   on.state?.('listening')
 
   return {

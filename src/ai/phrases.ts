@@ -73,12 +73,12 @@ export interface PhraseOptions {
 export interface PhraseEvents {
   /** Someone started speaking: a phrase is under way. */
   started?(): void
-  /** A finished phrase (after `started`). */
-  phrase(audio: Float32Array, id: number): void
+  /** A finished phrase (after `started`). `at`: where it began, counting every sample fed from the first. */
+  phrase(audio: Float32Array, id: number, at: number): void
   /** The phrase turned out to be too little to send (after `started`). */
   dropped?(): void
   /** The phrase so far, while it's still being said. */
-  preview?(audio: Float32Array, id: number): void
+  preview?(audio: Float32Array, id: number, at: number): void
   level?(v: number): void
 }
 
@@ -94,6 +94,8 @@ export class Phrases {
   private sincePreview = 0
   private voicedSincePreview = false
   private floor = 0.01
+  /** Samples fed so far. */
+  private fed = 0
   /** The number of the phrase being said (each cut moves on to the next). */
   id = 1
   private readonly o: Required<PhraseOptions>
@@ -107,6 +109,7 @@ export class Phrases {
   /** The next stretch of sound, at 16 kHz. */
   feed(input: Float32Array) {
     if (!input.length) return
+    this.fed += input.length
     let sum = 0
     for (const v of input) sum += v * v
     const rms = Math.sqrt(sum / input.length)
@@ -133,7 +136,7 @@ export class Phrases {
     if (this.o.previewMs && this.active && this.voicedSincePreview && this.sincePreview >= this.o.previewMs) {
       this.sincePreview = 0
       this.voicedSincePreview = false
-      this.on.preview?.(this.audio(), this.id)
+      this.on.preview?.(this.audio(), this.id, this.fed - this.length)
     }
   }
 
@@ -145,6 +148,7 @@ export class Phrases {
     const enough = this.voiced >= this.o.minVoicedMs
     const id = this.id
     const was = this.active
+    const at = this.fed - this.length
     this.chunks = []
     this.length = 0
     this.voiced = 0
@@ -154,7 +158,7 @@ export class Phrases {
     this.voicedSincePreview = false
     if (!was) return
     this.id++
-    if (enough) this.on.phrase(audio, id)
+    if (enough) this.on.phrase(audio, id, at)
     else this.on.dropped?.()
   }
 

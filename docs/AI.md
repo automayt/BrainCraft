@@ -198,14 +198,26 @@ the notes on the board as the meeting goes.
   isn't heard twice, and other voices and noise reduced where the browser or
   computer can (voice isolation; on a Mac, the Voice Isolation mic mode, and
   Voice Focus on Windows computers that have it, do this for every app). The
-  browser's echo cancelling only knows what the browser itself plays, so with
-  a call in its own app it's voice isolation, or headphones, that keeps the
-  call out of the microphone. With the server's speech to text, what the
-  microphone hears is put down as yours, by your name, and only the call's
-  voices are told apart; with the browser's own recognition (Chrome), both
-  are heard as one. Stopping the share, or unplugging the input, goes back to
-  the microphone alone. Headphones are surest: then nothing from the call
-  reaches the microphone at all.
+  browser's echo cancelling only knows what the browser itself plays, so a
+  call in its own app can still reach the microphone from the speakers. With
+  the server's speech to text, BrainCraft takes that out itself before
+  anything is sent: each phrase from the microphone is compared with what the
+  call was playing just then. A phrase that was only the call is dropped (it's
+  heard from the call), and where the call ran under your voice it's taken
+  away and your words kept. Nothing is taken out until the call has plainly
+  been found in the microphone, so your own voice is never mistaken for it.
+  So speakers are fine, without headphones. What the microphone hears is put
+  down as yours, by your name, and only the call's voices are told apart.
+  With the browser's own recognition (Chrome), both are heard as one, and
+  nothing is taken out. Stopping the share, or unplugging the input, goes
+  back to the microphone alone. Headphones are still surest: then nothing
+  from the call reaches the microphone at all.
+
+  Where the browser isn't allowed to record the screen (on a Mac, a setting
+  an administrator can lock), share the call's tab rather than the screen:
+  join the call in a browser tab, and pick that tab with **Also share tab
+  audio** ticked. A tab is shared from inside the browser, which doesn't need
+  that permission.
 - **The view stays still.** What the notes add glows briefly where it is
   (a still outline instead, when the computer is set to reduce motion); the
   board only moves by itself when none of the notes are in view yet.
