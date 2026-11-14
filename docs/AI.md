@@ -194,30 +194,49 @@ the notes on the board as the meeting goes.
     own app, and asks nothing each time.
 
   The last one used is offered first next time. The microphone then keeps to
-  your own voice: echo cancelled, so the call coming out of the speakers
-  isn't heard twice, and other voices and noise reduced where the browser or
+  your own voice: other voices and noise reduced where the browser or
   computer can (voice isolation; on a Mac, the Voice Isolation mic mode, and
-  Voice Focus on Windows computers that have it, do this for every app). The
-  browser's echo cancelling only knows what the browser itself plays, so a
-  call in its own app can still reach the microphone from the speakers. With
-  the server's speech to text, BrainCraft takes that out itself before
-  anything is sent: each phrase from the microphone is compared with what the
-  call was playing just then. A phrase that was only the call is dropped (it's
-  heard from the call), and where the call ran under your voice it's taken
-  away and your words kept. Nothing is taken out until the call has plainly
-  been found in the microphone, so your own voice is never mistaken for it.
-  So speakers are fine, without headphones. What the microphone hears is put
-  down as yours, by your name, and only the call's voices are told apart.
-  With the browser's own recognition (Chrome), both are heard as one, and
-  nothing is taken out. Stopping the share, or unplugging the input, goes
-  back to the microphone alone. Headphones are still surest: then nothing
-  from the call reaches the microphone at all.
+  Voice Focus on Windows computers that have it, do this for every app), and
+  the call taken back out of it (echo removal, next). What the microphone
+  hears is put down as yours, by your name, and only the call's voices are
+  told apart. Stopping the share, or unplugging the input, goes back to the
+  microphone alone.
+
+  When more than one voice is coming through your microphone and the call
+  isn't heard, the sign suggests hearing the call too. It asks once: **Not on
+  a call**, or opening the menu, puts it away for good in that browser.
 
   Where the browser isn't allowed to record the screen (on a Mac that is set
   app by app, and an administrator can lock it for the browser alone), share
   the call's tab rather than the screen: join the call in a browser tab, and
   pick that tab with **Also share tab audio** ticked. A tab is shared from
   inside the browser, so it shouldn't need that permission.
+- **Echo removal.** On speakers, the call also reaches your microphone, and
+  would be written down a second time as yours. Echo removal takes it back
+  out. It's a tick box at the foot of the **Hear the call too** menu (and,
+  once the call is heard, under **Hearing the call from…**). It's on unless
+  you turn it off, and the browser remembers your choice. It needs the
+  call's own sound to compare with, so it does nothing until the call is
+  heard too.
+  - The browser cancels the echo of what the browser itself plays (a call in
+    one of its tabs). It knows nothing of a call in its own app.
+  - With the server's speech to text, BrainCraft takes the rest out itself
+    before anything is sent: each phrase from the microphone is compared with
+    what the call was playing just then. A phrase that was only the call is
+    dropped (it's heard from the call), and where the call ran under your
+    voice it's taken away and your words kept. Nothing is taken out until the
+    call has plainly been found in the microphone, which keeps your own voice
+    from being mistaken for it. So speakers are fine, without headphones.
+  - With the browser's own recognition (Chrome), the microphone and the call
+    are heard as one, and only the browser's echo cancelling applies.
+  - Off, your microphone is heard as it is: the browser isn't asked to cancel
+    echo, and nothing is taken out here. On speakers, what the call says is
+    then written down again as yours. Turn it off if your own words go
+    missing, or when something else already takes the call out of your
+    microphone. It can be switched during a meeting.
+
+  Headphones are still surest: then nothing from the call reaches the
+  microphone at all.
 - **The view stays still.** What the notes add glows briefly where it is
   (a still outline instead, when the computer is set to reduce motion); the
   board only moves by itself when none of the notes are in view yet.

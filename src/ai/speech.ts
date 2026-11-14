@@ -11,10 +11,11 @@
  *
  * In a meeting on a call, either can hear the call's own sound too (see callAudio.ts), the
  * microphone then keeping to the speaker's own voice: what the browser leaves of the call in it
- * is taken out here before it's sent (see echo.ts).
+ * is taken out here before it's sent (see echo.ts). That is echo removal, and it can be turned
+ * off: the microphone is then heard as it is.
  */
 
-import { MIC_ON_CALL, mixed } from './callAudio'
+import { micOnCall, mixed } from './callAudio'
 import { Echo, Recent } from './echo'
 import { Downsampler, Phrases, wav } from './phrases'
 
@@ -54,6 +55,11 @@ export interface Ear {
    * every voice heard once, from where it was said.
    */
   hearCall?(call: MediaStream): Promise<void>
+  /**
+   * Echo removal on or off (on to begin with, unless asked otherwise): whether the call is taken
+   * out of the microphone once the call is heard too. Off, the microphone is heard as it is.
+   */
+  removeEcho?(on: boolean): Promise<void>
 }
 
 type Recognition = {
@@ -82,14 +88,17 @@ export const canRecognise = () => !!recognitionClass()
 /** Words, not silence or noise (which come back as nothing, or a stray mark or two). */
 const words = (text: string) => /[\p{L}\p{N}]/u.test(text)
 
-/** The browser's own recognition, kept going until stopped (it ends itself after a silence). */
-export function browserEar(lang: string, on: Hearing): Ear {
+/**
+ * The browser's own recognition, kept going until stopped (it ends itself after a silence). Echo
+ * removal here is the browser's own echo cancelling, which knows only what the browser plays.
+ */
+export function browserEar(lang: string, on: Hearing, removeEcho = true): Ear {
   const Rec = recognitionClass()!
   let stopped = false
   let muted = false
   let ended: (() => void) | null = null
   /** Once the call is heard too: the microphone and the call, mixed, which it listens to instead. */
-  let both: { track: MediaStreamTrack; ctx: AudioContext; mic: MediaStream } | null = null
+  let both: { track: MediaStreamTrack; ctx: AudioContext; mic: MediaStream; call: MediaStream } | null = null
   const r = new Rec()
   r.continuous = true
   r.interimResults = true
@@ -138,16 +147,33 @@ export function browserEar(lang: string, on: Hearing): Ear {
       if (quiet) r.stop()
       else tryStart()
     },
-    async hearCall(call) {
-      // It hears one sound: the person's own voice (the call taken out of the microphone) and the call, together.
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC_ON_CALL })
+    hearCall: (call) => hearBoth(call),
+    async removeEcho(want) {
+      if (want === removeEcho) return
+      removeEcho = want
+      // The microphone again, with or without its echo cancelling.
+      if (both) await hearBoth(both.call)
+    },
+  }
+  /** It hears one sound: the person's own voice (the call taken out of the microphone, with echo removal) and the call, together. */
+  async function hearBoth(call: MediaStream) {
+    // Asked for again when the choice changed meanwhile: that microphone isn't the one wanted.
+    for (;;) {
+      const wanted = removeEcho
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: micOnCall(wanted) })
       const ctx = new AudioContext()
       if (ctx.state === 'suspended') await ctx.resume()
-      letGo()
-      both = { track: mixed(ctx, [mic, call]), ctx, mic }
-      // Starts again on the two, once it has ended (onend).
-      if (!muted && !stopped) r.stop()
-    },
+      if (!stopped && wanted === removeEcho) {
+        letGo()
+        both = { track: mixed(ctx, [mic, call]), ctx, mic, call }
+        // Starts again on the two, once it has ended (onend).
+        if (!muted) r.stop()
+        return
+      }
+      for (const t of mic.getTracks()) t.stop()
+      void ctx.close()
+      if (stopped) return
+    }
   }
   function tryStart() {
     try {
@@ -192,6 +218,8 @@ export interface ServerEarOptions {
    * keeps that sound rather than taking it away as an echo (until the call is heard on its own).
    */
   meeting?: boolean
+  /** Echo removal to begin with (on unless false): see `Ear.removeEcho`. */
+  removeEcho?: boolean
 }
 
 /** Runs on the audio thread: passes the microphone's sound on in batches. */
@@ -241,8 +269,9 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     recent: Recent
     end(): void
   }
-  /** Takes the call out of the microphone's phrases, once the call is heard too. */
+  /** Takes the call out of the microphone's phrases, once the call is heard too (with echo removal on). */
   const echo = new Echo()
+  let removeEcho = o.removeEcho !== false
   /** The call's own sound, once it's heard too. */
   let call: Tap | null = null
   const tap = async (stream: MediaStream, from?: HeardFrom): Promise<Tap> => {
@@ -274,7 +303,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     let skipped = 0
     /** A microphone phrase without the call in it: null when the call was all there was. */
     const own = (audio: Float32Array, at: number, look: boolean): Float32Array | null => {
-      if (from !== 'me' || !call) return audio
+      if (from !== 'me' || !call || !removeEcho) return audio
       const cleaned = echo.clean(recent, call.recent, at + skipped, at + skipped + audio.length, look)
       return cleaned.allCall ? null : cleaned.audio
     }
@@ -327,10 +356,13 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       if (!stopped && !muted) phrases.feed(batch)
       else skipped += batch.length
     }
+    let ended = false
     return {
       phrases,
       recent,
       end() {
+        if (ended) return
+        ended = true
         // What was being said still counts.
         phrases.end()
         node.port.onmessage = null
@@ -343,6 +375,33 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
 
   let mic = await tap(first)
   on.state?.('listening')
+
+  /** One change to what's listened to at a time: two at once would leave a microphone open. */
+  let changing: Promise<unknown> = Promise.resolve()
+  const inTurn = <T>(change: () => Promise<T>): Promise<T> => {
+    const next = changing.then(change)
+    changing = next.catch(() => {})
+    return next
+  }
+  const letGo = (stream: MediaStream) => {
+    for (const t of stream.getTracks()) t.stop()
+  }
+  /** How the microphone was asked for once the call is heard too: with echo removal, or without. */
+  let micRemoves: boolean | null = null
+  /**
+   * The microphone once the call is heard too: the person's own voice. With echo removal, the
+   * browser takes out what it can of the call and the rest is taken out here; without, neither.
+   */
+  const myMic = async () => {
+    const removes = removeEcho
+    return { stream: await navigator.mediaDevices.getUserMedia({ audio: micOnCall(removes) }), removes }
+  }
+  const hearMe = async (own: { stream: MediaStream; removes: boolean }) => {
+    mic.end()
+    mic = await tap(own.stream, 'me')
+    micRemoves = own.removes
+    if (stopped) mic.end()
+  }
 
   return {
     kind: 'server',
@@ -362,18 +421,36 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       muted = quiet
       on.level?.(0)
     },
-    async hearCall(stream) {
-      // The microphone from now on: the person's own voice, the call taken out of it.
-      const own = await navigator.mediaDevices.getUserMedia({ audio: MIC_ON_CALL })
-      if (stopped) {
-        for (const t of own.getTracks()) t.stop()
-        return
-      }
-      const heard = await tap(stream, 'call')
-      mic.end()
-      mic = await tap(own, 'me')
-      call?.end()
-      call = heard
+    hearCall: (stream) =>
+      inTurn(async () => {
+        if (stopped) return letGo(stream)
+        // The microphone from now on: the person's own voice.
+        const own = await myMic()
+        if (stopped) {
+          letGo(own.stream)
+          return letGo(stream)
+        }
+        let heard: Tap
+        try {
+          heard = await tap(stream, 'call')
+        } catch (err) {
+          letGo(own.stream)
+          throw err
+        }
+        await hearMe(own)
+        call?.end()
+        call = heard
+        if (stopped) heard.end()
+      }),
+    removeEcho(want) {
+      removeEcho = want
+      // The microphone again, with or without the browser's echo cancelling (unless it's as wanted by its turn).
+      return inTurn(async () => {
+        if (!call || stopped || micRemoves === removeEcho) return
+        const own = await myMic()
+        if (stopped) return letGo(own.stream)
+        await hearMe(own)
+      })
     },
   }
 }

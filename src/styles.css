@@ -12182,7 +12182,22 @@ button.inbox-entry:focus-visible {
 .flow-meeting .flow-call.on {
   color: var(--text);
   border-color: transparent;
-  cursor: default;
+}
+
+.flow-meeting .flow-call small {
+  font-size: inherit;
+  color: var(--muted);
+}
+
+/* Once on it opens a menu too (echo removal): a small mark that it does. */
+.flow-meeting .flow-call.on::after {
+  content: '';
+  display: inline-block;
+  margin-left: 7px;
+  vertical-align: middle;
+  border: 4px solid transparent;
+  border-top-color: var(--muted);
+  border-bottom-width: 0;
 }
 
 .flow-call-wrap {
@@ -12239,6 +12254,88 @@ button.inbox-entry:focus-visible {
   font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
+}
+
+/* Echo removal: a tick box at the foot of the menu, with what it does as things are. */
+.flow-call-menu .flow-call-echo {
+  gap: 4px;
+}
+
+.flow-call-menu .flow-call-echo:not(:first-child) {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+}
+
+.flow-call-echo > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-call-echo i {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1;
+  color: var(--on-accent);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+
+.flow-call-echo[aria-checked='true'] i {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.flow-call-echo[aria-checked='true'] i::before {
+  content: '✓';
+}
+
+.flow-call-menu .flow-call-echo small {
+  padding-left: 22px;
+  line-height: 1.4;
+}
+
+/* Others are heard through the microphone: a suggestion to hear the call too, under the sign. */
+.flow-call-suggest {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: min(320px, calc(100vw - 48px));
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+
+.flow-call-suggest button {
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.flow-call-suggest button:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 /* Reading a recording: how far through it is, as a thin line under the sign. */

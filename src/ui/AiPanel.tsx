@@ -709,7 +709,16 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 onPeople: talk.voicesOn ? setPeople : undefined,
                 recording: editor.meeting.recording && { name: editor.meeting.recording.file.name, done: editor.meeting.recording.done, length: editor.meeting.recording.length },
                 agenda: agendaOf(editor.board, meetingItems(editor.board, editor.meeting.before)),
-                call: { from: talk.call, share: talk.canShare, inputs: talk.inputs, last: talk.lastCall, hear: (from) => void talk.hearCall(from) },
+                call: {
+                  from: talk.call,
+                  share: talk.canShare,
+                  inputs: talk.inputs,
+                  last: talk.lastCall,
+                  hear: (from) => void talk.hearCall(from),
+                  echo: { on: talk.echo, set: talk.setEcho, thorough: talk.how === 'server' },
+                  // Other voices through the microphone: they may be on a call.
+                  suggest: talk.voices.length > 1,
+                },
               }
             : undefined
         }

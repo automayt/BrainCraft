@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Utterances } from '../ai/listen'
 import { fileEar } from '../ai/recording'
-import { type CallInput, callInputs, canShareSound, captureCall, captureInput } from '../ai/callAudio'
+import { type CallInput, callInputs, canShareSound, captureCall, captureInput, echoRemovalWanted, wantEchoRemoval } from '../ai/callAudio'
 import { browserEar, canRecognise, canRecord, type Ear, type Heard, type HeardFrom, serverEar } from '../ai/speech'
 
 export interface TalkOptions {
@@ -104,6 +104,10 @@ export function useTalk(o: TalkOptions) {
   const [call, setCall] = useState<{ stream: MediaStream; label: string } | null>(null)
   /** Inputs the call's sound could come from, kept up to date while listening. */
   const [inputs, setInputs] = useState<CallInput[]>([])
+  /** Echo removal: the call taken out of the microphone once it's heard too. On, unless turned off in this browser. */
+  const [echo, setEcho] = useState(echoRemovalWanted)
+  const echoRef = useRef(echo)
+  echoRef.current = echo
   const [, setTick] = useState(0)
   /** The voices heard so far in this conversation, in the order they were first heard. */
   const [voices, setVoices] = useState<HeardVoice[]>([])
@@ -293,8 +297,9 @@ export function useTalk(o: TalkOptions) {
           hearing,
         )
       // In a meeting people pause mid-sentence more: a longer pause ends a phrase, so it keeps its sense.
-      else if (how === 'server') ear.current = await serverEar({ preview: !!serverPreviews, meeting: !!latest.current.meeting, transcribe, ...(latest.current.meeting ? { pauseMs: 1000 } : {}) }, hearing)
-      else ear.current = browserEar(lang, hearing)
+      else if (how === 'server')
+        ear.current = await serverEar({ preview: !!serverPreviews, meeting: !!latest.current.meeting, removeEcho: echoRef.current, transcribe, ...(latest.current.meeting ? { pauseMs: 1000 } : {}) }, hearing)
+      else ear.current = browserEar(lang, hearing, echoRef.current)
       setOn(true)
     } catch (err) {
       const e = err as Error
@@ -420,6 +425,8 @@ export function useTalk(o: TalkOptions) {
         setError(`Couldn’t hear the call: ${(err as Error).message}`)
         return
       }
+      // Stopped listening meanwhile: the call went with it.
+      if (ear.current !== e) return
       try {
         localStorage.setItem(CALL_FROM, from)
       } catch {
@@ -429,6 +436,14 @@ export function useTalk(o: TalkOptions) {
       setCall({ stream, label })
       // Stopped from the browser's sharing bar, or the input unplugged: the call isn't heard any more.
       stream.getAudioTracks()[0].addEventListener('ended', () => setCall((c) => (c?.stream === stream ? null : c)))
+    },
+    /** Echo removal: whether the call is taken out of the microphone once it's heard too. */
+    echo,
+    /** Turns echo removal on or off, now and for next time in this browser. */
+    setEcho: (remove: boolean) => {
+      setEcho(remove)
+      wantEchoRemoval(remove)
+      void ear.current?.removeEcho?.(remove).catch((err: Error) => setError(`Couldn’t change the microphone: ${err.message}`))
     },
     /** What a voice is called now (after any merges and names). */
     nameOf: (n: number) => voicesRef.current.find((v) => v.n === whose(n))?.name ?? `Voice ${whose(n)}`,

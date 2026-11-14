@@ -7,10 +7,44 @@
  * the speaker's voice on its own: echo cancelled (the call coming out of the speakers taken away)
  * and other voices and noise reduced, wherever the browser or the computer can. That way each voice
  * is heard once, from where it was said: yours from the microphone, everyone else's from the call.
+ * Taking the call out of the microphone ("echo removal") is the person's choice, on unless they
+ * turn it off.
  */
 
-/** The microphone for someone on a call: their voice, without the call coming back out of the speakers. */
-export const MIC_ON_CALL = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, voiceIsolation: true } as MediaTrackConstraints
+const ECHO_REMOVAL = 'braincraft.echoRemoval'
+
+/** Whether echo removal is wanted in this browser: on, unless it was turned off here. */
+export function echoRemovalWanted(store: Pick<Storage, 'getItem'> | null = stored()): boolean {
+  try {
+    return store?.getItem(ECHO_REMOVAL) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+/** Remembers the choice for next time. */
+export function wantEchoRemoval(on: boolean, store: Pick<Storage, 'setItem' | 'removeItem'> | null = stored()): void {
+  try {
+    if (on) store?.removeItem(ECHO_REMOVAL)
+    else store?.setItem(ECHO_REMOVAL, 'off')
+  } catch {
+    // On again next time.
+  }
+}
+
+function stored(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The microphone for someone on a call: their voice, without the call coming back out of the
+ * speakers. With echo removal turned off, the browser's echo cancelling is left off too.
+ */
+export const micOnCall = (removeEcho = true) => ({ echoCancellation: removeEcho, noiseSuppression: true, autoGainControl: true, channelCount: 1, voiceIsolation: true }) as MediaTrackConstraints
 
 /** Whether this browser can share a call's sound (Chrome and Edge can; Firefox and Safari share no sound). */
 export const canShareSound = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia && /Chrome\//.test(navigator.userAgent)

@@ -169,15 +169,52 @@ interface MeetingProps {
    * Hearing the call's own sound too: where from while it is, whether it can be shared (Chrome and
    * Edge), the inputs it could come from, where from last time, and asking to.
    */
-  call?: { from: string | null; share: boolean; inputs: readonly CallInput[]; last: string | null; hear: (from: string) => void }
+  call?: {
+    from: string | null
+    share: boolean
+    inputs: readonly CallInput[]
+    last: string | null
+    hear: (from: string) => void
+    /**
+     * Echo removal (the call taken back out of the microphone): whether it's on, turning it on or
+     * off, and whether it's thorough here (whatever plays the call) or only what the browser plays.
+     */
+    echo: { on: boolean; set: (on: boolean) => void; thorough: boolean }
+    /** More than one voice is coming through the microphone: the others may be on a call. */
+    suggest: boolean
+  }
+}
+
+/** The suggestion to hear the call too was answered in this browser: it isn't made again. */
+const SUGGESTED = 'braincraft.callSuggested'
+const suggestedBefore = () => {
+  try {
+    return localStorage.getItem(SUGGESTED) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** What echo removal does, as things are. */
+function echoHint(on: boolean, heard: boolean, thorough: boolean): string {
+  if (!on) return 'Off: your microphone is heard as it is. On speakers, what the call says is written down again as yours.'
+  return [
+    'Takes the call back out of your microphone, so what your speakers play isn’t written down again as yours.',
+    thorough ? '' : 'In this browser, only a call the browser itself plays.',
+    heard ? '' : 'It needs the call’s own sound: choose where to hear it from, above.',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 /**
  * Hearing the call too: from a share of the call's tab or the screen (Chrome and Edge), or from an
- * input that carries the computer's sound (any browser). Once on, it says where from.
+ * input that carries the computer's sound (any browser). Once on, it says where from. Echo removal
+ * is switched here too; and when others are heard through the microphone, it suggests the call.
  */
-function CallPicker({ from, share, inputs, last, hear }: NonNullable<MeetingProps['call']>) {
+function CallPicker({ from, share, inputs, last, hear, echo, suggest }: NonNullable<MeetingProps['call']>) {
   const [open, setOpen] = useState(false)
+  const [answered, setAnswered] = useState(suggestedBefore)
   const menu = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -186,32 +223,47 @@ function CallPicker({ from, share, inputs, last, hear }: NonNullable<MeetingProp
     window.addEventListener('pointerdown', away, true)
     return () => window.removeEventListener('pointerdown', away, true)
   }, [open])
-  if (from) return <span className="flow-call on" title="The call’s own sound is heard, and the microphone keeps to your voice, so nobody is heard twice">Hearing the call from {from}</span>
-  if (!share && !inputs.length) return null
+  if (!from && !share && !inputs.length) return null
   // Where it came from last time first.
-  const choices = [...(share ? [{ id: 'share', label: 'Share the call’s tab or screen…', likely: false }] : []), ...inputs].sort((a, b) => Number(b.id === last) - Number(a.id === last))
+  const choices = from ? [] : [...(share ? [{ id: 'share', label: 'Share the call’s tab or screen…', likely: false }] : []), ...inputs].sort((a, b) => Number(b.id === last) - Number(a.id === last))
   const pick = (id: string) => {
     setOpen(false)
     hear(id)
+  }
+  const answer = () => {
+    setAnswered(true)
+    try {
+      localStorage.setItem(SUGGESTED, '1')
+    } catch {
+      // Suggested again next time.
+    }
   }
   return (
     <span className="flow-call-wrap">
       <button
         type="button"
-        className="flow-call"
+        className={`flow-call${from ? ' on' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Hear the call as well as the room. Your microphone then keeps to your own voice, so nobody is heard twice."
-        onClick={() => setOpen((o) => !o)}
+        title={
+          from
+            ? `The call’s own sound is heard, and your microphone keeps to your voice. Echo removal is ${echo.on ? 'on' : 'off'}.`
+            : 'Hear the call as well as the room. Your microphone then keeps to your own voice, so nobody is heard twice.'
+        }
+        onClick={() => {
+          setOpen((o) => !o)
+          if (suggest && !from) answer()
+        }}
       >
-        Hear the call too
+        {from ? `Hearing the call from ${from}` : 'Hear the call too'}
+        {from && !echo.on && <small> · echo removal off</small>}
       </button>
       {open && (
         <div
           ref={menu}
           className="flow-call-menu"
           role="menu"
-          aria-label="Hear the call from"
+          aria-label={from ? 'Hearing the call' : 'Hear the call from'}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.stopPropagation()
@@ -226,8 +278,23 @@ function CallPicker({ from, share, inputs, last, hear }: NonNullable<MeetingProp
               {c.id === last && <small>Used last time</small>}
             </button>
           ))}
-          {!share && <p>This browser can’t share a call’s sound: choose an input that carries the computer’s sound, such as an audio interface’s loopback or Stereo Mix.</p>}
+          {!from && !share && <p>This browser can’t share a call’s sound: choose an input that carries the computer’s sound, such as an audio interface’s loopback or Stereo Mix.</p>}
+          <button type="button" role="menuitemcheckbox" aria-checked={echo.on} className="flow-call-echo" onClick={() => echo.set(!echo.on)}>
+            <span>
+              <i aria-hidden="true" />
+              Echo removal
+            </span>
+            <small>{echoHint(echo.on, !!from, echo.thorough)}</small>
+          </button>
         </div>
+      )}
+      {suggest && !from && !open && !answered && (
+        <span className="flow-call-suggest" role="status">
+          More than one voice is coming through your microphone. If the others are on a call, hear the call too: everyone is then written down once, from where they spoke.
+          <button type="button" onClick={answer}>
+            Not on a call
+          </button>
+        </span>
       )}
     </span>
   )
