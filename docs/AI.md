@@ -213,11 +213,11 @@ the notes on the board as the meeting goes.
   back to the microphone alone. Headphones are still surest: then nothing
   from the call reaches the microphone at all.
 
-  Where the browser isn't allowed to record the screen (on a Mac, a setting
-  an administrator can lock), share the call's tab rather than the screen:
-  join the call in a browser tab, and pick that tab with **Also share tab
-  audio** ticked. A tab is shared from inside the browser, which doesn't need
-  that permission.
+  Where the browser isn't allowed to record the screen (on a Mac that is set
+  app by app, and an administrator can lock it for the browser alone), share
+  the call's tab rather than the screen: join the call in a browser tab, and
+  pick that tab with **Also share tab audio** ticked. A tab is shared from
+  inside the browser, so it shouldn't need that permission.
 - **The view stays still.** What the notes add glows briefly where it is
   (a still outline instead, when the computer is set to reduce motion); the
   board only moves by itself when none of the notes are in view yet.
