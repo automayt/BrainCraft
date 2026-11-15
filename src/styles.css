@@ -8512,13 +8512,47 @@ button.inbox-entry:focus-visible {
    ===================================================================== */
 
 .wiki {
+  /* The list of pages is as wide as the reader made it, leaving the page room in a small window. */
+  --tree: clamp(180px, var(--wiki-tree, 270px), max(180px, 100vw - 360px));
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: var(--tree) minmax(0, 1fr);
   padding-top: 70px;
   background: var(--canvas);
   color: var(--text);
+}
+
+/* The edge of the list of pages: dragged, it makes the list wider or narrower. */
+.wiki-tree-edge {
+  position: absolute;
+  top: 70px;
+  bottom: 0;
+  left: calc(var(--tree) - 3px);
+  z-index: 2;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.wiki-tree-edge::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: transparent;
+  transition: background 0.12s var(--ease);
+}
+
+.wiki-tree-edge:hover::after,
+.wiki-tree-edge.dragging::after,
+.wiki-tree-edge:focus-visible::after {
+  background: var(--accent);
+}
+
+/* With the keyboard on it, the line itself shows, rather than a ring around the whole edge. */
+.wiki-tree-edge:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .wiki-drawer-btn {
@@ -9548,6 +9582,10 @@ button.inbox-entry:focus-visible {
   .wiki {
     grid-template-columns: minmax(0, 1fr);
     padding-top: 116px;
+  }
+  /* The list is a drawer here, as wide as the phone allows. */
+  .wiki-tree-edge {
+    display: none;
   }
   .wiki-drawer-btn {
     position: absolute;
@@ -12359,6 +12397,9 @@ button.inbox-entry:focus-visible {
   top: 62px;
   left: 18px;
   width: min(280px, calc(100% - 36px));
+  /* A long list scrolls, clear of the words at the bottom. */
+  max-height: calc(100% - 260px);
+  overflow-y: auto;
   padding: 10px 14px 12px;
   font-size: 13px;
   color: var(--text);
@@ -12375,7 +12416,8 @@ button.inbox-entry:focus-visible {
   color: var(--muted);
 }
 
-.flow-agenda ol {
+.flow-agenda ol,
+.flow-agenda ul {
   display: grid;
   gap: 5px;
   margin: 0;
@@ -12383,11 +12425,51 @@ button.inbox-entry:focus-visible {
   list-style: none;
 }
 
-.flow-agenda li {
+/* The ideas to bring up, under the agenda. */
+.flow-agenda ol + h2 {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* Each line is ticked by clicking it. */
+.flow-agenda li button {
   display: grid;
   grid-template-columns: 16px 1fr;
   gap: 6px;
+  width: 100%;
+  padding: 0;
+  font: inherit;
   line-height: 1.35;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.flow-agenda li button:disabled {
+  cursor: default;
+}
+
+.flow-agenda li button:hover:not(:disabled) i {
+  border-color: var(--text);
+}
+
+.flow-agenda-more {
+  margin: 6px 0 0 22px;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.flow-agenda-more:hover {
+  color: var(--text);
 }
 
 .flow-agenda li i {

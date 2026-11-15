@@ -433,7 +433,9 @@ shares live exactly like a board.
   reorder), use **Alt+Shift+arrows**, or **⋯ → Move…** on the page (the way to do
   it on a phone, where the list is behind **☰ Pages**). Undo and redo sit at
   the top of the list. Deleted pages go to the **Trash**, with their
-  sub-pages, until you delete them for good.
+  sub-pages, until you delete them for good. **Drag the list's right edge**
+  to make it wider for long titles, or narrower (the arrow keys move it too,
+  and a double click puts it back); this browser remembers it for every wiki.
 - **Writing:** click the page and type, right where you clicked (on a phone,
   double-tap it or press **Edit**). Markdown turns into formatting as you go:
   `## ` makes a heading, `- ` a bullet, `- [ ] ` a box to tick, and `**` round a
@@ -764,7 +766,9 @@ shares live exactly like a board.
   decisions and actions with who and when. When it ends, it all goes in one
   frame named for the meeting, with its transcript. It starts with an
   agenda from what matters most on the board (what the last meeting left
-  unfinished first), takes instructions ("robot, note that…"), asks what to
+  unfinished first), keeps a list of **ideas to bring up** under it (each
+  stays, from meeting to meeting, until it's been raised and ticked), takes
+  instructions ("robot, note that…"), asks what to
   keep at the end (idea collage, Kanban, notes, speaker timeline), then
   reviews the whole transcript in the background into an overview of what
   was decided, proposed and set to do, a mind map and a timeline of who said

@@ -74,6 +74,24 @@ describe('a meeting’s views, made from its review', () => {
     expect(table.table!.rows).toHaveLength(2)
   })
 
+  it('puts the ideas left to bring up along the top with the other views, as they are', () => {
+    const { b, frame } = meeting()
+    // The list sits in the frame when the meeting ends, wherever the meeting left it.
+    const f = B.getItem(b, frame)!
+    const listed = applyOps(b, [{ op: 'createTable', title: 'Ideas to bring up', columns: ['Idea', 'Why', 'Raised'], rows: [['Who signs off the budget?', 'Nobody was named', '']], at: { x: f.x + f.w / 2 - 100, y: f.y + f.h / 2 - 50 } }], ctx)
+    const list = listed.results[0].id!
+    expect(inFrame(listed.board, frame).some((i) => i.id === list)).toBe(true)
+    const out = polish(listed.board, frame).board
+    const at = (view: string) => inFrame(out, frame).find((i) => i.meeting?.view === view)!
+    const ideas = B.getItem(out, list)!
+    // In the top row, after the Actions board, and still inside the frame.
+    expect(ideas.y).toBe(at('overview').y)
+    expect(ideas.x).toBeGreaterThan(at('actions').x + at('actions').w)
+    expect(inFrame(out, frame).some((i) => i.id === list)).toBe(true)
+    // The review leaves what it says alone.
+    expect(ideas.table).toEqual(B.getItem(listed.board, list)!.table)
+  })
+
   it('updates the same objects when done again, never adding copies', () => {
     const { b, frame } = meeting()
     const once = polish(b, frame).board

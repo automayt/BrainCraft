@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps } from '../api/ops'
+import * as B from './board'
 import { emptyBoard } from './board'
-import { agendaOf, clock, glossaryOf, joinFragments, meetingItems, meetingParts, meetingTitle, summaryPoints, transcriptText, unpicked, untitledMeeting } from './meeting'
+import {
+  IDEAS_TITLE,
+  agendaOf,
+  clock,
+  glossaryOf,
+  ideasOf,
+  ideasTableOf,
+  joinFragments,
+  keepIdeas,
+  keepTicks,
+  meetingItems,
+  meetingParts,
+  meetingTitle,
+  settleIdeas,
+  summaryPoints,
+  tickRow,
+  transcriptText,
+  unpicked,
+  untitledMeeting,
+} from './meeting'
+import type { Board } from './types'
 import { fakeMeasure } from './test-helpers'
 
 const ctx = { measure: fakeMeasure }
@@ -97,11 +118,163 @@ describe('what to keep when a meeting ends', () => {
 
   it('reads the agenda, and what’s been covered', () => {
     const { board, ids } = made()
-    expect(agendaOf(board, ids)).toEqual([
-      { text: 'Venue', covered: true },
-      { text: 'Budget', covered: false },
+    expect(agendaOf(board, ids).map((a) => [a.text, a.covered])).toEqual([
+      ['Venue', true],
+      ['Budget', false],
     ])
     expect(agendaOf(board, [])).toEqual([])
+  })
+
+  it('ticks an agenda item by hand, and takes the tick away', () => {
+    const { board, ids } = made()
+    const budget = agendaOf(board, ids)[1]
+    const ticked = tickRow(board, budget.table, budget.row, true)
+    expect(agendaOf(ticked, ids).map((a) => a.covered)).toEqual([true, true])
+    expect(agendaOf(tickRow(ticked, budget.table, budget.row, false), ids).map((a) => a.covered)).toEqual([true, false])
+    // A row that isn't there changes nothing.
+    expect(tickRow(board, budget.table, 'no-such-row', true)).toBe(board)
+  })
+
+  it('keeps a tick on the agenda when the assistant writes the table again without it', () => {
+    const { board, ids } = made()
+    const table = agendaOf(board, ids)[0].table
+    const now = B.getItem(board, table)!
+    // The assistant gives every row again: the venue's tick left out, the budget's added.
+    const next = B.getItem(applyOps(board, [{ op: 'setTable', id: table, columns: ['Item', 'Why now', 'Covered'], rows: [['Venue', 'Due Friday', ''], ['Budget', 'Over', '✓']] }], ctx).board, table)!
+    const kept = B.updateItem(board, table, () => keepTicks(now, next))
+    expect(agendaOf(kept, ids).map((a) => a.covered)).toEqual([true, true])
+  })
+})
+
+describe('ideas to bring up', () => {
+  /** A board with the list as the assistant is asked to make it. */
+  const listed = (rows: string[][], title = IDEAS_TITLE, board: Board = emptyBoard()) => {
+    const out = applyOps(board, [{ op: 'createTable', title, columns: ['Idea', 'Why', 'Raised'], rows }], ctx)
+    return { board: out.board, table: out.results[0].id! }
+  }
+  const three = () =>
+    listed([
+      ['Who signs off the budget?', 'Nobody was named', ''],
+      ['Check the venue’s parking', 'Came up last time', '✓'],
+      ['Tell support before launch', 'They take the calls', ''],
+    ])
+  const read = (b: Board) => ideasOf(b).map((i) => [i.text, i.raised])
+
+  it('are read from the list, with why and whether they’ve been raised', () => {
+    const { board, table } = three()
+    expect(ideasOf(board).map(({ text, why, raised }) => ({ text, why, raised }))).toEqual([
+      { text: 'Who signs off the budget?', why: 'Nobody was named', raised: false },
+      { text: 'Check the venue’s parking', why: 'Came up last time', raised: true },
+      { text: 'Tell support before launch', why: 'They take the calls', raised: false },
+    ])
+    expect(ideasOf(board).every((i) => i.table === table)).toBe(true)
+    expect(ideasOf(emptyBoard())).toEqual([])
+  })
+
+  it('come from every list on the board, each idea once', () => {
+    const first = three()
+    const { board } = listed([['who signs off the budget', 'Again', ''], ['Book the photographer', 'Nobody has', '']], 'Ideas to bring up', first.board)
+    expect(read(board).map(([text]) => text)).toEqual(['Who signs off the budget?', 'Check the venue’s parking', 'Tell support before launch', 'Book the photographer'])
+    expect(ideasTableOf(board)).toBe(first.table)
+  })
+
+  it('are ticked by hand, in a list with or without a column for it', () => {
+    const { board, table } = three()
+    const idea = ideasOf(board)[0]
+    expect(read(tickRow(board, table, idea.row, true))[0]).toEqual(['Who signs off the budget?', true])
+    // A list someone made by hand, with only the ideas: it gets its column.
+    const plain = applyOps(emptyBoard(), [{ op: 'createTable', title: 'Ideas to bring up', columns: ['Idea'], rows: [['Ask about parking']] }], ctx)
+    const row = ideasOf(plain.board)[0].row
+    const ticked = tickRow(plain.board, plain.results[0].id!, row, true)
+    expect(read(ticked)).toEqual([['Ask about parking', true]])
+    expect(B.getItem(ticked, plain.results[0].id!)!.table!.columns.map((c) => c.name)).toEqual(['Idea', 'Raised'])
+  })
+
+  it('stay on the list whatever the assistant writes: it only adds ideas and ticks them', () => {
+    const { board, table } = three()
+    const now = B.getItem(board, table)!
+    // The assistant gives every row again, but drops one, clears a tick, ticks another, and adds one.
+    const rewritten = applyOps(board, [{ op: 'setTable', id: table, columns: ['Idea', 'Why', 'Raised'], rows: [['Check the venue’s parking', '', ''], ['Tell support before launch', '', '✓'], ['Agree who presents', 'Two people think they are', '']] }], ctx).board
+    const kept = B.updateItem(board, table, () => keepIdeas(now, B.getItem(rewritten, table)!))
+    expect(read(kept)).toEqual([
+      ['Who signs off the budget?', false],
+      ['Check the venue’s parking', true],
+      ['Tell support before launch', true],
+      ['Agree who presents', false],
+    ])
+    expect(ideasOf(kept)[3].why).toBe('Two people think they are')
+    // Their words and reasons are as they were.
+    expect(ideasOf(kept)[1].why).toBe('Came up last time')
+    // Tall enough for the row it gained.
+    expect(B.getItem(kept, table)!.h).toBeGreaterThan(now.h)
+  })
+
+  it('is left as it was when the assistant changes nothing, or makes it something else', () => {
+    const { board, table } = three()
+    const now = B.getItem(board, table)!
+    expect(keepIdeas(now, now)).toBe(now)
+    expect(keepIdeas(now, { ...now, kind: 'sticky', table: undefined })).toBe(now)
+  })
+
+  it('takes no more than a couple of dozen open ideas', () => {
+    const { board, table } = listed(Array.from({ length: 23 }, (_, k) => [`Idea ${k}`, '', '']))
+    const now = B.getItem(board, table)!
+    const more = applyOps(board, [{ op: 'setTable', id: table, columns: ['Idea', 'Why', 'Raised'], rows: [['One more', '', ''], ['And another', '', ''], ['Already talked about', '', '✓']] }], ctx).board
+    const kept = keepIdeas(now, B.getItem(more, table)!)
+    const texts = kept.table!.rows.map((r) => Object.values(r.cells)[0])
+    expect(texts).toContain('One more')
+    expect(texts).not.toContain('And another')
+    // One that's been raised doesn't count against the open ones.
+    expect(texts).toContain('Already talked about')
+  })
+
+  it('that were raised go when the meeting ends; the rest are kept', () => {
+    const { board, table } = three()
+    const settled = settleIdeas(board)
+    expect(settled.table).toBe(table)
+    expect(read(settled.board)).toEqual([
+      ['Who signs off the budget?', false],
+      ['Tell support before launch', false],
+    ])
+    expect(B.getItem(settled.board, table)!.h).toBeLessThan(B.getItem(board, table)!.h)
+  })
+
+  it('end up in one list when the assistant made a second', () => {
+    const first = three()
+    const second = listed([['Book the photographer', 'Nobody has', ''], ['Who signs off the budget?', '', ''], ['Done already', '', '✓']], 'Ideas to bring up', first.board)
+    const settled = settleIdeas(second.board)
+    expect(settled.table).toBe(first.table)
+    expect(settled.board.items.filter((i) => i.kind === 'table')).toHaveLength(1)
+    expect(ideasOf(settled.board).map((i) => [i.text, i.why])).toEqual([
+      ['Who signs off the budget?', 'Nobody was named'],
+      ['Tell support before launch', 'They take the calls'],
+      ['Book the photographer', 'Nobody has'],
+    ])
+  })
+
+  it('leave no list behind once every one has been raised', () => {
+    const { board } = listed([['Ask about parking', '', '✓'], ['Tell support', '', 'done']])
+    const settled = settleIdeas(board)
+    expect(settled.table).toBeNull()
+    expect(settled.board.items).toHaveLength(0)
+    // And a board without a list is left as it is.
+    expect(settleIdeas(emptyBoard()).table).toBeNull()
+  })
+
+  it('in a locked list are left alone', () => {
+    const { board, table } = three()
+    const locked = B.updateItem(board, table, (i) => ({ ...i, locked: true }))
+    expect(settleIdeas(locked).board).toBe(locked)
+    expect(ideasTableOf(locked)).toBeNull()
+    // They're still shown.
+    expect(ideasOf(locked)).toHaveLength(3)
+  })
+
+  it('are kept whatever was picked to keep from the meeting', () => {
+    const { board, table } = three()
+    const parts = meetingParts(board, [table])
+    expect([...parts.notes, ...parts.kanban, ...parts.collage]).toEqual([])
+    expect(unpicked(board, [table], { collage: false, kanban: false, notes: false, timeline: false })).toEqual([])
   })
 })
 

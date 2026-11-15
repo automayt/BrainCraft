@@ -1,6 +1,7 @@
 import { LockIcon } from '../icons'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { applyPageWidth, loadPageWidth, PAGE_WIDTHS, type PageWidth } from './pageWidth'
+import { TREE_WIDTH, fitTreeWidth, loadTreeWidth, saveTreeWidth, treeWidthKey } from './treeWidth'
 import { isProtected } from '../../model/protection'
 import { MovePage } from './MovePage'
 import { ChangesSince, PageHistory } from './PageHistory'
@@ -72,6 +73,8 @@ export function WikiView() {
   const [editing, setEditing] = useState(false)
   const [drawer, setDrawer] = useState(false)
   useEscape(() => setDrawer(false), drawer)
+  // The list of pages is as wide as this reader last made it.
+  const [treeWidth, setTreeWidth] = useState(loadTreeWidth)
 
   // Each wiki opens on the page you were last on.
   useEffect(() => {
@@ -107,6 +110,7 @@ export function WikiView() {
   return (
     <div
       className={`wiki no-canvas${drawer ? ' drawer-open' : ''}`}
+      style={{ ['--wiki-tree' as string]: `${treeWidth}px` }}
       onDragOver={(e) => {
         if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
       }}
@@ -143,6 +147,13 @@ export function WikiView() {
       </button>
       {drawer && <div className="wiki-drawer-backdrop" onPointerDown={() => setDrawer(false)} />}
       <PageTree current={page} />
+      <TreeEdge
+        width={treeWidth}
+        onWidth={(w, keep) => {
+          setTreeWidth(w)
+          if (keep) saveTreeWidth(w)
+        }}
+      />
       {editor.filesPanel && <FilesDialog />}
       <main className="wiki-main">
         {page ? (
@@ -159,6 +170,50 @@ export function WikiView() {
         )}
       </main>
     </div>
+  )
+}
+
+/**
+ * The edge between the list of pages and the page: dragged, it makes the list wider (for long
+ * titles) or narrower. The arrow keys move it too, and a double click puts it back.
+ */
+function TreeEdge({ width, onWidth }: { width: number; onWidth: (width: number, keep: boolean) => void }) {
+  const [dragging, setDragging] = useState(false)
+  const at = (e: React.PointerEvent<HTMLElement>) => fitTreeWidth(e.clientX - e.currentTarget.parentElement!.getBoundingClientRect().left, window.innerWidth)
+  const drop = (e: React.PointerEvent<HTMLElement>) => {
+    if (!dragging) return
+    setDragging(false)
+    onWidth(at(e), true)
+  }
+  return (
+    <div
+      className={`wiki-tree-edge${dragging ? ' dragging' : ''}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Width of the list of pages"
+      aria-valuemin={TREE_WIDTH.min}
+      aria-valuemax={TREE_WIDTH.max}
+      aria-valuenow={width}
+      tabIndex={0}
+      title="Drag to make the list of pages wider or narrower (or use the arrow keys). Double-click for the usual width."
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        // No text is selected as it's dragged.
+        e.preventDefault()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        setDragging(true)
+      }}
+      onPointerMove={(e) => dragging && onWidth(at(e), false)}
+      onPointerUp={drop}
+      onPointerCancel={drop}
+      onDoubleClick={() => onWidth(TREE_WIDTH.usual, true)}
+      onKeyDown={(e) => {
+        const next = treeWidthKey(e.key, width, window.innerWidth)
+        if (next === null) return
+        e.preventDefault()
+        onWidth(next, true)
+      }}
+    />
   )
 }
 

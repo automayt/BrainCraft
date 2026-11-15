@@ -8,7 +8,7 @@
 
 import { applyOps } from '../api/ops'
 import * as B from '../model/board'
-import { clock } from '../model/meeting'
+import { clock, isIdeasTable } from '../model/meeting'
 import type { MeetingPicks } from '../model/meeting'
 import { type Detail, type Review, contentSig, handEdited, mapTree, outcomeRows, overviewText, renameIn, saidAround, speakerTimeline } from '../model/meetingReview'
 import { layoutAll, type Measure } from '../model/mindmap'
@@ -257,7 +257,7 @@ const union = (a: Rect, z: Rect): Rect => {
 }
 
 /**
- * Lays a meeting's frame out afresh: the overview, transcript, decisions and actions along the top,
+ * Lays a meeting's frame out afresh: the overview, transcript, decisions, actions and the ideas left to bring up along the top,
  * the speaker timeline under them, then the mind map, then everything else the meeting made (kept
  * as it was arranged); the frame fits around it all. `also`: objects that belong in it wherever they are now.
  */
@@ -269,7 +269,8 @@ export function arrange(b: Board, frame: Id, also: ReadonlySet<Id> = new Set()):
   /** The blocks to place: each a set of objects moved together. */
   const block = (pred: (i: Item) => boolean) => new Set(members.filter(pred).map((i) => i.id))
   const view = (v: MeetingView) => (i: Item) => i.meeting?.view === v
-  const top = [block(view('overview')), block(view('transcript')), block(view('outcomes')), block(view('actions'))].filter((s) => s.size)
+  // The ideas still to bring up go along the top too, where the next meeting will look for them.
+  const top = [block(view('overview')), block(view('transcript')), block(view('outcomes')), block(view('actions')), block((i) => isIdeasTable(i))].filter((s) => s.size)
   const timeline = block(view('timeline'))
   const map = block(view('map'))
   const placed = new Set([...top, timeline, map].flatMap((s) => [...s]))

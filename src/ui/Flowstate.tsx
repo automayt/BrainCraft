@@ -13,7 +13,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { CallInput } from '../ai/callAudio'
-import { ALL_PICKS, type AgendaItem, type MeetingPicks } from '../model/meeting'
+import { ALL_PICKS, type AgendaItem, type IdeaToRaise, type MeetingPicks } from '../model/meeting'
+import type { Id } from '../model/types'
 import { flowFullScreen } from './flowFullScreen'
 import { PushToMute } from './pushToMute'
 import { useEditor } from './useEditor'
@@ -135,21 +136,45 @@ function MeetingPicker({ onPick }: { onPick: (p: MeetingPicks) => void }) {
   )
 }
 
-/** The meeting's agenda, with what's been covered so far. */
-function Agenda({ items }: { items: readonly AgendaItem[] }) {
-  if (!items.length) return null
+/** How many ideas to bring up are listed before the rest fold away. */
+const IDEAS_SHOWN = 6
+
+/**
+ * The meeting's agenda, with what's been covered so far, and under it the ideas worth bringing up
+ * (follow-ups the notes suggest, and those left from earlier meetings). Each is ticked by the notes
+ * once it's been talked about, or by hand here.
+ */
+function Agenda({ items, ideas, onTick }: { items: readonly AgendaItem[]; ideas: readonly IdeaToRaise[]; onTick?: (table: Id, row: string, on: boolean) => void }) {
+  const [all, setAll] = useState(false)
+  if (!items.length && !ideas.length) return null
+  const line = (key: string, text: string, done: boolean, table: Id, row: string, hint: string) => (
+    <li key={key} className={done ? 'covered' : undefined}>
+      <button type="button" role="checkbox" aria-checked={done} disabled={!onTick} title={hint} onClick={() => onTick?.(table, row, !done)}>
+        <i aria-hidden="true">{done ? '✓' : ''}</i>
+        <span>{text}</span>
+      </button>
+    </li>
+  )
+  const shown = all ? ideas : ideas.slice(0, IDEAS_SHOWN)
   return (
-    <section className="flow-agenda" aria-label="Agenda">
-      <h2>Agenda</h2>
-      <ol>
-        {items.map((a, k) => (
-          <li key={k} className={a.covered ? 'covered' : undefined}>
-            <i aria-hidden="true">{a.covered ? '✓' : ''}</i>
-            <span>{a.text}</span>
-            {a.covered && <span className="sr-only"> (covered)</span>}
-          </li>
-        ))}
-      </ol>
+    <section className="flow-agenda" aria-label="Agenda and ideas to bring up">
+      {items.length > 0 && (
+        <>
+          <h2>Agenda</h2>
+          <ol>{items.map((a) => line(`${a.table}:${a.row}`, a.text, a.covered, a.table, a.row, a.covered ? 'Covered. Click if it wasn’t.' : 'Click once it’s been covered'))}</ol>
+        </>
+      )}
+      {ideas.length > 0 && (
+        <>
+          <h2 title="Follow-ups worth raising in this meeting. Those not ticked are kept for the next one.">Ideas to bring up</h2>
+          <ul>{shown.map((a) => line(`${a.table}:${a.row}`, a.text, a.raised, a.table, a.row, [a.why, a.raised ? 'Raised. Click if it wasn’t.' : 'Click once it’s been raised; otherwise it’s kept for next time'].filter(Boolean).join('\n')))}</ul>
+          {ideas.length > IDEAS_SHOWN && (
+            <button type="button" className="flow-agenda-more" aria-expanded={all} onClick={() => setAll(!all)}>
+              {all ? 'Show fewer' : `${ideas.length - IDEAS_SHOWN} more`}
+            </button>
+          )}
+        </>
+      )}
     </section>
   )
 }
@@ -165,6 +190,9 @@ interface MeetingProps {
   /** From a recording: its name, and how far through it is (ms). */
   recording: { name: string; done: number; length: number } | null
   agenda: readonly AgendaItem[]
+  /** Ideas worth bringing up, from this meeting and those left from earlier ones; and ticking one, or an agenda item. */
+  ideas: readonly IdeaToRaise[]
+  onTick?: (table: Id, row: string, on: boolean) => void
   /**
    * Hearing the call's own sound too: where from while it is, whether it can be shared (Chrome and
    * Edge), the inputs it could come from, where from last time, and asking to.
@@ -465,7 +493,7 @@ export function Flowstate(props: {
       </div>
 
       {meeting && <MeetingSign {...meeting} listening={(listening || !!meeting.recording) && !muted} />}
-      {meeting && !meeting.ending && <Agenda items={meeting.agenda} />}
+      {meeting && !meeting.ending && <Agenda items={meeting.agenda} ideas={meeting.ideas} onTick={meeting.onTick} />}
       {meeting?.ending && !meeting.picked && <MeetingPicker onPick={meeting.onPick} />}
 
       <div className="flow-voice">

@@ -8,7 +8,7 @@ import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loa
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
-import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, glossaryOf, howLong, joinFragments, meetingItems, transcriptText, untitledMeeting } from '../model/meeting'
+import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, glossaryOf, howLong, ideasOf, joinFragments, meetingItems, transcriptText, untitledMeeting } from '../model/meeting'
 import { type MeetingRecord, type ReplayStep, type Snapshot, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
@@ -709,6 +709,8 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 onPeople: talk.voicesOn ? setPeople : undefined,
                 recording: editor.meeting.recording && { name: editor.meeting.recording.file.name, done: editor.meeting.recording.done, length: editor.meeting.recording.length },
                 agenda: agendaOf(editor.board, meetingItems(editor.board, editor.meeting.before)),
+                ideas: ideasOf(editor.board),
+                onTick: (table, row, on) => editor.tickMeetingRow(table, row, on),
                 call: {
                   from: talk.call,
                   share: talk.canShare,

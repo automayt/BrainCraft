@@ -44,7 +44,7 @@ import { merge3 } from '../model/merge'
 import * as RV from '../model/revisions'
 import * as W from '../model/wiki'
 import * as FS from '../model/files'
-import { type MeetingPicks, meetingItems, unpicked } from '../model/meeting'
+import { type MeetingPicks, ideasTableOf, isAgendaTable, isIdeasTable, keepIdeas, keepTicks, meetingItems, settleIdeas, tickRow, unpicked } from '../model/meeting'
 import { type MeetingRecord, replayBoard, stepsBy } from '../model/meetingReplay'
 import { contentSig } from '../model/meetingReview'
 import { type Polish, polishMeeting, renameInFrame } from './meetingViews'
@@ -440,7 +440,9 @@ export class Editor {
 
   /**
    * The last of a meeting's notes, done here rather than by the assistant: what wasn't picked to
-   * keep is taken away, and the transcript card (`card`) goes beside the rest. Returns the card.
+   * keep is taken away, and the transcript card (`card`) goes beside the rest. The ideas to bring
+   * up that were raised go too; those that weren't are kept as one list, put beside the rest so it
+   * is framed with this meeting (the latest). Returns the card.
    */
   tidyMeeting(before: ReadonlySet<Id>, picks: MeetingPicks, card: { text: string; description: string } | null): Id | null {
     if (this.readOnly) return null
@@ -457,16 +459,38 @@ export class Editor {
           return { ...t, meeting: { view: 'transcript', sig: contentSig(t) } }
         })
       }
+      const ideas = settleIdeas(next)
+      next = ideas.board
+      const list = ideas.table === null ? undefined : B.getItem(next, ideas.table)
+      const box = list && B.bounds(next, new Set(meetingItems(next, before).filter((id) => id !== list.id)))
+      if (list && box) next = B.translate(next, new Set([list.id]), box.x + box.w + 80 - list.x, box.y - list.y)
       return next
     })
     return made
   }
 
+  /**
+   * Ticks a row of the meeting's agenda or of its ideas to bring up (or takes the tick away), from
+   * the list shown while it's heard. The notes go on keeping that table up: it isn't a change the
+   * assistant has to leave alone.
+   */
+  tickMeetingRow(table: Id, row: string, on: boolean) {
+    const was = B.getItem(this.board, table)
+    if (this.readOnly || !was || was.locked) return
+    const notes = this.aiLeft.get(table) === contentSig(was)
+    this.edit((b) => tickRow(b, table, row, on))
+    const now = B.getItem(this.board, table)
+    if (notes && now) this.aiLeft.set(table, contentSig(now))
+  }
+
   /** Puts everything a meeting made into one frame with its title, and shows it; null when it made nothing. */
   frameMeeting(title: string, before: ReadonlySet<Id>): Id | null {
     if (this.readOnly) return null
-    const ids = meetingItems(this.board, before)
-    if (!ids.length) return null
+    const made = meetingItems(this.board, before)
+    if (!made.length) return null
+    // The ideas still to bring up go with the latest meeting (tidyMeeting put them beside it).
+    const ideas = ideasTableOf(this.board)
+    const ids = ideas === null || made.includes(ideas) ? made : [...made, ideas]
     let frame: Id | null = null
     this.edit((b) => {
       const out = applyOps(b, [{ op: 'createFrame', title, around: ids }], { measure: this.measure })
@@ -514,22 +538,30 @@ export class Editor {
    * on the board before, what's locked and what someone changed by hand are built on, not changed
    * (their place may still move with a map's layout). Returns the changes it may make, and how many
    * objects were kept from it.
+   *
+   * The ideas to bring up are the exception: that list is kept from meeting to meeting and ticked
+   * by people too, so the assistant may add to it and tick it whenever it was made, and can never
+   * take an idea or a tick away. A tick on the agenda stays as well.
    */
   private guardMeeting(patches: Patch[]): { patches: Patch[]; kept: number } {
     const m = this.meeting
     if (!m) return { patches, kept: 0 }
     const kept = new Set<Id>()
-    const out = patches.filter((p) => {
-      if (p.k === 'conn') return !(m.linksBefore.has(p.id) && !p.v)
-      if (p.k !== 'item') return true
+    const out = patches.flatMap((p): Patch[] => {
+      if (p.k === 'conn') return m.linksBefore.has(p.id) && !p.v ? [] : [p]
+      if (p.k !== 'item') return [p]
       const now = B.getItem(this.board, p.id)
-      if (!now) return true
+      if (!now) return [p]
       const same = !!p.v && contentSig(p.v) === contentSig(now)
-      if (same) return true
+      if (same) return [p]
+      if (isIdeasTable(now)) return now.locked || !p.v ? [] : [{ ...p, v: keepIdeas(now, p.v) }]
       const left = this.aiLeft.get(p.id)
       const mine = !m.before.has(p.id) && !now.locked && left !== undefined && left === contentSig(now)
-      if (!mine) kept.add(p.id)
-      return mine
+      if (!mine) {
+        kept.add(p.id)
+        return []
+      }
+      return [p.v && isAgendaTable(now) ? { ...p, v: keepTicks(now, p.v) } : p]
     })
     return { patches: out, kept: kept.size }
   }

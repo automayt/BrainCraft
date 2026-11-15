@@ -1,7 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import { askedLast } from '../ui/Flowstate'
-import { MEETING_REVIEW } from './assistant'
+import { applyOps } from '../api/ops'
+import { emptyBoard } from '../model/board'
+import { IDEAS_TITLE, agendaOf, ideasOf } from '../model/meeting'
+import { fakeMeasure } from '../model/test-helpers'
+import { MEETING_AGENDA, MEETING_NOTE, MEETING_REVIEW } from './assistant'
 import { parseReview } from '../model/meetingReview'
+
+describe('the agenda and the ideas to bring up, as the assistant is asked for them', () => {
+  it('are asked for by the names and columns they’re read by', () => {
+    for (const prompt of [MEETING_AGENDA, MEETING_NOTE]) {
+      expect(prompt).toContain(`"${IDEAS_TITLE}"`)
+      expect(prompt).toContain('Idea, Why and Raised')
+    }
+    expect(MEETING_AGENDA).toContain('Item, Why now and Covered')
+    // Tables made the way they're asked for read back as the agenda and the ideas.
+    const { board } = applyOps(
+      emptyBoard(),
+      [
+        { op: 'createTable', title: 'Agenda', columns: ['Item', 'Why now', 'Covered'], rows: [['Venue', 'Left from last time', '✓']] },
+        { op: 'createTable', title: IDEAS_TITLE, columns: ['Idea', 'Why', 'Raised'], rows: [['Who signs off the budget?', 'Nobody was named', '']] },
+      ],
+      { measure: fakeMeasure },
+    )
+    expect(agendaOf(board, board.items.map((i) => i.id)).map((a) => [a.text, a.covered])).toEqual([['Venue', true]])
+    expect(ideasOf(board).map((i) => [i.text, i.why, i.raised])).toEqual([['Who signs off the budget?', 'Nobody was named', false]])
+  })
+
+  it('say the ideas are kept from meeting to meeting, and never taken off the list', () => {
+    expect(MEETING_NOTE).toContain('Never take a row out of it or clear a tick')
+    expect(MEETING_NOTE).toContain('kept from meeting to meeting')
+    expect(MEETING_AGENDA).toContain('make no second one')
+  })
+})
 
 describe('the review of a meeting, as the assistant is asked for it', () => {
   it('asks for the form the review is read in', () => {

@@ -4,6 +4,7 @@ import { emptyBoard } from '../model/board'
 import * as M from '../model/mindmap'
 import { toScreen } from '../model/camera'
 import { fakeMeasure } from '../model/test-helpers'
+import { agendaOf, ideasOf, meetingItems } from '../model/meeting'
 import { Editor } from './Editor'
 import { diff } from '../collab/patch'
 import { BrainCraftAPI } from '../api/api'
@@ -1526,6 +1527,99 @@ describe('the assistant’s notes in a meeting', () => {
     expect(e.camera).toEqual(cam)
     expect(e.selection.size).toBe(0)
     expect(e.pulse!.ids.map((id) => B.getItem(e.board, id)!.text)).toEqual(['Far away'])
+  })
+})
+
+describe('ideas to bring up, in a meeting', () => {
+  const ai = (e: Editor, id: string, f: (b: typeof e.board) => typeof e.board) => e.applyAi(id, id, diff(e.board, f(e.board)))
+  const ops = (b: Editor['board'], list: Parameters<typeof applyOps>[1]) => applyOps(b, list, { measure: fakeMeasure }).board
+  const ideas = (e: Editor) => ideasOf(e.board).map((i) => [i.text, i.raised])
+  /** A board with a list left from an earlier meeting, and a new meeting started. */
+  const meeting = () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([
+      { op: 'createNote', text: 'From before', at: { x: 0, y: 0 } },
+      { op: 'createTable', title: 'Ideas to bring up', columns: ['Idea', 'Why', 'Raised'], rows: [['Who signs off the budget?', 'Nobody was named', ''], ['Check the parking', '', '']], at: { x: -900, y: 0 } },
+    ])
+    const list = e.board.items.find((i) => i.kind === 'table')!.id
+    e.setFlow(true, { meeting: true })
+    return { e, list, m: e.meeting! }
+  }
+
+  it('are added to and ticked by the assistant on a list from an earlier meeting, and never taken off it', () => {
+    const { e, list } = meeting()
+    // The assistant gives every row again: one dropped, one ticked, one new.
+    ai(e, 'a1', (b) => ops(b, [{ op: 'setTable', id: list, columns: ['Idea', 'Why', 'Raised'], rows: [['Check the parking', '', '✓'], ['Agree who presents', '', '']] }]))
+    expect(ideas(e)).toEqual([
+      ['Who signs off the budget?', false],
+      ['Check the parking', true],
+      ['Agree who presents', false],
+    ])
+    // It can't take the list away, or anything else that was there before.
+    ai(e, 'a2', (b) => B.remove(b, new Set(b.items.map((i) => i.id))))
+    expect(ideas(e)).toHaveLength(3)
+    expect(e.board.items.some((i) => i.text === 'From before')).toBe(true)
+  })
+
+  it('are ticked by hand without stopping the assistant keeping the list up', () => {
+    const { e, list } = meeting()
+    const idea = ideasOf(e.board)[0]
+    e.tickMeetingRow(list, idea.row, true)
+    expect(ideas(e)[0]).toEqual(['Who signs off the budget?', true])
+    // The assistant's next turn doesn't know of the tick: it stays, and its new idea goes in.
+    ai(e, 'a1', (b) => ops(b, [{ op: 'setTable', id: list, columns: ['Idea', 'Why', 'Raised'], rows: [['Who signs off the budget?', '', ''], ['Check the parking', '', ''], ['Agree who presents', '', '']] }]))
+    expect(ideas(e)).toEqual([
+      ['Who signs off the budget?', true],
+      ['Check the parking', false],
+      ['Agree who presents', false],
+    ])
+    e.tickMeetingRow(list, idea.row, false)
+    expect(ideas(e)[0]).toEqual(['Who signs off the budget?', false])
+  })
+
+  it('on the agenda too: a tick made by hand stays, and the assistant still ticks the rest', () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([{ op: 'createNote', text: 'From before' }])
+    e.setFlow(true, { meeting: true })
+    const m = e.meeting!
+    ai(e, 'a1', (b) => ops(b, [{ op: 'createTable', title: 'Agenda', columns: ['Item', 'Why now', 'Covered'], rows: [['Venue', '', ''], ['Budget', '', '']] }]))
+    const agenda = () => agendaOf(e.board, meetingItems(e.board, m.before))
+    e.tickMeetingRow(agenda()[0].table, agenda()[0].row, true)
+    expect(agenda().map((a) => a.covered)).toEqual([true, false])
+    // Not a change the assistant has to leave alone: it ticks the budget, and the venue's tick stays though it left it out.
+    ai(e, 'a2', (b) => ops(b, [{ op: 'setTable', id: agenda()[0].table, columns: ['Item', 'Why now', 'Covered'], rows: [['Venue', '', ''], ['Budget', '', '✓']] }]))
+    expect(agenda().map((a) => a.covered)).toEqual([true, true])
+    expect(e.status).not.toContain('Kept your change')
+  })
+
+  it('not raised are kept when the meeting ends, in its frame, and those raised go', () => {
+    const { e, list, m } = meeting()
+    ai(e, 'a1', (b) => ops(b, [{ op: 'createMindMap', outline: 'Launch\n  Venue' }, { op: 'setTable', id: list, columns: ['Idea', 'Why', 'Raised'], rows: [['Who signs off the budget?', '', '✓'], ['Check the parking', '', ''], ['Agree who presents', '', '']] }]))
+    e.tidyMeeting(m.before, { collage: false, kanban: false, notes: true, timeline: false }, { text: 'Transcript: Launch', description: '[0:01] Jo: hello' })
+    expect(ideas(e)).toEqual([
+      ['Check the parking', false],
+      ['Agree who presents', false],
+    ])
+    const framed = e.frameMeeting('Launch', m.before)!
+    const frame = B.getItem(e.board, framed)!
+    const kept = B.getItem(e.board, list)!
+    // The list came from far to the left: it's with the latest meeting now, inside its frame.
+    expect(kept.x >= frame.x && kept.y >= frame.y && kept.x + kept.w <= frame.x + frame.w && kept.y + kept.h <= frame.y + frame.h).toBe(true)
+    // And clear of everything else in it.
+    const others = e.board.items.filter((i) => i.id !== list && i.id !== frame.id && !m.before.has(i.id))
+    for (const o of others) expect(kept.x >= o.x + o.w || kept.x + kept.w <= o.x || kept.y >= o.y + o.h || kept.y + kept.h <= o.y).toBe(true)
+    // What was there before the meeting stays outside the frame.
+    const old = e.board.items.find((i) => i.text === 'From before')!
+    expect(old.x + old.w <= frame.x || old.x >= frame.x + frame.w || old.y + old.h <= frame.y || old.y >= frame.y + frame.h).toBe(true)
+  })
+
+  it('stay where they are when the meeting made nothing to frame', () => {
+    const { e, list, m } = meeting()
+    const at = { x: B.getItem(e.board, list)!.x, y: B.getItem(e.board, list)!.y }
+    e.tidyMeeting(m.before, { collage: true, kanban: true, notes: true, timeline: true }, null)
+    expect(e.frameMeeting('Nothing', m.before)).toBeNull()
+    expect({ x: B.getItem(e.board, list)!.x, y: B.getItem(e.board, list)!.y }).toEqual(at)
+    expect(ideas(e)).toHaveLength(2)
   })
 })
 

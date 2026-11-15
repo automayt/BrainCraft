@@ -169,7 +169,26 @@ the notes on the board as the meeting goes.
   it left unfinished (actions, blockers, open questions, proposals not yet
   agreed), marked "Left from last time". It goes on the board as an
   **Agenda** table, and shows at the top left while you meet; each item gets
-  its tick once it's been talked about.
+  its tick once it's been talked about, or when you click it there.
+- **Ideas to bring up.** Under the agenda is a second list: follow-ups worth
+  raising at this meeting that nobody has raised yet. The assistant suggests
+  some with the agenda (a follow-up to something on the board, a question
+  nobody has answered) and adds more as the meeting goes: a question left
+  hanging, an owner or a date nobody named, a risk that follows from what was
+  agreed. Hover one for why.
+  - An idea is ticked once it's been talked about, by the assistant or by
+    clicking it. Click again to take the tick away.
+  - It's a table on the board too, titled **Ideas to bring up**, with the
+    columns Idea, Why and Raised. Add your own there, or change them.
+  - **Ideas outlive the meeting.** When it ends, those that were raised go
+    (they're in the notes), and the rest are kept in the meeting's frame,
+    along the top. The next meeting on the board starts with them under its
+    agenda, and when it ends the list moves to its frame. An idea stays, from
+    meeting to meeting, until it's been raised; when none are left, so is no
+    list.
+  - The assistant only ever adds ideas and ticks them. It can't take one off
+    the list or clear a tick, whatever it writes; a locked list it leaves
+    alone altogether.
 - **Talking to the robot.** Anyone can tell the notes what to do mid-meeting,
   by calling the assistant (robot, assistant, BrainCraft) or with a
   note-taking phrase: "robot, note that the budget is fifty thousand",

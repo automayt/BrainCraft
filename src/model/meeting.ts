@@ -1,10 +1,13 @@
 /**
  * MeetingNotes: while a meeting is heard, the assistant takes notes on the board, and when it
- * ends everything the meeting made goes into one frame, titled for what it was about.
+ * ends everything the meeting made goes into one frame, titled for what it was about. Alongside
+ * the agenda it keeps a list of ideas to bring up, which outlives the meeting: an idea stays on
+ * it, from one meeting to the next, until it has been raised.
  */
 
 import * as B from './board'
-import type { Board, Id } from './types'
+import { addColumn, addRow, setCell, tableSize } from './table'
+import type { Board, Id, Item, TableData, TableRow } from './types'
 
 /**
  * What a meeting made: the objects that weren't on the board when it started, apart from ideas
@@ -64,7 +67,8 @@ export function meetingParts(b: Board, ids: readonly Id[], keep: ReadonlySet<Id>
   const out = { notes: [] as Id[], kanban: [] as Id[], collage: [] as Id[] }
   for (const id of ids) {
     const i = B.getItem(b, id)
-    if (!i || keep.has(id) || i.kind === 'frame') continue
+    // The ideas to bring up are kept whatever was picked: they're for the next meeting too.
+    if (!i || keep.has(id) || i.kind === 'frame' || isIdeasTable(i)) continue
     if (i.kind === 'mind' || (i.kind === 'table' && /^\s*(decisions|agenda)\b/i.test(i.text))) out.notes.push(id)
     else if (i.kind === 'kanban') out.kanban.push(id)
     else out.collage.push(id)
@@ -78,30 +82,215 @@ export function unpicked(b: Board, ids: readonly Id[], picks: MeetingPicks, keep
   return [...(picks.notes ? [] : parts.notes), ...(picks.kanban ? [] : parts.kanban), ...(picks.collage ? [] : parts.collage)]
 }
 
-/** One item of a meeting's agenda, and whether it's been talked about. */
+/** One item of a meeting's agenda, whether it's been talked about, and the row of the table it is. */
 export interface AgendaItem {
   text: string
   covered: boolean
+  table: Id
+  row: string
 }
+
+/** A cell that says a row is done: anything but nothing, or a word for "not yet". */
+const ticked = (mark: string | undefined) => {
+  const m = (mark ?? '').trim()
+  return !!m && !/^(no|not yet|-|–|—|open|todo|to do)$/i.test(m)
+}
+
+/** The columns of a list a meeting ticks off (the agenda, the ideas to bring up): what each row is, why, and whether it's done. */
+function listColumns(t: TableData) {
+  const cols = t.columns.filter((c) => !c.hidden)
+  const item = cols.find((c) => /item|topic|what|idea/i.test(c.name)) ?? cols.find((c) => !/^#|no\.?$/i.test(c.name.trim())) ?? cols[0]
+  const done = cols.find((c) => c !== item && /covered|done|discussed|raised|status/i.test(c.name))
+  const why = cols.find((c) => c !== item && c !== done && /why|reason/i.test(c.name))
+  return { item, done, why }
+}
+
+/** A meeting's agenda: a table with that title. */
+export const isAgendaTable = (i: Item | undefined): i is Item & { table: TableData } => i?.kind === 'table' && !!i.table && /^\s*agenda\b/i.test(i.text)
 
 /** The agenda the assistant put on the board for a meeting (a table titled "Agenda"), among `ids`. */
 export function agendaOf(b: Board, ids: readonly Id[]): AgendaItem[] {
   for (const id of ids) {
     const i = B.getItem(b, id)
-    if (i?.kind !== 'table' || !i.table || !/^\s*agenda\b/i.test(i.text)) continue
-    const cols = i.table.columns.filter((c) => !c.hidden)
-    const item = cols.find((c) => /item|topic|what/i.test(c.name)) ?? cols.find((c) => !/^#|no\.?$/i.test(c.name.trim())) ?? cols[0]
-    const done = cols.find((c) => /covered|done|discussed|status/i.test(c.name))
+    if (!isAgendaTable(i)) continue
+    const { item, done } = listColumns(i.table)
     if (!item) return []
     return i.table.rows
       .filter((r) => !r.hidden && (r.cells[item.id] ?? '').trim())
       .slice(0, 12)
-      .map((r) => {
-        const mark = done ? (r.cells[done.id] ?? '').trim() : ''
-        return { text: r.cells[item.id].trim(), covered: !!mark && !/^(no|not yet|-|–|—|open|todo|to do)$/i.test(mark) }
-      })
+      .map((r) => ({ text: r.cells[item.id].trim(), covered: !!done && ticked(r.cells[done.id]), table: i.id, row: r.id }))
   }
   return []
+}
+
+// ----- ideas to bring up ------------------------------------------------------------------
+
+/** What the list of ideas to bring up is called. There's one for the board, kept from meeting to meeting. */
+export const IDEAS_TITLE = 'Ideas to bring up'
+
+/** A list of ideas to bring up: a table with that title. */
+export const isIdeasTable = (i: Item | undefined): i is Item & { table: TableData } => i?.kind === 'table' && !!i.table && /^\s*ideas to (bring up|raise)\b/i.test(i.text)
+
+/** An idea worth bringing up, why, whether it has been raised, and the row of the list it is. */
+export interface IdeaToRaise {
+  text: string
+  why: string
+  raised: boolean
+  table: Id
+  row: string
+}
+
+/** Two ways of writing the same thing: capitals, punctuation and spacing aside. */
+const same = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+
+/** The lists of ideas a meeting can add to and tick: on the board, in view, and not locked. */
+function ideasTables(b: Board): (Item & { table: TableData })[] {
+  const hidden = B.hiddenIds(b)
+  return b.items.filter((i): i is Item & { table: TableData } => isIdeasTable(i) && !hidden.has(i.id))
+}
+
+/** The list of ideas a meeting adds to (the first, when the assistant made more than one), unless it's locked. */
+export function ideasTableOf(b: Board): Id | null {
+  return ideasTables(b).find((i) => !i.locked)?.id ?? null
+}
+
+/** The ideas to bring up, from wherever they are on the board (a meeting's own, and those left from earlier ones). */
+export function ideasOf(b: Board): IdeaToRaise[] {
+  const out: IdeaToRaise[] = []
+  const seen = new Set<string>()
+  for (const i of ideasTables(b)) {
+    const { item, done, why } = listColumns(i.table)
+    if (!item) continue
+    for (const r of i.table.rows) {
+      const text = (r.cells[item.id] ?? '').trim()
+      if (r.hidden || !text || seen.has(same(text))) continue
+      seen.add(same(text))
+      out.push({ text, why: why ? (r.cells[why.id] ?? '').trim() : '', raised: !!done && ticked(r.cells[done.id]), table: i.id, row: r.id })
+    }
+  }
+  return out
+}
+
+/** Ticks a row of the agenda or of the ideas to bring up, or takes its tick away. A list with nowhere for ticks gets a column for them. */
+export function tickRow(b: Board, table: Id, row: string, on: boolean): Board {
+  const i = B.getItem(b, table)
+  if (i?.kind !== 'table' || !i.table || !i.table.rows.some((r) => r.id === row)) return b
+  const done = listColumns(i.table).done
+  if (done) return B.updateItem(b, table, (x) => ({ ...x, table: setCell(i.table!, row, done.id, on ? '✓' : '') }))
+  if (!on) return b
+  const [wider, made] = addColumn(i.table, undefined, isIdeasTable(i) ? 'Raised' : 'Covered')
+  const t = setCell(wider, row, made, '✓')
+  return B.updateItem(b, table, (x) => ({ ...x, table: t, w: Math.max(x.w, tableSize(t).w) }))
+}
+
+/**
+ * A ticked list as the assistant rewrote it, with the ticks it had: the assistant may tick a row
+ * (once it's been talked about), but never takes a tick away, whoever made it.
+ */
+export function keepTicks(now: Item, next: Item): Item {
+  if (!now.table || !next.table) return next
+  const was = listColumns(now.table)
+  const will = listColumns(next.table)
+  if (!was.item || !was.done || !will.item || !will.done) return next
+  const marks = new Map(now.table.rows.filter((r) => ticked(r.cells[was.done!.id])).map((r) => [same(r.cells[was.item!.id] ?? ''), r.cells[was.done!.id]]))
+  let changed = false
+  const rows = next.table.rows.map((r) => {
+    const mark = marks.get(same(r.cells[will.item!.id] ?? ''))
+    if (!mark || ticked(r.cells[will.done!.id])) return r
+    changed = true
+    return { ...r, cells: { ...r.cells, [will.done!.id]: mark } }
+  })
+  return changed ? { ...next, table: { ...next.table, rows } } : next
+}
+
+/** No more ideas than this are kept open at once: past it, new ones wait until some are raised. */
+const MOST_IDEAS = 24
+
+/**
+ * The list of ideas as the assistant rewrote it, kept whole: it may add ideas and tick those that
+ * were talked about, but every idea already there stays as it was (its words, its place and its
+ * tick), whoever put it there.
+ */
+export function keepIdeas(now: Item, next: Item): Item {
+  if (!now.table || !next.table) return now
+  const was = listColumns(now.table)
+  const will = listColumns(next.table)
+  if (!was.item || !will.item) return now
+  const theirs = new Map<string, TableRow>()
+  for (const r of next.table.rows) {
+    const key = same(r.cells[will.item.id] ?? '')
+    if (key && !theirs.has(key)) theirs.set(key, r)
+  }
+  let t = now.table
+  let done = was.done?.id
+  const tick = (row: string) => {
+    if (!done) [t, done] = addColumn(t, undefined, 'Raised')
+    t = setCell(t, row, done, '✓')
+  }
+  const raised = (r: TableRow) => !!will.done && ticked(r.cells[will.done.id])
+  const have = new Set<string>()
+  for (const r of now.table.rows) {
+    const key = same(r.cells[was.item.id] ?? '')
+    have.add(key)
+    const their = theirs.get(key)
+    if (their && raised(their) && !(done && ticked(r.cells[done]))) tick(r.id)
+  }
+  let open = now.table.rows.filter((r) => !(done && ticked(r.cells[done]))).length
+  for (const [key, r] of theirs) {
+    if (have.has(key) || (!raised(r) && open >= MOST_IDEAS)) continue
+    let id: string
+    ;[t, id] = addRow(t)
+    t = setCell(t, id, was.item.id, (r.cells[will.item.id] ?? '').trim())
+    if (was.why && will.why) t = setCell(t, id, was.why.id, (r.cells[will.why.id] ?? '').trim())
+    if (raised(r)) tick(id)
+    else open++
+  }
+  if (t === now.table) return now
+  const size = tableSize(t)
+  return { ...now, table: t, w: Math.max(now.w, size.w), h: size.h }
+}
+
+/**
+ * When a meeting ends: the ideas that were raised go (they're in its notes), and those that
+ * weren't are kept, as one list, for the next meeting. Returns the list that's left, if any.
+ * A locked list is left as it is.
+ */
+export function settleIdeas(b: Board): { board: Board; table: Id | null } {
+  const tables = ideasTables(b).filter((i) => !i.locked)
+  const keeper = tables[0]
+  if (!keeper) return { board: b, table: null }
+  const cols = listColumns(keeper.table)
+  if (!cols.item) return { board: b, table: keeper.id }
+  const seen = new Set<string>()
+  const fresh = (text: string) => {
+    if (!text || seen.has(same(text))) return false
+    seen.add(same(text))
+    return true
+  }
+  // Its own rows not yet raised, as they are (rows hidden by hand stay hidden).
+  let t: TableData = { ...keeper.table, rows: keeper.table.rows.filter((r) => !(cols.done && ticked(r.cells[cols.done.id])) && fresh((r.cells[cols.item!.id] ?? '').trim())) }
+  // Any other list's (the assistant made a second one), folded in.
+  for (const other of tables.slice(1)) {
+    const from = listColumns(other.table)
+    if (!from.item) continue
+    for (const r of other.table.rows) {
+      const text = (r.cells[from.item.id] ?? '').trim()
+      if (r.hidden || (from.done && ticked(r.cells[from.done.id])) || !fresh(text)) continue
+      let id: string
+      ;[t, id] = addRow(t)
+      t = setCell(t, id, cols.item.id, text)
+      if (cols.why && from.why) t = setCell(t, id, cols.why.id, (r.cells[from.why.id] ?? '').trim())
+    }
+  }
+  const gone = new Set(tables.slice(1).map((i) => i.id))
+  // Nothing left to bring up: no list.
+  if (!t.rows.length) return { board: B.remove(b, new Set([...gone, keeper.id])), table: null }
+  const board = B.updateItem(gone.size ? B.remove(b, gone) : b, keeper.id, (i) => ({ ...i, table: t, h: tableSize(t).h }))
+  return { board, table: keeper.id }
 }
 
 /** A line heard in a meeting: when (ms from its start), who said it (a voice number), and what. */
