@@ -9,6 +9,7 @@ import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
 import { isWiki } from '../model/wiki'
 import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, glossaryOf, howLong, ideasOf, joinFragments, meetingItems, transcriptText, untitledMeeting } from '../model/meeting'
+import { isStock, sameWords } from '../ai/heardOnce'
 import { type MeetingRecord, type ReplayStep, type Snapshot, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
@@ -16,7 +17,7 @@ import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
 import { useUi } from './uiContext'
 import { useWorkspace } from './useWorkspace'
-import { useTalk } from './useTalk'
+import { heardSummary, heardWarning, useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, askedLast, plainLine } from './Flowstate'
 import { VoiceNames } from './VoiceNames'
@@ -458,6 +459,8 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
    * changes to what it made. `last`: how far into it the latest line was (ms).
    */
   const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; last: number; did: { at: number; text: string }[] }>({ lines: [], steps: [], snap: emptySnapshot(), last: 0, did: [] })
+  /** The latest lines heard, by the number each can be taken back by. */
+  const heardLines = useRef(new Map<number, MeetingLine>())
   /** How far into the meeting it is (ms): in a recording, as far as it's been read. */
   const meetingClock = () => {
     const m = editor.meeting
@@ -502,17 +505,30 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       if (!m) return
       const at = l.at ?? Date.now() - m.started
       log.current.last = Math.max(log.current.last, at)
-      log.current.lines.push({ at, text: l.text, ...(l.voice !== undefined ? { voice: l.voice } : {}), ...(l.unclear ? { unclear: true } : {}) })
+      const line: MeetingLine = { at, text: l.text, ...(l.voice !== undefined ? { voice: l.voice } : {}), ...(l.unclear ? { unclear: true } : {}) }
+      log.current.lines.push(line)
+      heardLines.current.set(l.id, line)
+      if (heardLines.current.size > 200) heardLines.current.delete(heardLines.current.keys().next().value!)
     },
-    // Names and terms in use, then what was said just before: speech to text spells them right.
+    // It was the call, heard through the microphone: the call's own line is the one kept.
+    unline: (id) => {
+      const line = heardLines.current.get(id)
+      heardLines.current.delete(id)
+      const at = line ? log.current.lines.lastIndexOf(line) : -1
+      if (at >= 0) log.current.lines.splice(at, 1)
+    },
+    // Names and terms in use, and what was said just before: speech to text spells them right.
     context: () => {
-      if (!editor.meeting && !editor.guide) return ''
+      if (!editor.meeting && !editor.guide) return { terms: '', said: '' }
       const terms = glossaryOf(editor.board, talk.voices.map((v) => v.name)).join(', ')
-      const before = log.current.lines
-        .slice(-3)
-        .map((l) => l.text.replace(/\[unclear: [^\]]*\]/g, ''))
-        .join(' ')
-      return `${terms ? `${terms}. ` : ''}${before}`.trim()
+      // The last few lines, each once, and none that speech to text says over silence anyway:
+      // given those, it says them again over the next noise.
+      const said: string[] = []
+      for (const l of log.current.lines.slice(-6)) {
+        const text = l.text.replace(/\[unclear: [^\]]*\]/g, '').trim()
+        if (text && !isStock(text) && !said.some((s) => sameWords(s, text))) said.push(text)
+      }
+      return { terms, said: said.slice(-3).join(' ') }
     },
     progress: (done, length) => editor.meetingProgress(done, length),
     ended: () => editor.endMeeting(),
@@ -721,6 +737,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   last: talk.lastCall,
                   hear: (from) => void talk.hearCall(from),
                   echo: { on: talk.echo, set: talk.setEcho, thorough: talk.how === 'server' },
+                  heard: { summary: heardSummary(talk.heard), warning: talk.call ? heardWarning(talk.heard, talk.echo) : null },
                   // Other voices through the microphone: they may be on a call.
                   suggest: talk.voices.length > 1,
                 },

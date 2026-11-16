@@ -293,6 +293,12 @@ export function settleIdeas(b: Board): { board: Board; table: Id | null } {
   return { board, table: keeper.id }
 }
 
+/** What the people on a call go by, as one, until someone says who they are: when their voices can't be told apart. */
+export const CALL_NAME = 'The call'
+
+/** A voice nobody has named yet: "Voice 2", or the call as a whole. */
+export const unnamedVoice = (name: string) => /^voice \d+$/i.test(name.trim()) || name.trim().toLowerCase() === CALL_NAME.toLowerCase()
+
 /** A line heard in a meeting: when (ms from its start), who said it (a voice number), and what. */
 export interface MeetingLine {
   at: number
@@ -386,7 +392,7 @@ export function glossaryOf(b: Board, names: readonly string[] = [], max = 40): s
     if (t.length < 2 || t.length > 40 || out.has(t.toLowerCase())) return
     out.set(t.toLowerCase(), t)
   }
-  for (const n of names) if (!/^voice \d+$/i.test(n)) add(n)
+  for (const n of names) if (!unnamedVoice(n)) add(n)
   for (const i of b.items) for (const a of i.assignees ?? []) add(a)
   for (const i of b.items) {
     if (out.size >= max) break

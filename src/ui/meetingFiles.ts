@@ -10,7 +10,7 @@ import { MEETING_REVIEW } from '../ai/assistant'
 import { withBrief } from '../ai/brief'
 import { askOnce } from '../ai/once'
 import { getFile } from '../model/files'
-import { ALL_PICKS, type MeetingPicks, clock, howLong, joinFragments, transcriptText } from '../model/meeting'
+import { ALL_PICKS, type MeetingPicks, clock, howLong, joinFragments, transcriptText, unnamedVoice } from '../model/meeting'
 import { type MeetingRecord, readRecord } from '../model/meetingReplay'
 import { type Detail, DETAILS, correctSpeakers, firstDetail, parseReview, peopleOf, renameInReview, unfinished } from '../model/meetingReview'
 import type { Id } from '../model/types'
@@ -190,7 +190,7 @@ export async function renamePerson(ws: Workspace, editor: Editor, frame: Id, fro
     await saveRecord(ws, editor, frame, { ...record, v: 2, lines, ...(record.review ? { review: renameInReview(record.review, from, name) } : {}) })
   }
   // A voice the server remembers by the old name is known by the new one from now on.
-  if (ws.server && !/^voice \d+$/i.test(from))
+  if (ws.server && !unnamedVoice(from))
     void fetch(new URL(`api/ai/voices?name=${encodeURIComponent(from)}`, ws.server.endsWith('/') ? ws.server : `${ws.server}/`), {
       method: 'PATCH',
       body: JSON.stringify({ name }),

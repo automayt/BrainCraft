@@ -779,8 +779,12 @@ shares live exactly like a board.
   was decided, proposed and set to do, a mind map and a timeline of who said
   what, at the level of detail you choose. It can work from a recording, and
   be played back to see how it grew. Voices, once named, are known in every
-  meeting after, and a name corrected once changes everywhere. See
-  [docs/AI.md](docs/AI.md#meetingnotes).
+  meeting after, and a name corrected once changes everywhere. On a call,
+  **Hear the call too** takes the call's own sound as well: you and the call
+  are two people from the first line, and what your speakers play isn't
+  written down a second time as yours. Each thing is heard once: a line
+  speech to text says over and over, or only says again over a noise, is
+  left out. See [docs/AI.md](docs/AI.md#meetingnotes).
 - **Guided:** the assistant asks you questions to draw your ideas out, and
   maps the questions and answers as you go.
 - **Sketch to board:** draw a rough flowchart or mind map with the pen, or

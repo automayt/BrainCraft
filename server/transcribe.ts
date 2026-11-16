@@ -18,9 +18,15 @@
  *   DELETE /api/ai/voices?name=Sam                                forgets one
  *   PATCH /api/ai/voices?name=Sam   {"name": "Samira"}            corrects a remembered name
  *
- * An X-Transcribe-Context header (URI-encoded) is passed on as the endpoint's prompt: the names and
- * terms in use and what was said just before, so each phrase is heard in context. Words the
- * endpoint wasn't sure of come back marked "[unclear: …]" (with "unclear": true).
+ * Two headers (URI-encoded) are passed on as the endpoint's prompt, so each phrase is heard in
+ * context: X-Transcribe-Terms, the names and terms in use, and X-Transcribe-Context, what was said
+ * just before. Words the endpoint wasn't sure of come back marked "[unclear: …]" (with "unclear":
+ * true).
+ *
+ * Speech to text given sound that isn't clear speech says something anyway: a phrase over and
+ * over, a stock line, or what it was just told came before. So a phrase said over and over comes
+ * back said once, and an answer that only says the context again is asked for once more without
+ * it: the same again was really said, anything else is what was (see src/ai/heardOnce.ts).
  *
  * Settings: BRAINCRAFT_TRANSCRIBE_URL (the endpoint's base, e.g. http://localhost:8000/v1),
  * BRAINCRAFT_TRANSCRIBE_MODEL (default whisper-1), BRAINCRAFT_TRANSCRIBE_KEY (if it needs one).
@@ -28,6 +34,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isStock, saidBefore, settled, withoutLoops } from '../src/ai/heardOnce'
 import type { AiGate } from './aiProxy'
 import { type Embedder, type VoiceBook, type Voices, cleanName, wavSamples } from './speakers'
 
@@ -69,45 +76,59 @@ function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
   })
 }
 
-/** The context the app sent for a phrase (URI-encoded, as headers carry only plain text), at most 800 characters. */
-export function contextOf(header: string | string[] | undefined): string {
+/**
+ * The context the app sent for a phrase (URI-encoded, as headers carry only plain text), at most
+ * `max` characters: the last of what was said, or (`start`) the first of a list of terms.
+ */
+export function contextOf(header: string | string[] | undefined, max = 800, start = false): string {
   const raw = Array.isArray(header) ? header[0] : header
-  if (!raw) return ''
+  if (!raw || max <= 0) return ''
   try {
-    return decodeURIComponent(raw).replace(/[\u0000-\u001f]+/g, ' ').trim().slice(-800)
+    const text = decodeURIComponent(raw).replace(/[\u0000-\u001f]+/g, ' ').trim()
+    return (start ? text.slice(0, max) : text.slice(-max)).trim()
   } catch {
     return ''
   }
 }
 
+/** The prompt speech to text takes in is short: the terms and what was said share this many characters. */
+const PROMPT_MAX = 800
+const TERMS_MAX = 300
+
 /** What speech to text makes of silence and noise when it has to say something. */
 const MADE_UP = /^\W*(thanks? (you )?(so much )?for watching|please subscribe|subtitles? by|transcribed by|amara\.org|♪+)\W*$/i
 
 /**
- * The words from a transcription endpoint's answer. With its stretches (verbose_json), those it
- * was likely making up over silence are left out, and those it wasn't sure of are marked
- * "[unclear: …]" so the notes don't take them for what was said.
+ * The words from a transcription endpoint's answer. A phrase it said over and over is said once.
+ * With its stretches (verbose_json), those it was likely making up over silence are left out, and
+ * those it wasn't sure of are marked "[unclear: …]" so the notes don't take them for what was said.
  */
 export function readTranscript(out: unknown): { text: string; unclear: boolean } {
   const o = (out ?? {}) as { text?: unknown; segments?: unknown }
   const whole = typeof o.text === 'string' ? o.text.trim() : ''
-  if (!Array.isArray(o.segments) || !o.segments.length) return { text: MADE_UP.test(whole) ? '' : whole, unclear: false }
+  if (!Array.isArray(o.segments) || !o.segments.length) {
+    const once = withoutLoops(whole).text
+    return { text: MADE_UP.test(once) ? '' : once, unclear: false }
+  }
   const kept: string[] = []
-  let unclear = false
   for (const s of o.segments as { text?: unknown; avg_logprob?: unknown; no_speech_prob?: unknown; compression_ratio?: unknown }[]) {
-    const t = typeof s?.text === 'string' ? s.text.trim() : ''
-    if (!t || MADE_UP.test(t)) continue
+    const said = typeof s?.text === 'string' ? s.text.trim() : ''
+    if (!said || MADE_UP.test(said)) continue
+    const { text: t, looped } = withoutLoops(said)
     const sure = typeof s.avg_logprob === 'number' ? s.avg_logprob : 0
     const silent = typeof s.no_speech_prob === 'number' ? s.no_speech_prob : 0
     const loops = typeof s.compression_ratio === 'number' ? s.compression_ratio : 1
     // Most likely silence it put words to.
     if (silent > 0.6 && sure < -0.7) continue
-    if (sure < -1 || loops > 2.4) {
-      unclear = true
-      kept.push(`[unclear: ${t.replace(/[[\]]/g, '')}]`)
-    } else kept.push(t)
+    // A stock line ("Thank you.") it wasn't sure of, or over what may have been silence.
+    if (isStock(t) && (silent > 0.4 || sure < -0.8)) continue
+    // Going round in some way other than one phrase over and over (that was folded to one saying).
+    if (sure < -1 || (loops > 2.4 && !looped)) kept.push(`[unclear: ${t.replace(/[[\]]/g, '')}]`)
+    else kept.push(t)
   }
-  return { text: kept.join(' ').replace(/\s+/g, ' ').trim(), unclear }
+  // The same thing in one stretch after another is a loop too.
+  const text = withoutLoops(kept.join(' ').replace(/\s+/g, ' ').trim()).text
+  return { text, unclear: /\[unclear: /.test(text) }
 }
 
 export class Transcriber {
@@ -136,17 +157,19 @@ export class Transcriber {
     if (audio.length < 100) return json(res, 400, { error: 'The recording is empty' })
     // "en-US" → "en": the language the speaker set, so short phrases aren't misheard as another.
     const lang = /^([a-z]{2,3})(?:[-_][A-Za-z]{2,4})?$/.exec(url.searchParams.get('lang') ?? '')?.[1]
-    // What was said just before and the words in use (names, terms on the board): each phrase is
+    // The words in use (names, terms on the board) and what was said just before: each phrase is
     // heard on its own, and without these, names and terms come out garbled.
-    const context = contextOf(req.headers['x-transcribe-context'])
-    const ask = (format: 'verbose_json' | 'json') => {
+    const terms = contextOf(req.headers['x-transcribe-terms'], TERMS_MAX, true)
+    const before = contextOf(req.headers['x-transcribe-context'], PROMPT_MAX - terms.length)
+    const both = [terms && !/[.!?…]$/.test(terms) ? `${terms}.` : terms, before].filter(Boolean).join(' ')
+    const ask = (format: 'verbose_json' | 'json', prompt = both) => {
       const form = new FormData()
       form.append('file', new Blob([new Uint8Array(audio)], { type }), `speech.${ext}`)
       form.append('model', this.o.model)
       form.append('response_format', format)
       form.append('temperature', '0')
       if (lang) form.append('language', lang)
-      if (context) form.append('prompt', context)
+      if (prompt) form.append('prompt', prompt)
       return this.o.fetch(`${this.o.baseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers: this.o.apiKey ? { authorization: `Bearer ${this.o.apiKey}` } : {},
@@ -172,7 +195,19 @@ export class Transcriber {
       const said = await r.text().catch(() => '')
       return json(res, 502, { error: `The transcription server said ${r.status}${said ? `: ${said.slice(0, 200)}` : ''}` })
     }
-    const words = readTranscript(await r.json().catch(() => ({})))
+    let words = readTranscript(await r.json().catch(() => ({})))
+    // It may only be saying again what it was told came before (or reciting the terms), as it does
+    // with sound that isn't clear speech: heard once more without that. One term on its own is
+    // just a word someone said.
+    const again = saidBefore(words.text, before)
+    const recited = !again && words.text.split(/\s+/).length >= 3 && saidBefore(words.text, terms)
+    if (again || recited) {
+      const plain = await ask(this.detailed ? 'verbose_json' : 'json', again ? terms : '')
+        .then((p) => (p.ok ? (p.json() as Promise<unknown>) : null))
+        .catch(() => null)
+      // Couldn't ask again: what it said stands.
+      if (plain) words = settled(words, readTranscript(plain))
+    }
     return json(res, 200, {
       text: words.text,
       ...(words.unclear ? { unclear: true } : {}),

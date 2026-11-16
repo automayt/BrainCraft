@@ -247,6 +247,19 @@ the notes on the board as the meeting goes.
   told apart. Stopping the share, or unplugging the input, goes back to the
   microphone alone.
 
+  You and the call are two people from the first line, whether or not the
+  server tells voices apart. Where it doesn't, everyone at the other end is
+  one voice, **The call**, until it has a name: click it in the **Voices**
+  strip, or just say who you're talking to ("robot, the other person is
+  Sam") and the notes name it.
+
+  The same menu says how it's going: how many lines were heard from you and
+  from the call, and how many were left out as the call in your microphone
+  or as the same line over and over. If nothing has been heard from the call
+  after a while, or nothing from you while the call's lines keep being taken
+  out of your microphone, it says so, with what to try, and the sign shows
+  **check**.
+
   When more than one voice is coming through your microphone and the call
   isn't heard, the sign suggests hearing the call too. It asks once: **Not on
   a call**, or opening the menu, puts it away for good in that browser.
@@ -279,6 +292,13 @@ the notes on the board as the meeting goes.
     then written down again as yours. Turn it off if your own words go
     missing, or when something else already takes the call out of your
     microphone. It can be switched during a meeting.
+  - Whatever gets past that is caught by its words. A line from your
+    microphone that says what the call was saying at that moment (all of a
+    short one, most of a longer one) was the call: it's left out, or taken
+    back if it was written down first. Saying the same thing back a few
+    seconds later is yours, and so is anything you say over the call. And a
+    microphone phrase with the call in it that speech to text couldn't make
+    out is left out rather than written as "[unclear: …]".
 
   Headphones are still surest: then nothing from the call reaches the
   microphone at all.
@@ -366,6 +386,19 @@ things, such as product names and acronyms) and what was said just before,
 so names and terms come out spelled as you write them. A pause of about a
 second ends a phrase in a meeting (a breath mid-sentence doesn't), and what
 speech to text makes up over silence ("Thanks for watching!") is left out.
+
+**Hearing it once.** Given a noise, a breath, or what's left of a call in the
+microphone, speech to text doesn't say nothing: it says the last line again,
+or one phrase over and over, or a stock line. So:
+
+- a phrase said over and over in one answer is written once;
+- an answer that only says again what came just before is heard a second
+  time without being told what came before. The same again, and it really
+  was said twice. Anything else is what was said; nothing, or a stock line
+  ("Thank you.", "Bye-bye."), is nothing;
+- a stock line on its own is believed only when speech to text was sure of
+  it, where the endpoint says how sure it was;
+- the same line a third time running, from the same place, is left out.
 
 ### Guided
 

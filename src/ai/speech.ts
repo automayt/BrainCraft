@@ -17,18 +17,22 @@
 
 import { micOnCall, mixed } from './callAudio'
 import { Echo, Recent } from './echo'
+import { type Source, type Span, onlyUnclear } from './heardOnce'
 import { Downsampler, Phrases, wav } from './phrases'
 
 /** Where a phrase was heard, once the call is heard too: the microphone (the person here) or the call. */
-export type HeardFrom = 'me' | 'call'
+export type HeardFrom = Source
 
 export interface Hearing {
   /**
    * A finished phrase, which voice said it (when the server can tell voices apart), when, in a
    * recording (ms), whether speech to text wasn't sure of some of it (marked "[unclear: …]"), and,
-   * once the call is heard too, whether it came from the microphone or the call.
+   * once the call is heard too, whether it came from the microphone or the call, and when it was
+   * said (so the call heard through the microphone can be told from the person here).
    */
-  final(text: string, voice?: number, at?: number, unclear?: boolean, from?: HeardFrom): void
+  final(text: string, voice?: number, at?: number, unclear?: boolean, from?: HeardFrom, said?: Span): void
+  /** A microphone phrase left out: it was the call, coming out of the speakers. */
+  echoed?(): void
   /** The server knows who a voice is: named here, or in an earlier meeting. */
   named?(voice: number, name: string): void
   /** Voices the server found to be one person: each [later, earlier] is the earlier one from now on. */
@@ -301,11 +305,11 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     const recent = new Recent()
     /** Samples heard but not cut into phrases (while muted): a phrase began that much later in the sound than in what was cut. */
     let skipped = 0
-    /** A microphone phrase without the call in it: null when the call was all there was. */
-    const own = (audio: Float32Array, at: number, look: boolean): Float32Array | null => {
-      if (from !== 'me' || !call || !removeEcho) return audio
+    /** A microphone phrase without the call in it, and how much of it was the call (ms): null when the call was all there was. */
+    const own = (audio: Float32Array, at: number, look: boolean): { audio: Float32Array; echoed: number } | null => {
+      if (from !== 'me' || !call || !removeEcho) return { audio, echoed: 0 }
       const cleaned = echo.clean(recent, call.recent, at + skipped, at + skipped + audio.length, look)
-      return cleaned.allCall ? null : cleaned.audio
+      return cleaned.allCall ? null : { audio: cleaned.audio, echoed: cleaned.echoed }
     }
     const phrases: Phrases = new Phrases(
       { pauseMs: o.pauseMs, previewMs: o.preview ? 1000 : 0 },
@@ -315,10 +319,15 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
         level: (v) => on.level?.(v),
         phrase: (heard, _id, at) => {
           // Only the call coming out of the speakers: it's heard from the call itself.
-          const audio = own(heard, at, true)
-          if (!audio) return closed()
+          const mine = own(heard, at, true)
+          if (!mine) {
+            on.echoed?.()
+            return closed()
+          }
+          // When it was said, on the clock both sounds are timed by.
+          const said = { from: recent.timeOf(at + skipped), to: recent.timeOf(at + skipped + heard.length) }
           on.state?.('transcribing')
-          const text = o.transcribe(wav(audio), false, from)
+          const text = o.transcribe(wav(mine.audio), false, from)
           delivered = delivered.then(() =>
             text
               .then(
@@ -326,7 +335,9 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
                   on.interim?.('')
                   if (t.merged?.length) on.merged?.(t.merged)
                   if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
-                  if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear, from)
+                  // What was left of the call in it, too faint to make out: heard from the call itself.
+                  if (mine.echoed >= 300 && onlyUnclear(t.text)) return on.echoed?.()
+                  if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear, from, from ? said : undefined)
                 },
                 (err: Error) => {
                   if (!stopped) on.error(err.message)
@@ -338,10 +349,10 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
         // One at a time: when the server is slow, previews just come less often.
         preview: (heard, id, at) => {
           if (previewing || stopped) return
-          const audio = own(heard, at, false)
-          if (!audio) return
+          const mine = own(heard, at, false)
+          if (!mine) return
           previewing = true
-          o.transcribe(wav(audio), true, from)
+          o.transcribe(wav(mine.audio), true, from)
             .then((t) => {
               if (!stopped && phrases.id === id && words(t.text)) on.interim?.(t.text.trim())
             })

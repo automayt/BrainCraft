@@ -12402,6 +12402,28 @@ button.inbox-entry:focus-visible {
   line-height: 1.4;
 }
 
+/* What's been heard from where, and what was left out; and a warning when it looks wrong. */
+.flow-call-menu .flow-call-heard,
+.flow-call-menu .flow-call-warn {
+  margin: 4px 0 0;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.flow-call-menu .flow-call-warn {
+  color: var(--text);
+}
+
+.flow-call-menu .flow-call-warn + .flow-call-heard {
+  margin-top: 0;
+  padding-top: 2px;
+  border-top: 0;
+}
+
+.flow-meeting .flow-call small.flow-call-warn {
+  color: var(--warning-text);
+}
+
 /* Others are heard through the microphone: a suggestion to hear the call too, under the sign. */
 .flow-call-suggest {
   position: absolute;

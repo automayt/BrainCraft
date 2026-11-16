@@ -7,6 +7,7 @@
  * record, so they agree, and each idea leads back to when it was said.
  */
 
+import { unnamedVoice } from './meeting'
 import type { OutlineNode } from './mindmap'
 import type { Item } from './types'
 
@@ -430,8 +431,8 @@ export function cleanReview(raw: unknown): Review | null {
   return { ...(title ? { title } : {}), ideas, outcomes, renames: [], lineWho: [] }
 }
 
-/** "Voice 2", a voice not yet known by name. */
-const unnamed = (who: string | undefined) => !who || /^voice \d+$/i.test(who) || who.toLowerCase() === NOT_SURE.toLowerCase()
+/** "Voice 2" or the call as a whole: a voice not yet known by name. */
+const unnamed = (who: string | undefined) => !who || unnamedVoice(who) || who.toLowerCase() === NOT_SURE.toLowerCase()
 
 /**
  * The transcript's speakers, corrected by the review: voices it worked out ("Voice 2" is Sam) and

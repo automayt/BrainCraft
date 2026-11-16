@@ -95,6 +95,83 @@ describe('speech to text for talking to the assistant', () => {
     expect(formats.at(-1)).toBe('json')
     s2.close()
   })
+
+  it('hears a phrase again, without what came before, when it only says that again', async () => {
+    /** What the endpoint says: by the prompt it was given. */
+    let hears: (prompt: string) => unknown = () => ({ text: '' })
+    const prompts: string[] = []
+    const t3 = new Transcriber({
+      baseUrl: 'http://stt.local/v1',
+      model: 'w',
+      gate: new AiGate({ equal: (a, b) => a === b }),
+      fetch: (async (_url: string, init: RequestInit) => {
+        const prompt = String((init.body as FormData).get('prompt') ?? '')
+        prompts.push(prompt)
+        const said = hears(prompt)
+        return said === null ? new Response('busy', { status: 503 }) : Response.json(said)
+      }) as typeof fetch,
+    })
+    const s3 = createServer((req, res) => void t3.handle(req, res, new URL(req.url ?? '/', 'http://x')))
+    await new Promise<void>((ok) => s3.listen(0, '127.0.0.1', ok))
+    const a = s3.address()
+    const url = `http://127.0.0.1:${typeof a === 'object' && a ? a.port : 0}/api/ai/transcribe`
+    const TERMS = 'Sam, Brian, Kubernetes'
+    const BEFORE = 'We move the launch to May. I’m talking about the venue.'
+    const say = async (headers: Record<string, string> = { 'x-transcribe-terms': encodeURIComponent(TERMS), 'x-transcribe-context': encodeURIComponent(BEFORE) }) => {
+      prompts.length = 0
+      const r = await fetch(url, { method: 'POST', body: new Uint8Array(400).fill(1), headers: { 'content-type': 'audio/wav', ...headers } })
+      return (await r.json()) as { text: string; unclear?: boolean }
+    }
+
+    // Something new: asked once, with the terms and what came before.
+    hears = () => ({ text: 'And the caterer is booked.' })
+    expect(await say()).toEqual({ text: 'And the caterer is booked.' })
+    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`])
+
+    // Over a noise it says the last line again; without that line, it hears nothing.
+    hears = (prompt) => ({ text: prompt.includes('venue') ? ' I’m talking about the venue.' : '' })
+    expect(await say()).toEqual({ text: '' })
+    // The second time with the terms only.
+    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, TERMS])
+
+    // ...or a stock line: nothing was said either.
+    hears = (prompt) => ({ text: prompt.includes('venue') ? 'I’m talking about the venue.' : ' Thank you.' })
+    expect(await say()).toEqual({ text: '' })
+
+    // ...or something else: that is what was said.
+    hears = (prompt) => ({ text: prompt.includes('venue') ? 'I’m talking about the venue.' : 'I’m walking to the venue.' })
+    expect(await say()).toEqual({ text: 'I’m walking to the venue.' })
+
+    // The same both times: it really was said again.
+    hears = () => ({ text: 'I’m talking about the venue.' })
+    expect(await say()).toEqual({ text: 'I’m talking about the venue.' })
+    expect(prompts).toHaveLength(2)
+
+    // The second go failed: what it said stands.
+    hears = (prompt) => (prompt.includes('venue') ? { text: 'We move the launch to May.' } : null)
+    expect(await say()).toEqual({ text: 'We move the launch to May.' })
+
+    // The terms recited back: heard again with nothing at all. One term on its own is a word someone said.
+    hears = (prompt) => ({ text: prompt ? 'Sam, Brian, Kubernetes.' : '' })
+    expect(await say()).toEqual({ text: '' })
+    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
+    hears = () => ({ text: 'Kubernetes.' })
+    expect(await say()).toEqual({ text: 'Kubernetes.' })
+    expect(prompts).toHaveLength(1)
+
+    // An older app sends it all as what came before: still heard again without it.
+    hears = (prompt) => ({ text: prompt ? 'We were saying' : 'you' })
+    expect(await say({ 'x-transcribe-context': encodeURIComponent('Sam. We were saying') })).toEqual({ text: '' })
+    expect(prompts).toEqual(['Sam. We were saying', ''])
+
+    // The prompt stays short: the terms first, then as much of what was said as fits.
+    hears = () => ({ text: 'fine' })
+    await say({ 'x-transcribe-terms': encodeURIComponent(`${'A'.repeat(300)}${'B'.repeat(100)}`), 'x-transcribe-context': encodeURIComponent(`${'old '.repeat(300)}the last words`) })
+    expect(prompts[0].length).toBeLessThanOrEqual(802)
+    expect(prompts[0].startsWith(`${'A'.repeat(300)}. `)).toBe(true)
+    expect(prompts[0].endsWith('the last words')).toBe(true)
+    s3.close()
+  })
 })
 
 describe('reading what speech to text heard', () => {
@@ -113,6 +190,35 @@ describe('reading what speech to text heard', () => {
     expect(readTranscript({ text: ' Thanks for watching! ' })).toEqual({ text: '', unclear: false })
     expect(readTranscript({ text: ' hello ' })).toEqual({ text: 'hello', unclear: false })
     expect(readTranscript(null)).toEqual({ text: '', unclear: false })
+  })
+
+  it('says once what it said over and over', () => {
+    // Inside one stretch: going round is why it compressed so well, so it isn't unclear for that.
+    expect(readTranscript({ text: 'x', segments: [{ text: ' I’m talking about. I’m talking about. I’m talking about. I’m talking about.', avg_logprob: -0.3, no_speech_prob: 0.05, compression_ratio: 3.1 }] })).toEqual({
+      text: 'I’m talking about.',
+      unclear: false,
+    })
+    // One stretch after another.
+    const loop = { text: ' Bye-bye.', avg_logprob: -0.4, no_speech_prob: 0.1, compression_ratio: 0.6 }
+    expect(readTranscript({ text: 'x', segments: [{ text: ' See you Monday.', avg_logprob: -0.2 }, loop, loop, loop, loop] })).toEqual({ text: 'See you Monday. Bye-bye.', unclear: false })
+    // Unclear ones too, their marks and all.
+    const mumble = { text: ' the the venue', avg_logprob: -1.3, no_speech_prob: 0.2, compression_ratio: 1 }
+    expect(readTranscript({ text: 'x', segments: [mumble, mumble, mumble] })).toEqual({ text: '[unclear: the the venue]', unclear: true })
+    // Without stretches.
+    expect(readTranscript({ text: ' We ship Friday. We ship Friday. We ship Friday. ' })).toEqual({ text: 'We ship Friday.', unclear: false })
+    // Repetitive in some other way: still marked.
+    expect(readTranscript({ text: 'x', segments: [{ text: ' and a one and a two and a three and', avg_logprob: -0.3, compression_ratio: 2.6 }] })).toEqual({ text: '[unclear: and a one and a two and a three and]', unclear: true })
+  })
+
+  it('believes a stock line only when it was sure of it', () => {
+    const stock = (avg_logprob: number, no_speech_prob: number) => readTranscript({ text: 'x', segments: [{ text: ' Thank you.', avg_logprob, no_speech_prob, compression_ratio: 0.8 }] }).text
+    expect(stock(-0.2, 0.05)).toBe('Thank you.')
+    expect(stock(-0.2, 0.5)).toBe('')
+    expect(stock(-0.9, 0.05)).toBe('')
+    // More than a stock line is kept on the same footing.
+    expect(readTranscript({ text: 'x', segments: [{ text: ' Thank you, Sam.', avg_logprob: -0.9, no_speech_prob: 0.5 }] }).text).toBe('Thank you, Sam.')
+    // An endpoint that doesn't say how sure it was: taken at its word.
+    expect(readTranscript({ text: 'x', segments: [{ text: ' Bye.' }] }).text).toBe('Bye.')
   })
 
   it('takes the context the app sent, as plain words', () => {

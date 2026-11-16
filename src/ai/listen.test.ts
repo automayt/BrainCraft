@@ -150,4 +150,39 @@ describe('waiting for a phrase still being heard', () => {
     await c.tick(1)
     expect(sent).toEqual(['a timeline'])
   })
+
+  it('takes back a phrase that hasn’t gone yet, and says when it already has', async () => {
+    const c = clock()
+    const sent: string[] = []
+    const u = new Utterances(async (t) => void sent.push(t), { pauseMs: 1000, ...c })
+    u.heard('[Jordan] we move to May')
+    u.heard('[The call] we move to May')
+    u.heard('[Jordan] I’ll tell the venue')
+    expect(u.unhear(' [Jordan] we move to May ')).toBe(true)
+    expect(u.waiting).toBe('[The call] we move to May\n[Jordan] I’ll tell the venue')
+    // Not there (any more).
+    expect(u.unhear('[Jordan] we move to May')).toBe(false)
+    await c.tick(1000)
+    expect(sent).toEqual(['[The call] we move to May\n[Jordan] I’ll tell the venue'])
+    // Already with the assistant.
+    expect(u.unhear('[Jordan] I’ll tell the venue')).toBe(false)
+    // The only one waiting, taken back: nothing goes at all, and the wait starts afresh with the next.
+    u.heard('[Jordan] bye')
+    expect(u.unhear('[Jordan] bye')).toBe(true)
+    await c.tick(5000)
+    expect(sent).toHaveLength(1)
+    u.hold(true)
+    u.heard('later')
+    await c.tick(7500)
+    expect(sent).toHaveLength(1)
+    await c.tick(4500)
+    expect(sent).toEqual(['[The call] we move to May\n[Jordan] I’ll tell the venue', 'later'])
+    u.hold(false)
+    // The last of two that read the same.
+    u.heard('okay')
+    u.heard('and then')
+    u.heard('okay')
+    expect(u.unhear('okay')).toBe(true)
+    expect(u.waiting).toBe('okay and then')
+  })
 })

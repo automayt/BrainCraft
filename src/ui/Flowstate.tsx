@@ -210,6 +210,8 @@ interface MeetingProps {
      * off, and whether it's thorough here (whatever plays the call) or only what the browser plays.
      */
     echo: { on: boolean; set: (on: boolean) => void; thorough: boolean }
+    /** What's been heard from where and what was left out, in words; and a warning when hearing the call looks wrong. */
+    heard?: { summary: string; warning: string | null }
     /** More than one voice is coming through the microphone: the others may be on a call. */
     suggest: boolean
   }
@@ -242,7 +244,7 @@ function echoHint(on: boolean, heard: boolean, thorough: boolean): string {
  * input that carries the computer's sound (any browser). Once on, it says where from. Echo removal
  * is switched here too; and when others are heard through the microphone, it suggests the call.
  */
-function CallPicker({ from, share, inputs, last, hear, echo, suggest }: NonNullable<MeetingProps['call']>) {
+function CallPicker({ from, share, inputs, last, hear, echo, heard, suggest }: NonNullable<MeetingProps['call']>) {
   const [open, setOpen] = useState(false)
   const [answered, setAnswered] = useState(suggestedBefore)
   const menu = useRef<HTMLDivElement>(null)
@@ -287,6 +289,7 @@ function CallPicker({ from, share, inputs, last, hear, echo, suggest }: NonNulla
       >
         {from ? `Hearing the call from ${from}` : 'Hear the call too'}
         {from && !echo.on && <small> · echo removal off</small>}
+        {from && heard?.warning && <small className="flow-call-warn"> · check</small>}
       </button>
       {open && (
         <div
@@ -316,6 +319,12 @@ function CallPicker({ from, share, inputs, last, hear, echo, suggest }: NonNulla
             </span>
             <small>{echoHint(echo.on, !!from, echo.thorough)}</small>
           </button>
+          {from && heard?.warning && (
+            <p className="flow-call-warn" role="status">
+              {heard.warning}
+            </p>
+          )}
+          {from && heard?.summary && <p className="flow-call-heard">{heard.summary}</p>}
         </div>
       )}
       {suggest && !from && !open && !answered && (

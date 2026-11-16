@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { applyOps, type Op } from '../api/ops'
 import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
-import { sameVoice, voiceLine } from '../ui/useTalk'
+import { CALL_NAME, glossaryOf, unnamedVoice } from '../model/meeting'
+import { heardSummary, heardWarning, sameVoice, voiceLine } from '../ui/useTalk'
 import { Utterances, joined } from './listen'
 
 describe('who said what, as the assistant reads it', () => {
@@ -24,6 +25,56 @@ describe('who said what, as the assistant reads it', () => {
   it('says when it isn’t sure who, rather than letting the line run on as the last person’s', () => {
     expect(voiceLine('and the budget', undefined, two)).toBe('[Not sure who] and the budget')
     expect(joined(['[Sam] we could', '[Not sure who] and the budget'])).toBe('[Sam] we could\n[Not sure who] and the budget')
+  })
+})
+
+describe('the microphone and the call, as two people', () => {
+  const both = [
+    { n: 0, name: 'Jordan' },
+    { n: 1, name: CALL_NAME },
+  ]
+
+  it('puts the call down as the call, and the microphone as the person here', () => {
+    expect(voiceLine('I’ll book it', 0, both, 'me')).toBe('[Jordan] I’ll book it')
+    expect(voiceLine('We move to May', 1, both, 'call')).toBe('[The call] We move to May')
+    // One of several voices on the call, not known which: still not the person here.
+    expect(voiceLine('and the budget', undefined, both, 'call')).toBe('[Someone on the call] and the budget')
+    expect(voiceLine('and the budget', undefined, both, 'me')).toBe('[Not sure who] and the budget')
+    // From the first line, before the other has said anything.
+    expect(voiceLine('We move to May', 1, [both[1]], 'call')).toBe('[The call] We move to May')
+    expect(voiceLine('I’ll book it', 0, [both[0]], 'me')).toBe('[Jordan] I’ll book it')
+    expect(voiceLine('I’ll book it', 0, [both[0]])).toBe('I’ll book it')
+  })
+
+  it('counts the call as a whole as a voice still to be named', () => {
+    expect(unnamedVoice('The call')).toBe(true)
+    expect(unnamedVoice(' the call ')).toBe(true)
+    expect(unnamedVoice('Voice 12')).toBe(true)
+    expect(unnamedVoice('Sam')).toBe(false)
+    expect(unnamedVoice('The caller')).toBe(false)
+    // Not a name for speech to text to spell.
+    expect(glossaryOf(emptyBoard(), ['Jordan', 'The call', 'Voice 2'])).toEqual(['Jordan'])
+  })
+
+  it('says what was heard from where, and what was left out', () => {
+    expect(heardSummary({ me: 0, call: 0, room: 4, echo: 0, again: 0 })).toBe('')
+    expect(heardSummary({ me: 12, call: 1, room: 0, echo: 0, again: 0 })).toBe('Heard 12 lines from you and 1 line from the call.')
+    expect(heardSummary({ me: 12, call: 30, room: 2, echo: 8, again: 1 })).toBe('Heard 12 lines from you and 30 lines from the call. Left out: 8 that were the call in your microphone, and 1 said over and over.')
+    expect(heardSummary({ me: 0, call: 0, room: 9, echo: 0, again: 3 })).toBe('Left out: 3 said over and over.')
+    expect(heardSummary({ me: 2, call: 2, room: 0, echo: 1, again: 0 })).toBe('Heard 2 lines from you and 2 lines from the call. Left out: 1 that was the call in your microphone.')
+  })
+
+  it('warns when one of the two isn’t being heard', () => {
+    // Too soon to say.
+    expect(heardWarning({ me: 3, call: 0, room: 0, echo: 0, again: 0 }, true)).toBeNull()
+    expect(heardWarning({ me: 6, call: 0, room: 0, echo: 0, again: 0 }, true)).toMatch(/Nothing has been heard from the call/)
+    expect(heardWarning({ me: 2, call: 0, room: 0, echo: 4, again: 0 }, true)).toMatch(/Nothing has been heard from the call/)
+    expect(heardWarning({ me: 6, call: 1, room: 0, echo: 0, again: 0 }, true)).toBeNull()
+    // The call heard, the microphone never, and much taken out of it: echo removal may be taking the person too.
+    expect(heardWarning({ me: 0, call: 12, room: 0, echo: 4, again: 0 }, true)).toMatch(/turn echo removal off/)
+    expect(heardWarning({ me: 0, call: 12, room: 0, echo: 4, again: 0 }, false)).toBeNull()
+    expect(heardWarning({ me: 0, call: 12, room: 0, echo: 0, again: 0 }, true)).toBeNull()
+    expect(heardWarning({ me: 1, call: 40, room: 0, echo: 9, again: 0 }, true)).toBeNull()
   })
 })
 

@@ -63,6 +63,21 @@ export class Utterances {
     this.schedule()
   }
 
+  /**
+   * Takes back a phrase that hasn't gone yet (the last one that reads so): true when it was still
+   * waiting, false when the assistant already has it.
+   */
+  unhear(text: string): boolean {
+    const at = this.pending.lastIndexOf(text.trim())
+    if (at < 0) return false
+    this.pending.splice(at, 1)
+    if (!this.pending.length) {
+      this.first = null
+      this.clear()
+    }
+    return true
+  }
+
   /** The speaker is still talking (an unfinished phrase): wait for the pause. */
   speaking() {
     if (this.pending.length && !this.busy) this.schedule()

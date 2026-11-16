@@ -1,6 +1,7 @@
 /** In a meeting: the voices heard so far, each named with a click ("Voice 2" → "Sam"). */
 
 import { useState } from 'react'
+import { unnamedVoice } from '../model/meeting'
 import type { HeardVoice } from './useTalk'
 import { personColor } from './TimeTracking'
 
@@ -18,7 +19,7 @@ export function VoiceNames({ voices, onName }: { voices: readonly HeardVoice[]; 
             autoFocus
             className="voice-name-input"
             aria-label={`Name ${v.name}`}
-            defaultValue={/^Voice \d+$/.test(v.name) ? '' : v.name}
+            defaultValue={unnamedVoice(v.name) ? '' : v.name}
             placeholder={`Who is ${v.name}?`}
             maxLength={40}
             onBlur={(e) => {
