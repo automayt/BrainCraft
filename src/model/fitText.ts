@@ -9,6 +9,7 @@ import { codeSize } from './code'
 import { type Rect, center, contains, containsRect, expand, unionAll } from './geom'
 import type { Measure } from './mindmap'
 import { textRect } from './shapes'
+import { marksText } from './textMarks'
 import { tableSize } from './table'
 import { KANBAN_COL_W } from './kanban'
 import { groups, titleField, viewSize } from './dataset'
@@ -36,11 +37,11 @@ export const fitsText = (i: Pick<Item, 'kind'>) => FITS.has(i.kind)
  * The largest whole font size, from `min` to `max`, at which `text` wrapped to the box's width fits
  * its height (`min` when even that doesn't).
  */
-export function fitFontSize(measure: Measure, text: string, box: { w: number; h: number }, max: number, o: { min?: number; weight?: number; hand?: boolean } = {}): number {
+export function fitFontSize(measure: Measure, text: string, box: { w: number; h: number }, max: number, o: { min?: number; weight?: number; hand?: boolean; marks?: boolean } = {}): number {
   const min = Math.min(o.min ?? MIN_FONT, max)
   if (!text.trim() || box.w <= 2 || box.h <= 0) return max
   const fits = (s: number) => {
-    const m = measure(text, s, o.weight ?? 400, box.w - 2, o.hand)
+    const m = measure(text, s, o.weight ?? 400, box.w - 2, o.hand, o.marks)
     return m.w <= box.w && m.h <= box.h
   }
   if (fits(max)) return Math.floor(max)
@@ -56,18 +57,22 @@ export function fitFontSize(measure: Measure, text: string, box: { w: number; h:
   return lo
 }
 
-/** The size an object's text is drawn at: its own, or fitted to its shape. */
-export function itemFontSize(i: Item, measure: Measure): number {
+/**
+ * The size an object's text is drawn at: its own, or fitted to its shape. `typed`: while it's being
+ * typed, when the marks are on show too and take their room.
+ */
+export function itemFontSize(i: Item, measure: Measure, typed = false): number {
   if (!fitsText(i)) return i.fontSize
   const box = textRect(i)
   const hand = !!i.sketch
-  const fitted = fitFontSize(measure, i.text, box, i.fontSize, { hand })
+  const marks = !typed && marksText(i.kind)
+  const fitted = fitFontSize(measure, i.text, box, i.fontSize, { hand, marks })
   if (!growsText(i) || i.fontFixed || fitted < i.fontSize) return fitted
   // Room to spare: grow, leaving a margin. Text too long for that keeps its size, as it fits. Only a
   // little in a shape of the usual size (so "Go" isn't three times "Ask everyone" beside it); more
   // as the shape is made bigger.
   const cap = Math.min(MAX_FIT_FONT, Math.round(i.fontSize * GROW_MAX * Math.max(1, Math.min(box.w / GROW_BASE.w, box.h / GROW_BASE.h))))
-  return Math.max(fitted, fitFontSize(measure, i.text, { w: box.w * GROW_FILL, h: box.h * GROW_FILL }, cap, { hand }))
+  return Math.max(fitted, fitFontSize(measure, i.text, { w: box.w * GROW_FILL, h: box.h * GROW_FILL }, cap, { hand, marks }))
 }
 
 // ----- fitting objects to what's in them -----------------------------------------
@@ -126,9 +131,9 @@ export function fitToContent(b: Board, i: Item, measure: Measure): Rect | null {
   }
   if (i.kind === 'text') {
     const text = i.text || ' '
-    const one = measure(text, i.fontSize, 400, 1e6, hand).w
+    const one = measure(text, i.fontSize, 400, 1e6, hand, true).w
     const w = Math.ceil(Math.min(800, Math.max(40, one)) + 8)
-    return { x: i.x, y: i.y, w, h: Math.ceil(measure(text, i.fontSize, 400, w - 10, hand).h + 8) }
+    return { x: i.x, y: i.y, w, h: Math.ceil(measure(text, i.fontSize, 400, w - 10, hand, true).h + 8) }
   }
   if (!fitsText(i)) return null
   if (!i.text.trim()) {
@@ -138,7 +143,7 @@ export function fitToContent(b: Board, i: Item, measure: Measure): Rect | null {
   const font = i.fontSize
   const fitsAt = (w: number, h: number) => {
     const r = textRect({ ...i, w, h })
-    const m = measure(i.text, font, 400, r.w - 2, hand)
+    const m = measure(i.text, font, 400, r.w - 2, hand, true)
     return m.w <= r.w && m.h <= r.h
   }
   if (i.kind === 'sticky') {
@@ -147,8 +152,8 @@ export function fitToContent(b: Board, i: Item, measure: Measure): Rect | null {
     return around(i, s, s)
   }
   // Wrap at the text's own width, up to a comfortable line, then find the smallest shape around it.
-  const wrap = Math.min(i.shape === 'decision' ? DECISION_WRAP : (WRAP[i.kind] ?? 300), measure(i.text, font, 400, 1e6, hand).w)
-  const m = measure(i.text, font, 400, wrap, hand)
+  const wrap = Math.min(i.shape === 'decision' ? DECISION_WRAP : (WRAP[i.kind] ?? 300), measure(i.text, font, 400, 1e6, hand, true).w)
+  const m = measure(i.text, font, 400, wrap, hand, true)
   let w = MIN_W
   let h = MIN_H
   for (let round = 0; round < 3; round++) {

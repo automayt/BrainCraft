@@ -47,6 +47,7 @@ import { ExportDialog } from './ExportImage'
 import { SearchPalette } from './SearchPalette'
 import { clearMeasureCache, measureText } from './measure'
 import { EditorContext } from './useEditor'
+import { keepMarkKeys } from './markKeys'
 import { WorkspaceContext, useWorkspace } from './useWorkspace'
 
 function isTyping(target: EventTarget | null) {
@@ -440,6 +441,8 @@ function App({ ws }: { ws: Workspace }) {
     const onStale = () => editor.setStatus('A new version of the app is ready: reload the page to use this')
     window.addEventListener('vite:preloadError', onStale)
     window.addEventListener('keydown', onKeyDown)
+    // Before any text box sees the key (many keep their keys to themselves).
+    window.addEventListener('keydown', keepMarkKeys, true)
     window.addEventListener('keyup', onKeyUp)
     document.addEventListener('copy', onCopy)
     document.addEventListener('cut', onCopy)
@@ -451,6 +454,7 @@ function App({ ws }: { ws: Workspace }) {
       window.removeEventListener('hashchange', onHash)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', keepMarkKeys, true)
       window.removeEventListener('keyup', onKeyUp)
       document.removeEventListener('copy', onCopy)
       document.removeEventListener('cut', onCopy)

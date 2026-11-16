@@ -11,8 +11,12 @@ import type { Vec } from './geom'
 import { BRANCHES, type Board, type Id, type Item, MIND_ROOT_COLOR, type Side } from './types'
 
 /** Measures `text` laid out in the app font, wrapped at `maxWidth`. */
-/** Measures wrapped text; `hand` for the handwriting of hand-drawn objects, which runs wider. */
-export type Measure = (text: string, fontSize: number, weight: number, maxWidth: number, hand?: boolean) => { w: number; h: number }
+/**
+ * Measures wrapped text; `hand` for the handwriting of hand-drawn objects, which runs wider.
+ * `marks`: the text is an object's words, measured as drawn, its `**bold**` and `*italic*` marks
+ * read rather than counted (see textMarks.ts).
+ */
+export type Measure = (text: string, fontSize: number, weight: number, maxWidth: number, hand?: boolean, marks?: boolean) => { w: number; h: number }
 
 export interface NodeStyle {
   fontSize: number
@@ -73,7 +77,7 @@ export function layoutAll(b: Board, measure: Measure): Board {
 
   const size = (i: Item, depth: number) => {
     const s = nodeStyle(depth)
-    const m = measure(i.text || placeholderFor(depth), s.fontSize, s.weight, s.maxText, !!i.sketch)
+    const m = measure(i.text || placeholderFor(depth), s.fontSize, s.weight, s.maxText, !!i.sketch, true)
     return { w: Math.max(s.minW, Math.ceil(m.w) + 2 * s.padX), h: Math.ceil(m.h) + 2 * s.padY }
   }
 

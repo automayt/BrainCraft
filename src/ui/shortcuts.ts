@@ -26,6 +26,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
       ['Ctrl G', 'Group the selection (Ctrl Shift G ungroups)'],
       ['Ctrl ] · Ctrl [', 'Bring the selection to the front, or send it to the back'],
       ['Ctrl Shift L', 'Lock or unlock the selection'],
+      ['Ctrl B · Ctrl I', 'Bold · italic: the words you’ve selected while typing, or all the words of what’s selected (again: plain)'],
       ['The squiggle in the tool rail', 'Hand-drawn: the selected objects, new objects (just you), or the whole board for everyone'],
       ['/', 'Cursor chat: say something next to your pointer (nothing selected)'],
       ['Enter', 'Place the current tool in the middle of the view'],

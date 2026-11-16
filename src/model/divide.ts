@@ -7,6 +7,7 @@
  */
 
 import { objectLabel } from './notes'
+import { unmarked } from './textMarks'
 import { emptyBoard, itemBounds, newItem } from './board'
 import { type Rect, unionAll } from './geom'
 import { frameMembers } from './subBoard'
@@ -94,7 +95,7 @@ function titleOf(items: Item[], kind: UnitKind): string {
   const root = kind === 'mindmap' ? items.find((i) => i.kind === 'mind' && i.parent === undefined) : undefined
   const start = kind === 'flowchart' ? items.find((i) => i.kind === 'flow' && i.shape === 'terminator') : undefined
   const first = root ?? start ?? [...items].sort((p, q) => p.y - q.y || p.x - q.x).find((i) => objectLabel(i).trim())
-  return first ? short(first.text.trim().split('\n')[0] || objectLabel(first)) : ''
+  return first ? short(unmarked(first.text).trim().split('\n')[0] || objectLabel(first)) : ''
 }
 
 /**

@@ -1,8 +1,10 @@
 /** Text measuring without a browser (servers, the MCP server): close enough for layout. */
 
 import type { Measure } from './mindmap'
+import { unmarked } from './textMarks'
 
-export const approxMeasure: Measure = (text, fontSize, weight, maxWidth, hand = false) => {
+export const approxMeasure: Measure = (words, fontSize, weight, maxWidth, hand = false, marks = false) => {
+  const text = marks ? unmarked(words) : words
   // Handwriting runs a little wider than the interface's typeface.
   const charW = fontSize * (weight >= 600 ? 0.58 : 0.54) * (hand ? 1.15 : 1)
   let lines = 0

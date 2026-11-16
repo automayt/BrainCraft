@@ -890,6 +890,13 @@ shares live exactly like a board.
   ellipses it grows and shrinks with the shape; **A−/A+** set a size instead
   (**Fit text** goes back), and it still shrinks rather than spill out.
   Sticky notes keep their size until the text would overflow.
+- **Bold and italic:** while typing in a note, a shape, a text box, a comment
+  block or a mind-map idea, **Ctrl B** makes the selected words bold and
+  **Ctrl I** italic (again takes it off; with nothing selected, the word the
+  caret is in). They're written as on a wiki page, `**bold**` and `*italic*`,
+  and drawn once you're done typing. With objects selected instead, the keys
+  (or **B** and **I** on the toolbar) do all of their words. Sums and
+  wildcards such as `2*3*4` or `*.txt` are left alone.
 - **Fit to content** (right-click, Ctrl+K, or the toolbar's **⋯** menu) sizes
   an object to what's in it: a shape or sticky note to its text (an empty one
   back to its usual size), a frame around what's inside, a Kanban board,

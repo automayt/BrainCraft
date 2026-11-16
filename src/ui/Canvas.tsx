@@ -8,6 +8,7 @@ import { applyPatches } from '../collab/patch'
 import type { FlowDir } from '../model/flowchart'
 import { textRect } from '../model/shapes'
 import { fitsText, itemFontSize } from '../model/fitText'
+import { markKey, retype } from './markKeys'
 import { ACCENT, mindRootText } from './paint'
 import { type Item, WIDGET_TITLE_H } from '../model/types'
 import * as B from '../model/board'
@@ -800,6 +801,7 @@ function TextEditor({ editor }: { editor: Editor }) {
           onChange={(ev) => editor.setEditingText(ev.target.value.replace(/\n/g, ' '))}
           onKeyDown={(ev) => {
             ev.stopPropagation()
+            if (markKey(ev)) return ev.preventDefault()
             if (ev.key === 'Enter' || ev.key === 'Escape') {
               ev.preventDefault()
               editor.finishEditing()
@@ -815,7 +817,8 @@ function TextEditor({ editor }: { editor: Editor }) {
   if (!item) return null
   const r = editor.screenRect(item)
   let box: Rect
-  let fontSize = (fitsText(item) ? itemFontSize(item, editor.measure) : item.fontSize) * z
+  // Sized for the text as it's typed, marks and all.
+  let fontSize = (fitsText(item) ? itemFontSize(item, editor.measure, true) : item.fontSize) * z
   let fontWeight = 400
   let align: 'left' | 'center' = 'center'
   let color = inkFor(item)
@@ -893,6 +896,15 @@ function TextEditor({ editor }: { editor: Editor }) {
         onChange={(ev) => editor.setEditingText(ev.target.value)}
         onKeyDown={(ev) => {
           ev.stopPropagation()
+          // Ctrl B and Ctrl I: bold and italic for the selected words (never the browser's own keys).
+          const mark = markKey(ev)
+          if (mark) {
+            ev.preventDefault()
+            const ta = ev.currentTarget
+            const next = editor.markEditing(mark, ta.selectionStart, ta.selectionEnd)
+            if (next) retype(ta, next, (text) => editor.setEditingText(text))
+            return
+          }
           // In code, Tab indents (two spaces) instead of leaving the box.
           if (item.kind === 'code' && ev.key === 'Tab' && !ev.shiftKey) {
             ev.preventDefault()

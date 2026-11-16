@@ -8,6 +8,7 @@ import { boardHops } from '../model/hops'
 import { nodeStyle, placeholderFor } from '../model/mindmap'
 import { flowDetail, flowOutline, textRect } from '../model/shapes'
 import { fitsText, itemFontSize } from '../model/fitText'
+import { textRuns } from '../model/textMarks'
 import { measureText } from './measure'
 import { frameFill, ink, mindRootFill, mindRootText } from './paint'
 import { KanbanView } from './widgets/KanbanView'
@@ -29,6 +30,13 @@ export function darken(hex: string, k = 0.72): string {
   return `rgb(${c(16)}, ${c(8)}, ${c(0)})`
 }
 
+/** An object's words as they read: `**bold**` and `*italic*` drawn so, the marks themselves gone. */
+export function Marked({ text }: { text: string }) {
+  if (!text.includes('*')) return <>{text}</>
+  // One element around them all: where the words are centred in a flex box, they stay one block.
+  return <span>{textRuns(text).map((r, k) => (r.b && r.i ? <b key={k}><i>{r.text}</i></b> : r.b ? <b key={k}>{r.text}</b> : r.i ? <i key={k}>{r.text}</i> : r.text))}</span>
+}
+
 function Text({ item, className, color }: { item: Item; className: string; color?: string }) {
   // Text inside a shape or sticky note is laid out in its text area, at a size that fits it.
   const fit = fitsText(item)
@@ -36,7 +44,7 @@ function Text({ item, className, color }: { item: Item; className: string; color
   return (
     <foreignObject x={r.x} y={r.y} width={Math.max(r.w, 1)} height={Math.max(r.h, 1)}>
       <div className={`item-text ${className}${fit ? ' fit' : ''}${item.sketch ? ' hand' : ''}${item.linkTo ? ' linked' : ''}`} style={{ fontSize: fit ? itemFontSize(item, measureText) : item.fontSize, color }}>
-        {item.text}
+        <Marked text={item.text} />
       </div>
     </foreignObject>
   )
@@ -221,7 +229,7 @@ function CommentBlock({ item, editing }: { item: Item; editing: boolean }) {
       {!editing && !item.wheel && (
         <foreignObject x={body.x} y={body.y} width={body.w} height={body.h}>
           <div className={`item-text comment-body${item.sketch ? ' hand' : ''}`} style={{ fontSize: item.fontSize, color: TEXT_ON_FILL }}>
-            {item.text || <span className="muted">{item.poll ? 'What are we voting on?' : item.brainstorm ? 'What are we brainstorming?' : 'Write a comment…'}</span>}
+            {item.text ? <Marked text={item.text} /> : <span className="muted">{item.poll ? 'What are we voting on?' : item.brainstorm ? 'What are we brainstorming?' : 'Write a comment…'}</span>}
           </div>
         </foreignObject>
       )}
@@ -254,7 +262,7 @@ function FlowNode({ item, editing }: { item: Item; editing: boolean }) {
       {!editing && item.text && (
         <foreignObject x={t.x} y={t.y} width={t.w} height={t.h}>
           <div className={`item-text centered flow${item.sketch ? ' hand' : ''}`} style={{ fontSize: itemFontSize(item, measureText), color: TEXT_ON_FILL }}>
-            {item.text}
+            <Marked text={item.text} />
           </div>
         </foreignObject>
       )}
@@ -292,7 +300,7 @@ function MindNode({ item, depth, editing }: { item: Item; depth: number; editing
               color: depth === 0 ? mindRootText(item.color) : 'var(--ink)',
             }}
           >
-            {item.text || placeholderFor(depth)}
+            {item.text ? <Marked text={item.text} /> : placeholderFor(depth)}
           </div>
         </foreignObject>
       )}

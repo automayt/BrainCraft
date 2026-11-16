@@ -6,6 +6,7 @@
 
 import { getItem } from './board'
 import { plainNote } from './notes'
+import { unmarked } from './textMarks'
 import { uid } from './uid'
 import type { Board, Connector, Id, Item, RunRecord, RunStep } from './types'
 import { flowShapeInfo } from './types'
@@ -33,7 +34,7 @@ export function options(b: Board, id: Id): RunOption[] {
       const to = getItem(b, c.to)
       if (!isStep(to)) return []
       const label = c.label?.trim()
-      return [{ connector: c.id, to, label: label || to.text.trim() || flowShapeInfo(to.shape).label, labelled: !!label }]
+      return [{ connector: c.id, to, label: label || unmarked(to.text).trim() || flowShapeInfo(to.shape).label, labelled: !!label }]
     })
 }
 

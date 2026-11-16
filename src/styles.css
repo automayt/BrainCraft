@@ -1300,6 +1300,17 @@ button.on,
   opacity: 0.45;
 }
 
+/* **Bold** and *italic* words on the board (see textMarks.ts): as heavy as measure.ts measures them. */
+.item-text b,
+.mind-text b {
+  font-weight: 700;
+}
+
+.item-text i,
+.mind-text i {
+  font-style: italic;
+}
+
 .collapse-toggle {
   cursor: pointer;
 }
@@ -1900,6 +1911,11 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
   align-self: stretch;
   margin: 3px 4px;
   background: var(--border-strong);
+}
+
+/* Bold and italic: a letter each, the width of the text-size buttons beside them. */
+.selection-toolbar .stb-mark {
+  min-width: 30px;
 }
 
 .selection-toolbar button svg {

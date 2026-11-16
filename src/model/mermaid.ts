@@ -9,6 +9,7 @@ import { addItem, connect, getItem } from './board'
 import { flowItem } from './flowchart'
 import type { Vec } from './geom'
 import { RANK_GAP, layered } from './layered'
+import { unmarked } from './textMarks'
 import { type Arrowheads, type Board, type FlowShape, type Id, type Item, flowShapeInfo } from './types'
 
 export type MermaidDir = 'TD' | 'BT' | 'LR' | 'RL'
@@ -322,7 +323,7 @@ export function toMermaid(b: Board, ids?: ReadonlySet<Id>): string {
   const lines = [`flowchart ${horizontal > links.length / 2 ? 'LR' : 'TD'}`]
   for (const i of items) {
     const shape: FlowShape = i.kind === 'flow' ? (i.shape ?? 'process') : i.kind === 'ellipse' ? 'terminator' : 'process'
-    const label = `"${escapeLabel(i.text || flowShapeInfo(shape).label)}"`
+    const label = `"${escapeLabel(unmarked(i.text) || flowShapeInfo(shape).label)}"`
     const oc = OPEN_CLOSE[shape]
     lines.push(oc ? `    n${i.id}${oc[0]}${label}${oc[1]}` : `    n${i.id}@{ shape: doc, label: ${label} }`)
   }

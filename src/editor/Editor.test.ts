@@ -1634,3 +1634,132 @@ describe('laying mind maps out again once fonts load', () => {
     expect(where()).toEqual(before)
   })
 })
+
+describe('bold and italic on the board', () => {
+  /** A board with a note, a shape, a frame and a table, nothing selected. */
+  const board = () => {
+    const e = editor()
+    const made = new BrainCraftAPI(e).apply([
+      { op: 'createNote', text: 'Budget review', at: { x: 0, y: 0 } },
+      { op: 'createShape', text: 'Ship it\non Friday', at: { x: 400, y: 0 } },
+      { op: 'createFrame', title: 'Sprint 4', w: 300, h: 200, at: { x: 0, y: 400 } },
+      { op: 'createTable', title: 'Costs', columns: ['Item'], rows: [['Hall']], at: { x: 800, y: 0 } },
+    ]) as { id: number }[]
+    const [note, shape, frame, table] = made.map((m) => m.id)
+    const text = (id: number) => B.getItem(e.board, id)!.text
+    e.select([])
+    return { e, note, shape, frame, table, text }
+  }
+
+  it('Ctrl B makes all the words of what’s selected bold, and plain again', () => {
+    const { e, note, shape, text } = board()
+    e.select([note, shape])
+    expect(e.keyDown('b', { ctrl: true })).toBe(true)
+    expect(text(note)).toBe('**Budget review**')
+    expect(text(shape)).toBe('**Ship it**\n**on Friday**')
+    expect(e.selectionHas('b')).toBe(true)
+    expect(e.keyDown('b', { ctrl: true })).toBe(true)
+    expect(text(note)).toBe('Budget review')
+    expect(text(shape)).toBe('Ship it\non Friday')
+    expect(e.selectionHas('b')).toBe(false)
+  })
+
+  it('is one undo step for the whole selection', () => {
+    const { e, note, shape, text } = board()
+    e.select([note, shape])
+    e.keyDown('i', { ctrl: true })
+    expect(text(note)).toBe('*Budget review*')
+    e.undo()
+    expect(text(note)).toBe('Budget review')
+    expect(text(shape)).toBe('Ship it\non Friday')
+  })
+
+  it('with some bold already, makes the rest bold too', () => {
+    const { e, note, shape, text } = board()
+    e.select([note])
+    e.keyDown('b', { ctrl: true })
+    e.select([note, shape])
+    expect(e.selectionHas('b')).toBe(false)
+    e.keyDown('b', { ctrl: true })
+    expect(text(note)).toBe('**Budget review**')
+    expect(text(shape)).toBe('**Ship it**\n**on Friday**')
+  })
+
+  it('leaves the key to the browser with nothing selected', () => {
+    const { e } = board()
+    expect(e.keyDown('b', { ctrl: true })).toBe(false)
+    expect(e.keyDown('i', { ctrl: true })).toBe(false)
+  })
+
+  it('takes the key, and says why nothing changed, when what’s selected has no words to mark', () => {
+    const { e, frame, table, text } = board()
+    e.select([frame, table])
+    const before = e.board
+    expect(e.markable).toEqual([])
+    expect(e.keyDown('b', { ctrl: true })).toBe(true)
+    expect(e.status).toContain('Nothing selected has words to make bold')
+    expect(e.keyDown('i', { ctrl: true })).toBe(true)
+    expect(e.status).toContain('italic')
+    expect(text(frame)).toBe('Sprint 4')
+    expect(text(table)).toBe('Costs')
+    expect(e.board).toBe(before)
+  })
+
+  it('leaves locked objects and a read-only board alone', () => {
+    const { e, note, shape, text } = board()
+    e.select([note])
+    e.setLocked(true)
+    e.select([note, shape])
+    e.keyDown('b', { ctrl: true })
+    expect(text(note)).toBe('Budget review')
+    expect(text(shape)).toBe('**Ship it**\n**on Friday**')
+    e.readOnly = true
+    expect(e.keyDown('b', { ctrl: true })).toBe(false)
+    expect(text(shape)).toBe('**Ship it**\n**on Friday**')
+  })
+
+  it('other Ctrl B chords are not bold', () => {
+    const { e, note, text } = board()
+    e.select([note])
+    expect(e.keyDown('b', { ctrl: true, shift: true })).toBe(false)
+    expect(e.keyDown('b', { ctrl: true, alt: true })).toBe(false)
+    expect(text(note)).toBe('Budget review')
+  })
+
+  it('while typing, marks the selected words', () => {
+    const { e, note, text } = board()
+    e.startEditing(note)
+    const next = e.markEditing('b', 0, 6)!
+    expect(next).toEqual({ text: '**Budget** review', from: 2, to: 8 })
+    e.setEditingText(next.text)
+    expect(e.markEditing('i', 11, 17)).toEqual({ text: '**Budget** *review*', from: 12, to: 18 })
+    // The same words again: plain.
+    expect(e.markEditing('b', 2, 8)).toEqual({ text: 'Budget review', from: 0, to: 6 })
+    e.finishEditing()
+    expect(text(note)).toBe('**Budget** review')
+  })
+
+  it('while typing a title or a line’s label, has no marks to give', () => {
+    const { e, note, shape, frame } = board()
+    e.startEditing(frame)
+    expect(e.markEditing('b', 0, 6)).toBeNull()
+    e.finishEditing()
+    new BrainCraftAPI(e).apply([{ op: 'connect', from: note, to: shape, label: 'then' }])
+    e.startEditingLabel(e.board.connectors[0].id)
+    expect(e.markEditing('b', 0, 4)).toBeNull()
+    e.finishEditing()
+    expect(e.markEditing('b', 0, 4)).toBeNull()
+  })
+
+  it('a mind-map idea is sized for its words, not its marks', () => {
+    const e = editor()
+    const [made] = new BrainCraftAPI(e).apply([{ op: 'createMindMap', outline: 'Trip\n  Food and drink' }]) as { id: number }[]
+    const idea = e.board.items.find((i) => i.kind === 'mind' && i.parent === made.id)!
+    const plain = idea.w
+    e.select([idea.id])
+    e.keyDown('b', { ctrl: true })
+    const bold = B.getItem(e.board, idea.id)!
+    expect(bold.text).toBe('**Food and drink**')
+    expect(bold.w).toBe(plain)
+  })
+})

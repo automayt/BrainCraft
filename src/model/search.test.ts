@@ -50,3 +50,17 @@ describe('search', () => {
     expect(entries[1]).toMatchObject({ title: 'Approve budget', notes: 1 })
   })
 })
+
+describe('words with bold and italic marks', () => {
+  it('are found as they read, and shown without the marks', () => {
+    const r = { x: 0, y: 0, w: 10, h: 10 }
+    let b = emptyBoard()
+    ;[b] = addItem(b, newItem('sticky', r, { text: '**Budget** review, *soon*' }))
+    const [hit] = search(b, 'budget review')
+    expect(hit?.title).toBe('Budget review, soon')
+    expect(hit?.snippet).not.toContain('*')
+    // A frame's title is kept as typed: stars there are just stars.
+    ;[b] = addItem(b, newItem('frame', r, { text: '**Q4** plans' }))
+    expect(search(b, '**q4**')[0]?.title).toBe('**Q4** plans')
+  })
+})

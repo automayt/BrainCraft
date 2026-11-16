@@ -36,6 +36,7 @@ export interface ToolHost {
 export const OPS_GUIDE = `Operations are JSON objects with an "op" field, applied as one all-or-nothing batch (one undo step).
 Any create op takes "ref": "name" so later ops in the batch can use that name in place of an id, and "at": {"x","y"} for its top-left corner (omit to place it in free space to the right of everything).
 Colours: hex or yellow, orange, red, pink, violet, blue, cyan, green, gray, white. Dates: YYYY-MM-DD.
+The words of a note, free text, a shape, a comment block, a flowchart step or a mind-map idea draw **bold** and *italic* (titles, tables, cards and code don't). Sparingly: a word or a label such as **Decision:**, not a whole note.
 
 createNote {text, color?, w?, h?} — sticky note
 createText {text, fontSize?, w?} — free text

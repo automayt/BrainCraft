@@ -72,6 +72,9 @@ timeline.
 - **Dates** are `YYYY-MM-DD`.
 - **Colours** are hex (`"#aad2fa"`) or a palette name: yellow, orange, red, pink,
   violet, blue, cyan, green, gray, white.
+- **Bold and italic:** the words of a note, free text, a shape, a comment
+  block, a flowchart step or a mind-map idea draw `**bold**` and `*italic*`.
+  Titles, tables, cards and code show them as typed.
 
 ## Operations
 

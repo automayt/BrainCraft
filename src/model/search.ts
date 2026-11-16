@@ -4,6 +4,7 @@ import { getItem } from './board'
 import { display, getDataset, recordTitle, withComputed } from './dataset'
 import { objectLabel, plainNote } from './notes'
 import { statusInfo } from './status'
+import { marksText, unmarked } from './textMarks'
 import { type Board, type Id, type Item, type Kind, KIND_LABELS } from './types'
 
 export interface SearchResult {
@@ -26,7 +27,8 @@ interface Field {
 
 /** Every searchable piece of text in an item. */
 function fields(b: Board, i: Item, seenDatasets: Set<string>): Field[] {
-  const out: Field[] = [{ where: i.kind === 'frame' ? 'Title' : 'Text', text: i.text }]
+  // Words are found as they read: "budget review" finds "**Budget** review".
+  const out: Field[] = [{ where: i.kind === 'frame' ? 'Title' : 'Text', text: marksText(i.kind) ? unmarked(i.text) : i.text }]
   if (i.description) out.push({ where: 'Description', text: plainNote(i.description) })
   const status = statusInfo(i.status)
   if (status) out.push({ where: 'Status', text: status.label })

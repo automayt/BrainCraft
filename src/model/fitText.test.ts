@@ -187,3 +187,23 @@ describe('growing text', () => {
     expect(big / itemFontSize(ask, approxMeasure)).toBeLessThan(1.6)
   })
 })
+
+describe('text with bold and italic marks', () => {
+  it('is fitted for the words drawn, and for the marks too while it is typed', async () => {
+    const { approxMeasure } = await import('./approxMeasure')
+    const { newItem } = await import('./board')
+    const { itemFontSize } = await import('./fitText')
+    // Measured as drawn: the marks take no room.
+    expect(approxMeasure('**Budget** review', 20, 400, 300, false, true)).toEqual(approxMeasure('Budget review', 20, 400, 300))
+    expect(approxMeasure('**Budget** review', 20, 400, 300).w).toBeGreaterThan(approxMeasure('Budget review', 20, 400, 300).w)
+    // A sum is no mark: every star counts.
+    expect(approxMeasure('2*3*4', 20, 400, 300, false, true)).toEqual(approxMeasure('2*3*4', 20, 400, 300))
+    const words = 'one two three four five six seven eight nine ten eleven twelve'
+    const marked = words.split(' ').map((w) => `***${w}***`).join(' ')
+    const note = (text: string) => ({ ...newItem('sticky', { x: 0, y: 0, w: 160, h: 160 }, { text, fontSize: 40 }), id: 1 })
+    expect(itemFontSize(note(marked), approxMeasure)).toBe(itemFontSize(note(words), approxMeasure))
+    expect(itemFontSize(note(marked), approxMeasure, true)).toBeLessThan(itemFontSize(note(words), approxMeasure))
+    // A frame's title has no marks: its stars are measured.
+    expect(itemFontSize({ ...newItem('frame', { x: 0, y: 0, w: 160, h: 160 }, { text: marked }), id: 2 }, approxMeasure)).toBe(newItem('frame', { x: 0, y: 0, w: 1, h: 1 }).fontSize)
+  })
+})

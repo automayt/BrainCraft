@@ -312,6 +312,17 @@ export function SelectionToolbar() {
             </button>
           </>
         )}
+        {editor.markable.length > 0 && (
+          <>
+            {!hasFontSize && <span className="sep" />}
+            <button className={`stb-mark${editor.selectionHas('b') ? ' on' : ''}`} title="Bold (Ctrl B). While typing, it's for the words you've selected" aria-label="Bold" aria-pressed={editor.selectionHas('b')} onClick={() => editor.toggleMark('b')}>
+              <b>B</b>
+            </button>
+            <button className={`stb-mark${editor.selectionHas('i') ? ' on' : ''}`} title="Italic (Ctrl I). While typing, it's for the words you've selected" aria-label="Italic" aria-pressed={editor.selectionHas('i')} onClick={() => editor.toggleMark('i')}>
+              <i>I</i>
+            </button>
+          </>
+        )}
         {sequence && !editor.readOnly && (
           <>
             <span className="sep" />

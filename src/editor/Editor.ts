@@ -14,6 +14,7 @@ import { type Rect, type Vec, boundsOf, center, dist, intersects, rectFromCenter
 import { fractionAlong } from '../model/routes'
 import { History } from '../model/history'
 import { canFitToContent, canMatchSize, fitToContent, growsText, itemFontSize, sameSize } from '../model/fitText'
+import { type Mark, marksText, toggleMark, toggleWhole, unmarked, wholeHas } from '../model/textMarks'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
@@ -1399,7 +1400,7 @@ export class Editor {
 
   private stepText(id: Id): string {
     const i = B.getItem(this.board, id)
-    return i?.text.trim() || flowShapeInfo(i?.shape).label
+    return unmarked(i?.text ?? '').trim() || flowShapeInfo(i?.shape).label
   }
 
   get runStep(): Id | null {
@@ -1717,6 +1718,50 @@ export class Editor {
       if (e.replaced && was?.trim() && item && item.text !== was) this.setStatus('Replaced the text — Ctrl Z brings it back')
     }
     this.emit()
+  }
+
+  /**
+   * Ctrl B or Ctrl I while typing: the selected words (`from`..`to` in the text) made bold or italic,
+   * or plain again. Returns the text and what to select in it, or null where words have no such marks
+   * (a title, a line's label, code).
+   */
+  markEditing(mark: Mark, from: number, to: number): { text: string; from: number; to: number } | null {
+    const e = this.editing
+    const item = e && !e.connector ? B.getItem(this.board, e.id) : undefined
+    return item && marksText(item.kind) ? toggleMark(item.text, from, to, mark) : null
+  }
+
+  /** The selected objects whose words can be made bold or italic. */
+  get markable(): Item[] {
+    if (this.readOnly) return []
+    const round = BS.openRound(this.board)
+    return this.selectedItems.filter((i) => marksText(i.kind) && !i.locked && !!i.text.trim() && !BS.isMasked(i, this.me, round))
+  }
+
+  /** Whether all the selected words are bold (or italic) already. */
+  selectionHas(mark: Mark): boolean {
+    const items = this.markable
+    return items.length > 0 && items.every((i) => wholeHas(i.text, mark))
+  }
+
+  /**
+   * Ctrl B or Ctrl I on a selection: all the words of each selected object made bold (or italic), or
+   * plain again when they all were. With something selected the key is always taken, saying so when
+   * none of it has words to mark; false with nothing selected, or on a board that can't be changed.
+   */
+  toggleMark(mark: Mark): boolean {
+    const items = this.markable
+    if (!items.length) {
+      if (this.readOnly || !this.selection.size) return false
+      this.setStatus(`Nothing selected has words to make ${mark === 'b' ? 'bold' : 'italic'}: notes, shapes, text, comments and ideas do`)
+      return true
+    }
+    const on = !items.every((i) => wholeHas(i.text, mark))
+    const ids = new Set(items.map((i) => i.id))
+    this.edit((b) => B.updateItems(b, ids, (i) => (wholeHas(i.text, mark) === on ? i : { ...i, text: toggleWhole(i.text, mark) })))
+    const what = mark === 'b' ? 'bold' : 'italic'
+    this.setStatus(on ? `Made ${what}` : `Not ${what} any more`)
+    return true
   }
 
   /** Keys pressed inside the text box. Returns true when handled. */
@@ -3999,6 +4044,8 @@ export class Editor {
       else if (k === 'g' && mods.shift) this.ungroup()
       else if (k === 'g' && this.selection.size > 1) this.group()
       else if (k === 'l' && mods.shift && this.selection.size) this.setLocked(!this.selectedItems.every((i) => i.locked))
+      // Bold and italic, for the words of what's selected. With nothing selected, the key is the browser's.
+      else if ((k === 'b' || k === 'i') && !mods.shift && !mods.alt) return this.toggleMark(k)
       else if (k === ']' && this.selection.size) this.bringToFront()
       else if (k === '[' && this.selection.size) this.sendToBack()
       else if (ARROWS[k] && this.selection.size) {
