@@ -3,7 +3,16 @@
 Run BrainCraft over HTTPS whenever anyone signs in to it from another device.
 Without it, passwords and session cookies cross the network in plain text,
 single sign-on providers (Google, Microsoft and most others) refuse to send
-people back to it, and browsers hold back features such as the clipboard.
+people back to it, and browsers hold back features such as the clipboard and
+the microphone.
+
+**The microphone is the one people notice.** A browser only lets a page hear
+you when the page is HTTPS, or is on the same computer (`localhost`). So
+talking to the assistant, Flowstate and MeetingNotes work at
+`http://localhost:8080` and nowhere else until the server is HTTPS: at
+`http://192.168.1.99:8080`, or at the computer's name, the browser refuses
+before BrainCraft can ask. A name is no better than a number here; what counts
+is the `https://`.
 
 There are two ways to get it. **Use a proxy** (Caddy, Cloudflare Tunnel or
 Tailscale) if you can: it gets and renews the certificate for you. Or **let
@@ -15,6 +24,12 @@ the single sign-on redirect use it:
 ```sh
 BRAINCRAFT_PUBLIC_URL=https://boards.example.org
 ```
+
+At home, where the same server is reached at several addresses (`localhost`
+on the computer itself, `192.168.1.99` and its name from the others) and there
+is no single sign-on, leave it unset: BrainCraft then goes by the address each
+request came to, and all of them work. Set to one address, the others can
+open boards but not join live sessions.
 
 ## Behind a proxy
 
@@ -112,32 +127,75 @@ Where the certificate comes from:
 - **A domain name:** [certbot](https://certbot.eff.org) or any ACME client gets
   a free one from Let's Encrypt (for example with a DNS challenge, so no web
   server is needed).
-- **At home, on your network only:** [mkcert](https://github.com/FiloSottile/mkcert)
-  makes a certificate your own devices trust. On the BrainCraft computer:
+- **At home, on your network only:** make a certificate of your own.
+  `scripts/home-cert.sh` does it with OpenSSL, which comes with Git (on
+  Windows, run it from Git Bash). Give it a folder outside the BrainCraft
+  folder, then every address and name the computer is reached by:
 
   ```sh
-  mkcert -install
-  mkcert 192.168.1.99 braincraft.local localhost
+  bash scripts/home-cert.sh E:/BrainCraft-certs 192.168.1.99 my-computer my-computer.local
   ```
 
-  It writes `192.168.1.99+2.pem` and `192.168.1.99+2-key.pem`. Each other
-  device needs mkcert's root certificate installed once (`mkcert -CAROOT`
-  shows where it is) to trust it. Single sign-on providers usually don't
-  accept a private address like this, so for sign-in with Google or Microsoft
-  use a domain name (any of the proxy options above).
+  It writes `cert.pem` and `key.pem` for the server (`localhost` is always
+  included), and `root.pem`, a root certificate of your own that signed them.
+  See [Trusting your own root](#trusting-your-own-root) for what devices make
+  of it. Run it again to renew the certificate (it lasts 825 days) or when
+  the computer's address changes: the root is kept, so devices that trust it
+  need nothing more, and the server picks the new certificate up within the
+  hour.
+
+  [mkcert](https://github.com/FiloSottile/mkcert) does the same and installs
+  its root on the computer for you: `mkcert -install`, then
+  `mkcert 192.168.1.99 my-computer localhost`.
+
+  Single sign-on providers usually don't accept a private address like this,
+  so for sign-in with Google or Microsoft use a domain name (any of the proxy
+  options above).
 - **Tailscale:** `tailscale cert <computer>.<your-tailnet>.ts.net` writes a
   real certificate for the tailnet name.
+
+### Trusting your own root
+
+A certificate you made yourself is as good as any for keeping the connection
+private, but a browser has no reason to believe it's really your server, so it
+shows a warning first.
+
+- **Without doing anything:** choose **Advanced**, then **Proceed** (Chrome,
+  Edge) or **Accept the Risk and Continue** (Firefox), once on each device.
+  The page is HTTPS from then on, and the microphone can be allowed. The
+  address bar goes on saying "Not secure".
+- **To have the lock and no warning:** tell the device to trust `root.pem`,
+  once. It's the device's own setting, so it's yours to do:
+  - Windows: `certutil -user -addstore Root E:\BrainCraft-certs\root.pem`
+    (Chrome and Edge go by this; Firefox does too unless it's been told not
+    to use the system's certificates).
+  - macOS: open `root.pem` in Keychain Access, then set it to **Always
+    Trust**.
+  - iPhone and iPad: send yourself the file and open it to install the
+    profile, then turn it on under Settings → General → About → Certificate
+    Trust Settings.
+  - Android: Settings → Security → Install a certificate → CA certificate.
+
+The root made by `scripts/home-cert.sh` can only vouch for home-network
+addresses and names: the private address ranges, `localhost`, names ending in
+`.local`, `.lan`, `.home.arpa` or `.internal`, and the names it was made with.
+A device that trusts it trusts nothing about the rest of the internet through
+it. Even so, keep `root-key.pem` to yourself.
 
 ## On this Windows computer
 
 The **Redeploy BrainCraft** batch file on the Desktop sets the server's
-settings near the top. For HTTPS with mkcert, add:
+settings near the top. With a certificate from `scripts/home-cert.sh`:
 
 ```bat
-set "BRAINCRAFT_TLS_CERT=E:\BrainCraft-certs\192.168.1.99+2.pem"
-set "BRAINCRAFT_TLS_KEY=E:\BrainCraft-certs\192.168.1.99+2-key.pem"
-set "BRAINCRAFT_PUBLIC_URL=https://192.168.1.99:8080"
+set "BRAINCRAFT_TLS_CERT=E:\BrainCraft-certs\cert.pem"
+set "BRAINCRAFT_TLS_KEY=E:\BrainCraft-certs\key.pem"
 ```
+
+`BRAINCRAFT_PUBLIC_URL` stays unset, so `https://localhost:8080` on the
+computer itself and `https://192.168.1.99:8080` from the others both work.
+The server then answers only HTTPS on its port: `http://` addresses stop
+working, bookmarks included.
 
 Keep the certificate files outside the BrainCraft folder, so a pull or a
 rebuild never touches them.
