@@ -737,7 +737,9 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   last: talk.lastCall,
                   hear: (from) => void talk.hearCall(from),
                   echo: { on: talk.echo, set: talk.setEcho, thorough: talk.how === 'server' },
-                  heard: { summary: heardSummary(talk.heard), warning: talk.call ? heardWarning(talk.heard, talk.echo) : null },
+                  heard: { summary: heardSummary(talk.heard), warning: talk.call ? heardWarning(talk.heard, talk.echo, talk.sources) : null },
+                  // Only where the two are heard apart (the server's speech to text).
+                  sources: talk.how === 'server' ? { ...talk.sources, set: talk.hearSource } : undefined,
                   // Other voices through the microphone: they may be on a call.
                   suggest: talk.voices.length > 1,
                 },

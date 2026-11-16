@@ -75,6 +75,9 @@ describe('the microphone and the call, as two people', () => {
     expect(heardWarning({ me: 0, call: 12, room: 0, echo: 4, again: 0 }, false)).toBeNull()
     expect(heardWarning({ me: 0, call: 12, room: 0, echo: 0, again: 0 }, true)).toBeNull()
     expect(heardWarning({ me: 1, call: 40, room: 0, echo: 9, again: 0 }, true)).toBeNull()
+    // One of the two turned off by hand: nothing to warn about.
+    expect(heardWarning({ me: 6, call: 0, room: 0, echo: 0, again: 0 }, true, { me: true, call: false })).toBeNull()
+    expect(heardWarning({ me: 0, call: 12, room: 0, echo: 4, again: 0 }, true, { me: false, call: true })).toBeNull()
   })
 })
 

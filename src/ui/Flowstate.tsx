@@ -212,6 +212,8 @@ interface MeetingProps {
     echo: { on: boolean; set: (on: boolean) => void; thorough: boolean }
     /** What's been heard from where and what was left out, in words; and a warning when hearing the call looks wrong. */
     heard?: { summary: string; warning: string | null }
+    /** Once the call is heard too: whether the microphone and the call are each being heard, and turning one off or on. */
+    sources?: { me: boolean; call: boolean; set: (from: 'me' | 'call', on: boolean) => void }
     /** More than one voice is coming through the microphone: the others may be on a call. */
     suggest: boolean
   }
@@ -244,7 +246,7 @@ function echoHint(on: boolean, heard: boolean, thorough: boolean): string {
  * input that carries the computer's sound (any browser). Once on, it says where from. Echo removal
  * is switched here too; and when others are heard through the microphone, it suggests the call.
  */
-function CallPicker({ from, share, inputs, last, hear, echo, heard, suggest }: NonNullable<MeetingProps['call']>) {
+function CallPicker({ from, share, inputs, last, hear, echo, heard, sources, suggest }: NonNullable<MeetingProps['call']>) {
   const [open, setOpen] = useState(false)
   const [answered, setAnswered] = useState(suggestedBefore)
   const menu = useRef<HTMLDivElement>(null)
@@ -289,6 +291,8 @@ function CallPicker({ from, share, inputs, last, hear, echo, heard, suggest }: N
       >
         {from ? `Hearing the call from ${from}` : 'Hear the call too'}
         {from && !echo.on && <small> · echo removal off</small>}
+        {from && sources && !sources.me && <small> · your microphone off</small>}
+        {from && sources && !sources.call && <small> · the call off</small>}
         {from && heard?.warning && <small className="flow-call-warn"> · check</small>}
       </button>
       {open && (
@@ -312,6 +316,24 @@ function CallPicker({ from, share, inputs, last, hear, echo, heard, suggest }: N
             </button>
           ))}
           {!from && !share && <p>This browser can’t share a call’s sound: choose an input that carries the computer’s sound, such as an audio interface’s loopback or Stereo Mix.</p>}
+          {from && sources && (
+            <>
+              <button type="button" role="menuitemcheckbox" aria-checked={sources.me} className="flow-call-echo" onClick={() => sources.set('me', !sources.me)}>
+                <span>
+                  <i aria-hidden="true" />
+                  Your microphone
+                </span>
+                <small>{sources.me ? 'Heard, and written down as yours.' : 'Off: nothing you say is heard. The call still is.'}</small>
+              </button>
+              <button type="button" role="menuitemcheckbox" aria-checked={sources.call} className="flow-call-echo flow-call-source" onClick={() => sources.set('call', !sources.call)}>
+                <span>
+                  <i aria-hidden="true" />
+                  The call
+                </span>
+                <small>{sources.call ? 'Heard, as the people at the other end.' : 'Off: nothing from the call is heard. You still are.'}</small>
+              </button>
+            </>
+          )}
           <button type="button" role="menuitemcheckbox" aria-checked={echo.on} className="flow-call-echo" onClick={() => echo.set(!echo.on)}>
             <span>
               <i aria-hidden="true" />

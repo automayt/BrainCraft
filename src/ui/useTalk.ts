@@ -80,7 +80,9 @@ export function heardSummary(h: HeardCount): string {
  * Something looks wrong with hearing the call too, going by what's been heard so far: nothing from
  * the call at all, or nothing from the person here. Null while it looks right (or it's too soon).
  */
-export function heardWarning(h: HeardCount, echoRemoval: boolean): string | null {
+export function heardWarning(h: HeardCount, echoRemoval: boolean, hearing: { me: boolean; call: boolean } = { me: true, call: true }): string | null {
+  // One of them turned off by hand says nothing about the other.
+  if (!hearing.me || !hearing.call) return null
   if (!h.call && h.me + h.echo >= 6) return 'Nothing has been heard from the call yet. Check that it’s the tab or input the call’s sound comes from.'
   if (!h.me && h.call >= 12 && h.echo >= 4 && echoRemoval) return 'Nothing has been heard from your microphone. If you’ve been talking, turn echo removal off: your own words may be going with the call’s.'
   return null
@@ -153,6 +155,8 @@ export function useTalk(o: TalkOptions) {
   const [echo, setEcho] = useState(echoRemovalWanted)
   const echoRef = useRef(echo)
   echoRef.current = echo
+  /** With the call heard too: whether the microphone and the call are each being heard (both, to begin with). */
+  const [sources, setSources] = useState({ me: true, call: true })
   const [, setTick] = useState(0)
   /** What's been heard in this conversation, and what was left out of it. */
   const heard = useRef<HeardCount>({ ...NOTHING_HEARD })
@@ -255,6 +259,7 @@ export function useTalk(o: TalkOptions) {
     same.current = new Map()
     known.current = new Map()
     guessed.current = new Set()
+    setSources({ me: true, call: true })
     setVoices([])
     heard.current = { ...NOTHING_HEARD }
     /** Each thing is heard once: see ai/heardOnce.ts. */
@@ -537,6 +542,14 @@ export function useTalk(o: TalkOptions) {
       setCall({ stream, label })
       // Stopped from the browser's sharing bar, or the input unplugged: the call isn't heard any more.
       stream.getAudioTracks()[0].addEventListener('ended', () => setCall((c) => (c?.stream === stream ? null : c)))
+    },
+    /** With the call heard too: whether the microphone and the call are each being heard. */
+    sources,
+    /** Hears the microphone or the call, or stops hearing just that one (the other goes on). */
+    hearSource: (from: HeardFrom, on: boolean) => {
+      if (!ear.current?.hear) return
+      ear.current.hear(from, on)
+      setSources((s) => ({ ...s, [from]: on }))
     },
     /** Echo removal: whether the call is taken out of the microphone once it's heard too. */
     echo,

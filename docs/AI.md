@@ -253,6 +253,13 @@ the notes on the board as the meeting goes.
   strip, or just say who you're talking to ("robot, the other person is
   Sam") and the notes name it.
 
+  Either one can be turned off on its own in that menu, once the call is
+  heard (with the server's speech to text): **Your microphone**, to say
+  something that isn't for the notes while the call goes on being written
+  down, or **The call**, to keep only what you say. The sign shows which is
+  off, and Space still mutes both at once. With the call off, echo removal
+  goes on taking its sound out of your microphone.
+
   The same menu says how it's going: how many lines were heard from you and
   from the call, and how many were left out as the call in your microphone
   or as the same line over and over. If nothing has been heard from the call

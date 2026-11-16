@@ -64,6 +64,11 @@ export interface Ear {
    * out of the microphone once the call is heard too. Off, the microphone is heard as it is.
    */
   removeEcho?(on: boolean): Promise<void>
+  /**
+   * Once the call is heard too: hears the microphone or the call, or stops hearing just that one
+   * (what it said up to then still counts). Both are heard to begin with.
+   */
+  hear?(from: HeardFrom, on: boolean): void
 }
 
 type Recognition = {
@@ -278,6 +283,8 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
   let removeEcho = o.removeEcho !== false
   /** The call's own sound, once it's heard too. */
   let call: Tap | null = null
+  /** Which of the two isn't being heard for now, by the person's choice. */
+  const off: Record<HeardFrom, boolean> = { me: false, call: false }
   const tap = async (stream: MediaStream, from?: HeardFrom): Promise<Tap> => {
     // Each sound at its own rate (Firefox won't connect a sound to a context at another), brought
     // down to 16 kHz here.
@@ -364,7 +371,7 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
     node.port.onmessage = (e: MessageEvent<Float32Array>) => {
       const batch = down.push(e.data)
       recent.push(batch, performance.now())
-      if (!stopped && !muted) phrases.feed(batch)
+      if (!stopped && !muted && !(from && off[from])) phrases.feed(batch)
       else skipped += batch.length
     }
     let ended = false
@@ -431,6 +438,12 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
       }
       muted = quiet
       on.level?.(0)
+    },
+    hear(from, on) {
+      if (off[from] === !on || stopped) return
+      // What was said before it was turned off still goes.
+      if (!on) (from === 'me' ? mic : call)?.phrases.end()
+      off[from] = !on
     },
     hearCall: (stream) =>
       inTurn(async () => {
