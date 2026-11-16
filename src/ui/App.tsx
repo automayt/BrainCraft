@@ -13,7 +13,7 @@ import { AiDialog } from './AiConnect'
 import { Presenter } from './Present'
 import { RunPanel, RunsDialog } from './RunPanel'
 import { MeetingReplay } from './MeetingReplay'
-import { playMeeting } from './meetingFiles'
+import { continueMeeting, playMeeting } from './meetingFiles'
 import { MeetingPeopleDialog } from './MeetingPeople'
 import { Editor } from '../editor/Editor'
 import * as B from '../model/board'
@@ -170,6 +170,7 @@ function App({ ws }: { ws: Workspace }) {
       }
     },
     replayMeeting: (frame, at) => void playMeeting(ws, editor, frame, at),
+    continueMeeting: (frame) => void continueMeeting(ws, editor, frame, (on, o) => ui.flow(on, o)),
     openMeetingPeople: (frame) => setPeopleOf(frame),
     ai: bridge,
     menu,

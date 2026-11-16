@@ -130,6 +130,9 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     ...(editor.single?.kind === 'frame' && editor.single.meeting?.replay
       ? [
           { id: 'replay', label: 'Replay this meeting', group: 'Board', aliases: 'replay play back playback meeting watch again catch up timelapse history', run: () => ui.replayMeeting(editor.single!.id) },
+          ...(editor.readOnly
+            ? []
+            : [{ id: 'meeting-continue', label: 'Continue this meeting', group: 'Board', aliases: 'continue resume carry on pick up again more meeting notes same frame second part', run: () => ui.continueMeeting(editor.single!.id) }]),
           { id: 'meeting-people', label: 'People in this meeting…', group: 'Board', aliases: 'rename speaker voice who name correct fix person people meeting', run: () => ui.openMeetingPeople(editor.single!.id) },
         ]
       : []),

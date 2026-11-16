@@ -181,6 +181,8 @@ function Agenda({ items, ideas, onTick }: { items: readonly AgendaItem[]; ideas:
 
 interface MeetingProps {
   started: number
+  /** An earlier meeting carried on: its clock goes on from where it stopped. */
+  resumed?: boolean
   ending: boolean
   /** What to keep has been chosen (so the notes are being finished). */
   picked: boolean
@@ -362,7 +364,7 @@ function CallPicker({ from, share, inputs, last, hear, echo, heard, sources, sug
 }
 
 /** The sign that a meeting is being heard: how long for, and how many people are in it (or how far through a recording). */
-function MeetingSign({ started, ending, picked, people, onPeople, listening, recording, call, brief }: Pick<MeetingProps, 'started' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording' | 'call' | 'brief'> & { listening: boolean }) {
+function MeetingSign({ started, resumed, ending, picked, people, onPeople, listening, recording, call, brief }: Pick<MeetingProps, 'started' | 'resumed' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording' | 'call' | 'brief'> & { listening: boolean }) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -372,7 +374,7 @@ function MeetingSign({ started, ending, picked, people, onPeople, listening, rec
   return (
     <div className={`flow-meeting${listening && !ending ? ' on' : ''}`} role="status" aria-label="MeetingNotes">
       <i aria-hidden="true" />
-      <span>{ending ? (picked ? 'Finishing the notes…' : recording ? 'The recording is over' : 'The meeting is over') : recording ? `Notes from ${recording.name}` : 'MeetingNotes'}</span>
+      <span>{ending ? (picked ? 'Finishing the notes…' : recording ? 'The recording is over' : 'The meeting is over') : recording ? `Notes from ${recording.name}` : resumed ? 'MeetingNotes, carried on' : 'MeetingNotes'}</span>
       {!ending &&
         (recording ? (
           <time title="How far through the recording">

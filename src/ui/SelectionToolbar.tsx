@@ -798,6 +798,11 @@ function MeetingTools({ id }: { id: number }) {
         <button title="Play the meeting back: how its notes grew, with what was said" onClick={() => ui.replayMeeting(id)}>
           ▶ Replay
         </button>
+        {!editor.readOnly && (
+          <button title="Carry this meeting on: MeetingNotes starts again here, and what’s said is added to these notes, this transcript and this frame" disabled={busy} onClick={() => ui.continueMeeting(id)}>
+            Continue
+          </button>
+        )}
         {item.meeting.detail && (
           <select
             className="meeting-detail"

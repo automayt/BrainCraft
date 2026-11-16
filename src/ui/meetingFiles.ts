@@ -53,6 +53,25 @@ export async function recordOf(ws: Workspace, editor: Editor, frame: Id): Promis
   return record
 }
 
+/** The record of a meeting's frame, when it has been read already (see `recordOf`). */
+export function knownRecord(editor: Editor, frame: Id): MeetingRecord | null {
+  const f = replayFileOf(editor, frame)
+  return (f && read.get(f.id)) ?? null
+}
+
+/**
+ * Carries on the meeting framed by `frame`: MeetingNotes starts again in it, the clock going on
+ * from where it stopped. When it ends, what was said and noted is added to the same record and the
+ * same frame, and the whole meeting is reviewed again.
+ */
+export async function continueMeeting(ws: Workspace, editor: Editor, frame: Id, flow: (on: boolean, o: { meeting: true; resume: { frame: Id; length: number } }) => void) {
+  if (editor.readOnly) return editor.setStatus('This board is read-only')
+  if (editor.reviewing.has(frame)) return editor.setStatus('This meeting is still being reviewed: carry it on once that’s done')
+  const record = await recordOf(ws, editor, frame)
+  if (typeof record === 'string') return editor.setStatus(record)
+  flow(true, { meeting: true, resume: { frame, length: record.length } })
+}
+
 /** Keeps a meeting's record as a file with the board, linked from its frame (the one it replaces goes). */
 export async function saveRecord(ws: Workspace, editor: Editor, frame: Id, record: MeetingRecord): Promise<boolean> {
   const old = replayFileOf(editor, frame)

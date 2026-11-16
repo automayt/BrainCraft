@@ -48,8 +48,8 @@ import * as W from '../model/wiki'
 import * as FS from '../model/files'
 import { type MeetingPicks, ideasTableOf, isAgendaTable, isIdeasTable, keepIdeas, keepTicks, meetingItems, settleIdeas, tickRow, unpicked } from '../model/meeting'
 import { type MeetingRecord, replayBoard, stepsBy } from '../model/meetingReplay'
-import { contentSig } from '../model/meetingReview'
-import { type Polish, polishMeeting, renameInFrame } from './meetingViews'
+import { contentSig, handEdited } from '../model/meetingReview'
+import { type Polish, arrange, inFrame, polishMeeting, renameInFrame } from './meetingViews'
 import type { PagePlan } from '../files/toWiki'
 import { getSnap, setSnap, unusedSnaps } from '../model/embed'
 import { embedKeys, toggleTask } from '../model/markdown'
@@ -171,6 +171,9 @@ function resizeAnchor(r: Rect, grip: Corner | Edge): { anchor: Vec; pin?: Partia
       return { anchor: cornerOf(r, OPPOSITE[grip]) }
   }
 }
+
+/** A meeting's views that are made from its review, not by the notes as it goes: the overview, speaker timeline, Actions board and transcript. */
+const REVIEWED_VIEWS: ReadonlySet<string> = new Set(['overview', 'timeline', 'actions', 'transcript'])
 
 /** UI handles the canvas can report under the pointer. */
 export type Handle =
@@ -377,7 +380,8 @@ export class Editor {
    * on the board when it started is kept, so what the meeting made can be framed when it ends.
    * `ending`: wrapping up; `picks`: what to keep, once chosen; `hurry`: asked to leave before
    * that's done. `recording`: notes from a recording rather than a meeting heard now, and how far
-   * through it is (ms).
+   * through it is (ms). `resumed`: an earlier meeting carried on, in its frame: `started` is then
+   * when it would have started had it never stopped, so its clock goes on from where it was.
    */
   meeting: {
     started: number
@@ -387,26 +391,39 @@ export class Editor {
     picks: MeetingPicks | null
     hurry: boolean
     recording: { file: File; done: number; length: number } | null
+    resumed: { frame: Id; title: string } | null
   } | null = null
   /** Guided: Flowstate where the assistant asks questions to draw ideas out, mapping them as it goes. */
   guide = false
 
-  setFlow(on: boolean, o: { meeting?: boolean; guide?: boolean; recording?: File } = {}) {
+  /**
+   * `resume`: carries on the meeting in that frame, `length` ms long so far. What's in the frame is
+   * the meeting's own again (the notes go on in it), and its clock goes on from where it stopped.
+   */
+  setFlow(on: boolean, o: { meeting?: boolean; guide?: boolean; recording?: File; resume?: { frame: Id; length: number } } = {}) {
     if (on === this.flow) return
+    const frame = on && o.resume ? B.getItem(this.board, o.resume.frame) : undefined
+    const resume = frame?.kind === 'frame' && !o.recording ? o.resume : undefined
+    // The meeting's own: what's in its frame. The frame itself stays as it is until the end.
+    const own = resume ? inFrame(this.board, resume.frame) : []
+    const mine = new Set(own.map((i) => i.id))
     this.flow = on
     this.meeting =
-      on && (o.meeting || o.recording)
+      on && (o.meeting || o.recording || resume)
         ? {
-            started: Date.now(),
-            before: new Set(this.board.items.map((i) => i.id)),
-            linksBefore: new Set(this.board.connectors.map((c) => c.id)),
+            started: Date.now() - (resume ? Math.max(0, resume.length) + 1000 : 0),
+            before: new Set(this.board.items.filter((i) => !mine.has(i.id)).map((i) => i.id)),
+            linksBefore: new Set(this.board.connectors.filter((c) => !(mine.has(c.from) && mine.has(c.to))).map((c) => c.id)),
             ending: false,
             picks: null,
             hurry: false,
             recording: o.recording ? { file: o.recording, done: 0, length: 0 } : null,
+            resumed: resume && frame ? { frame: resume.frame, title: frame.text } : null,
           }
         : null
     if (this.meeting) this.aiLeft = new Map()
+    // What the notes left in the frame is theirs to go on with; what someone changed since isn't.
+    for (const i of own) if (!handEdited(i)) this.aiLeft.set(i.id, contentSig(i))
     this.guide = on && !this.meeting && !!o.guide
     if (on) {
       this.finishEditing()
@@ -444,15 +461,23 @@ export class Editor {
    * The last of a meeting's notes, done here rather than by the assistant: what wasn't picked to
    * keep is taken away, and the transcript card (`card`) goes beside the rest. The ideas to bring
    * up that were raised go too; those that weren't are kept as one list, put beside the rest so it
-   * is framed with this meeting (the latest). Returns the card.
+   * is framed with this meeting (the latest). Returns the card. `into`: the frame of a meeting
+   * that carried on, whose transcript card is written again rather than a second one added.
    */
-  tidyMeeting(before: ReadonlySet<Id>, picks: MeetingPicks, card: { text: string; description: string } | null): Id | null {
+  tidyMeeting(before: ReadonlySet<Id>, picks: MeetingPicks, card: { text: string; description: string } | null, into?: Id): Id | null {
     if (this.readOnly) return null
     let made: Id | null = null
     this.edit((b) => {
-      const drop = unpicked(b, meetingItems(b, before), picks)
+      const had = into === undefined ? undefined : inFrame(b, into).find((i) => i.meeting?.view === 'transcript')
+      const drop = unpicked(b, meetingItems(b, before), picks, new Set(had ? [had.id] : []))
       let next = drop.length ? B.remove(b, new Set(drop.flatMap((id) => (B.getItem(b, id)?.kind === 'mind' ? [...B.subtree(b, id)] : [id])))) : b
-      if (card) {
+      if (card && had) {
+        made = had.id
+        next = B.updateItem(next, had.id, (i) => {
+          const t: Item = { ...i, text: card.text, description: card.description, meeting: { view: 'transcript' } }
+          return { ...t, meeting: { view: 'transcript', sig: contentSig(t) } }
+        })
+      } else if (card) {
         const box = B.bounds(next, new Set(meetingItems(next, before)))
         const out = applyOps(next, [{ op: 'createNote', text: card.text, color: 'white', w: 320, h: 320, ...(box ? { at: { x: box.x + box.w + 80, y: box.y } } : {}) }], { measure: this.measure })
         made = out.results[0]?.id ?? null
@@ -507,6 +532,30 @@ export class Editor {
     return frame
   }
 
+  /**
+   * A meeting that carried on: what its further part made goes into its frame, which is laid out
+   * afresh around it all, and shown. False when the frame is gone.
+   */
+  extendMeeting(frame: Id, before: ReadonlySet<Id>): boolean {
+    if (this.readOnly || B.getItem(this.board, frame)?.kind !== 'frame') return false
+    this.edit((b) => {
+      const inside = new Set(inFrame(b, frame).map((i) => i.id))
+      const fresh = new Set(meetingItems(b, before).filter((id) => !inside.has(id) && id !== frame))
+      const ideas = ideasTableOf(b)
+      // Brought just under the frame, arranged among themselves as they were, so it's laid out
+      // around them without a gap however far away they were made.
+      const f = B.getItem(b, frame)!
+      const box = B.bounds(b, fresh)
+      const next = box ? B.translate(b, fresh, f.x + 60 - box.x, f.y + f.h + 40 - box.y) : b
+      return arrange(next, frame, new Set([...fresh, ...(ideas === null ? [] : [ideas])]))
+    })
+    this.selection = new Set([frame])
+    const box = B.bounds(this.board, this.selection)
+    if (box) this.flyTo(fit(box, this.openView, 80))
+    this.emit()
+    return true
+  }
+
   /** Links a meeting's frame to the file its record and replay are kept in. */
   setMeetingReplay(frame: Id, file: string) {
     if (this.readOnly || B.getItem(this.board, frame)?.kind !== 'frame') return
@@ -558,7 +607,10 @@ export class Editor {
       if (same) return [p]
       if (isIdeasTable(now)) return now.locked || !p.v ? [] : [{ ...p, v: keepIdeas(now, p.v) }]
       const left = this.aiLeft.get(p.id)
-      const mine = !m.before.has(p.id) && !now.locked && left !== undefined && left === contentSig(now)
+      // In a meeting that carried on, the views made from its review are made again at the end
+      // from the whole of it: until then they stay as they are.
+      const reviewed = !!m.resumed && !!now.meeting?.view && REVIEWED_VIEWS.has(now.meeting.view)
+      const mine = !m.before.has(p.id) && !now.locked && !reviewed && left !== undefined && left === contentSig(now)
       if (!mine) {
         kept.add(p.id)
         return []
@@ -1149,7 +1201,18 @@ export class Editor {
     patches = guarded.patches
     if (guarded.kept) this.setStatus(guarded.kept === 1 ? 'Kept your change to one object: the notes build on it instead' : `Kept your changes to ${guarded.kept} objects: the notes build on them instead`)
     const start = this.board
-    this.edit((b) => withIdsAfter(applyPatches(b, patches), patches))
+    const carriedOn = !!this.meeting?.resumed
+    this.edit((b) => {
+      let next = withIdsAfter(applyPatches(b, patches), patches)
+      // In a meeting that carried on, the notes go on in what its review made: what they change
+      // there keeps counting as untouched by hand, for the review to come.
+      if (carriedOn)
+        for (const p of patches) {
+          const i = p.k === 'item' && p.v ? B.getItem(next, p.id) : undefined
+          if (i?.meeting?.sig !== undefined && i.meeting.sig !== contentSig(i)) next = B.updateItem(next, i.id, (x) => ({ ...x, meeting: { ...x.meeting, sig: contentSig(x) } }))
+        }
+      return next
+    })
     if (merged.size) this.saveVersions(merged, { at: Date.now(), by: 'AI', note: summary })
     if (this.board === start) return false
     const change: AiChange = { id, at: Date.now(), summary, forward: diff(before, this.board), inverse: diff(this.board, before), undone: false }

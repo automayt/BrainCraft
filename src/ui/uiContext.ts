@@ -54,9 +54,11 @@ export interface Ui {
    * with `guide`, the assistant asking the questions. Leaving a meeting wraps it up first (what to
    * keep, then its frame and review), unless `now`.
    */
-  flow: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; now?: boolean }) => void
+  flow: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; resume?: { frame: number; length: number }; now?: boolean }) => void
   /** Plays back the meeting a frame holds (see MeetingReplay), from `at` ms in. */
   replayMeeting: (frame: number, at?: number) => void
+  /** Carries on the meeting in that frame: MeetingNotes again, adding to its notes, transcript and record. */
+  continueMeeting: (frame: number) => void
   /** Who was in a meeting, to correct a name everywhere in it. */
   openMeetingPeople: (frame: number) => void
   /** The recorded runs of the flowchart containing `id`. */

@@ -166,6 +166,10 @@ Shape the notes as the meeting goes, and keep shaping them:
 Someone may speak to you directly, by calling you (robot, assistant, BrainCraft or the like) or by telling the notes what to do: "note that…", "action item for Sam: …", "strike that", "park this", "make that a timeline". Then do what they ask on the board: "strike that" takes back what you noted from what was said just before it, and "park this" puts it under a branch called "Parked". Still answer only with your few words.
 Leave alone what was on the board before the meeting (the "Ideas to bring up" table aside: it's kept from meeting to meeting), anything locked, and anything someone has changed by hand: build on it, don't change it. Don't put a frame around it all: that's done when the meeting ends. Leave out "at", so what you make is placed beside the rest. ` + WHO_NOTE + `]`
 
+/** A meeting that carried on from earlier, in the frame its notes are in: where the notes go on. */
+export const carriedOn = (frame: string) =>
+  `[This meeting is carrying on from earlier. Its notes so far are in the frame “${frame.replace(/[\n“”]+/g, ' ').slice(0, 80)}”, and they are yours to go on with: add to the mind map there (addIdeas) and to its "Decisions and actions" table (setTable, giving every row, those already there as they are) rather than starting new ones, and draw anything new beside them. Its overview, speaker timeline, Actions board and transcript are made again from the whole meeting when it ends: leave them as they are.]`
+
 /**
  * Before a meeting: an agenda from what matters most on the board, starting with what's left from
  * the last one, and the ideas worth bringing up beside it.
@@ -559,7 +563,7 @@ export class Assistant {
    * 'meeting-agenda' starts one with an agenda (`text` is then not used; `extra.carry` is what's
    * left from the last meeting).
    */
-  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: Live = false, extra: { carry?: { title: string; items: string[] } } = {}): Promise<void> {
+  async send(text: string, on: Callbacks, signal?: AbortSignal, images: AiImage[] = [], live: Live = false, extra: { carry?: { title: string; items: string[] }; resumed?: string } = {}): Promise<void> {
     this.checksLeft = 1
     const sel = this.host.selection()
     const others = this.host.others?.()
@@ -593,7 +597,7 @@ export class Assistant {
           text:
             live === 'meeting' || live === 'meeting-agenda'
               ? // A meeting: the whole board comes along (the notes grow long), and what was said, line by line.
-                `${context}\n${live === 'meeting' ? MEETING_NOTE : `${MEETING_AGENDA}${extra.carry?.items.length ? `\n\n[Left from the last meeting, “${extra.carry.title}”:]\n${extra.carry.items.map((x) => `- ${x}`).join('\n')}` : ''}`}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
+                `${context}\n${live === 'meeting' ? `${MEETING_NOTE}${extra.resumed !== undefined ? `\n\n${carriedOn(extra.resumed)}` : ''}` : `${MEETING_AGENDA}${extra.carry?.items.length ? `\n\n[Left from the last meeting, “${extra.carry.title}”:]\n${extra.carry.items.map((x) => `- ${x}`).join('\n')}` : ''}`}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { view: this.host.view?.() }).slice(0, 30_000)}${live === 'meeting' ? `\n\n[Just said in the meeting:]\n${text}` : ''}`
               : live === 'guide' || live === 'guide-start'
                 ? // Guided: the board, and what they said (nothing yet, at the start).
                   `${context}\n${live === 'guide-start' ? `${GUIDE_START}\n${GUIDE_NOTE}` : GUIDE_NOTE}\n\n[The board now:]\n${boardText(this.host.readable?.() ?? open, { focus: sel, view: this.host.view?.() }).slice(0, 20_000)}${live === 'guide' ? `\n\nThey said: ${JSON.stringify(text)}${linked ? `\n\n${linked}` : ''}` : ''}`

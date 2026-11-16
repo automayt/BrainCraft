@@ -450,7 +450,26 @@ Verbose detail, ideas that lead back to when they were said, voices worked
 out from what's said and one correction for a whole meeting, edits and
 locks left alone, a still view with a glow on what's new, speech to text
 given the board's names and terms, and the next agenda starting with what
-the last meeting left. Next:
+the last meeting left. Then, from a meeting whose transcript filled with one
+line over and over: each thing heard once (loops folded, a line that only
+says the last one again heard a second time without it, the call through the
+microphone left out by its words as well as its sound), you and the call as
+two people whether or not voices are told apart, your microphone or the call
+turned off on its own, a count of what was heard and left out with a warning
+when one of the two isn't coming through, and carrying a meeting on in its
+frame. Next:
+
+- [ ] **Check-ins during a meeting.** Asked for, but not yet pinned down. It
+  could be the notes saying where things stand when asked ("robot, where are
+  we?": what's decided, what's open, what's left on the agenda), or the notes
+  going over themselves every so often as the review does at the end
+  (regrouping, putting names right), or both.
+- [ ] **A second map made while carrying on.** The notes are told to go on in
+  the meeting's mind map; if they start another instead, it stays beside the
+  rest rather than being folded into the reviewed one.
+- [ ] **Lines to strike from the transcript.** "Strike that" takes back what
+  was noted, and muting keeps things out; nothing yet takes a line out of the
+  transcript once it's been heard.
 
 - [ ] **Remember who was there.** The agenda already starts with what the
   board's last meeting left; with voices known, it could start with what's

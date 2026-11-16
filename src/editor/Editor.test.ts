@@ -4,7 +4,9 @@ import { emptyBoard } from '../model/board'
 import * as M from '../model/mindmap'
 import { toScreen } from '../model/camera'
 import { fakeMeasure } from '../model/test-helpers'
-import { agendaOf, ideasOf, meetingItems } from '../model/meeting'
+import { ALL_PICKS, agendaOf, ideasOf, meetingItems } from '../model/meeting'
+import { handEdited, parseReview } from '../model/meetingReview'
+import { inFrame } from './meetingViews'
 import { Editor } from './Editor'
 import { diff } from '../collab/patch'
 import { BrainCraftAPI } from '../api/api'
@@ -1819,5 +1821,160 @@ describe('the board’s brief', () => {
     e.setBrief(BRIEF)
     expect(e.board.items).toBe(items)
     expect(e.board.title).toBe('Untitled board')
+  })
+})
+
+describe('a meeting carried on', () => {
+  const review = parseReview(`Title: Launch
+Outcomes:
+- Decision: Launch moves to May
+- Action: Book the venue | Brian | 2026-11-20
+Ideas:
+- 0:45 | Sam | Launch > Venue | 1 | Three venues downtown are all under budget
+- 2:10 | Brian | Launch > Date | 2 | May avoids the conference clash
+`)
+  const ai = (e: Editor, id: string, f: (b: typeof e.board) => typeof e.board) => e.applyAi(id, id, diff(e.board, f(e.board)))
+  const view = (e: Editor, frame: number, v: string) => inFrame(e.board, frame).filter((i) => i.meeting?.view === v)
+
+  /** A meeting that ended and was reviewed: its frame holds an overview, a mind map, a decisions table and the transcript. */
+  const ended = () => {
+    const e = editor()
+    const api = new BrainCraftAPI(e)
+    api.apply([{ op: 'createNote', text: 'From before', at: { x: -3000, y: 0 } }])
+    e.setFlow(true, { meeting: true })
+    const m = e.meeting!
+    api.apply([
+      { op: 'createMindMap', outline: 'Launch\n  Venue', at: { x: 0, y: 0 } },
+      { op: 'createTable', title: 'Decisions and actions', columns: ['Type', 'What', 'Who', 'When'], rows: [['Decision', 'Go', '', '']], at: { x: 0, y: 700 } },
+      // Something the notes drew, which stays as it was made.
+      { op: 'createNote', text: 'A sketch', at: { x: 900, y: 0 } },
+    ])
+    const card = e.tidyMeeting(m.before, ALL_PICKS, { text: 'Transcript: Launch\n1 min', description: '[0:01] Jo: hello' })!
+    const frame = e.frameMeeting('Launch', m.before)!
+    e.setFlow(false)
+    e.polishMeeting({ frame, title: 'Launch', review, detail: 2, picks: ALL_PICKS, length: 60_000, howLong: '1 min', lines: [], people: ['Sam', 'Brian'], arrange: true })
+    e.select([])
+    return { e, api, frame, card, old: e.board.items.find((i) => i.text === 'From before')!.id }
+  }
+
+  it('makes what’s in its frame the meeting’s own again, and its clock goes on', () => {
+    const { e, frame, old } = ended()
+    e.setFlow(true, { meeting: true, resume: { frame, length: 60_000 } })
+    const m = e.meeting!
+    expect(m.resumed).toEqual({ frame, title: 'Launch' })
+    // An hour in, had it never stopped: a minute and a moment.
+    expect(Date.now() - m.started).toBeGreaterThanOrEqual(61_000)
+    expect(Date.now() - m.started).toBeLessThan(70_000)
+    expect(m.before.has(old)).toBe(true)
+    expect(m.before.has(frame)).toBe(true)
+    for (const i of inFrame(e.board, frame)) expect(m.before.has(i.id)).toBe(false)
+    expect(meetingItems(e.board, m.before).length).toBe(inFrame(e.board, frame).length)
+    // Nothing in it counts as changed by hand.
+    expect(e.meetingTouched().size).toBe(0)
+  })
+
+  it('is an ordinary meeting when there’s no such frame, and never from a recording', () => {
+    const { e, frame, old } = ended()
+    e.setFlow(true, { meeting: true, resume: { frame: old, length: 60_000 } })
+    expect(e.meeting!.resumed).toBeNull()
+    expect(e.meeting!.before.size).toBe(e.board.items.length)
+    expect(Date.now() - e.meeting!.started).toBeLessThan(5000)
+    e.setFlow(false)
+    e.setFlow(true, { recording: new File(['x'], 'call.mp3'), resume: { frame, length: 60_000 } })
+    expect(e.meeting!.resumed).toBeNull()
+    expect(e.meeting!.before.has(view(e, frame, 'overview')[0].id)).toBe(true)
+  })
+
+  it('lets the notes go on in its mind map and table, and leaves what its review made', () => {
+    const { e, frame } = ended()
+    e.setFlow(true, { meeting: true, resume: { frame, length: 60_000 } })
+    const root = view(e, frame, 'map').find((i) => i.parent === undefined)!
+    const table = view(e, frame, 'outcomes')[0]
+    const overview = view(e, frame, 'overview')[0]
+    const transcript = view(e, frame, 'transcript')[0]
+    ai(e, 'a1', (b) => {
+      let next = applyOps(b, [{ op: 'addIdeas', parent: root.id, ideas: 'Catering' }, { op: 'update', id: root.id, text: 'Launch, part two' }], { measure: fakeMeasure }).board
+      next = B.updateItem(next, table.id, (i) => ({ ...i, text: 'Decisions and actions (more)' }))
+      next = B.updateItem(next, overview.id, (i) => ({ ...i, text: 'Rewritten by the notes' }))
+      return B.updateItem(next, transcript.id, (i) => ({ ...i, description: 'Rewritten by the notes' }))
+    })
+    expect(e.board.items.some((i) => i.text === 'Catering')).toBe(true)
+    expect(B.getItem(e.board, root.id)!.text).toBe('Launch, part two')
+    expect(B.getItem(e.board, table.id)!.text).toBe('Decisions and actions (more)')
+    expect(B.getItem(e.board, overview.id)!.text).toBe(overview.text)
+    expect(B.getItem(e.board, transcript.id)!.description).toBe('[0:01] Jo: hello')
+    expect(e.status).toContain('Kept your changes to 2 objects')
+    // What the notes changed there still counts as theirs, for the review to come.
+    expect(handEdited(B.getItem(e.board, root.id)!)).toBe(false)
+    expect(handEdited(B.getItem(e.board, table.id)!)).toBe(false)
+    expect(e.meetingTouched().size).toBe(0)
+    // And they may change it again.
+    ai(e, 'a2', (b) => B.updateItem(b, root.id, (i) => ({ ...i, text: 'Launch, part three' })))
+    expect(B.getItem(e.board, root.id)!.text).toBe('Launch, part three')
+  })
+
+  it('leaves alone what someone changed since the meeting ended', () => {
+    const { e, frame } = ended()
+    const table = view(e, frame, 'outcomes')[0]
+    e.edit((b) => B.updateItem(b, table.id, (i) => ({ ...i, text: 'Decisions, as I want them' })))
+    e.setFlow(true, { meeting: true, resume: { frame, length: 60_000 } })
+    expect([...e.meetingTouched()]).toEqual([table.id])
+    ai(e, 'a1', (b) => B.updateItem(b, table.id, (i) => ({ ...i, text: 'Decisions and actions' })))
+    expect(B.getItem(e.board, table.id)!.text).toBe('Decisions, as I want them')
+  })
+
+  it('ends in the same frame: its transcript written again, and what was added brought in', () => {
+    const { e, frame, card, old } = ended()
+    e.setFlow(true, { meeting: true, resume: { frame, length: 60_000 } })
+    const m = e.meeting!
+    // The notes draw something new, far from the frame.
+    ai(e, 'a1', (b) => applyOps(b, [{ op: 'createNote', text: 'Drawn in part two', at: { x: 9000, y: 9000 } }, { op: 'createNote', text: 'And its neighbour', at: { x: 9400, y: 9000 } }], { measure: fakeMeasure }).board)
+    const written = e.tidyMeeting(m.before, ALL_PICKS, { text: 'Transcript: Launch\n3 min', description: '[0:01] Jo: hello\n[1:30] Jo: more' }, frame)
+    expect(written).toBe(card)
+    expect(view(e, frame, 'transcript')).toHaveLength(1)
+    const t = B.getItem(e.board, card)!
+    expect(t.text).toBe('Transcript: Launch\n3 min')
+    expect(t.description).toBe('[0:01] Jo: hello\n[1:30] Jo: more')
+    expect(handEdited(t)).toBe(false)
+    expect(e.extendMeeting(frame, m.before)).toBe(true)
+    const inside = inFrame(e.board, frame).map((i) => i.text)
+    expect(inside).toContain('Drawn in part two')
+    expect(inside).toContain('And its neighbour')
+    expect(inside).not.toContain('From before')
+    // Side by side as they were, and the note from before where it was.
+    const [a, z] = ['Drawn in part two', 'And its neighbour'].map((text) => e.board.items.find((i) => i.text === text)!)
+    expect(z.x - a.x).toBe(400)
+    expect(z.y).toBe(a.y)
+    expect(B.getItem(e.board, old)!.x).toBe(-3000)
+    // Brought to the frame, not the frame stretched out to where they were made.
+    expect(B.getItem(e.board, frame)!.w).toBeLessThan(5000)
+    expect(B.getItem(e.board, frame)!.h).toBeLessThan(5000)
+    // Still one frame, selected and big enough for it all.
+    expect(e.board.items.filter((i) => i.kind === 'frame')).toHaveLength(1)
+    expect([...e.selection]).toEqual([frame])
+    const f = B.getItem(e.board, frame)!
+    for (const i of inFrame(e.board, frame)) {
+      expect(i.x).toBeGreaterThanOrEqual(f.x)
+      expect(i.x + i.w).toBeLessThanOrEqual(f.x + f.w)
+      expect(i.y + i.h).toBeLessThanOrEqual(f.y + f.h)
+    }
+    // Not without the frame.
+    e.edit((b) => B.remove(b, new Set([frame])))
+    expect(e.extendMeeting(frame, m.before)).toBe(false)
+  })
+
+  it('keeps the transcript whatever is picked to keep, and makes one when the frame has none', () => {
+    const { e, frame, card } = ended()
+    e.setFlow(true, { meeting: true, resume: { frame, length: 60_000 } })
+    const m = e.meeting!
+    e.tidyMeeting(m.before, { collage: false, kanban: false, notes: false, timeline: false }, { text: 'Transcript: Launch\n2 min', description: 'more' }, frame)
+    expect(B.getItem(e.board, card)!.text).toBe('Transcript: Launch\n2 min')
+    // Taken out by hand, then carried on again: a new card, as at the end of any meeting.
+    e.setFlow(false)
+    e.edit((b) => B.remove(b, new Set([card])))
+    e.setFlow(true, { meeting: true, resume: { frame, length: 120_000 } })
+    const again = e.tidyMeeting(e.meeting!.before, ALL_PICKS, { text: 'Transcript: Launch\n4 min', description: 'all of it' }, frame)!
+    expect(again).not.toBe(card)
+    expect(B.getItem(e.board, again)!.meeting?.view).toBe('transcript')
   })
 })

@@ -778,7 +778,9 @@ shares live exactly like a board.
   reviews the whole transcript in the background into an overview of what
   was decided, proposed and set to do, a mind map and a timeline of who said
   what, at the level of detail you choose. It can work from a recording, and
-  be played back to see how it grew. Voices, once named, are known in every
+  be played back to see how it grew. A meeting that ended can be carried on
+  from its frame (**Continue**): the same notes, transcript and frame go on,
+  and the whole is reviewed again. Voices, once named, are known in every
   meeting after, and a name corrected once changes everywhere. On a call,
   **Hear the call too** takes the call's own sound as well: you and the call
   are two people from the first line, and what your speakers play isn't

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps } from '../api/ops'
 import { emptyBoard } from './board'
-import { type MeetingRecord, emptySnapshot, readRecord, replayBoard, snapshot, stepBetween, stepsBy } from './meetingReplay'
+import { type MeetingRecord, continuedRecord, emptySnapshot, readRecord, replayBoard, snapshot, snapshotAfter, stepBetween, stepsBy } from './meetingReplay'
+import { parseReview } from './meetingReview'
 import { fakeMeasure } from './test-helpers'
 
 const ctx = { measure: fakeMeasure }
@@ -81,5 +82,70 @@ describe('a meeting’s replay', () => {
     expect(readRecord('not json')).toBeNull()
     expect(readRecord(JSON.stringify({ v: 2 }))).toBeNull()
     expect(readRecord(JSON.stringify({ ...record, steps: [{ at: 1 }] }))).toBeNull()
+  })
+})
+
+describe('a meeting that carried on', () => {
+  /** The meeting above, reviewed since it ended (its subject renamed, an idea taken out), then carried on: one more note. */
+  function carriedOn() {
+    const { start, end, record } = meeting()
+    const before = new Set(start.items.map((i) => i.id))
+    const links = new Set(start.connectors.map((c) => c.id))
+    const root = end.items.find((i) => i.text === 'Launch')!
+    const venue = end.items.find((i) => i.text === 'Venue')!
+    const reviewed = applyOps(end, [{ op: 'update', id: root.id, text: 'Launch plan' }, { op: 'delete', ids: [venue.id] }], ctx).board
+    const from = snapshot(reviewed, before, links)
+    const more = applyOps(reviewed, [{ op: 'createNote', text: 'Second part' }], ctx).board
+    const step = stepBetween(from, snapshot(more, before, links), 55_000, 'Noted the second part.')!
+    const part = { length: 70_000, lines: [{ at: 50_000, who: 'Jo', text: 'And another thing' }], steps: [step], log: [{ at: 56_000, text: 'Noted the second part.' }], picks: { collage: true, kanban: false, notes: true }, from }
+    return { record, part, more, root, venue }
+  }
+
+  it('knows what the meeting had made when its record ended', () => {
+    const { end, record } = meeting()
+    const after = snapshotAfter(record)
+    const made = [...after.items.values()].map((j) => (JSON.parse(j) as { text: string }).text).sort()
+    expect(made).toEqual(['Launch', 'Venue'])
+    expect(after.links.size).toBe(end.connectors.length)
+  })
+
+  it('is one record: what was said, done and made goes on from where it stopped', () => {
+    const { record, part } = carriedOn()
+    const review = parseReview('Title: Launch\nOutcomes:\n- Decision: Go\nIdeas:\n')
+    const all = continuedRecord({ ...record, review, log: [{ at: 12_000, text: 'Started the map.' }] }, part)
+    expect(all).toMatchObject({ v: 2, title: 'Launch', started: 0, length: 70_000, picks: { collage: true, kanban: false, notes: true } })
+    expect(all.lines.map((l) => l.text)).toEqual(['Launch first', 'And another thing'])
+    expect(all.log!.map((l) => l.at)).toEqual([12_000, 56_000])
+    // Its review stands until the whole is reviewed again.
+    expect(all.review).toBe(review)
+    // Without picks of its own, the earlier ones stay.
+    expect(continuedRecord({ ...record, picks: { collage: false, kanban: true, notes: true } }, { ...part, picks: undefined }).picks).toEqual({ collage: false, kanban: true, notes: true })
+    // Never shorter than it was, and nothing lands before where it stopped.
+    const early = continuedRecord(record, { ...part, length: 1000, lines: [{ at: 10, text: 'Early' }], steps: [{ ...part.steps[0], at: 20 }], log: [{ at: 30, text: 'x' }] })
+    expect(early.length).toBe(40_000)
+    expect(early.lines.at(-1)).toEqual({ at: 40_000, text: 'Early' })
+    expect(early.steps.at(-1)!.at).toBe(40_000)
+    expect(early.log!.at(-1)!.at).toBe(40_000)
+  })
+
+  it('plays back through what it had become when it carried on', () => {
+    const { record, part, more, root, venue } = carriedOn()
+    const all = continuedRecord(record, part)
+    // Its two steps, one for how the notes had changed since, then the new one.
+    expect(all.steps).toHaveLength(4)
+    const bridge = all.steps[2]
+    expect(bridge).toMatchObject({ at: 40_000, noted: 'The meeting carried on' })
+    expect(bridge.put.map((i) => i.text)).toContain('Launch plan')
+    expect(bridge.gone).toEqual([venue.id])
+    const texts = (upto: number) => replayBoard(more, all, upto).items.map((i) => i.text).sort()
+    expect(texts(2)).toEqual(['From before', 'Launch', 'Venue'])
+    expect(texts(3)).toEqual(['From before', 'Launch plan'])
+    expect(texts(4)).toEqual(['From before', 'Launch plan', 'Second part'])
+    expect(replayBoard(more, all, 3).items.find((i) => i.id === root.id)!.text).toBe('Launch plan')
+    expect(stepsBy(all, 40_000)).toBe(3)
+    // Nothing had changed since: the step only says it carried on.
+    const same = continuedRecord(record, { ...part, from: snapshotAfter(record), steps: [] })
+    expect(same.steps).toHaveLength(3)
+    expect(same.steps[2]).toEqual({ at: 40_000, put: [], gone: [], links: [], unlinked: [], noted: 'The meeting carried on' })
   })
 })

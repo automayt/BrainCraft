@@ -104,6 +104,49 @@ export function replayBoard(now: Board, r: MeetingRecord, upto: number, frame?: 
   return { ...now, items: all, connectors: conns }
 }
 
+/** What a meeting had made by the end of its record: its objects and links as its steps left them. */
+export function snapshotAfter(r: MeetingRecord): Snapshot {
+  const out = emptySnapshot()
+  for (const s of r.steps) {
+    for (const i of s.put) out.items.set(i.id, JSON.stringify(i))
+    for (const id of s.gone) out.items.delete(id)
+    for (const c of s.links) out.links.set(c.id, JSON.stringify(c))
+    for (const id of s.unlinked) out.links.delete(id)
+  }
+  return out
+}
+
+/** A further part of a meeting that carried on: its times counted from the meeting's start, like the rest. */
+export interface MeetingPart {
+  /** How long the meeting has gone on now, the earlier parts included (ms). */
+  length: number
+  lines: readonly RecordLine[]
+  steps: readonly ReplayStep[]
+  log: readonly { at: number; text: string }[]
+  picks?: MeetingRecord['picks']
+  /** What the meeting's own objects were when it carried on (they'd been reviewed, and maybe changed by hand, since its record ended). */
+  from: Snapshot
+}
+
+/**
+ * A meeting's record with a further part added, as one meeting: what was said, done and made goes
+ * on from where it stopped. Played back, the notes first become what they were when the meeting
+ * carried on (one step), then grow again. Its review is kept until the whole is reviewed anew.
+ */
+export function continuedRecord(old: MeetingRecord, part: MeetingPart): MeetingRecord {
+  const bridge = stepBetween(snapshotAfter(old), part.from, old.length, 'The meeting carried on')
+  const after = <T extends { at: number }>(list: readonly T[]) => list.map((x) => (x.at < old.length ? { ...x, at: old.length } : x))
+  return {
+    ...old,
+    v: 2,
+    length: Math.max(old.length, part.length),
+    lines: [...old.lines, ...after(part.lines)],
+    steps: [...old.steps, ...(bridge ? [bridge] : []), ...after(part.steps)],
+    log: [...(old.log ?? []), ...after(part.log)],
+    ...(part.picks ? { picks: part.picks } : {}),
+  }
+}
+
 /** How many steps had happened by `at` ms into the meeting. */
 export function stepsBy(r: MeetingRecord, at: number): number {
   let n = 0

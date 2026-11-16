@@ -379,6 +379,29 @@ Space pauses. When it's all been read, you're asked what to keep, as at the
 end of a meeting. It needs the server's speech to text, and the whole
 recording is read into memory, so a few hours at most.
 
+**Carrying a meeting on.** A meeting that ended can go on, the next day or
+after a break: select its frame and press **Continue** (or Ctrl K → Continue
+this meeting). MeetingNotes starts again as the same meeting:
+
+- The sign says **MeetingNotes, carried on**, and its clock goes on from
+  where the meeting stopped, so every new line's time follows the earlier
+  ones.
+- The notes go on in the frame: in its mind map and its decisions table, with
+  anything new drawn beside them. The overview, speaker timeline, Actions
+  board and transcript are left as they are until the end, when they're made
+  again from the whole meeting.
+- Anything in the frame you changed by hand since the meeting ended stays
+  yours, as in any meeting.
+- There's no second agenda. The ideas to bring up go on as ever.
+- When it ends, what was said is added to the same transcript and the same
+  record, what the notes made is brought into the same frame (which grows to
+  hold it), and the whole meeting is reviewed again, so the overview,
+  decisions, actions, mind map and timeline cover both parts.
+- Played back, it runs through both, with "The meeting carried on" where it
+  did.
+
+A meeting whose review is still running can be carried on once that's done.
+
 **Watching it again.** A meeting's frame keeps its record: select the frame
 and press **▶ Replay** (or Ctrl K → Replay this meeting). The board
 goes back to how it was when the meeting started and grows again turn by turn,

@@ -10,7 +10,7 @@ import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/n
 import { isWiki } from '../model/wiki'
 import { ALL_PICKS, type MeetingLine, type MeetingPicks, agendaOf, glossaryOf, howLong, ideasOf, joinFragments, meetingItems, transcriptText, untitledMeeting } from '../model/meeting'
 import { isStock, sameWords } from '../ai/heardOnce'
-import { type MeetingRecord, type ReplayStep, type Snapshot, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
+import { type MeetingRecord, type ReplayStep, type Snapshot, continuedRecord, emptySnapshot, snapshot, stepBetween } from '../model/meetingReplay'
 import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
@@ -21,7 +21,7 @@ import { heardSummary, heardWarning, useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
 import { type FlowLine, Flowstate, askedLast, plainLine } from './Flowstate'
 import { VoiceNames } from './VoiceNames'
-import { carryOver, pickRecording, reviewMeeting, saveRecord } from './meetingFiles'
+import { carryOver, knownRecord, pickRecording, reviewMeeting, saveRecord } from './meetingFiles'
 import { KnownVoices } from './KnownVoices'
 
 /** A request that says nothing for this long has stalled. */
@@ -360,7 +360,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   // A turn is with the assistant (kept outside React too, so a turn spoken meanwhile waits its go).
   const busy = useRef(false)
   /** Sends a message; resolves with the reply once it's done (null when it couldn't be sent). */
-  const send = async (text: string, images: AiImage[] = [], label?: string, live: Live = false, extra: { carry?: { title: string; items: string[] } } = {}): Promise<Turn | null> => {
+  const send = async (text: string, images: AiImage[] = [], label?: string, live: Live = false, extra: { carry?: { title: string; items: string[] }; resumed?: string } = {}): Promise<Turn | null> => {
     const s = session()
     // The turns that start something say nothing of their own.
     const quiet = live === 'meeting-agenda' || live === 'guide-start'
@@ -458,7 +458,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
    * What a meeting is keeping for its transcript and replay: every line heard, and each turn's
    * changes to what it made. `last`: how far into it the latest line was (ms).
    */
-  const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; last: number; did: { at: number; text: string }[] }>({ lines: [], steps: [], snap: emptySnapshot(), last: 0, did: [] })
+  const log = useRef<{ lines: MeetingLine[]; steps: ReplayStep[]; snap: Snapshot; from: Snapshot; last: number; did: { at: number; text: string }[] }>({ lines: [], steps: [], snap: emptySnapshot(), from: emptySnapshot(), last: 0, did: [] })
   /** The latest lines heard, by the number each can be taken back by. */
   const heardLines = useRef(new Map<number, MeetingLine>())
   /** How far into the meeting it is (ms): in a recording, as far as it's been read. */
@@ -490,7 +490,9 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       while (busy.current && !dropTalk.current) await wait(250)
       if (dropTalk.current) return
       const how: Live = editor.meeting ? 'meeting' : editor.guide ? 'guide' : true
-      const reply = await send(t, [], `🎙 ${t}`, how)
+      // A meeting that carried on: the notes go on in its frame.
+      const resumed = how === 'meeting' ? editor.meeting?.resumed : null
+      const reply = await send(t, [], `🎙 ${t}`, how, resumed ? { resumed: resumed.title } : {})
       if (how !== 'meeting') return
       // Voices worked out from what was said ("Who: Voice 2 = Sam").
       const words = reply?.text ?? ''
@@ -591,11 +593,16 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       const m = editor.meeting
       if (checked && canTalk && !talk.on && !m?.ending && !started.current) {
         started.current = true
-        if (m) log.current = { lines: [], steps: [], snap: snapshot(editor.board, m.before, m.linksBefore), last: 0, did: [] }
+        if (m) {
+          const snap = snapshot(editor.board, m.before, m.linksBefore)
+          log.current = { lines: [], steps: [], snap, from: snap, last: 0, did: [] }
+          heardLines.current = new Map()
+        }
         void talk.start(m?.recording?.file)
         // A meeting starts with an agenda from what matters most on the board (what's left from
-        // the last meeting first); a guide with its first question.
-        if (m && !m.recording && m.before.size)
+        // the last meeting first); a guide with its first question. One that carried on has its
+        // agenda already.
+        if (m && !m.recording && m.before.size && !m.resumed)
           void carryOver(ws, editor)
             .catch(() => null)
             .then((carry) => send('', [], carry ? '📋 Suggesting an agenda, starting with what’s left from last time' : '📋 Suggesting an agenda from the board', 'meeting-agenda', carry ? { carry } : {}))
@@ -636,33 +643,52 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       } catch {
         // Whatever went wrong, what was noted still gets its frame.
       } finally {
-        const name = untitledMeeting(m.started)
-        const { steps, did } = log.current
         const length = Math.max(meetingClock(), log.current.lines.at(-1)?.at ?? 0)
         // Who said each line, by the names the voices ended up with.
-        const lines = log.current.lines.map((l) => ({ at: l.at, text: l.text, ...(l.voice !== undefined ? { who: talk.nameOf(l.voice) } : {}), ...(l.unclear ? { unclear: true as const } : {}) }))
+        const said = log.current.lines.map((l) => ({ at: l.at, text: l.text, ...(l.voice !== undefined ? { who: talk.nameOf(l.voice) } : {}), ...(l.unclear ? { unclear: true as const } : {}) }))
         const touched = editor.meetingTouched()
-        const people = talk.voices.length > 1 ? `, ${talk.voices.length} people` : ''
+        // A meeting that carried on: what was said before comes first, and it keeps its name and frame.
+        const earlier = m.resumed && B.getItem(editor.board, m.resumed.frame) ? knownRecord(editor, m.resumed.frame) : null
+        const into = earlier ? m.resumed!.frame : undefined
+        const name = earlier ? earlier.title : untitledMeeting(m.started)
+        const lines = earlier ? [...earlier.lines, ...said] : said
+        const spoke = new Set(lines.map((l) => l.who).filter(Boolean)).size
+        const people = (earlier ? spoke : talk.voices.length) > 1 ? `, ${earlier ? spoke : talk.voices.length} people` : ''
         const card = lines.length
           ? { text: `Transcript: ${name}\n${howLong(length)}${people}\n\nEvery word is in this note’s comments (Alt C).`, description: transcriptText({ lines: joinFragments(lines) }) }
           : null
-        editor.tidyMeeting(m.before, chose, card)
+        const written = editor.tidyMeeting(m.before, chose, card, into)
+        // The transcript written again here is the notes' own, for the review to correct names in.
+        if (into !== undefined && written !== null) touched.delete(written)
         keepStep()
-        const framed = editor.frameMeeting(name, m.before)
+        const { steps, did } = log.current
+        const framed = into !== undefined ? (editor.extendMeeting(into, m.before) ? into : null) : editor.frameMeeting(name, m.before)
         const reviews = framed !== null && lines.length > 0 && !!connection && !editor.readOnly
-        editor.setStatus(framed === null ? 'Nothing was noted in this meeting' : reviews ? 'MeetingNotes framed; reviewing them against the whole transcript…' : `MeetingNotes put in the frame “${name}”`)
+        editor.setStatus(
+          framed === null
+            ? 'Nothing was noted in this meeting'
+            : earlier
+              ? reviews
+                ? `Added to “${name}”; reviewing the whole meeting against its transcript…`
+                : `Added to the meeting “${name}”`
+              : reviews
+                ? 'MeetingNotes framed; reviewing them against the whole transcript…'
+                : `MeetingNotes put in the frame “${name}”`,
+        )
         if (framed !== null) {
-          const record: MeetingRecord = {
-            v: 2,
-            title: name,
-            started: m.started,
-            length,
-            ...(m.recording ? { recording: m.recording.file.name } : {}),
-            lines,
-            steps,
-            log: did,
-            picks: chose,
-          }
+          const record: MeetingRecord = earlier
+            ? continuedRecord(earlier, { length, lines: said, steps, log: did, picks: chose, from: log.current.from })
+            : {
+                v: 2,
+                title: name,
+                started: m.started,
+                length,
+                ...(m.recording ? { recording: m.recording.file.name } : {}),
+                lines,
+                steps,
+                log: did,
+                picks: chose,
+              }
           // The record goes with the board (linked from the frame), then the review, in the background.
           void saveRecord(ws, editor, framed, record).then(() => {
             if (reviews) void reviewMeeting(ws, editor, framed, { record, picks: chose, touched, arrange: true })
@@ -720,6 +746,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           editor.meeting
             ? {
                 started: editor.meeting.started,
+                resumed: !!editor.meeting.resumed,
                 ending,
                 picked: !!editor.meeting.picks,
                 onPick: (p) => editor.pickMeeting(p),
