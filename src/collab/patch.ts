@@ -20,6 +20,8 @@ export type Patch =
   | { k: 'conn'; id: Id; v: Connector | null }
   | { k: 'title'; v: string }
   | { k: 'icon'; v: string | null }
+  /** The board's brief for the assistant (null: none). */
+  | { k: 'brief'; v: string | null }
   /** The board is hand-drawn (new objects come out drawn by hand). */
   | { k: 'sketch'; v: boolean }
   /** Paint order of the board's items (only sent when the order of existing items changes). */
@@ -48,6 +50,8 @@ export function keyOf(p: Patch): string {
       return 'title'
     case 'icon':
       return 'icon'
+    case 'brief':
+      return 'brief'
     case 'sketch':
       return 'sketch'
     case 'order':
@@ -109,6 +113,7 @@ export function diff(a: Board, z: Board): Patch[] {
   const out: Patch[] = []
   if (a.title !== z.title) out.push({ k: 'title', v: z.title })
   if (a.icon !== z.icon) out.push({ k: 'icon', v: z.icon ?? null })
+  if (a.brief !== z.brief) out.push({ k: 'brief', v: z.brief ?? null })
   if (!!a.sketch !== !!z.sketch) out.push({ k: 'sketch', v: !!z.sketch })
 
   if (a.items !== z.items && sameIds(a.items, z.items)) {
@@ -262,6 +267,7 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   let datasets = b.datasets
   let title = b.title
   let icon = b.icon
+  let brief = b.brief
   let sketch = !!b.sketch
   let pages = b.pages
   let bodies = b.bodies
@@ -288,6 +294,9 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
         break
       case 'icon':
         icon = p.v ?? undefined
+        break
+      case 'brief':
+        brief = p.v ?? undefined
         break
       case 'sketch':
         sketch = p.v
@@ -377,6 +386,8 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
   const next: Board = { ...b, title, items, connectors }
   if (icon) next.icon = icon
   else delete next.icon
+  if (brief) next.brief = brief
+  else delete next.brief
   if (sketch) next.sketch = true
   else delete next.sketch
   if (datasets?.length) next.datasets = datasets
@@ -426,6 +437,8 @@ export function valuesOf(b: Board): (p: Patch) => unknown {
         return b.title
       case 'icon':
         return b.icon ?? null
+      case 'brief':
+        return b.brief ?? null
       case 'sketch':
         return !!b.sketch
       case 'order':

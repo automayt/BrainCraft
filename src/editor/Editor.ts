@@ -15,6 +15,7 @@ import { fractionAlong } from '../model/routes'
 import { History } from '../model/history'
 import { canFitToContent, canMatchSize, fitToContent, growsText, itemFontSize, sameSize } from '../model/fitText'
 import { type Mark, marksText, toggleMark, toggleWhole, unmarked, wholeHas } from '../model/textMarks'
+import { cleanBrief } from '../model/sanitize'
 import { type OpResult, applyOps, opsFromText } from '../api/ops'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
@@ -985,6 +986,24 @@ export class Editor {
       else delete next.icon
       return next
     })
+  }
+
+  /**
+   * Sets the board's brief: what it's for, which the assistant is given with its instructions
+   * (nothing, or only spaces, takes it off). One undo step; false when nothing changed.
+   */
+  setBrief(text: string): boolean {
+    if (this.readOnly) return false
+    const brief = cleanBrief(text.trim())
+    if ((this.board.brief ?? '') === (brief ?? '')) return false
+    this.edit((b) => {
+      const next: Board = { ...b }
+      if (brief) next.brief = brief
+      else delete next.brief
+      return next
+    })
+    this.setStatus(brief ? 'Brief saved: the assistant goes by it from its next turn' : 'Brief removed')
+    return true
   }
 
   select(ids: Iterable<Id>) {

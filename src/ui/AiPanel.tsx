@@ -14,6 +14,7 @@ import { timeAgo } from './Boards'
 import { useLinkPicker } from './NotesPanel'
 import { PersonMention } from './PersonMention'
 import { useEditor } from './useEditor'
+import { useUi } from './uiContext'
 import { useWorkspace } from './useWorkspace'
 import { useTalk } from './useTalk'
 import { saveMissingCopies } from './wiki/embedCopies'
@@ -244,6 +245,7 @@ function keep(t: Thread, k: Keeper) {
 export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void; flow?: boolean; onFlow?: (on: boolean, o?: { meeting?: boolean; guide?: boolean; recording?: File; now?: boolean }) => void }) {
   const editor = useEditor()
   const ws = useWorkspace()
+  const ui = useUi()
   const [settings, setSettings] = useState<AiSettings>(loadSettings)
   const [server, setServer] = useState<ServerAi>({ available: false, password: false, providers: [], openaiModels: [], textTools: false, agents: [], agentsLocal: false })
   /** Models found on your own model server, or why none were. */
@@ -711,6 +713,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                 agenda: agendaOf(editor.board, meetingItems(editor.board, editor.meeting.before)),
                 ideas: ideasOf(editor.board),
                 onTick: (table, row, on) => editor.tickMeetingRow(table, row, on),
+                brief: { has: !!editor.board.brief, open: ui.openBrief },
                 call: {
                   from: talk.call,
                   share: talk.canShare,
@@ -744,6 +747,15 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
             History{editor.aiHistory.length ? ` (${editor.aiHistory.length})` : ''}
           </button>
         </div>
+        {(!editor.readOnly || !!editor.board.brief) && (
+          <button
+            className={`ai-brief${editor.board.brief ? ' on' : ''}`}
+            title={editor.board.brief ? 'The assistant goes by this board’s brief. Open it to read or change it.' : 'Tell the assistant what this board is for: what belongs here, names and terms, how you like things written'}
+            onClick={ui.openBrief}
+          >
+            Brief
+          </button>
+        )}
         <button className="icon-btn" title="AI settings" aria-label="AI settings" onClick={() => setSetup(!setup)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />

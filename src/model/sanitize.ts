@@ -30,7 +30,7 @@ import type {
   TableData,
   TimelineData,
 } from './types'
-import { type Automation, MEETING_VIEWS, type MeetingView, defaultColor, defaultFontSize } from './types'
+import { type Automation, BRIEF_MAX, MEETING_VIEWS, type MeetingView, defaultColor, defaultFontSize } from './types'
 import { BODY_MAX, isPageId } from './wiki'
 import { cleanFile, isFileId } from './files'
 import { cleanAssignees, cleanEntry, isEntryId } from './timeTracking'
@@ -457,13 +457,19 @@ export function cleanConnector(v: unknown): Connector | null {
 /** A board icon worth keeping: a short string. */
 export const cleanIcon = (v: unknown): string | undefined => (typeof v === 'string' && v && v.length <= 16 ? v : undefined)
 
-/** The board with every item, connector and dataset checked and the icon validated. */
+/** A board's brief worth keeping: some words, no longer than a brief may be. */
+export const cleanBrief = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.slice(0, BRIEF_MAX) : undefined)
+
+/** The board with every item, connector and dataset checked and the icon and brief validated. */
 export function cleanBoard(b: Board): Board {
   const items = b.items.map(cleanItem).filter((i): i is Item => !!i)
   const out: Board = { ...b, items }
   const icon = cleanIcon(b.icon)
   if (icon) out.icon = icon
   else delete out.icon
+  const brief = cleanBrief(b.brief)
+  if (brief) out.brief = brief
+  else delete out.brief
   return out
 }
 
@@ -566,6 +572,9 @@ export function cleanPatches(patches: readonly unknown[]): Patch[] {
         break
       case 'icon':
         out.push({ k: 'icon', v: cleanIcon(p.v) ?? null })
+        break
+      case 'brief':
+        out.push({ k: 'brief', v: cleanBrief(p.v) ?? null })
         break
       case 'sketch':
         if (typeof p.v === 'boolean') out.push({ k: 'sketch', v: p.v })

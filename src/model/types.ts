@@ -516,7 +516,15 @@ export interface Board {
   time?: TimeEntry[]
   /** A child board: the board it was divided from (see `divide.ts`). Set when it's made. */
   parent?: BoardParent
+  /**
+   * The board's brief: what it's for, in the words of the people who use it. The assistant is
+   * given it with its own instructions in everything it does here (see `ai/brief.ts`).
+   */
+  brief?: string
 }
+
+/** The longest a board's brief can be (characters). */
+export const BRIEF_MAX = 4000
 
 /** The board a child board came from: the key links to it use, and its title then. */
 export interface BoardParent {

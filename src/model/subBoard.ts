@@ -52,6 +52,8 @@ export function boardOfFrame(b: Board, frameId: Id, back?: { key: string; title:
   const datasets = (b.datasets ?? []).filter((d) => used.has(d.id))
   return {
     ...emptyBoard(frame.text || 'Part of a board'),
+    // Still about what the board it came from is about.
+    ...(b.brief ? { brief: b.brief } : {}),
     items,
     connectors,
     nextId: b.nextId + (back ? 1 : 0),

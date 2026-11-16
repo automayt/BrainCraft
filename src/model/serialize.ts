@@ -1,7 +1,7 @@
 import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
-import { MAX_ID, cleanBody, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanRev, cleanSnap } from './sanitize'
+import { MAX_ID, cleanBody, cleanBrief, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanRev, cleanSnap } from './sanitize'
 import { MAX_REVS } from './revisions'
 import { type Board, type BoardFile, type BoardParent, type Connector, type Dataset, FILLS, FORMAT_VERSION, type Item, type Page, type PageBody, type PageRev, type Snap } from './types'
 import { MAX_PAGES, MAX_SNAPS } from './wiki'
@@ -81,6 +81,7 @@ export function fromJson(json: string): Board {
     ...(time.length ? { time } : {}),
     ...(raw.sketch === true ? { sketch: true as const } : {}),
     ...(parent ? { parent } : {}),
+    ...(cleanBrief(raw.brief) ? { brief: cleanBrief(raw.brief) } : {}),
   }
 }
 

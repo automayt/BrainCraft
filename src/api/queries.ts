@@ -222,14 +222,20 @@ export function timeReport(b: Board, f: { from?: string; to?: string; who?: stri
   }
 }
 
+/** What a board's brief is, for an assistant reading the board from outside the app. */
+export const BRIEF_NOTE = 'The brief is what this board is for, written by the people who use it: go by it for what belongs here and what doesn’t, and for the names and terms it gives.'
+
 /** A compact description of the whole board: what an assistant reads first. */
 export function describeBoard(b: Board, kind?: Kind) {
   const time = b.time?.length ? timeOverview(b) : undefined
-  if (W.isWiki(b)) return { kind: 'wiki', ...listPages(b), ...(time ? { time } : {}), note: 'This is a wiki: read pages with read_page, change them with createPage, updatePage, movePage and deletePage.' }
+  // What the board is for, in its people's words: an assistant working on it should go by it.
+  const brief = b.brief ? { brief: b.brief, briefNote: BRIEF_NOTE } : {}
+  if (W.isWiki(b)) return { kind: 'wiki', ...brief, ...listPages(b), ...(time ? { time } : {}), note: 'This is a wiki: read pages with read_page, change them with createPage, updatePage, movePage and deletePage.' }
   const counts: Partial<Record<Kind, number>> = {}
   for (const i of b.items) counts[i.kind] = (counts[i.kind] ?? 0) + 1
   return {
     title: b.title,
+    ...brief,
     counts,
     objects: listObjects(b, kind),
     links: kind ? undefined : listLinks(b),

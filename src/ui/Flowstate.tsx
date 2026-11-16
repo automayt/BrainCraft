@@ -193,6 +193,8 @@ interface MeetingProps {
   /** Ideas worth bringing up, from this meeting and those left from earlier ones; and ticking one, or an agenda item. */
   ideas: readonly IdeaToRaise[]
   onTick?: (table: Id, row: string, on: boolean) => void
+  /** The board's brief, which tells the notes what the meeting is about: whether it has one, and opening it. */
+  brief?: { has: boolean; open: () => void }
   /**
    * Hearing the call's own sound too: where from while it is, whether it can be shared (Chrome and
    * Edge), the inputs it could come from, where from last time, and asking to.
@@ -329,7 +331,7 @@ function CallPicker({ from, share, inputs, last, hear, echo, suggest }: NonNulla
 }
 
 /** The sign that a meeting is being heard: how long for, and how many people are in it (or how far through a recording). */
-function MeetingSign({ started, ending, picked, people, onPeople, listening, recording, call }: Pick<MeetingProps, 'started' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording' | 'call'> & { listening: boolean }) {
+function MeetingSign({ started, ending, picked, people, onPeople, listening, recording, call, brief }: Pick<MeetingProps, 'started' | 'ending' | 'picked' | 'people' | 'onPeople' | 'recording' | 'call' | 'brief'> & { listening: boolean }) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -350,6 +352,16 @@ function MeetingSign({ started, ending, picked, people, onPeople, listening, rec
         ))}
       {recording && !ending && <b className="flow-read" style={{ ['--read' as string]: read }} aria-hidden="true" />}
       {call && !ending && !recording && <CallPicker {...call} />}
+      {brief && !ending && (
+        <button
+          type="button"
+          className={`flow-brief${brief.has ? ' on' : ''}`}
+          title={brief.has ? 'The notes keep to this board’s brief. Open it to read or change it.' : 'Say what this meeting is about, so the notes keep to it and leave out the rest.'}
+          onClick={brief.open}
+        >
+          {brief.has ? 'Brief' : 'Add a brief'}
+        </button>
+      )}
       {onPeople && !ending && (
         <label title="With the number of people, voices are never split into more people than there are">
           People

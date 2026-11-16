@@ -1763,3 +1763,61 @@ describe('bold and italic on the board', () => {
     expect(bold.w).toBe(plain)
   })
 })
+
+describe('the board’s brief', () => {
+  const BRIEF = 'The warehouse move. On topic: the schedule. Not for the notes: hiring.'
+
+  it('is set, changed and taken off, each as one undo step', () => {
+    const e = editor()
+    const sent: unknown[] = []
+    e.onBoardChange = (b) => sent.push(b.brief)
+    expect(e.setBrief(BRIEF)).toBe(true)
+    expect(e.board.brief).toBe(BRIEF)
+    expect(e.status).toContain('Brief saved')
+    expect(e.setBrief('Only the budget.')).toBe(true)
+    expect(e.board.brief).toBe('Only the budget.')
+    e.undo()
+    expect(e.board.brief).toBe(BRIEF)
+    e.undo()
+    expect('brief' in e.board).toBe(false)
+    e.redo()
+    expect(e.board.brief).toBe(BRIEF)
+    expect(e.setBrief('')).toBe(true)
+    expect('brief' in e.board).toBe(false)
+    expect(e.status).toBe('Brief removed')
+    // Everyone in a live session gets each change.
+    expect(sent).toContain(BRIEF)
+    expect(sent).toContain('Only the budget.')
+  })
+
+  it('is kept without the space around it, and only when it changes', () => {
+    const e = editor()
+    expect(e.setBrief(`\n  ${BRIEF}  \n`)).toBe(true)
+    expect(e.board.brief).toBe(BRIEF)
+    const before = e.board
+    expect(e.setBrief(`${BRIEF}\n`)).toBe(false)
+    expect(e.board).toBe(before)
+    // Only spaces: no brief.
+    expect(e.setBrief('   ')).toBe(true)
+    expect('brief' in e.board).toBe(false)
+    expect(e.setBrief('  \n')).toBe(false)
+  })
+
+  it('can’t be changed on a board that can’t be changed', () => {
+    const e = editor()
+    e.setBrief(BRIEF)
+    e.readOnly = true
+    expect(e.setBrief('Something else')).toBe(false)
+    expect(e.setBrief('')).toBe(false)
+    expect(e.board.brief).toBe(BRIEF)
+  })
+
+  it('leaves everything else on the board as it was', () => {
+    const e = editor()
+    new BrainCraftAPI(e).apply([{ op: 'createNote', text: 'Book the vans' }, { op: 'createMindMap', outline: 'Move\n  Vans' }])
+    const items = e.board.items
+    e.setBrief(BRIEF)
+    expect(e.board.items).toBe(items)
+    expect(e.board.title).toBe('Untitled board')
+  })
+})

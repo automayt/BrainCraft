@@ -40,6 +40,7 @@ import { TimesheetDialog } from './TimeTracking'
 import { OutlinePanel } from './OutlinePanel'
 import { CheckDialog } from './CheckDialog'
 import { DivideDialog } from './DivideDialog'
+import { BriefDialog } from './BriefDialog'
 import { BoardErrorBoundary, PartBoundary } from './ErrorBoundary'
 import { watchLinkPreviews } from './linkPreviews'
 import { LazyAiPanel } from './lazyAi'
@@ -59,7 +60,7 @@ const isBoardFile = (f: File) => /\.(braincraft|json)$/i.test(f.name)
 /** Excalidraw, loaded only when a drawing is opened. */
 const DrawingEditor = lazy(() => import('./excalidraw/DrawingEditor'))
 
-type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | 'check' | 'divide' | null
+type Dialog = 'help' | 'import' | 'boards' | 'versions' | 'share' | 'ai' | 'export' | 'admin' | 'credits' | 'check' | 'divide' | 'brief' | null
 
 /** Opens the board library first, then the app. */
 export function Root() {
@@ -124,6 +125,7 @@ function App({ ws }: { ws: Workspace }) {
     newBoard: () => void ws.newBoard(),
     moveFrameToBoard: (frame) => void ws.moveFrameToBoard(frame),
     openDivide: () => setDialog('divide'),
+    openBrief: () => setDialog('brief'),
     openBoards: () => {
       void ws.loadServerBoards()
       void ws.loadInbox()
@@ -287,7 +289,8 @@ function App({ ws }: { ws: Workspace }) {
         return
       }
       // Esc ends Flowstate (once any text being typed is put down).
-      if (editor.flow && e.key === 'Escape' && !editor.editing && !isTyping(e.target)) {
+      // ...and once any dialog over it is closed: Esc there closes the dialog, not the meeting.
+      if (editor.flow && e.key === 'Escape' && !editor.editing && !isTyping(e.target) && !document.querySelector('[aria-modal="true"]')) {
         e.preventDefault()
         uiRef.current.flow(false)
         return
@@ -575,6 +578,7 @@ function App({ ws }: { ws: Workspace }) {
           {dialog === 'export' && <ExportDialog onClose={close} />}
           {dialog === 'check' && <CheckDialog onClose={close} />}
           {dialog === 'divide' && <DivideDialog onClose={close} />}
+          {dialog === 'brief' && <BriefDialog onClose={close} />}
           {peopleOf !== null && <MeetingPeopleDialog frame={peopleOf} onClose={() => setPeopleOf(null)} />}
           <input
             ref={fileInput}

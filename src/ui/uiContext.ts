@@ -31,6 +31,8 @@ export interface Ui {
   moveFrameToBoard: (frame: number) => void
   /** Divide the open board into child boards (by frame, kind or topic). */
   openDivide: () => void
+  /** The board's brief for the assistant: what the board is for. */
+  openBrief: () => void
   openBoards: () => void
   openVersions: () => void
   openShare: () => void

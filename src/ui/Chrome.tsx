@@ -228,6 +228,8 @@ export function TopLeft() {
             )}
             <MenuItem label="Share…" onClick={run(ui.openShare)} />
             <MenuItem label="Connect an AI assistant…" onClick={run(ui.openAi)} />
+            {/* What the board is for, which the assistant goes by (to read, for those who can't change it). */}
+            {(!ws.viewOnly || !!editor.board.brief) && <MenuItem label="Brief for the assistant…" onClick={run(ui.openBrief)} />}
             {!ws.viewOnly && <MenuItem label="Version history…" onClick={run(ui.openVersions)} />}
             {!isWiki(editor.board) && (
               <>

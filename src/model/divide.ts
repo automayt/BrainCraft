@@ -388,6 +388,8 @@ export function childBoard(b: Board, group: Group, parent?: BoardParent): Board 
   const datasets = (b.datasets ?? []).filter((d) => shown.has(d.id))
   return {
     ...emptyBoard(group.title || 'Part of a board'),
+    // Still about what its parent is about.
+    ...(b.brief ? { brief: b.brief } : {}),
     items,
     connectors,
     nextId: b.nextId + (parent ? 1 : 0),

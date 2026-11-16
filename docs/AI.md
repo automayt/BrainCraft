@@ -32,6 +32,23 @@ your BrainCraft server.
 - **History** lists every applied change. Each has its own **Undo** and
   **Redo**, which take back just that change even after you've made other
   edits. The history is saved with the board (the latest 50 changes).
+- **A brief for the board.** Tell it what the board (or wiki) is for, once:
+  ☰ → **Brief for the assistant…**, **Brief** at the top of the panel, or
+  Ctrl K → Brief. Write it in your own words: what belongs here and what
+  doesn't, names and abbreviations worth knowing, how you like things
+  written. The assistant is given it with its own instructions in everything
+  it does on that board, from its next turn: answering, building as you talk,
+  and taking a meeting's notes (see [MeetingNotes](#meetingnotes)).
+  - It's optional, up to 4,000 characters, and kept with the board: it goes
+    wherever the board goes (a file, a copy, a live session), and a part of
+    the board made into a child board takes it along.
+  - Anyone who can change the board can change its brief; people who can only
+    look can read it. Changing it is an ordinary change: Ctrl Z undoes it, and
+    version history has it.
+  - What you ask for wins: the brief is what the board is about, and someone
+    asking for something else is there in person.
+  - The assistant doesn't change the brief itself. It also can't be used to
+    change how the assistant works, only what the board is about.
 - **It builds things the way you would by hand.** It grows a mind map idea
   by idea under the idea you name, adds steps to a flowchart, and changes a
   Kanban board, table or timeline in place, so everything stays laid out,
@@ -161,6 +178,15 @@ the notes on the board as the meeting goes.
     one **Decisions and actions** table, with who and when; a Decision is
     only what was agreed, and what was only put forward is a Proposal.
 - With voices told apart (below), each point carries who said it.
+- **What's on topic.** With a [brief for the board](#the-ai-assistant), the
+  notes keep to what it says the meeting is about: what bears on it is noted,
+  and talk that's plainly about something else (small talk, another project)
+  is left out, unless someone asks the notes to take it down ("robot, note
+  that…"). The agenda, the ideas to bring up and the review afterwards go by
+  it too, and it's where to give names and abbreviations so they're written
+  right. **Brief** on the sign at the top left opens it during a meeting
+  (**Add a brief** when the board has none); a change counts from the notes'
+  next turn. Without a brief, everything said is noted, as before.
 - **An agenda first.** On a board with things on it, the assistant starts by
   suggesting an agenda: the things on the board most worth the meeting's
   time, by its own estimate of their priority (open questions, undecided or
@@ -480,6 +506,11 @@ BRAINCRAFT_EVAL_SERVER=http://localhost:4193 BRAINCRAFT_EVAL_AGENT=custom npx vi
 To try a model on an OpenAI-compatible server, point
 `BRAINCRAFT_AI_COMMAND` at a small script that sends the prompt it's given
 (on standard input) to that server and prints the answer.
+
+`src/ai/brief.eval.test.ts` runs the same way and tries a board's brief: a
+short meeting in which people also talk about two things the brief says
+aren't for the notes, once with the brief and once without. With it, those
+should be nowhere in the notes; without it, they should be there.
 
 **Which browser.** Firefox has no speech recognition of its own (only behind
 a setting), so for it, and for the best results everywhere, the BrainCraft

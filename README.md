@@ -760,6 +760,11 @@ shares live exactly like a board.
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
   works, and the board grows and changes as you speak. Esc to leave.
+- **A brief for the board:** ☰ → **Brief for the assistant…** says what a
+  board or wiki is for, in your own words: what belongs there and what
+  doesn't, names and abbreviations, how you like things written. The
+  assistant goes by it in everything it does there, and in a meeting it's
+  what tells the notes what's on topic.
 - **MeetingNotes:** Flowstate for a meeting. The assistant listens and takes
   the notes on the board as you meet: a mind map of every point, the flows,
   sequences and timelines people describe drawn as they go, and a table of

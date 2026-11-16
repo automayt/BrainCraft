@@ -7,6 +7,7 @@
 
 import type { Editor } from '../editor/Editor'
 import { MEETING_REVIEW } from '../ai/assistant'
+import { withBrief } from '../ai/brief'
 import { askOnce } from '../ai/once'
 import { getFile } from '../model/files'
 import { ALL_PICKS, type MeetingPicks, clock, howLong, joinFragments, transcriptText } from '../model/meeting'
@@ -106,7 +107,8 @@ export async function reviewMeeting(ws: Workspace, editor: Editor, frame: Id, o:
   editor.setReviewing(frame, true)
   editor.setStatus('Reviewing the meeting against its whole transcript…')
   try {
-    const reply = await askOnce(ws.server, MEETING_REVIEW, reviewText(got))
+    // The board's brief says what the meeting was about, so the record keeps to it as the notes did.
+    const reply = await askOnce(ws.server, withBrief(MEETING_REVIEW, editor.board.brief), reviewText(got))
     const review = parseReview(reply)
     if (!review.ideas.length && !review.outcomes.length) return editor.setStatus('The review came back empty, so the notes are as they were')
     // Who spoke, corrected once for everything.

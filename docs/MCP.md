@@ -54,7 +54,7 @@ It works two ways:
 
 | Tool | What it does |
 | --- | --- |
-| `read_board` | Title, counts by kind, every object (id, kind, label, position, size, comments) and the lines between them. |
+| `read_board` | Title, counts by kind, every object (id, kind, label, position, size, comments) and the lines between them. A board with a brief (what it's for, written by its people in ☰ → Brief for the assistant…) gives that too, as `brief`. |
 | `get_object` | One object in full: text, comments, and its data (table as CSV, Kanban columns and cards, timeline lanes and entries, mind-map outline). |
 | `find` | Searches all text, comments, cells, cards and labels (in a wiki: page titles and text). |
 | `list_pages` / `read_page` | A wiki's page tree (ids, titles, who edited each and when), and one page in full: its Markdown, sub-pages and the pages linking to it (with `version`, that saved version). |

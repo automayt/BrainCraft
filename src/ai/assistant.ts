@@ -14,6 +14,7 @@ import { OpError, type Op, applyOps, maskedIds } from '../api/ops'
 import type { Person } from '../model/timeTracking'
 import { OPS_GUIDE, TOOL_DEFS, type ToolHost, runTool } from '../api/tools'
 import { BUDGET, SUMMARY_SYSTEM, dropStale, sizeOf, summaryCut, transcript, withSummary } from './thread'
+import { withBrief } from './brief'
 import { problemsWith } from './check'
 import { type Patch, diff } from '../collab/patch'
 import { type Measure, layoutAll } from '../model/mindmap'
@@ -625,7 +626,8 @@ export class Assistant {
         on.status(step === 0 ? 'Thinking…' : 'Working…')
         let message: Awaited<ReturnType<Backend['turn']>>
         try {
-          message = await this.backend.turn({ system: SYSTEM, messages: this.messages, tools: TOOLS }, (delta) => {
+          // The board's brief, if its people wrote one, comes after the assistant's own instructions.
+          message = await this.backend.turn({ system: withBrief(SYSTEM, this.host.board().brief), messages: this.messages, tools: TOOLS }, (delta) => {
             on.status(null)
             on.text(delta)
           }, signal)

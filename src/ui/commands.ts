@@ -103,6 +103,7 @@ export function commands(editor: Editor, ui: Ui): Command[] {
     ...(!isWiki(editor.board) && !editor.readOnly
       ? [{ id: 'divide', label: 'Divide into child boards…', group: 'Board', aliases: 'split break up crowded busy slow heavy sub-board child boards topic kind frame tidy organise organize ai', run: ui.openDivide }]
       : []),
+    { id: 'brief', label: 'Brief for the assistant…', group: 'Board', aliases: 'prompt system prompt instructions topic on topic off topic about purpose scope context meeting subject what this board is for ai', run: ui.openBrief },
     { id: 'check', label: 'Check board…', group: 'Board', aliases: 'tidy clean lint problems overlap empty stray messy fix tidy up', run: ui.openCheck },
     { id: 'flowstate', label: 'Flowstate: build the board by talking', group: 'Board', keys: 'Ctrl Shift F', aliases: 'voice talk speak dictate microphone live immersive focus full screen', run: () => ui.flow(true) },
     {
