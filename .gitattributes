@@ -1,0 +1,2 @@
+# Shell scripts keep Unix line endings on every computer: bash can't run them otherwise.
+*.sh text eol=lf
