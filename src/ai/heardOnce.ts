@@ -8,8 +8,9 @@
  *
  * This is the words' side of putting that right (the sound's side is echo.ts):
  * - one phrase said over and over inside an answer is folded to one saying;
- * - an answer that only says again what came before is asked for once more without it (the server
- *   does that, with `saidBefore` and `settled`);
+ * - an answer that only says what it was given (what came before, or the board's terms), or a
+ *   short one it wasn't sure of, is asked for once more with nothing given (the server does that,
+ *   with `saidBefore`, `doubtful` and `settled`): clear speech is heard the same both times;
  * - the same line a third time running is left out;
  * - a microphone line that says what the call said at that moment was the call: it's heard once,
  *   from the call, whichever of the two is turned into words first.
@@ -46,7 +47,7 @@ export const onlyUnclear = (text: string) => /\[unclear: /.test(text) && !/[\p{L
  * What speech to text says over silence and noise that people also really say. On its own it's
  * believed only when speech to text was sure of it.
  */
-const STOCK = /^\W*(you|bye|bye[- ]?bye|thank you( very much| so much)?|thanks|okay|ok|so|oh|hmm+|mm+|uh+|um+|i'?m sorry|sorry)\W*$/i
+const STOCK = /^\W*(you|bye|bye[- ]?bye|thank you( very much| so much)?|thanks|okay|ok|so|oh|hmm+|mm+|uh+|um+|i'?m sorry|sorry|we'?ll be right back|(i'?ll )?see you (next time|later)|the end)\W*$/i
 
 export const isStock = (text: string) => !/[\p{L}\p{N}]/u.test(text) || STOCK.test(text.replace(/’/g, "'"))
 
@@ -121,18 +122,52 @@ export function saidBefore(text: string, before: string): boolean {
 export interface Words {
   text: string
   unclear: boolean
+  /**
+   * How sure it was, where the endpoint says: its least sure stretch (an average log-probability:
+   * 0 is certain, clear speech about -0.2, what it makes up over noise about -0.8 to -1).
+   */
+  sure?: number
 }
 
+/** How alike two lines are, by their letters: 1 the same, 0 nothing in common. */
+export function alike(a: string, b: string): number {
+  const x = wordsOf(a).join(' ').slice(0, 600)
+  const y = wordsOf(b).join(' ').slice(0, 600)
+  if (x === y) return 1
+  if (!x || !y) return 0
+  // The fewest letters to change, add or take out to turn one into the other.
+  let row = Array.from({ length: y.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= x.length; i++) {
+    const next = [i]
+    for (let j = 1; j <= y.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1))
+    row = next
+  }
+  return 1 - row[y.length] / Math.max(x.length, y.length)
+}
+
+/** Below this, speech to text wasn't sure; and a line of no more words than this is short. */
+const UNSURE = -0.6
+const SHORT = 8
+/** Two hearings this alike heard the same thing (a name spelled another way, "12th" for "twelfth"). */
+const SAME = 0.7
+
+/** A short answer speech to text wasn't sure of: what it gives for a noise as readily as for a few mumbled words. */
+export const doubtful = (w: Words) => w.sure !== undefined && w.sure < UNSURE && wordsOf(w.text).length <= SHORT
+
 /**
- * A line that only said again what came before (`given`), and the same sound heard without being
- * told what came before (`plain`): what was really said. The same both times, it was said again.
- * Otherwise it was going by what it was told, not by the sound: the plain hearing is the one to
- * believe, and when that is nothing, or a stock line, nothing was said.
+ * An answer in doubt (`given`: it only said what it had been given, when `echoed`, or was short
+ * and unsure), and the same sound heard with nothing given (`plain`): what was really said.
+ * - Clear speech is heard the same both times: the first stands, with its names spelled right.
+ * - When the plain hearing is nothing, or a stock line, there was nothing to hear.
+ * - Otherwise they differ. An answer that only said what it was given was going by that, not by
+ *   the sound, so the plain hearing is the one to believe. A short unsure one stays, marked as
+ *   not clearly heard.
  */
-export function settled(given: Words, plain: Words): Words {
-  if (sameWords(given.text, plain.text)) return given
+export function settled(given: Words, plain: Words, echoed = true): Words {
+  if (alike(given.text, plain.text) >= SAME) return given
   if (isStock(plain.text)) return { text: '', unclear: false }
-  return plain
+  if (echoed) return plain
+  return { ...given, text: `[unclear: ${given.text.replace(/\[unclear: ([^\]]*)\]/g, '$1').replace(/[[\]]/g, '')}]`, unclear: true }
 }
 
 // ----- the same line again, and the call in the microphone ---------------------------------------

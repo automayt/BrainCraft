@@ -128,41 +128,73 @@ describe('speech to text for talking to the assistant', () => {
     expect(await say()).toEqual({ text: 'And the caterer is booked.' })
     expect(prompts).toEqual([`${TERMS}. ${BEFORE}`])
 
-    // Over a noise it says the last line again; without that line, it hears nothing.
+    // Over a noise it says the last line again; given nothing, it hears nothing.
     hears = (prompt) => ({ text: prompt.includes('venue') ? ' I’m talking about the venue.' : '' })
     expect(await say()).toEqual({ text: '' })
-    // The second time with the terms only.
-    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, TERMS])
+    // The second time with nothing given at all.
+    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
 
     // ...or a stock line: nothing was said either.
-    hears = (prompt) => ({ text: prompt.includes('venue') ? 'I’m talking about the venue.' : ' Thank you.' })
+    hears = (prompt) => ({ text: prompt ? 'I’m talking about the venue.' : ' Thank you.' })
+    expect(await say()).toEqual({ text: '' })
+    hears = (prompt) => ({ text: prompt ? 'I’m talking about the venue.' : ' We’ll be right back.' })
     expect(await say()).toEqual({ text: '' })
 
     // ...or something else: that is what was said.
-    hears = (prompt) => ({ text: prompt.includes('venue') ? 'I’m talking about the venue.' : 'I’m walking to the venue.' })
-    expect(await say()).toEqual({ text: 'I’m walking to the venue.' })
+    hears = (prompt) => ({ text: prompt ? 'I’m talking about the venue.' : 'And who pays the caterer?' })
+    expect(await say()).toEqual({ text: 'And who pays the caterer?' })
 
     // The same both times: it really was said again.
     hears = () => ({ text: 'I’m talking about the venue.' })
     expect(await say()).toEqual({ text: 'I’m talking about the venue.' })
     expect(prompts).toHaveLength(2)
-
-    // The second go failed: what it said stands.
-    hears = (prompt) => (prompt.includes('venue') ? { text: 'We move the launch to May.' } : null)
+    // Near enough the same (a word spelled another way): the first hearing stands, as it's written on the board.
+    hears = (prompt) => ({ text: prompt ? 'We move the launch to May.' : 'We moved the lunch to May' })
     expect(await say()).toEqual({ text: 'We move the launch to May.' })
 
-    // The terms recited back: heard again with nothing at all. One term on its own is a word someone said.
+    // The second go failed: what it said stands.
+    hears = (prompt) => (prompt ? { text: 'We move the launch to May.' } : null)
+    expect(await say()).toEqual({ text: 'We move the launch to May.' })
+
+    // The terms recited back, all of them or one: heard again the same way.
     hears = (prompt) => ({ text: prompt ? 'Sam, Brian, Kubernetes.' : '' })
     expect(await say()).toEqual({ text: '' })
     expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
-    hears = () => ({ text: 'Kubernetes.' })
+    hears = (prompt) => ({ text: prompt ? 'Kubernetes.' : ' You' })
+    expect(await say()).toEqual({ text: '' })
+    // One term someone really said is heard both times.
+    hears = (prompt) => ({ text: prompt ? 'Kubernetes.' : 'Kubernets.' })
     expect(await say()).toEqual({ text: 'Kubernetes.' })
-    expect(prompts).toHaveLength(1)
+    expect(prompts).toHaveLength(2)
 
     // An older app sends it all as what came before: still heard again without it.
     hears = (prompt) => ({ text: prompt ? 'We were saying' : 'you' })
     expect(await say({ 'x-transcribe-context': encodeURIComponent('Sam. We were saying') })).toEqual({ text: '' })
     expect(prompts).toEqual(['Sam. We were saying', ''])
+
+    // A short answer it wasn't sure of is heard again too, whatever it says.
+    const stretch = (text: string, sure: number) => ({ text, segments: [{ text: ` ${text}`, avg_logprob: sure, no_speech_prob: 0, compression_ratio: 0.9 }] })
+    // The same both times: someone mumbled it.
+    hears = () => stretch('See about the deposit.', -0.75)
+    expect(await say()).toEqual({ text: 'See about the deposit.' })
+    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
+    // A stock line the second time: it was a noise.
+    hears = (prompt) => (prompt ? stretch('See about the deposit.', -0.75) : stretch('Thank you.', -0.3))
+    expect(await say()).toEqual({ text: '' })
+    // Something else the second time: not clearly heard, and marked so.
+    hears = (prompt) => (prompt ? stretch('See about the deposit.', -0.75) : stretch('Seed a bowl of posset.', -0.9))
+    expect(await say()).toEqual({ text: '[unclear: See about the deposit.]', unclear: true })
+    // Sure of it, or long: taken at its word, asked once.
+    hears = () => stretch('See about the deposit.', -0.4)
+    expect(await say()).toEqual({ text: 'See about the deposit.' })
+    expect(prompts).toHaveLength(1)
+    hears = () => stretch('Someone should see about the deposit before the end of next week.', -0.75)
+    expect(await say()).toEqual({ text: 'Someone should see about the deposit before the end of next week.' })
+    expect(prompts).toHaveLength(1)
+    // Nothing was given the first time: a second hearing would be the same one.
+    hears = () => stretch('See about the deposit.', -0.75)
+    expect(await say({})).toEqual({ text: 'See about the deposit.' })
+    expect(prompts).toEqual([''])
 
     // The prompt stays short: the terms first, then as much of what was said as fits.
     hears = () => ({ text: 'fine' })
@@ -213,8 +245,12 @@ describe('reading what speech to text heard', () => {
   it('believes a stock line only when it was sure of it', () => {
     const stock = (avg_logprob: number, no_speech_prob: number) => readTranscript({ text: 'x', segments: [{ text: ' Thank you.', avg_logprob, no_speech_prob, compression_ratio: 0.8 }] }).text
     expect(stock(-0.2, 0.05)).toBe('Thank you.')
+    expect(stock(-0.5, 0)).toBe('Thank you.')
     expect(stock(-0.2, 0.5)).toBe('')
     expect(stock(-0.9, 0.05)).toBe('')
+    // As heard over a room's noise by a real model: not very sure, and no sign of silence at all.
+    expect(stock(-0.82, 0)).toBe('')
+    expect(stock(-0.7, 0)).toBe('')
     // More than a stock line is kept on the same footing.
     expect(readTranscript({ text: 'x', segments: [{ text: ' Thank you, Sam.', avg_logprob: -0.9, no_speech_prob: 0.5 }] }).text).toBe('Thank you, Sam.')
     // An endpoint that doesn't say how sure it was: taken at its word.

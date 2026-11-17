@@ -419,16 +419,31 @@ speech to text makes up over silence ("Thanks for watching!") is left out.
 
 **Hearing it once.** Given a noise, a breath, or what's left of a call in the
 microphone, speech to text doesn't say nothing: it says the last line again,
-or one phrase over and over, or a stock line. So:
+or one of the board's terms, or one phrase over and over, or a stock line. So:
 
 - a phrase said over and over in one answer is written once;
-- an answer that only says again what came just before is heard a second
-  time without being told what came before. The same again, and it really
-  was said twice. Anything else is what was said; nothing, or a stock line
-  ("Thank you.", "Bye-bye."), is nothing;
+- an answer that only says what it was given (the line said just before, or
+  one of the terms) is heard a second time with nothing given. Clear speech
+  comes out the same both times, and stands, spelled as the board writes it.
+  When the second hearing is nothing, or a stock line ("Thank you.", "We'll
+  be right back."), there was nothing to hear. Anything else is what was
+  said;
+- a short answer speech to text wasn't sure of is heard a second time the
+  same way: the same again and it stands; a stock line or nothing and it's
+  dropped; something else and it's kept as "[unclear: …]";
 - a stock line on its own is believed only when speech to text was sure of
-  it, where the endpoint says how sure it was;
+  it;
 - the same line a third time running, from the same place, is left out.
+
+How sure it was comes from the endpoint, where it says (`verbose_json`). Tried
+against Whisper with a room's noise and a call too faint to make out, each
+told the line before: it said that line again, or "WMS." (a term), "You",
+"Thank you." and "We'll be right back.", and never signalled silence. All of
+them now come back as nothing, while the same line really said again is kept.
+
+A speech-to-text server that leaves out the stretches with nobody speaking
+before it listens (voice activity detection) spares most of this: it has
+nothing to make words up over.
 
 ### Guided
 

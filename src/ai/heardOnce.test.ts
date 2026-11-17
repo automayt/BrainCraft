@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HeardOnce, callSaid, isStock, onlyUnclear, saidBefore, sameWords, settled, withoutLoops, wordsOf } from './heardOnce'
+import { HeardOnce, alike, callSaid, doubtful, isStock, onlyUnclear, saidBefore, sameWords, settled, withoutLoops, wordsOf } from './heardOnce'
 
 describe('one phrase said over and over', () => {
   it('is said once', () => {
@@ -52,14 +52,49 @@ describe('a line that only says again what came before', () => {
     expect(settled(given, { text: '', unclear: false })).toEqual({ text: '', unclear: false })
     expect(settled(given, { text: ' Thank you. ', unclear: false })).toEqual({ text: '', unclear: false })
     expect(settled(given, { text: 'Bye-bye.', unclear: false })).toEqual({ text: '', unclear: false })
+    expect(settled(given, { text: 'We’ll be right back.', unclear: false })).toEqual({ text: '', unclear: false })
     // Something else: that's what was said.
-    const plain = { text: '[unclear: I’m walking about]', unclear: true }
+    const plain = { text: '[unclear: Who pays the caterer]', unclear: true }
     expect(settled(given, plain)).toBe(plain)
     expect(settled(given, { text: 'And the caterer?', unclear: false })).toEqual({ text: 'And the caterer?', unclear: false })
+    // Near enough the same: the first hearing stands, with its words as the board writes them.
+    const named = { text: 'Ask Priyanka about the Kubernetes cluster.', unclear: false }
+    expect(settled(named, { text: 'Ask Prianka about the Kubernets cluster', unclear: false })).toBe(named)
+  })
+
+  it('tells how alike two hearings are', () => {
+    expect(alike('Move it to May.', 'move it to may')).toBe(1)
+    expect(alike('the 12th of May', 'the twelfth of May')).toBeGreaterThanOrEqual(0.7)
+    expect(alike('Kubernetes', 'Kubernets')).toBeGreaterThan(0.85)
+    expect(alike('I am going to go get a new laptop.', 'Thank you.')).toBeLessThan(0.3)
+    expect(alike('We ship on Friday', 'We ship on Monday')).toBeGreaterThan(0.6)
+    expect(alike('WMS.', 'You')).toBe(0)
+    expect(alike('', '')).toBe(1)
+    expect(alike('hello', '')).toBe(0)
+  })
+
+  it('doubts a short answer speech to text wasn’t sure of', () => {
+    expect(doubtful({ text: 'We’ll be right back.', unclear: false, sure: -0.99 })).toBe(true)
+    expect(doubtful({ text: 'WMS.', unclear: false, sure: -0.81 })).toBe(true)
+    // Sure of it, long, or an endpoint that doesn't say how sure it was.
+    expect(doubtful({ text: 'I am going to go get a new laptop.', unclear: false, sure: -0.18 })).toBe(false)
+    expect(doubtful({ text: 'See about it.', unclear: false, sure: -0.6 })).toBe(false)
+    expect(doubtful({ text: 'Someone should see about the deposit before next week.', unclear: false, sure: -0.9 })).toBe(false)
+    expect(doubtful({ text: 'See about it.', unclear: false })).toBe(false)
+  })
+
+  it('settles a short unsure answer by hearing it with nothing given', () => {
+    const given = { text: 'See about the deposit.', unclear: false, sure: -0.75 }
+    expect(settled(given, { text: 'see about the deposit', unclear: false }, false)).toBe(given)
+    expect(settled(given, { text: 'Thank you.', unclear: false }, false)).toEqual({ text: '', unclear: false })
+    expect(settled(given, { text: '', unclear: false }, false)).toEqual({ text: '', unclear: false })
+    // The two differ: it stays, as something not clearly heard (once, however it was marked).
+    expect(settled(given, { text: 'Seed a bowl of posset.', unclear: false }, false)).toEqual({ text: '[unclear: See about the deposit.]', unclear: true, sure: -0.75 })
+    expect(settled({ text: '[unclear: See about] the deposit.', unclear: true }, { text: 'Seed a bowl of posset.', unclear: false }, false).text).toBe('[unclear: See about the deposit.]')
   })
 
   it('knows what speech to text says over silence', () => {
-    for (const s of ['Thank you.', 'thank you so much', 'Bye.', 'Bye-bye!', 'you', ' Okay. ', 'I’m sorry.', 'Hmm', '...', '']) expect(isStock(s)).toBe(true)
+    for (const s of ['Thank you.', 'thank you so much', 'Bye.', 'Bye-bye!', 'you', ' Okay. ', 'I’m sorry.', 'Hmm', '...', '', 'We’ll be right back.', 'See you next time.', 'I’ll see you later', 'The end.']) expect(isStock(s)).toBe(true)
     for (const s of ['Thank you, Sam.', 'Yes.', 'No.', 'Okay, the venue.', 'Bye for now, see you Monday']) expect(isStock(s)).toBe(false)
   })
 

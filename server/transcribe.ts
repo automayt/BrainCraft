@@ -24,9 +24,11 @@
  * true).
  *
  * Speech to text given sound that isn't clear speech says something anyway: a phrase over and
- * over, a stock line, or what it was just told came before. So a phrase said over and over comes
- * back said once, and an answer that only says the context again is asked for once more without
- * it: the same again was really said, anything else is what was (see src/ai/heardOnce.ts).
+ * over, a stock line, or what it was just given (the last line said, one of the terms). So a
+ * phrase said over and over comes back said once, and an answer that only says what it was given,
+ * or a short one it wasn't sure of, is asked for once more with nothing given: clear speech is
+ * heard the same both times, and anything else is settled by the second hearing (see
+ * src/ai/heardOnce.ts).
  *
  * Settings: BRAINCRAFT_TRANSCRIBE_URL (the endpoint's base, e.g. http://localhost:8000/v1),
  * BRAINCRAFT_TRANSCRIBE_MODEL (default whisper-1), BRAINCRAFT_TRANSCRIBE_KEY (if it needs one).
@@ -34,7 +36,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { isStock, saidBefore, settled, withoutLoops } from '../src/ai/heardOnce'
+import { type Words, doubtful, isStock, saidBefore, settled, withoutLoops } from '../src/ai/heardOnce'
 import type { AiGate } from './aiProxy'
 import { type Embedder, type VoiceBook, type Voices, cleanName, wavSamples } from './speakers'
 
@@ -104,6 +106,12 @@ const MADE_UP = /^\W*(thanks? (you )?(so much )?for watching|please subscribe|su
  * those it wasn't sure of are marked "[unclear: …]" so the notes don't take them for what was said.
  */
 export function readTranscript(out: unknown): { text: string; unclear: boolean } {
+  const { text, unclear } = readWords(out)
+  return { text, unclear }
+}
+
+/** The same, with how sure it was of its least sure stretch, where the endpoint says. */
+export function readWords(out: unknown): Words {
   const o = (out ?? {}) as { text?: unknown; segments?: unknown }
   const whole = typeof o.text === 'string' ? o.text.trim() : ''
   if (!Array.isArray(o.segments) || !o.segments.length) {
@@ -111,6 +119,7 @@ export function readTranscript(out: unknown): { text: string; unclear: boolean }
     return { text: MADE_UP.test(once) ? '' : once, unclear: false }
   }
   const kept: string[] = []
+  let least: number | undefined
   for (const s of o.segments as { text?: unknown; avg_logprob?: unknown; no_speech_prob?: unknown; compression_ratio?: unknown }[]) {
     const said = typeof s?.text === 'string' ? s.text.trim() : ''
     if (!said || MADE_UP.test(said)) continue
@@ -120,15 +129,18 @@ export function readTranscript(out: unknown): { text: string; unclear: boolean }
     const loops = typeof s.compression_ratio === 'number' ? s.compression_ratio : 1
     // Most likely silence it put words to.
     if (silent > 0.6 && sure < -0.7) continue
-    // A stock line ("Thank you.") it wasn't sure of, or over what may have been silence.
-    if (isStock(t) && (silent > 0.4 || sure < -0.8)) continue
+    // A stock line ("Thank you.") it wasn't sure of, or over what may have been silence. Said
+    // clearly it comes back far surer (about -0.2); over a room's noise, about -0.8 to -0.9, and
+    // without any sign of silence, so how sure it was is what tells them apart.
+    if (isStock(t) && (silent > 0.4 || sure < -0.6)) continue
     // Going round in some way other than one phrase over and over (that was folded to one saying).
     if (sure < -1 || (loops > 2.4 && !looped)) kept.push(`[unclear: ${t.replace(/[[\]]/g, '')}]`)
     else kept.push(t)
+    if (typeof s.avg_logprob === 'number') least = Math.min(least ?? 0, s.avg_logprob)
   }
   // The same thing in one stretch after another is a loop too.
   const text = withoutLoops(kept.join(' ').replace(/\s+/g, ' ').trim()).text
-  return { text, unclear: /\[unclear: /.test(text) }
+  return { text, unclear: /\[unclear: /.test(text), ...(least !== undefined ? { sure: least } : {}) }
 }
 
 export class Transcriber {
@@ -195,18 +207,18 @@ export class Transcriber {
       const said = await r.text().catch(() => '')
       return json(res, 502, { error: `The transcription server said ${r.status}${said ? `: ${said.slice(0, 200)}` : ''}` })
     }
-    let words = readTranscript(await r.json().catch(() => ({})))
-    // It may only be saying again what it was told came before (or reciting the terms), as it does
-    // with sound that isn't clear speech: heard once more without that. One term on its own is
-    // just a word someone said.
-    const again = saidBefore(words.text, before)
-    const recited = !again && words.text.split(/\s+/).length >= 3 && saidBefore(words.text, terms)
-    if (again || recited) {
-      const plain = await ask(this.detailed ? 'verbose_json' : 'json', again ? terms : '')
+    let words = readWords(await r.json().catch(() => ({})))
+    // It may only be saying what it was given (the last line said, or one of the terms), as it
+    // does over sound that isn't clear speech; and a short answer it wasn't sure of is what a
+    // noise gets as readily as a few mumbled words. Either is heard once more with nothing given:
+    // clear speech comes out the same both times.
+    const echoed = saidBefore(words.text, before) || saidBefore(words.text, terms)
+    if (both && words.text && (echoed || doubtful(words))) {
+      const plain = await ask(this.detailed ? 'verbose_json' : 'json', '')
         .then((p) => (p.ok ? (p.json() as Promise<unknown>) : null))
         .catch(() => null)
       // Couldn't ask again: what it said stands.
-      if (plain) words = settled(words, readTranscript(plain))
+      if (plain) words = settled(words, readWords(plain), echoed)
     }
     return json(res, 200, {
       text: words.text,
