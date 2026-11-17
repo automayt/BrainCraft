@@ -266,6 +266,15 @@ export interface KanbanData {
 export interface TimelineLane {
   id: string
   name: string
+  /**
+   * For managing time (see `timelineHours.ts`): the hours a week this person (or team, or machine)
+   * has to give, which the lane's load is held against.
+   */
+  capacity?: number
+  /** Hours set aside for the lane over the whole timeline. */
+  budget?: number
+  /** What an hour of theirs costs. */
+  rate?: number
 }
 
 export interface TimelineEntry {
@@ -278,6 +287,19 @@ export interface TimelineEntry {
   color: string
   /** Entries (of this timeline) that must finish before this one starts. */
   after?: string[]
+  /** Time planned for it, in hours: over the whole span, or for each working day or week of it (`per`). */
+  hours?: number
+  per?: 'day' | 'week'
+  /** Hours spent on it so far. */
+  spent?: number
+  /** Not settled yet: drawn lighter, and counted apart from what's planned. */
+  tentative?: true
+}
+
+/** Hours a timeline as a whole is held to: in all, or each week or month (a retainer). */
+export interface TimelineBudget {
+  hours: number
+  per?: 'week' | 'month'
 }
 
 /** Someone or something in a sequence diagram: a lane, left to right. */
@@ -330,6 +352,12 @@ export interface TimelineData {
   sources?: Id[]
   /** Days per screen pixel are derived from this range; omitted means fit the content. */
   range?: { start: string; end: string }
+  /** Whether hours are shown (totals, load, what's left): yes, no, or (left out) whenever something on it has hours. */
+  time?: boolean
+  /** What its hours are held to. */
+  budget?: TimelineBudget
+  /** The sign money is written with, where lanes have rates ("$", "€", "kr"). */
+  currency?: string
 }
 
 /** Standard flowchart symbols, drawn by `flow` items. */

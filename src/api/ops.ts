@@ -28,7 +28,8 @@ import { setSketch } from '../model/sketch'
 import { codeSize, langId } from '../model/code'
 import { addNote } from '../model/notes'
 import { tableSize } from '../model/table'
-import { isIsoDay } from '../model/timeline'
+import { hugged, isIsoDay } from '../model/timeline'
+import { HOURS_MAX, WEEK_MAX } from '../model/timelineHours'
 import { uid } from '../model/uid'
 import { cleanBody, cleanConnector, cleanItem, cleanPage } from '../model/sanitize'
 import * as RV from '../model/revisions'
@@ -77,7 +78,9 @@ type FieldSpec = {
   fn?: RollupFn
 }
 type KanbanColumnIn = { title: string; cards?: (string | { title: string; start?: string; due?: string; color?: string })[] }
-type TimelineLaneIn = { name: string; entries?: { title: string; start: string; end?: string; color?: string }[] }
+type TimelineEntryIn = { title: string; start: string; end?: string; color?: string; hours?: number; per?: 'day' | 'week'; spent?: number; tentative?: boolean }
+type TimelineLaneIn = { name: string; capacity?: number; budget?: number; rate?: number; entries?: TimelineEntryIn[] }
+type TimelineBudgetIn = { hours: number; per?: 'week' | 'month' }
 
 /** Words for flowchart shapes, as the Mermaid shapes are often called. */
 const FLOW_SHAPE_WORDS: Record<string, FlowShape> = {
@@ -138,7 +141,10 @@ export type Op =
   | ({
       op: 'createTimeline'
       title?: string
-      lanes?: { name: string; entries?: { title: string; start: string; end?: string; color?: string }[] }[]
+      lanes?: TimelineLaneIn[]
+      /** Hours the whole timeline is held to: in all, or each week or month. */
+      budget?: TimelineBudgetIn
+      currency?: string
       followKanban?: Ref[]
       w?: number
       h?: number
@@ -146,7 +152,7 @@ export type Op =
   /** Replace a widget's content (same shape as creating it); unchanged cards, rows and entries keep their details. */
   | { op: 'setKanban'; id: Ref; title?: string; columns: KanbanColumnIn[] }
   | { op: 'setTable'; id: Ref; title?: string; columns: string[]; rows?: (string | number)[][] }
-  | { op: 'setTimeline'; id: Ref; title?: string; lanes: TimelineLaneIn[] }
+  | { op: 'setTimeline'; id: Ref; title?: string; lanes: TimelineLaneIn[]; budget?: TimelineBudgetIn | null; currency?: string }
   | ({ op: 'createImage'; src: string; w?: number; h?: number } & Placed)
   | ({ op: 'createLink'; url: string; w?: number; h?: number } & Placed)
   | ({ op: 'createSpinner'; options: string[] } & Placed)
@@ -456,14 +462,36 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         ...(prev?.filters ? { filters: Object.fromEntries(Object.entries(prev.filters).filter(([c]) => ids.has(c))) } : {}),
       }
     }
+    /** Hours as given: a number, none below nothing. */
+    const hoursOf = (v: unknown, field: string, most: number): number | undefined => {
+      if (v === undefined || v === null) return undefined
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) fail(index, op, `"${field}" is a number of hours, 0 or more`)
+      return Math.min(v as number, most)
+    }
+    /** What a timeline's hours are held to, as given. */
+    const budgetOf = (v: unknown): TimelineData['budget'] | undefined => {
+      if (v === undefined || v === null) return undefined
+      const o = obj(v, 'budget') as { hours?: unknown; per?: unknown }
+      const hours = hoursOf(o.hours, 'budget.hours', HOURS_MAX)
+      if (hours === undefined) fail(index, op, '"budget.hours" is required')
+      if (o.per !== undefined && o.per !== 'week' && o.per !== 'month') fail(index, op, '"budget.per" is "week" or "month" (leave it out for hours in all)')
+      return { hours: hours!, ...(o.per ? { per: o.per as 'week' | 'month' } : {}) }
+    }
     /** Timeline lanes as given, keeping the details of lanes and entries already there. */
     const timelineOf = (lanesIn: TimelineLaneIn[] | undefined, prev?: TimelineData): Pick<TimelineData, 'lanes' | 'entries'> => {
       const lanes: TimelineData['lanes'] = []
       const entries: TimelineData['entries'] = []
       list(lanesIn, 'lanes').forEach((lane, k) => {
         const name = text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`)
-        const id = prev?.lanes.find((l) => same(l.name, name))?.id ?? uid()
-        lanes.push({ id, name })
+        const was = prev?.lanes.find((l) => same(l.name, name))
+        const id = was?.id ?? uid()
+        // What the lane has: given here, or as it was (a lane sent again by name keeps its hours).
+        const has = (key: 'capacity' | 'budget' | 'rate', most: number) => {
+          const given = hoursOf(lane[key], `lanes[${k}].${key}`, most)
+          const value = lane[key] === undefined ? was?.[key] : given
+          return value === undefined ? {} : { [key]: value }
+        }
+        lanes.push({ id, name, ...has('capacity', WEEK_MAX), ...has('budget', HOURS_MAX), ...has('rate', 1_000_000) })
         list(lane.entries, `lanes[${k}].entries`).forEach((e, j) => {
           const f = `lanes[${k}].entries[${j}]`
           const start = date(obj(e, f).start, `${f}.start`)
@@ -472,7 +500,20 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
           const title = text(e.title, `${f}.title`)
           const old = prev?.entries.find((x) => same(x.title, title))
-          const entry = { ...old, id: old?.id ?? uid(), lane: id, title, start, color: color(e.color, `${f}.color`).color ?? old?.color ?? BRANCHES[entries.length % BRANCHES.length][1] }
+          const entry: TimelineData['entries'][number] = { ...old, id: old?.id ?? uid(), lane: id, title, start, color: color(e.color, `${f}.color`).color ?? old?.color ?? BRANCHES[entries.length % BRANCHES.length][1] }
+          // Hours planned (in all, or a day or a week) and spent: as given, or as they were.
+          if (e.hours !== undefined) {
+            entry.hours = hoursOf(e.hours, `${f}.hours`, HOURS_MAX)
+            if (e.per === undefined) delete entry.per
+          }
+          if (e.per !== undefined) {
+            if (e.per !== 'day' && e.per !== 'week') fail(index, op, `"${f}.per" is "day" or "week" (leave it out for hours in all)`)
+            if (entry.hours === undefined) fail(index, op, `"${f}.per" needs "hours"`)
+            entry.per = e.per
+          }
+          if (e.spent !== undefined) entry.spent = hoursOf(e.spent, `${f}.spent`, HOURS_MAX)
+          if (e.tentative === true) entry.tentative = true
+          else if (e.tentative === false) delete entry.tentative
           if (end) entries.push({ ...entry, end })
           else {
             const { end: _gone, ...milestone } = entry as typeof entry & { end?: string }
@@ -734,8 +775,19 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         const it = widget(op.id, 'timeline')
         const prev = it.timeline
         const t = timelineOf(op.lanes, prev)
-        const timeline: TimelineData = { ...t, ...(prev?.sources?.length ? { sources: prev.sources } : {}) }
-        b = B.updateItem(b, it.id, (i) => ({ ...i, timeline, h: Math.max(i.h, 120 + (t.lanes.length + (prev?.sources?.length ?? 0)) * 46), ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
+        // Its budget and money sign: as given, taken away with null, or as they were.
+        const budget = op.budget === null ? undefined : (budgetOf(op.budget) ?? prev?.budget)
+        const currency = op.currency !== undefined ? text(op.currency, 'currency', false).slice(0, 4) : prev?.currency
+        const timeline: TimelineData = {
+          ...t,
+          ...(prev?.sources?.length ? { sources: prev.sources } : {}),
+          ...(prev?.range ? { range: prev.range } : {}),
+          ...(prev?.time !== undefined ? { time: prev.time } : {}),
+          ...(budget ? { budget } : {}),
+          ...(currency ? { currency } : {}),
+        }
+        const board = b
+        b = B.updateItem(b, it.id, (i) => hugged(board, { ...i, timeline, ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
         done({ id: it.id })
         break
       }
@@ -795,8 +847,13 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           if (B.getItem(b, id)?.kind !== 'kanban') fail(index, op, `followKanban[${k}] isn't a Kanban board`)
           return id
         })
-        const timeline: TimelineData = { lanes, entries, ...(sources.length ? { sources } : {}) }
-        const id = add(B.newItem('timeline', r0(size(op.w) ?? 1000, size(op.h) ?? Math.max(220, 120 + (lanes.length + sources.length) * 46)), { text: text(op.title, 'title', false) || 'Timeline', timeline }))
+        const budget = budgetOf(op.budget)
+        const currency = op.currency !== undefined ? text(op.currency, 'currency', false).slice(0, 4) : ''
+        const timeline: TimelineData = { lanes, entries, ...(sources.length ? { sources } : {}), ...(budget ? { budget } : {}), ...(currency ? { currency } : {}) }
+        const id = add(B.newItem('timeline', r0(size(op.w) ?? 1000, 220), { text: text(op.title, 'title', false) || 'Timeline', timeline }))
+        // As tall as its lanes need.
+        const board = b
+        b = B.updateItem(b, id, (i) => hugged(board, i))
         place([id], op.at)
         done({ id })
         break

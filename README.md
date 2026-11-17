@@ -239,11 +239,44 @@ These become interactive once selected; drag them by their title strip.
   Content, Hiring, Now / Next / Later, a week…) and keeps the cards. The
   **+** strip after the last column adds one.
 - **Timelines (I):** lanes of events and milestones on a time axis that
-  scales itself, with a "today" line. Drag to reschedule, drag the ends to
-  change the length, double-click to add, and zoom and pan. A timeline can
-  **follow Kanban boards**: their dated cards appear live in their own lane,
-  overdue ones are flagged, and dragging a card on the timeline reschedules it
-  on the board.
+  scales itself, with a "today" line. Everything is done with the mouse:
+  - drag a span to move it, its ends to stretch it (down to a single day),
+    and onto another lane to move it there;
+  - drag across an empty stretch of a lane to draw a new span, or
+    double-click to add one;
+  - hold a span at the edge and the days in view go along with it, so it can
+    be taken past what was showing;
+  - drag the dates to move through time, and turn the wheel over them to zoom
+    it (the wheel anywhere else is the board's, as on any object);
+  - the small **+** under the last lane adds another, and a lane's **⋯** moves
+    it up or down.
+
+  The timeline is as tall as its lanes need, no taller. A timeline can
+  **follow Kanban boards** (**Kanban cards**): their dated cards appear live
+  in a lane of their own, overdue ones are flagged, and dragging a card on
+  the timeline reschedules it on the board. It can be **hand-drawn** like
+  shapes and mind maps (**⋯ → Hand-drawn**).
+- **Managing time on a timeline:** press **Hours** and a timeline plans and
+  follows a team's time. Nothing is required: use as much of it as helps.
+  - **A lane is whoever's time it is:** a person, a team, a client, a
+    machine. Its **⋯ → Hours a week, budget and rate…** says how many hours a
+    week they have, how many are set aside for them, and what an hour costs.
+  - **A span is their time on something.** Select it and give it **hours**
+    along the foot: in all, or for each working day or week of it. **Spent**
+    is what's been used so far (a line along the bar's foot shows how much),
+    and **maybe** marks a span that isn't settled: drawn lighter, and counted
+    apart.
+  - **What it adds up to** shows under each lane's name and along the foot:
+    hours planned and spent, the cost where lanes have rates, and what's
+    left of the budget.
+  - **How full each week is** shows as a band under every lane that has
+    hours a week: green, amber when nearly full, red when it has more than
+    its hours.
+  - **A budget** (in **Hours**) holds all its hours to a number: in all for a
+    fixed amount of work, or each week or month for a retainer. Leave it
+    empty for work charged by the hour. It warns at nine tenths, and again
+    when over.
+  - A span's last day counts: Monday to Friday is five working days.
 - **Timeline dependencies:** select an event and use **Waits for…** to pick
   what must finish first. Arrows join them; if an event starts too early its
   arrow turns red and dashed, and **Line up** moves events (and everything

@@ -9,6 +9,8 @@ import { linksIn, objectLabel, plainNote } from '../model/notes'
 import { search } from '../model/search'
 import { sceneText } from '../model/excalidraw'
 import { toCsv } from '../model/table'
+import { today } from '../model/timeline'
+import { hoursText, timelineHours, tracksTime } from '../model/timelineHours'
 import type { Board, Id, Item, Kind, Status, TimeTarget } from '../model/types'
 import * as W from '../model/wiki'
 import { diffCounts } from '../model/merge'
@@ -74,7 +76,8 @@ export function getObject(b: Board, id: Id): ObjectDetail | null {
       : i.table
       ? { csv: toCsv(i.table) }
       : (i.kanban ??
-        i.timeline ??
+        // A timeline that manages time comes with what its hours add up to.
+        (i.timeline && tracksTime(i.timeline) ? { ...i.timeline, totals: timelineHours(i.timeline, today()), inWords: hoursText(i.timeline, today()) } : i.timeline) ??
         i.link ??
         (i.kind === 'mind' ? { outline: toOutline(b, i.id) } : i.runs?.length ? { runs: i.runs.map((r) => ({ ...r, startedAt: new Date(r.startedAt).toISOString(), endedAt: new Date(r.endedAt).toISOString() })) } : undefined)),
   }

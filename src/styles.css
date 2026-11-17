@@ -3030,8 +3030,23 @@ html.card-grabbing * {
 
 .timeline {
   position: relative;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* Taller than its box only when lanes were added from elsewhere (a followed Kanban's cards). */
+  overflow-x: hidden;
+  overflow-y: auto;
   outline: none;
+}
+
+.timeline > .tl-lanes {
+  flex: 0 0 auto;
+}
+
+/* The dates are a handle on time: drag them to move through it. */
+.widget.live .tl-axis {
+  cursor: ew-resize;
+  touch-action: none;
 }
 
 .tl-axis {
@@ -3082,6 +3097,33 @@ html.card-grabbing * {
   font-size: 13px;
   font-weight: 600;
   border-right: 1px solid var(--widget-line);
+}
+
+/* A lane's name, with what its hours add up to under it. */
+.tl-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tl-figures {
+  padding-left: 2px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.tl-figures.near {
+  color: var(--warning-text);
+}
+
+.tl-figures.over {
+  color: var(--danger);
 }
 
 .tl-label input {
@@ -3226,18 +3268,291 @@ html.card-grabbing * {
   border-radius: var(--r-sm);
 }
 
-.tl-selected {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  z-index: 3;
+/* Along the foot: what's selected, to change it, or else what it all adds up to. */
+.tl-foot {
+  flex: 0 0 auto;
+  margin-top: auto;
+  background: var(--widget-head);
+  border-top: 1px solid var(--widget-line);
+}
+
+.tl-selected,
+.tl-summary {
+  height: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 0 10px;
+  overflow: hidden;
   font-size: 12px;
-  background: var(--widget-head);
-  border-top: 1px solid var(--widget-line);
+  white-space: nowrap;
+}
+
+.tl-summary {
+  gap: 14px;
+}
+
+.tl-summary .muted,
+.tl-selected .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-standing.near {
+  color: var(--warning-text);
+}
+
+.tl-standing.over {
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.tl-standing.ok {
+  color: var(--success-text);
+}
+
+/* The row that adds a lane: a small plus under the last name. */
+.tl-add {
+  display: flex;
+}
+
+.tl-add .tl-label {
+  align-items: center;
+  padding-top: 0;
+}
+
+.tl-add button {
+  width: 22px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--widget-line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.tl-add button:hover,
+.tl-add button:focus-visible {
+  color: var(--text);
+  background: var(--surface-2);
+  border-style: solid;
+}
+
+/* Hours on a bar, and how much of them is spent along its foot. */
+.tl-entry em {
+  flex: 0 0 auto;
+  margin-left: 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.tl-entry .tl-spent {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: currentColor;
+  border-radius: 0 2px 2px var(--r-sm);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.tl-entry .tl-spent.over {
+  background: var(--danger);
+  opacity: 1;
+}
+
+/* Not settled yet: lighter, with a dashed edge. */
+.tl-entry.tentative {
+  opacity: 0.6;
+  outline: 1.5px dashed currentColor;
+  outline-offset: -2px;
+}
+
+/* A span being drawn. */
+.tl-entry.ghost {
+  z-index: 2;
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1.5px dashed var(--accent);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.tl-entry.moving {
+  z-index: 3;
+  cursor: grabbing;
+  box-shadow: var(--shadow-md);
+}
+
+/* The lane a bar would be dropped on. */
+.tl-lane.drop .tl-track {
+  background: var(--accent-soft);
+}
+
+.widget.live .tl-track {
+  cursor: crosshair;
+}
+
+/* How full each week is, against the hours the lane has: a band along its foot. */
+.tl-load {
+  position: absolute;
+  bottom: 0;
+  height: 5px;
+  background: var(--success);
+  border-left: 1px solid var(--widget-bg);
+  opacity: 0.55;
+}
+
+.tl-load.empty {
+  background: var(--widget-line);
+  opacity: 0.5;
+}
+
+.tl-load.near {
+  background: var(--warning);
+  opacity: 0.85;
+}
+
+.tl-load.over {
+  background: var(--danger);
+  opacity: 1;
+}
+
+/* Small boxes for hours. */
+.tl-num {
+  width: 46px;
+  height: 22px;
+  padding: 0 5px;
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.tl-num.wide {
+  width: 64px;
+}
+
+.tl-num:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tl-entry-hours {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tl-entry-hours select,
+.tl-budget select {
+  height: 22px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.tl-entry-hours label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.widget-menu.tl-budget,
+.widget-menu.tl-lane-hours {
+  width: 270px;
+  gap: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.widget-menu.tl-budget label,
+.widget-menu.tl-lane-hours label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.widget-menu.tl-budget label > :first-child,
+.widget-menu.tl-lane-hours label > :first-child {
+  margin-right: auto;
+}
+
+.widget-menu.tl-budget p,
+.widget-menu.tl-lane-hours p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.widget-menu.tl-budget > button {
+  align-self: flex-start;
+}
+
+.widget-menu.tl-lane-hours {
+  left: 0;
+  right: auto;
+  z-index: 22;
+}
+
+/* Drawn by hand: handwriting, and each bar a wobbly, pencil-hatched box. */
+.widget.hand {
+  font-family: 'Excalifont', 'Comic Shanns', 'Segoe Print', 'Bradley Hand', cursive;
+  letter-spacing: 0;
+}
+
+.widget.hand input,
+.widget.hand select,
+.widget.hand button {
+  font-family: inherit;
+}
+
+.widget.hand .tl-entry:not(.milestone):not(.ghost) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.tl-rough {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tl-entry > span,
+.tl-entry > em {
+  position: relative;
+}
+
+/* Its rules are pencilled in: only the sides that have one. */
+.widget.hand .tl-lane,
+.widget.hand .tl-axis,
+.widget.hand .widget-title {
+  border-bottom-style: dashed;
+}
+
+.widget.hand .tl-foot {
+  border-top-style: dashed;
+}
+
+.widget.hand .tl-label {
+  border-right-style: dashed;
 }
 
 .tl-selected .swatches {

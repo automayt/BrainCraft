@@ -192,6 +192,7 @@ function pages(key: string, spots: Record<string, Id>, now: number): GuidePage[]
 - **Top left:** the board menu: your boards, new, open, save, share, version history, import and export.
 - **Top right:** Share, Ask AI, Present, Search, Comments, the theme and Help (**?**).
 - **Left:** the tools, grouped: writing, thinking it through, drawing. The last button holds tables, Kanban boards, timelines and more. Hover one to see its key.
+- **Timelines manage time too:** press **Hours** on a timeline and each lane is someone whose time is planned. Give spans hours (and what's been spent), say how many hours a week each lane has under its **⋯**, and set a budget: it shows what everything adds up to, how full each week is, and what's left. Drag spans to move them, their ends to stretch them, onto another lane to hand them over, and across an empty stretch to draw a new one.
 - **Ctrl+K** searches everything and runs any command by name. If you only remember one shortcut, make it this one.
 - **Right-click** (or press and hold on a touch screen) anything for what it can do.
 

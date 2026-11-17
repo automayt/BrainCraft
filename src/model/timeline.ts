@@ -182,6 +182,73 @@ export function packRows(entries: TimelineEntry[], minDays: number): Map<string,
   return rows
 }
 
+// ----- how it's laid out ------------------------------------------------------------
+
+/** The names down the side: wider when lanes carry hours under their names. */
+export const LABEL_W = 130
+export const LABEL_W_HOURS = 178
+export const ROW_H = 30
+export const LANE_PAD = 8
+/** A lane with hours a week has a band under it showing how full each week is. */
+export const LOAD_H = 7
+/** Above the lanes: the title strip and the dates. Under them: the row that adds a lane, and the strip that says what's selected or what it all adds up to. */
+export const HEAD_H = 40
+export const AXIS_H = 28
+export const ADD_H = 28
+export const FOOT_H = 40
+
+/** Whether a timeline shows hours: as it was asked to, or else whenever something on it has them. */
+export function tracksTime(t: TimelineData): boolean {
+  return t.time ?? (!!t.budget || t.lanes.some((l) => l.capacity !== undefined || l.budget !== undefined || l.rate !== undefined) || t.entries.some((e) => e.hours !== undefined || e.spent !== undefined))
+}
+
+export interface TimelineLayout {
+  shown: ShownTimeline
+  range: { start: number; end: number }
+  days: number
+  labelW: number
+  trackW: number
+  pxPerDay: number
+  /** Which row of its lane each entry is on: entries that would overlap stack. */
+  rows: Map<string, number>
+  /** Each lane, top to bottom: where it starts under the dates, and how tall it is. */
+  lanes: { id: string; top: number; height: number }[]
+  lanesH: number
+  /** The object's height that holds it all, with nothing left over. */
+  height: number
+}
+
+/**
+ * Where everything on a timeline `width` wide goes. `range`: the days in view when they aren't the
+ * timeline's own (while it's being dragged along or zoomed).
+ */
+export function timelineLayout(b: Board, t: TimelineData, width: number, now = today(), range?: { start: number; end: number }): TimelineLayout {
+  const shown = shownTimeline(b, t, now)
+  const r = range ?? visibleRange(t, shown.entries, now)
+  const days = Math.max(1, r.end - r.start)
+  const labelW = tracksTime(t) ? LABEL_W_HOURS : LABEL_W
+  const trackW = Math.max(100, width - labelW - 2)
+  const pxPerDay = trackW / days
+  const rows = packRows(shown.entries, Math.ceil(110 / pxPerDay))
+  const lanes: TimelineLayout['lanes'] = []
+  let top = 0
+  for (const lane of shown.lanes) {
+    const most = Math.max(1, ...shown.entries.filter((e) => e.lane === lane.id).map((e) => (rows.get(e.id) ?? 0) + 1))
+    const height = most * ROW_H + LANE_PAD * 2 + (lane.capacity !== undefined ? LOAD_H : 0)
+    lanes.push({ id: lane.id, top, height })
+    // Each lane is ruled off below.
+    top += height + 1
+  }
+  return { shown, range: r, days, labelW, trackW, pxPerDay, rows, lanes, lanesH: top, height: HEAD_H + AXIS_H + top + ADD_H + FOOT_H + 2 }
+}
+
+/** A timeline object as tall as its lanes need, no taller (its width is whatever it was given). */
+export function hugged(b: Board, item: Item, now = today()): Item {
+  if (!item.timeline) return item
+  const h = timelineLayout(b, item.timeline, item.w, now).height
+  return h === item.h ? item : { ...item, h }
+}
+
 // ----- editing ---------------------------------------------------------------------
 
 export function addEntry(t: TimelineData, entry: Omit<TimelineEntry, 'id'>): [TimelineData, string] {
@@ -289,12 +356,15 @@ export function lineUp(t: TimelineData): TimelineData {
   return changed ? { ...t, entries } : t
 }
 
-/** Shifts an entry by `days`, or one of its ends when resizing (never past the other end). */
+/**
+ * Shifts an entry by `days`, or one of its ends when it's stretched (never past the other end: a
+ * span can be as short as a day, its first and last day the same).
+ */
 export function shiftDates(e: { start: string; end?: string }, days: number, edge?: 'start' | 'end'): { start: string; end?: string } {
   const s = toDay(e.start)
   const f = e.end ? toDay(e.end) : undefined
-  if (edge === 'start') return { start: fromDay(Math.min(s + days, (f ?? s) - 1)), end: e.end }
-  if (edge === 'end') return { start: e.start, end: fromDay(Math.max((f ?? s) + days, s + 1)) }
+  if (edge === 'start') return { start: fromDay(Math.min(s + days, f ?? s)), end: e.end }
+  if (edge === 'end') return { start: e.start, end: fromDay(Math.max((f ?? s) + days, s)) }
   return { start: fromDay(s + days), end: f === undefined ? undefined : fromDay(f + days) }
 }
 
@@ -306,6 +376,75 @@ export function addLane(t: TimelineData, name = 'New lane'): [TimelineData, stri
 export function renameLane(t: TimelineData, id: string, name: string): TimelineData {
   return { ...t, lanes: t.lanes.map((l) => (l.id === id ? { ...l, name } : l)) }
 }
+
+/** Changes what a lane has (hours a week, a budget, a rate); undefined takes one away. */
+export function updateLane(t: TimelineData, id: string, patch: Partial<Pick<TimelineLane, 'capacity' | 'budget' | 'rate'>>): TimelineData {
+  return {
+    ...t,
+    lanes: t.lanes.map((l) => {
+      if (l.id !== id) return l
+      const next = { ...l, ...patch }
+      for (const k of ['capacity', 'budget', 'rate'] as const) if (k in patch && patch[k] === undefined) delete next[k]
+      return next
+    }),
+  }
+}
+
+/** What the timeline's hours are held to: set, or (with none) taken away. Setting one shows hours. */
+export function withBudget(t: TimelineData, budget: TimelineData['budget']): TimelineData {
+  const { budget: _was, ...rest } = t
+  void _was
+  return budget ? { ...rest, budget, ...(t.time === false ? { time: true } : {}) } : rest
+}
+
+/** The sign money is written with; none goes back to the usual one. */
+export function withCurrency(t: TimelineData, sign: string): TimelineData {
+  const { currency: _was, ...rest } = t
+  void _was
+  const s = sign.trim().slice(0, 4)
+  return s ? { ...rest, currency: s } : rest
+}
+
+/** Hours put out of sight: everything set stays as it is, and shows again when they're turned back on. */
+export const withoutHours = (t: TimelineData): TimelineData => ({ ...t, time: false })
+
+/** Moves a lane up or down among the timeline's own. */
+export function moveLane(t: TimelineData, id: string, by: number): TimelineData {
+  const at = t.lanes.findIndex((l) => l.id === id)
+  const to = Math.max(0, Math.min(t.lanes.length - 1, at + by))
+  if (at < 0 || to === at) return t
+  const lanes = [...t.lanes]
+  lanes.splice(to, 0, ...lanes.splice(at, 1))
+  return { ...t, lanes }
+}
+
+/**
+ * An entry put somewhere else by the mouse: moved by `days` (or one of its ends, when stretched),
+ * and onto another of the timeline's lanes when it was dropped there.
+ */
+export function placeEntry(t: TimelineData, id: string, days: number, edge?: 'start' | 'end', lane?: string): TimelineData {
+  const e = t.entries.find((x) => x.id === id)
+  if (!e) return t
+  const to = lane !== undefined && lane !== e.lane && t.lanes.some((l) => l.id === lane) ? lane : e.lane
+  if (!days && to === e.lane) return t
+  const dates = shiftDates(e, days, edge)
+  return updateEntry(t, id, { start: dates.start, end: dates.end, lane: to })
+}
+
+/** The days in view, stretched so they hold these days too (a span dragged past the edge). */
+export function rangeWith(range: { start: number; end: number }, from: number, to: number): { start: number; end: number } {
+  return { start: Math.min(range.start, from), end: Math.max(range.end, to + 1) }
+}
+
+/** Zooms the days in view about one of them (factor < 1 zooms in), so the day under the pointer stays under it. */
+export function zoomAbout(range: { start: number; end: number }, day: number, factor: number): { start: number; end: number } {
+  const span = Math.max(6, Math.min(7300, (range.end - range.start) * factor))
+  const at = Math.max(0, Math.min(1, (day - range.start) / Math.max(1, range.end - range.start)))
+  const start = Math.round(day - span * at)
+  return { start, end: start + Math.round(span) }
+}
+
+export const rangeDays = (r: { start: number; end: number }): { start: string; end: string } => ({ start: fromDay(r.start), end: fromDay(r.end) })
 
 export function deleteLane(t: TimelineData, id: string): TimelineData {
   return { ...t, lanes: t.lanes.filter((l) => l.id !== id), entries: t.entries.filter((e) => e.lane !== id) }

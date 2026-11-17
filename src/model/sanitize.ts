@@ -38,6 +38,7 @@ import { canLink, cleanItemLink } from './itemLink'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
 import { canSketch } from './sketch'
+import { HOURS_MAX, WEEK_MAX } from './timelineHours'
 import { cleanSequence, sequenceSize } from './sequence'
 
 export const KINDS: readonly Kind[] = ['sticky', 'rect', 'ellipse', 'text', 'frame', 'pen', 'mind', 'flow', 'comment', 'image', 'table', 'kanban', 'timeline', 'data', 'link', 'code', 'sequence']
@@ -130,7 +131,15 @@ function cleanKanban(v: unknown): KanbanData | undefined {
 
 function cleanTimeline(v: unknown): TimelineData | undefined {
   if (!isObj(v)) return undefined
-  const lanes = arr(v.lanes).flatMap((l) => (isObj(l) && typeof l.id === 'string' ? [{ id: l.id.slice(0, 64), name: str(l.name, NAME_MAX) ?? '' }] : []))
+  // Hours: a number that makes sense (none below nothing, none beyond what could ever be worked).
+  const hours = (x: unknown, most: number) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.min(x, most) : undefined)
+  const lanes = arr(v.lanes).flatMap((l) => {
+    if (!isObj(l) || typeof l.id !== 'string') return []
+    const capacity = hours(l.capacity, WEEK_MAX)
+    const budget = hours(l.budget, HOURS_MAX)
+    const rate = hours(l.rate, 1_000_000)
+    return [{ id: l.id.slice(0, 64), name: str(l.name, NAME_MAX) ?? '', ...(capacity !== undefined ? { capacity } : {}), ...(budget !== undefined ? { budget } : {}), ...(rate !== undefined ? { rate } : {}) }]
+  })
   const entries = arr(v.entries).flatMap((e) => {
     if (!isObj(e) || typeof e.id !== 'string' || typeof e.lane !== 'string' || !day(e.start)) return []
     // A handful of "waits for" links per event; a file with thousands could stall Line up.
@@ -144,10 +153,18 @@ function cleanTimeline(v: unknown): TimelineData | undefined {
         ...(day(e.end) ? { end: day(e.end) } : {}),
         color: str(e.color, 32) ?? '#888888',
         ...(after.length ? { after } : {}),
+        ...(hours(e.hours, HOURS_MAX) !== undefined ? { hours: hours(e.hours, HOURS_MAX) } : {}),
+        ...(hours(e.hours, HOURS_MAX) !== undefined && (e.per === 'day' || e.per === 'week') ? { per: e.per as 'day' | 'week' } : {}),
+        ...(hours(e.spent, HOURS_MAX) !== undefined ? { spent: hours(e.spent, HOURS_MAX) } : {}),
+        ...(e.tentative === true ? { tentative: true as const } : {}),
       },
     ]
   })
   const out: TimelineData = { lanes, entries }
+  if (typeof v.time === 'boolean') out.time = v.time
+  if (isObj(v.budget) && hours(v.budget.hours, HOURS_MAX) !== undefined) out.budget = { hours: hours(v.budget.hours, HOURS_MAX)!, ...(v.budget.per === 'week' || v.budget.per === 'month' ? { per: v.budget.per } : {}) }
+  const currency = typeof v.currency === 'string' ? v.currency.replace(/\s+/g, ' ').trim().slice(0, 4).trim() : ''
+  if (currency) out.currency = currency
   const sources = arr(v.sources).filter((s): s is number => num(s) !== undefined)
   if (sources.length) out.sources = sources
   if (isObj(v.range) && day(v.range.start) && day(v.range.end)) out.range = { start: day(v.range.start)!, end: day(v.range.end)! }

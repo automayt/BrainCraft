@@ -9,6 +9,8 @@ import { type Rect, intersects } from '../model/geom'
 import { objectLabel } from '../model/notes'
 import * as TT from '../model/timeTracking'
 import { toMermaidSequence } from '../model/sequence'
+import { today } from '../model/timeline'
+import { entryHours, hoursText } from '../model/timelineHours'
 import type { Board, Id, Item, Kind } from '../model/types'
 
 /** Above this many objects, the board is summarised instead of listed in full. */
@@ -43,7 +45,15 @@ export function objectLine(i: Item): string {
   if (i.kind === 'sequence' && i.sequence) parts.push(`mermaid:${quote(clip(toMermaidSequence(i.sequence)))}`)
   if (i.kind === 'timeline' && i.timeline) {
     const t = i.timeline
-    parts.push(`lanes:${quote(clip(t.lanes.map((l) => `${l.name}[${t.entries.filter((e) => e.lane === l.id).map((e) => `${e.title} ${e.start}${e.end ? `..${e.end}` : ''}`).join('; ')}]`).join(' | ')))}`)
+    // Each lane with its entries: dates, then hours planned and spent where it has them.
+    const figures = (e: (typeof t.entries)[number]) => {
+      const h = entryHours(e)
+      return `${h ? ` ${h}` : ''}${e.tentative ? ' (tentative)' : ''}`
+    }
+    parts.push(`lanes:${quote(clip(t.lanes.map((l) => `${l.name}[${t.entries.filter((e) => e.lane === l.id).map((e) => `${e.title} ${e.start}${e.end ? `..${e.end}` : ''}${figures(e)}`).join('; ')}]`).join(' | '), 1500))}`)
+    // What the hours add up to, and what needs attention.
+    const hours = hoursText(t, today())
+    if (hours) parts.push(`hours:${quote(clip(hours, 900))}`)
   }
   return parts.join(' ')
 }

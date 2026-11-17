@@ -23,6 +23,40 @@ const oneOf = (...s: Schema[]): Schema => ({ oneOf: s })
 const ref = oneOf(num('An object id'), str('The "ref" of an object made earlier in the batch'))
 const day = str('A date, YYYY-MM-DD')
 const color = str('Hex ("#aad2fa") or a palette name: yellow, orange, red, pink, violet, blue, cyan, green, gray, white')
+
+/** A timeline's lanes: who or what each is, the hours they have, and their spans of time. */
+const timelineLanes = list({
+  type: 'object',
+  properties: {
+    name: str('Who or what the lane is: a person, a team, a client, a phase'),
+    capacity: num('Hours a week they have, to show how full each week is'),
+    budget: num('Hours set aside for this lane in all'),
+    rate: num('What an hour of theirs costs'),
+    entries: list({
+      type: 'object',
+      properties: {
+        title: str(),
+        start: day,
+        end: str('The last day of it, YYYY-MM-DD (counted in); left out for a milestone'),
+        color,
+        hours: num('Hours planned: over the whole span, or each working day or week of it with "per"'),
+        per: { type: 'string', enum: ['day', 'week'], description: 'How "hours" is meant; left out for hours in all' },
+        spent: num('Hours spent on it so far'),
+        tentative: bool('Not settled yet: drawn lighter, and counted apart'),
+      },
+      required: ['title', 'start'],
+    }),
+  },
+  required: ['name'],
+})
+
+/** What a timeline's hours are held to. */
+const timelineBudget: Schema = {
+  type: 'object',
+  description: 'Hours the whole timeline is held to: in all (a fixed amount of work), or each week or month (a retainer)',
+  properties: { hours: num(), per: { type: 'string', enum: ['week', 'month'], description: 'Left out for hours in all' } },
+  required: ['hours'],
+}
 const pageRef = str('A page id, a "ref" from earlier in the batch, or an exact page title')
 
 const placed: Record<string, Schema> = {
@@ -95,14 +129,12 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
     },
   },
   createTimeline: {
-    summary: 'A timeline of lanes; an entry without an end is a milestone',
+    summary: 'A timeline of lanes; an entry without an end is a milestone. With hours it manages a team’s time: who is on what, when, for how long, against what they have and a budget',
     properties: {
       title: str(),
-      lanes: list({
-        type: 'object',
-        properties: { name: str(), entries: list({ type: 'object', properties: { title: str(), start: day, end: day, color }, required: ['title', 'start'] }) },
-        required: ['name'],
-      }),
+      lanes: timelineLanes,
+      budget: timelineBudget,
+      currency: str('The sign money is written with where lanes have rates ("$", "€")'),
       followKanban: list(ref, 'Kanban boards whose dated cards show live in their own lane'),
       ...size,
       ...placed,
@@ -123,15 +155,13 @@ export const OP_SCHEMAS: Record<Op['op'], OpSchema> = {
   },
   setTable: { summary: 'Replaces a table’s columns and rows', properties: { id: ref, title: str(), columns: list(str()), rows: list(list(oneOf(str(), num()))) }, required: ['id', 'columns'] },
   setTimeline: {
-    summary: 'Replaces a timeline’s lanes and entries; entries already there keep what waits on them',
+    summary: 'Replaces a timeline’s lanes and entries; entries already there keep what waits on them, and lanes and entries keep the hours they had unless new ones are given',
     properties: {
       id: ref,
       title: str(),
-      lanes: list({
-        type: 'object',
-        properties: { name: str(), entries: list({ type: 'object', properties: { title: str(), start: day, end: day, color }, required: ['title', 'start'] }) },
-        required: ['name'],
-      }),
+      lanes: timelineLanes,
+      budget: timelineBudget,
+      currency: str('The sign money is written with where lanes have rates ("$", "€")'),
     },
     required: ['id', 'lanes'],
   },

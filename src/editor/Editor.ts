@@ -2814,8 +2814,24 @@ export class Editor {
     })
   }
 
+  /** Changes a timeline; it stays as tall as its lanes need, no taller. */
   updateTimeline(id: Id, f: (t: TimelineData) => TimelineData) {
-    this.updateItem(id, (i) => (i.timeline ? { ...i, timeline: f(i.timeline) } : i))
+    const board = this.board
+    this.updateItem(id, (i) => (i.timeline ? TL.hugged(board, { ...i, timeline: f(i.timeline) }) : i))
+  }
+
+  /**
+   * A timeline entry put somewhere else by the mouse: moved by `days` (or one of its ends, when
+   * stretched), onto another lane when it was dropped there, with the days in view as they were
+   * left (a span dragged past the edge takes the view with it). One step to undo. Entries that
+   * come from Kanban cards only move in time, and it's the card that changes.
+   */
+  placeTimelineEntry(timeline: Id, entry: TL.ShownEntry, days: number, edge?: 'start' | 'end', lane?: string, range?: { start: string; end: string }) {
+    if (entry.source) return this.shiftTimelineEntry(timeline, entry, days, edge)
+    this.updateTimeline(timeline, (t) => {
+      const placed = TL.placeEntry(t, entry.id, days, edge, lane)
+      return range && (placed !== t || t.range) ? { ...placed, range } : placed
+    })
   }
 
   /**

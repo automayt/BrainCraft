@@ -94,8 +94,8 @@ timeline.
 | `setFlowchart` | `id` (any step in it), `mermaid` | Replaces the whole flowchart, where it was |
 | `createTable` | `columns` (names), `rows?` (lists of cell values), `title?` | Table |
 | `createKanban` | `columns?` (`[{"title", "cards": [text \| {"title", "start?", "due?", "color?"}]}]`), `title?`, `template?` (`simple`, `todo`, `sprint`, `bugs`, `content`, `hiring`, `priority`, `week`, `retro`) | Kanban board (default: Not started / In progress / Completed, or the template's columns) |
-| `createTimeline` | `lanes?` (`[{"name", "entries": [{"title", "start", "end?", "color?"}]}]`), `followKanban?` (Kanban ids/refs), `title?`, `w?`, `h?` | Timeline. An entry without `end` is a milestone. Followed Kanban boards show their dated cards live. |
-| `setKanban`, `setTable`, `setTimeline` | `id`, then the same fields as creating one (`columns`; `columns` and `rows`; `lanes`), `title?` | Replaces a widget's content. Cards, rows and entries already there keep their details (matched by title, a row by its first cell), so moving a card keeps its dates. |
+| `createTimeline` | `lanes?` (`[{"name", "capacity?", "budget?", "rate?", "entries": [{"title", "start", "end?", "color?", "hours?", "per?", "spent?", "tentative?"}]}]`), `budget?` (`{"hours", "per?"}`), `currency?`, `followKanban?` (Kanban ids/refs), `title?`, `w?` | Timeline. An entry without `end` is a milestone, and `end` is its last day (counted in). Followed Kanban boards show their dated cards live. It's as tall as its lanes need. **Hours** make it manage time: a lane's `capacity` is the hours a week it has, `budget` the hours set aside for it, `rate` what an hour costs; an entry's `hours` are planned over the whole span, or with `per` (`"day"` or `"week"`) for each working day or week of it, `spent` is what's been used, and `tentative` marks one not yet settled. The timeline's `budget` holds all its hours to a number: in all, or with `per` (`"week"` or `"month"`) each week or month. |
+| `setKanban`, `setTable`, `setTimeline` | `id`, then the same fields as creating one (`columns`; `columns` and `rows`; `lanes`, and for a timeline `budget?`, `currency?`), `title?` | Replaces a widget's content. Cards, rows and entries already there keep their details (matched by title, a row by its first cell), so moving a card keeps its dates. A timeline's lanes and entries keep the hours they had unless new ones are given, so a span is moved (or given to someone else) by sending it with its new dates under the lane it now belongs to; `"budget": null` takes the budget away. |
 | `createImage` | `src` (`data:image/…` or `https://…`), `w?`, `h?` | Image |
 | `createCode` | `code`, `lang?`, `w?`, `h?` | Code block with syntax colouring; the language is guessed when left out. |
 | `createSpinner` | `options` (two or more) | Spinner wheel card. Anyone can spin it; everyone sees the same answer. |
@@ -212,7 +212,7 @@ object {"ops": [...]}, no prose. Available operations:
 - addSteps {after: step id, steps: [text or {text, shape?, label?}]}
 - createTable {title?, columns: [names], rows: [[cells]]}
 - createKanban {title?, columns: [{title, cards: [text or {title, due: "YYYY-MM-DD"}]}]}
-- createTimeline {title?, lanes: [{name, entries: [{title, start, end?}]}], followKanban?: [refs]}
+- createTimeline {title?, lanes: [{name, capacity?, budget?, rate?, entries: [{title, start, end?, hours?, per?, spent?, tentative?}]}], budget?: {hours, per?}, followKanban?: [refs]}
 - createDatabase {title?, fields?, records?: [{field: value}], views?: [table|board|timeline|calendar|gallery|form]}
 - addField {id, field: {name, type, formula? | to? | relation?, field?, fn?}}
 - addAutomation {id, when: {added: true} | {field, to?}, set: [{field, value}]}

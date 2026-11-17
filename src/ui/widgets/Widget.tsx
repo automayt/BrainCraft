@@ -21,7 +21,7 @@ export function Widget({
 }) {
   return (
     <foreignObject x={item.x} y={item.y} width={item.w} height={item.h}>
-      <div className={`widget widget-${item.kind}${live ? ' live' : ''}`}>
+      <div className={`widget widget-${item.kind}${live ? ' live' : ''}${item.sketch ? ' hand' : ''}`}>
         <div className="widget-title">
           <span className="widget-name">{editingTitle ? '' : item.text || KIND_LABELS[item.kind]}</span>
           {live && actions && <div className="widget-actions no-canvas">{actions}</div>}

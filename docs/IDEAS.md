@@ -459,6 +459,14 @@ turned off on its own, a count of what was heard and left out with a warning
 when one of the two isn't coming through, and carrying a meeting on in its
 frame. Next:
 
+- [x] **Managing a team's time on a timeline:** hours planned and spent on
+  spans, what each lane has a week, budgets (in all, or a week or month),
+  costs, how full each week is, all with the mouse, drawn by hand if wanted,
+  and understood by the assistant.
+- [ ] **Time on a timeline, next:** actual hours filled from the timers
+  people run (a span linked to what's being timed); days off and part-time
+  weeks; a lane's hours a week changing over time; totals by what the spans
+  are called (a project across people); CSV of the hours.
 - [ ] **Check-ins during a meeting.** Asked for, but not yet pinned down. It
   could be the notes saying where things stand when asked ("robot, where are
   we?": what's decided, what's open, what's left on the agenda), or the notes

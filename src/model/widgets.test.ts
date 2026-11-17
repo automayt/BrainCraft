@@ -169,8 +169,11 @@ describe('timeline', () => {
 
   it('moves and resizes entries', () => {
     expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, 3)).toEqual({ start: '2026-10-04', end: '2026-10-08' })
-    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, 10, 'start')).toEqual({ start: '2026-10-04', end: '2026-10-05' })
-    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, -10, 'end')).toEqual({ start: '2026-10-01', end: '2026-10-02' })
+    // Stretched by an end, never past the other: a span can be as short as one day.
+    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, 10, 'start')).toEqual({ start: '2026-10-05', end: '2026-10-05' })
+    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, -10, 'end')).toEqual({ start: '2026-10-01', end: '2026-10-01' })
+    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, 2, 'end')).toEqual({ start: '2026-10-01', end: '2026-10-07' })
+    expect(TL.shiftDates({ start: '2026-10-01', end: '2026-10-05' }, -3, 'start')).toEqual({ start: '2026-09-28', end: '2026-10-05' })
     expect(TL.shiftDates({ start: '2026-10-01' }, -1)).toEqual({ start: '2026-09-30', end: undefined })
   })
 
