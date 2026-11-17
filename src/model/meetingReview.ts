@@ -9,7 +9,7 @@
 
 import { unnamedVoice } from './meeting'
 import type { OutlineNode } from './mindmap'
-import type { Item } from './types'
+import type { Item, TableData } from './types'
 
 /** How much a view shows: the important ideas only, the usual amount, or everything. */
 export type Detail = 1 | 2 | 3
@@ -372,13 +372,9 @@ export function renameInReview(r: Review, from: string, to: string): Review {
 
 // ----- telling hand edits from made ones -------------------------------------------------
 
-/**
- * A fingerprint of what an object says (not where it is, nor whether a branch is folded): made
- * views keep the one they were made with, so a view someone has since changed by hand is left
- * as they made it.
- */
-export function contentSig(i: Item): string {
-  const what = JSON.stringify([i.kind, i.text, i.color, i.description ?? '', i.assignees ?? [], i.status ?? '', i.table ?? null, i.kanban ?? null, i.parent ?? null, i.locked ?? false])
+/** A short fingerprint of some data. */
+function sigOf(data: unknown): string {
+  const what = JSON.stringify(data)
   let h = 0x811c9dc5
   for (let k = 0; k < what.length; k++) {
     h ^= what.charCodeAt(k)
@@ -387,8 +383,35 @@ export function contentSig(i: Item): string {
   return (h >>> 0).toString(36)
 }
 
+/**
+ * What a table says: its columns' names and its rows' cells. How it's shaped and shown (how wide
+ * its columns are, how it's sorted or filtered, what's hidden) isn't what it says, and a rewrite
+ * keeps all of that.
+ */
+const tableSays = (t: TableData) => [t.columns.map((c) => c.name), t.rows.map((r) => t.columns.map((c) => r.cells[c.id] ?? ''))]
+
+/**
+ * A fingerprint of what an object says (not where it is, nor whether a branch is folded, nor how
+ * a table's columns are sized): made views keep the one they were made with, so a view someone
+ * has since changed by hand is left as they made it.
+ */
+export function contentSig(i: Item): string {
+  return sigOf([i.kind, i.text, i.color, i.description ?? '', i.assignees ?? [], i.status ?? '', i.table ? tableSays(i.table) : null, i.kanban ?? null, i.parent ?? null, i.locked ?? false])
+}
+
+/**
+ * A table's fingerprint as it was taken before tables could be shaped: of the whole table, with
+ * every column the width they were all made with then. A meeting's tables from before are still
+ * told from ones changed by hand (and widening their columns since isn't that).
+ */
+function sigBefore(i: Item): string | null {
+  if (!i.table) return null
+  const table = { ...i.table, columns: i.table.columns.map((c) => ({ id: c.id, name: c.name, width: 150, ...(c.hidden ? { hidden: true } : {}) })) }
+  return sigOf([i.kind, i.text, i.color, i.description ?? '', i.assignees ?? [], i.status ?? '', table, i.kanban ?? null, i.parent ?? null, i.locked ?? false])
+}
+
 /** Changed by hand since it was made (or locked): a review leaves it as it is. */
-export const handEdited = (i: Item) => !!i.locked || (i.meeting?.sig !== undefined && i.meeting.sig !== contentSig(i))
+export const handEdited = (i: Item) => !!i.locked || (i.meeting?.sig !== undefined && i.meeting.sig !== contentSig(i) && i.meeting.sig !== sigBefore(i))
 
 /** What was said around an idea, from the transcript: its line and the next ones, briefly. */
 export function saidAround(lines: readonly { at: number; text: string; who?: string }[], at: number, max = 320): string {

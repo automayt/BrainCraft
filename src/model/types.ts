@@ -225,6 +225,11 @@ export interface TableColumn {
   name: string
   width: number
   hidden?: boolean
+  /**
+   * Someone gave it this width (dragged its edge, or the table's side): it's kept when the table is
+   * rewritten. Without it, the column is as wide as its text needs.
+   */
+  sized?: true
 }
 
 export interface TableRow {
@@ -648,7 +653,8 @@ export const TEXT_ON_FILL = '#1e1e24'
 /** Whether the item's colour is an ink (text/line) colour rather than a fill. */
 export const usesInk = (k: Kind) => k === 'text' || k === 'pen'
 export const hasText = (k: Kind) => k !== 'pen' && k !== 'image' && k !== 'link'
-export const isResizable = (k: Kind) => k !== 'mind' && k !== 'table' && k !== 'sequence'
+/** Objects with handles to drag. (A table's make it wider or narrower; it's as tall as its rows.) */
+export const isResizable = (k: Kind) => k !== 'mind' && k !== 'sequence'
 /** Objects with their own interactive content (live once selected). */
 export const isWidget = (k: Kind) => k === 'table' || k === 'kanban' || k === 'timeline' || k === 'data'
 /** Height of the draggable title strip on widgets. */

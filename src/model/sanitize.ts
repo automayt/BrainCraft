@@ -38,6 +38,7 @@ import { canLink, cleanItemLink } from './itemLink'
 import { SNAP_MAX_ITEMS, isSnapKey } from './embed'
 import { cleanExcalidraw } from './excalidraw'
 import { canSketch } from './sketch'
+import { COL_MAX, COL_MIN } from './table'
 import { HOURS_MAX, WEEK_MAX } from './timelineHours'
 import { cleanSequence, sequenceSize } from './sequence'
 
@@ -87,7 +88,7 @@ function cleanNotes(v: unknown): Note[] | undefined {
 function cleanTable(v: unknown): TableData | undefined {
   if (!isObj(v)) return undefined
   const columns = arr(v.columns).flatMap((c) =>
-    isObj(c) && typeof c.id === 'string' ? [{ id: c.id.slice(0, 64), name: str(c.name, NAME_MAX) ?? '', width: num(c.width) ?? 160, ...(c.hidden === true ? { hidden: true } : {}) }] : [],
+    isObj(c) && typeof c.id === 'string' ? [{ id: c.id.slice(0, 64), name: str(c.name, NAME_MAX) ?? '', width: Math.max(COL_MIN, Math.min(COL_MAX, Math.round(num(c.width) ?? 160))), ...(c.hidden === true ? { hidden: true } : {}), ...(c.sized === true ? { sized: true as const } : {}) }] : [],
   )
   if (!columns.length) return undefined
   const rows = arr(v.rows).flatMap((r) => {

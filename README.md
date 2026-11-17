@@ -228,9 +228,21 @@ Who sends what to whom, in order, built from the keyboard:
 These become interactive once selected; drag them by their title strip.
 
 - **Tables (G)**, or paste cells copied from Excel or Google Sheets. Edit
-  cells inline (Enter moves down and adds a row at the end). Click a header to
-  sort (numbers sort naturally). Filter by column. Hide rows and columns and
-  bring them back. Insert and delete rows and columns, and copy as CSV.
+  cells inline (Enter moves down and adds a row at the end; **Alt + Enter**
+  starts a new line in a cell). Click ↕ on a header to sort (numbers sort
+  naturally). Filter by column. Hide rows and columns and bring them back.
+  Insert and delete rows and columns, and copy as CSV.
+  - **Long text is read in full.** A cell's text wraps onto as many lines as
+    it needs, and its row is as tall as that; the table is always the size of
+    what's in it.
+  - **Drag a column's edge** (the line after its header) to make it wider or
+    narrower, or double-click the edge to fit the column to its text. **Fit**
+    does that for all of them. **Drag the table's side** and the columns
+    share the change.
+  - A table the assistant makes (a meeting's decisions and actions, an
+    agenda) starts with each column as wide as its text needs, long text
+    wrapped at a comfortable width. A column you've sized keeps your width
+    when the assistant rewrites the table.
 - **Kanban boards (K):** drag cards between columns, or focus a card and
   press **Alt + arrows** (or use "Move to" in its ⋯ menu). Press Enter to keep
   adding cards. Cards have colors and start/due dates, and overdue cards are

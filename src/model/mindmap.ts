@@ -8,6 +8,7 @@
 
 import { getItem, newItem, rootOf, subtree } from './board'
 import type { Vec } from './geom'
+import { tableSize } from './table'
 import { BRANCHES, type Board, type Id, type Item, MIND_ROOT_COLOR, type Side } from './types'
 
 /** Measures `text` laid out in the app font, wrapped at `maxWidth`. */
@@ -63,7 +64,10 @@ export function sideOf(b: Board, id: Id): Side | undefined {
 
 // ----- layout --------------------------------------------------------------------
 
-/** Re-sizes and positions every node of every mind map. Unchanged nodes keep their identity. */
+/**
+ * Re-sizes and positions every node of every mind map, and makes every table the size of what's
+ * in it (its rows as tall as their text, wrapped). Unchanged objects keep their identity.
+ */
 export function layoutAll(b: Board, measure: Measure): Board {
   const pos = new Map<Id, { x: number; y: number; w: number; h: number }>()
   const children = new Map<Id, Item[]>()
@@ -135,6 +139,12 @@ export function layoutAll(b: Board, measure: Measure): Board {
 
   let changed = false
   const items = b.items.map((i) => {
+    if (i.kind === 'table' && i.table) {
+      const s = tableSize(i.table, measure)
+      if (s.w === i.w && s.h === i.h) return i
+      changed = true
+      return { ...i, ...s }
+    }
     const p = pos.get(i.id)
     if (!p || (p.x === i.x && p.y === i.y && p.w === i.w && p.h === i.h)) return i
     changed = true

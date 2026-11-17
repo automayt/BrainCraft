@@ -121,7 +121,7 @@ export function fitToContent(b: Board, i: Item, measure: Measure): Rect | null {
     const box = unionAll(inside.map(itemBounds))
     return box && expand(box, FRAME_PAD)
   }
-  if (i.kind === 'table') return i.table ? { x: i.x, y: i.y, ...tableSize(i.table) } : null
+  if (i.kind === 'table') return i.table ? { x: i.x, y: i.y, ...tableSize(i.table, measure) } : null
   if (i.kind === 'code') return { x: i.x, y: i.y, ...codeSize(i.text) }
   if (i.kind === 'kanban') return i.kanban ? { x: i.x, y: i.y, ...kanbanFit(i.kanban, measure) } : null
   if (i.kind === 'data') {

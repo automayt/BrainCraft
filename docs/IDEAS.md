@@ -468,6 +468,15 @@ frame. Next:
   people run (a span linked to what's being timed); days off and part-time
   weeks; a lane's hours a week changing over time; totals by what the spans
   are called (a project across people); CSV of the hours.
+- [x] **Notes that can be read.** A meeting's tables (decisions and actions,
+  the agenda, ideas to bring up) cut long text off at a fixed width, and
+  couldn't be made wider. Cells now wrap, columns start as wide as their text
+  needs, a column's edge and the table's side drag, and a table is always
+  the size of what's in it.
+- [ ] **Tables, next:** rows dragged into another order; a table that grew
+  taller pushing what's under it down inside a meeting's frame (for now it
+  overlaps, and the rest is moved by hand); cells with a tick box or a
+  person; long tables with a header that stays in view.
 - [ ] **Check-ins during a meeting.** Asked for, but not yet pinned down. It
   could be the notes saying where things stand when asked ("robot, where are
   we?": what's decided, what's open, what's left on the agenda), or the notes

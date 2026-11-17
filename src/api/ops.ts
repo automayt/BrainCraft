@@ -27,7 +27,7 @@ import { newWheel } from '../model/wheel'
 import { setSketch } from '../model/sketch'
 import { codeSize, langId } from '../model/code'
 import { addNote } from '../model/notes'
-import { tableSize } from '../model/table'
+import { COL_W, fitColumns, tableSize } from '../model/table'
 import { hugged, isIsoDay } from '../model/timeline'
 import { HOURS_MAX, WEEK_MAX } from '../model/timelineHours'
 import { uid } from '../model/uid'
@@ -446,7 +446,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       const columns = columnsIn.map((name, k) => {
         const n = text(name, `columns[${k}]`)
         const old = prev?.columns.find((c) => same(c.name, n))
-        return old ? { ...old, name: n } : { id: uid(), name: n, width: 150 }
+        return old ? { ...old, name: n } : { id: uid(), name: n, width: COL_W }
       })
       const firstOld = prev?.columns[0]?.id
       const rows = list(rowsIn as unknown[] | undefined, 'rows').map((row, k) => {
@@ -455,12 +455,17 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
         return { ...old, id: old?.id ?? uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
       })
       const ids = new Set(columns.map((c) => c.id))
-      return {
-        columns,
-        rows,
-        ...(prev?.sort && ids.has(prev.sort.column) ? { sort: prev.sort } : {}),
-        ...(prev?.filters ? { filters: Object.fromEntries(Object.entries(prev.filters).filter(([c]) => ids.has(c))) } : {}),
-      }
+      return fitColumns(
+        {
+          columns,
+          rows,
+          ...(prev?.sort && ids.has(prev.sort.column) ? { sort: prev.sort } : {}),
+          ...(prev?.filters ? { filters: Object.fromEntries(Object.entries(prev.filters).filter(([c]) => ids.has(c))) } : {}),
+        },
+        ctx.measure,
+        // A column someone gave a width keeps it; the rest are as wide as their text needs now.
+        { which: (c) => !c.sized },
+      )
     }
     /** Hours as given: a number, none below nothing. */
     const hoursOf = (v: unknown, field: string, most: number): number | undefined => {
@@ -766,7 +771,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'setTable': {
         const it = widget(op.id, 'table')
         const table = tableOf(op.columns, op.rows, it.table)
-        const sz = tableSize(table)
+        const sz = tableSize(table, ctx.measure)
         b = B.updateItem(b, it.id, (i) => ({ ...i, table, w: sz.w, h: sz.h, ...(op.title !== undefined ? { text: text(op.title, 'title') } : {}) }))
         done({ id: it.id })
         break
@@ -823,7 +828,8 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       }
       case 'createTable': {
         const table: TableData = tableOf(op.columns, op.rows)
-        const id = add(B.newItem('table', r0(tableSize(table).w, tableSize(table).h), { text: text(op.title, 'title', false) || 'Table', table }))
+        const size = tableSize(table, ctx.measure)
+        const id = add(B.newItem('table', r0(size.w, size.h), { text: text(op.title, 'title', false) || 'Table', table }))
         place([id], op.at)
         done({ id })
         break

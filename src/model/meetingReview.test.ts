@@ -164,4 +164,50 @@ describe('telling hand edits from made ones', () => {
     expect(handEdited({ ...tagged, text: 'Changed' })).toBe(true)
     expect(handEdited({ ...tagged, locked: true })).toBe(true)
   })
+
+  const decisions = (): Item => {
+    const table = { columns: [{ id: 'a', name: 'Type', width: 150 }, { id: 'b', name: 'What', width: 150 }], rows: [{ id: 'r1', cells: { a: 'Decision', b: 'Move the launch' } }, { id: 'r2', cells: { a: 'Action', b: 'Book it' } }] }
+    return B.newItem('table', { x: 0, y: 0, w: 400, h: 200 }, { text: 'Decisions and actions', table }) as Item
+  }
+
+  it('takes shaping a table for what it is: not a change to what it says', () => {
+    const i = decisions()
+    const tagged: Item = { ...i, meeting: { view: 'outcomes', sig: contentSig(i) } }
+    const t = tagged.table!
+    // Columns made wider, one sized by hand, sorted, filtered, a row hidden: it says what it said.
+    const shaped: Item = {
+      ...tagged,
+      w: 900,
+      table: { ...t, columns: [{ ...t.columns[0], width: 96 }, { ...t.columns[1], width: 420, sized: true }], rows: [{ ...t.rows[0], hidden: true }, t.rows[1]], sort: { column: 'a', dir: 'asc' }, filters: { b: 'book' }, showFilters: true },
+    }
+    expect(handEdited(shaped)).toBe(false)
+    // A cell's words changed, a column renamed, a row gone or added, or rows in another order: changed by hand.
+    const cell: Item = { ...tagged, table: { ...t, rows: [t.rows[0], { ...t.rows[1], cells: { ...t.rows[1].cells, b: 'Book the venue' } }] } }
+    expect(handEdited(cell)).toBe(true)
+    expect(handEdited({ ...tagged, table: { ...t, columns: [t.columns[0], { ...t.columns[1], name: 'Which' }] } })).toBe(true)
+    expect(handEdited({ ...tagged, table: { ...t, rows: [t.rows[0]] } })).toBe(true)
+    expect(handEdited({ ...tagged, table: { ...t, rows: [t.rows[1], t.rows[0]] } })).toBe(true)
+  })
+
+  it('still knows a table from a meeting before tables could be shaped', () => {
+    // The fingerprint as it was taken then: of the whole table, widths and all.
+    const before = (i: Item) => {
+      const what = JSON.stringify([i.kind, i.text, i.color, i.description ?? '', i.assignees ?? [], i.status ?? '', i.table ?? null, i.kanban ?? null, i.parent ?? null, i.locked ?? false])
+      let h = 0x811c9dc5
+      for (let k = 0; k < what.length; k++) {
+        h ^= what.charCodeAt(k)
+        h = Math.imul(h, 0x01000193)
+      }
+      return (h >>> 0).toString(36)
+    }
+    const i = decisions()
+    const old: Item = { ...i, meeting: { view: 'outcomes', sig: before(i) } }
+    expect(old.meeting!.sig).not.toBe(contentSig(i))
+    expect(handEdited(old)).toBe(false)
+    // Opened now, its columns are widened to their text (and can be sized by hand): still as the meeting made it.
+    const t = old.table!
+    expect(handEdited({ ...old, table: { ...t, columns: [t.columns[0], { ...t.columns[1], width: 420, sized: true }] } })).toBe(false)
+    // But a cell changed by hand since then still shows.
+    expect(handEdited({ ...old, table: { ...t, rows: [{ ...t.rows[0], cells: { ...t.rows[0].cells, b: 'Keep the date' } }, t.rows[1]] } })).toBe(true)
+  })
 })

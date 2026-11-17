@@ -635,6 +635,8 @@ function Overlays({ editor }: { editor: Editor }) {
           e: { x: r.x + r.w - 4, y: r.y + 8, w: 8, h: r.h - 16 },
         }
         for (const [edge, strip] of Object.entries(strips)) {
+          // A table is as tall as its rows: only its sides drag.
+          if (single.kind === 'table' && (edge === 'n' || edge === 's')) continue
           out.push(<rect key={edge} data-handle="resize" data-corner={edge} {...xywh(strip)} rx={4} className={`resize-edge resize-${edge}`} />)
         }
       }

@@ -2717,7 +2717,9 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
 }
 
 .table-grid .td {
-  height: 32px;
+  /* One line of text; a row with more is as tall as its longest cell. */
+  min-height: 32px;
+  align-items: flex-start;
 }
 
 .table-grid .col-name {
@@ -2739,14 +2741,45 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
   color: var(--faint);
 }
 
-.table-grid .td > span {
-  padding: 0 8px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+/* A cell's text wraps, shown or typed: the same room, line and breaks either way (as table.ts measures it). */
+.table-grid .td > span,
+.table-grid .cell-grow::after,
+.table-grid .cell-grow > textarea {
+  min-width: 0;
+  /* With the line under the cell, 12px in all: one line of text is a row of 32px. */
+  padding: 6px 8px 5px;
+  font: inherit;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.table-grid .td input,
+/* The text twice in one place: unseen, to take the room it needs, and to type in, laid over it. */
+.table-grid .cell-grow {
+  display: grid;
+  align-self: stretch;
+  width: 100%;
+}
+
+.table-grid .cell-grow::after {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  content: attr(data-text);
+}
+
+.table-grid .cell-grow > textarea {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: inherit;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
 .table-grid .tf input {
   width: 100%;
   height: 100%;
@@ -2756,11 +2789,45 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
   outline: none;
 }
 
-.table-grid .td input:focus,
+.table-grid .cell-grow > textarea:focus,
 .table-grid .tf input:focus,
 .table-grid .col-name:focus {
   background: var(--surface);
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* A column's edge, to drag: on the line between it and the next. */
+.table-grid .col-grip {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  z-index: 2;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* The last column's stays inside the table, or the table would scroll to reach it. */
+.table-grid .col-grip.last {
+  right: 0;
+  width: 6px;
+}
+
+.table-grid .col-grip::after {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 3px;
+  width: 3px;
+  content: '';
+  background: transparent;
+  border-radius: 2px;
+}
+
+.table-grid .col-grip:hover::after,
+.table-grid .col-grip:active::after {
+  background: var(--accent);
 }
 
 .table-grid .tf input {
@@ -2769,6 +2836,7 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
 
 .table-grid .rownum,
 .table-grid .corner {
+  align-items: stretch;
   justify-content: center;
   font-size: 12px;
   color: var(--faint);
@@ -2776,11 +2844,22 @@ body:has(.selection-toolbar.docked):not(:has([aria-modal='true'])) .align-menu {
 }
 
 .table-grid .rownum button {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   width: 100%;
   height: 100%;
+  /* Beside the first line of its row, however tall the row. */
+  padding: 6px 0 0;
   font-size: 12px;
+  line-height: 20px;
   color: var(--faint);
   border-radius: 0;
+}
+
+.table-grid .rownum > span {
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .table-grid .hidden-col,

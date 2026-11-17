@@ -27,7 +27,7 @@ import { withSynced } from '../model/synced'
 import * as N from '../model/notes'
 import * as K from '../model/kanban'
 import { kanbanWidth, newKanban } from '../model/kanban'
-import { looksTabular, newTable, tableFromText, tableSize } from '../model/table'
+import { fitColumns, forgetFits, looksTabular, newTable, scaleColumns, tableFromText, tableSize, widenUnsized } from '../model/table'
 import * as TL from '../model/timeline'
 import * as SQ from '../model/sequence'
 import { insertMermaid, looksLikeMermaid, parseMermaid, toMermaid } from '../model/mermaid'
@@ -935,8 +935,42 @@ export class Editor {
   /** Runs `f` as one undoable step. */
   edit(f: (b: Board) => Board) {
     this.finishEditing()
+    this.endScrub()
     const before = this.board
     this.apply(f(this.board))
+    this.commit(before)
+    this.emit()
+  }
+
+  /** The board as it was when a change made bit by bit began (see `scrub`). */
+  private scrubbed: Board | null = null
+
+  /**
+   * A change made bit by bit from inside an object (a table's column dragged wider): each step
+   * shows at once, and `endScrub` makes them all one undo step.
+   */
+  scrub(f: (b: Board) => Board) {
+    if (this.readOnly) return
+    this.scrubbed ??= this.board
+    this.apply(f(this.board))
+    this.emit()
+  }
+
+  /** A table changed bit by bit (a column's edge dragged): see `scrub`. */
+  scrubTable(id: Id, f: (t: TableData) => TableData) {
+    this.scrub((b) =>
+      B.updateItem(b, id, (i) => {
+        const table = i.table && f(i.table)
+        return !table || table === i.table ? i : { ...i, table }
+      }),
+    )
+  }
+
+  /** The change made bit by bit is done: one undo step, if it changed anything. */
+  endScrub() {
+    const before = this.scrubbed
+    this.scrubbed = null
+    if (!before || before === this.board) return
     this.commit(before)
     this.emit()
   }
@@ -950,7 +984,8 @@ export class Editor {
   }
 
   load(board: Board, status = '') {
-    this.board = M.layoutAll(board, this.measure)
+    this.board = M.layoutAll(widenUnsized(board, this.measure), this.measure)
+    this.scrubbed = null
     this.blankSlate = false
     this.selection.clear()
     this.selectedConnector = null
@@ -977,6 +1012,7 @@ export class Editor {
   /** Measures text again (e.g. once web fonts load) and re-lays out mind maps. */
   relayout() {
     this.measureCache?.()
+    forgetFits()
     // Every idea measured afresh. A central idea keeps its centre (layout grows it about its centre,
     // so its width can't simply go to nothing: it would move left by half its width each time).
     const next = M.layoutAll({ ...this.board, items: this.board.items.map((i) => (i.kind !== 'mind' ? i : i.parent === undefined ? { ...i, x: i.x + i.w / 2, w: 0 } : { ...i, w: 0 })) }, this.measure)
@@ -1103,9 +1139,9 @@ export class Editor {
     if (!patches.length) return
     // Tabs of one browser share the id sequence (live sessions hand each person their own range).
     const patched = applyPatches(this.board, patches)
-    // Only mind maps are laid out here, so a change that leaves them alone needs no layout pass
-    // (this runs for every message from every busy peer).
-    const mind = patches.some((p) => (p.k === 'item' && (p.v === null || p.v.kind === 'mind')) || p.k === 'order')
+    // Only mind maps and tables are laid out here, so a change that leaves them alone needs no
+    // layout pass (this runs for every message from every busy peer).
+    const mind = patches.some((p) => (p.k === 'item' && (p.v === null || p.v.kind === 'mind' || p.v.kind === 'table')) || p.k === 'order')
     const layout = (b: Board) => (mind ? M.layoutAll(b, this.measure) : b)
     const next = layout(opts.sharedIds ? withIdsAfter(patched, patches) : patched)
     this.board = next
@@ -1117,6 +1153,7 @@ export class Editor {
       d.before = held(d.before)
       if (d.at) d.at = held(d.at)
     }
+    if (this.scrubbed) this.scrubbed = held(this.scrubbed)
     if (this.editing) this.editing = { ...this.editing, before: held(this.editing.before) }
     this.selection = new Set([...this.selection].filter((id) => B.getItem(next, id)))
     if (this.selectedConnector !== null && !B.getConnector(next, this.selectedConnector)) this.selectedConnector = null
@@ -1131,9 +1168,10 @@ export class Editor {
    */
   resetFromRemote(board: Board, opts: { readOnly: boolean; idBase: number }) {
     const first = !this.board.items.length
-    const next = M.layoutAll(board, this.measure)
+    const next = M.layoutAll(widenUnsized(board, this.measure), this.measure)
     this.board = Number.isSafeInteger(opts.idBase) && opts.idBase > 0 ? { ...next, nextId: opts.idBase } : next
     this.readOnly = opts.readOnly
+    this.scrubbed = null
     this.selection = new Set([...this.selection].filter((id) => B.getItem(this.board, id)))
     this.editing = null
     // A gesture held across a reconnect would take everything others did meanwhile as its own
@@ -2737,13 +2775,13 @@ export class Editor {
     this.edit((b) => B.updateItem(b, id, f))
   }
 
-  /** Updates a table, resizing the object to fit it. */
+  /** Updates a table; the object is then the size of what's in it. */
   updateTable(id: Id, f: (t: TableData) => TableData) {
     this.updateItem(id, (i) => {
       if (!i.table) return i
       const table = f(i.table)
       if (table === i.table) return i
-      return { ...i, table, ...tableSize(table) }
+      return { ...i, table, ...tableSize(table, this.measure) }
     })
   }
 
@@ -3422,8 +3460,8 @@ export class Editor {
       return
     }
     if (looksTabular(text)) {
-      const table = tableFromText(text)
-      const size = tableSize(table)
+      const table = fitColumns(tableFromText(text), this.measure)
+      const size = tableSize(table, this.measure)
       let id = -1
       this.edit((b) => {
         const [next, newId] = B.addItem(b, B.newItem('table', rectFromCenter(at, size.w, size.h), { text: 'Table', table }))
@@ -3804,6 +3842,20 @@ export class Editor {
         r.w = Math.max(r.w, 12)
         r.h = Math.max(r.h, 12)
         const item = B.getItem(this.board, d.id)
+        // A table's columns share the change in its width; it's as tall as its rows, whatever is dragged.
+        if (item?.kind === 'table' && item.table) {
+          // From the columns as they were when the drag began, so going out and back comes back to them
+          // (not to whatever rounding and the limits made of them on the way).
+          const table = scaleColumns(B.getItem(d.before, d.id)?.table ?? item.table, r.w)
+          const w = tableSize(table).w
+          // The side that isn't held stays where it is.
+          const x = d.anchor.x > item.x + item.w / 2 ? d.anchor.x - w : item.x
+          if (x !== item.x || w !== item.w || table.columns.some((c, k) => c.width !== item.table!.columns[k]?.width)) {
+            this.apply(B.updateItem(this.board, d.id, (i) => ({ ...i, table, x, w })))
+            d.at = this.board
+          }
+          break
+        }
         // Images keep their proportions; shift-drag to stretch.
         if (item?.kind === 'image' && !mods.shift) {
           const ratio = item.w / item.h
