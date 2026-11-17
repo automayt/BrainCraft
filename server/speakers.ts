@@ -1,7 +1,8 @@
 /**
  * Who said it: in a meeting, each phrase sent to be turned into words is also matched to a voice
  * heard earlier in the same conversation ("Voice 2"), so the assistant knows who said what. The app
- * lets people name the voices.
+ * lets people name the voices, and the assistant works names out from what's said; either way the
+ * voice is remembered by its name, and known in the meetings after (see VoiceBook).
  *
  * A speaker-recognition model turns a phrase into a voiceprint (a list of numbers that's close for
  * the same voice and far apart for different ones); Voices groups them. The model runs here, on the
@@ -122,6 +123,11 @@ export interface VoicesOptions {
   /** The voices known by name across meetings, and how alike a voice must be to one to be recognised as them. */
   book?: VoiceBook | null
   recall?: number
+  /**
+   * Whose voices are remembered: "all" (the default) for those named by hand and those the
+   * assistant worked out; "named" for only those someone named.
+   */
+  remember?: 'all' | 'named'
 }
 
 interface Voice {
@@ -133,6 +139,10 @@ interface Voice {
   at: number
   /** Who it is, when named or recognised. */
   name?: string
+  /** The name was worked out from what was said in this conversation: nobody has checked it. */
+  guessed?: boolean
+  /** The name is the voice's own from another meeting (it was recognised). */
+  recalled?: boolean
   /** What of it was taught to that name, to take back if the name turns out wrong. */
   taught?: { sum: Float32Array; heard: number }
   /** While it's only a maybe: the phrases heard as it so far, by the names the app gave them. */
@@ -192,7 +202,7 @@ export class Voices {
   private base: VoiceSettings
 
   constructor(o: VoicesOptions = {}) {
-    this.o = { threshold: 0.72, same: 0.85, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.9, ...given(o) }
+    this.o = { threshold: 0.72, same: 0.85, most: 12, shortest: 1.2, heardTimes: 2, conversations: 500, forgetMs: 8 * 60 * 60_000, now: Date.now, book: null, recall: 0.9, remember: 'all', ...given(o) }
     this.base = this.settings()
   }
 
@@ -219,14 +229,46 @@ export class Voices {
   /**
    * Names a voice in a conversation, and teaches the name what it sounds like, so it's known in
    * later meetings too. A name it was given before is taken back. False when there's no such voice.
+   *
+   * `guessed`: the name was worked out from what was said, not given by a person. It's remembered
+   * as a name nobody has checked; it never replaces a name a person gave or the voice's own from
+   * another meeting; and where that name is already someone's remembered voice, it's only taught
+   * when the two sound like one person (or a wrong guess would spoil what's remembered of them).
    */
-  name(conversation: string, n: number, name: string): boolean {
+  name(conversation: string, n: number, name: string, guessed = false): boolean {
     const v = this.talks.get(conversation)?.voices.find((x) => x.n === n)
     const clean = cleanName(name)
+    const book = this.o.book
     if (!v || !clean) return false
-    if (v.name?.toLowerCase() === clean.toLowerCase()) return true
+    if (v.name?.toLowerCase() === clean.toLowerCase()) {
+      // Said by a person now: it's no longer only worked out.
+      if (!guessed && (v.guessed || book?.unchecked(clean))) {
+        v.guessed = undefined
+        if (v.taught) book?.check(clean)
+        else this.teach(v)
+      }
+      return true
+    }
+    if (guessed) {
+      if (v.name && !v.guessed) return true
+      this.untaught(v)
+      v.name = clean
+      v.guessed = true
+      v.recalled = undefined
+      this.teach(v)
+      return true
+    }
+    // Known from another meeting by a name nobody ever checked, and it was wrong: all that's
+    // remembered under it is this voice (it was recognised by it), so all of it goes to the right name.
+    if (v.recalled && v.name && v.taught && book?.unchecked(v.name) && book.rename(v.name, clean)) {
+      v.name = clean
+      v.recalled = undefined
+      return true
+    }
     this.untaught(v)
     v.name = clean
+    v.guessed = undefined
+    v.recalled = undefined
     this.teach(v)
     return true
   }
@@ -238,8 +280,15 @@ export class Voices {
 
   /** All of a named voice so far goes to its name. */
   private teach(v: Voice) {
-    if (!v.name || !this.o.book) return
-    this.o.book.learn(v.name, v.sum, v.heard)
+    const book = this.o.book
+    if (!v.name || !book) return
+    if (v.guessed) {
+      if (this.o.remember === 'named') return
+      // Already someone's remembered voice, and this one doesn't sound like them: the guess isn't taught.
+      const alike = book.alike(v.name, v.sum)
+      if (alike !== null && alike < this.o.same) return
+    }
+    book.learn(v.name, v.sum, v.heard, v.guessed ? 'guess' : v.recalled ? 'more' : 'hand')
     v.taught = { sum: Float32Array.from(v.sum), heard: v.heard }
   }
 
@@ -252,6 +301,7 @@ export class Voices {
     // Two voices in one meeting can't both be them: the likelier one already has the name.
     if (talk.voices.some((w) => w !== v && w.name?.toLowerCase() === best.name.toLowerCase())) return
     v.name = best.name
+    v.recalled = true
     this.teach(v)
   }
 
@@ -338,7 +388,7 @@ export class Voices {
     v.at = now
     // Someone known: this phrase is more of what they sound like.
     if (v.name && v.taught && this.o.book) {
-      this.o.book.learn(v.name, p, 1)
+      this.o.book.learn(v.name, p, 1, 'more')
       for (let i = 0; i < p.length; i++) v.taught.sum[i] += p[i]
       v.taught.heard++
     }
@@ -362,6 +412,8 @@ export class Voices {
       if (drop.name && !keep.name) {
         keep.name = drop.name
         keep.taught = drop.taught
+        keep.guessed = drop.guessed
+        keep.recalled = drop.recalled
       } else this.untaught(drop)
       for (let i = 0; i < keep.sum.length; i++) keep.sum[i] += drop.sum[i]
       keep.heard += drop.heard
@@ -396,15 +448,21 @@ export interface KnownVoice {
   sum: number[]
   heard: number
   updated: number
+  /** The name was worked out by the assistant, and nobody has checked it. */
+  guessed?: boolean
 }
 
+/** How a name comes by more of its voice: a person named it, the assistant worked it out, or it's more of a voice already known. */
+export type Taught = 'hand' | 'guess' | 'more'
+
 /**
- * The voices this server knows by name. Naming a voice in one meeting teaches it here, and from
- * then on that voice is recognised in every meeting: the voice is who someone is. Kept in a file
- * (see server.ts); each remembered voice can be forgotten.
+ * The voices this server knows by name. Naming a voice in one meeting teaches it here (and so does
+ * the assistant working out whose it is), and from then on that voice is recognised in every
+ * meeting: the voice is who someone is. Kept in a file (see server.ts); each remembered voice can
+ * be forgotten.
  */
 export class VoiceBook {
-  private people = new Map<string, { name: string; sum: Float32Array; heard: number; updated: number }>()
+  private people = new Map<string, { name: string; sum: Float32Array; heard: number; updated: number; guessed?: boolean }>()
   private timer: ReturnType<typeof setTimeout> | null = null
 
   private o: { load?: () => unknown; save?: (list: KnownVoice[]) => void; now?: () => number; saveAfterMs?: number }
@@ -421,8 +479,30 @@ export class VoiceBook {
     for (const v of got as KnownVoice[]) {
       const name = typeof v?.name === 'string' ? cleanName(v.name) : ''
       if (!name || !Array.isArray(v.sum) || !v.sum.length || v.sum.length > 4096 || !v.sum.every((x) => Number.isFinite(x))) continue
-      this.people.set(name.toLowerCase(), { name, sum: Float32Array.from(v.sum), heard: Math.max(1, Math.floor(Number(v.heard) || 1)), updated: Number(v.updated) || 0 })
+      this.people.set(name.toLowerCase(), { name, sum: Float32Array.from(v.sum), heard: Math.max(1, Math.floor(Number(v.heard) || 1)), updated: Number(v.updated) || 0, ...(v.guessed === true ? { guessed: true } : {}) })
     }
+  }
+
+  /** How alike a voiceprint (or a total of them) is to the voice remembered by a name; null when there's none. */
+  alike(name: string, print: Float32Array): number | null {
+    const p = this.people.get(cleanName(name).toLowerCase())
+    return p && p.sum.length === print.length ? cosine(p.sum, print) : null
+  }
+
+  /** The name is remembered, but only as worked out by the assistant: nobody has checked it. */
+  unchecked(name: string): boolean {
+    return !!this.people.get(cleanName(name).toLowerCase())?.guessed
+  }
+
+  /** A person says the name is right. False when there's no such voice. */
+  check(name: string): boolean {
+    const p = this.people.get(cleanName(name).toLowerCase())
+    if (!p) return false
+    if (p.guessed) {
+      p.guessed = undefined
+      this.changed()
+    }
+    return true
   }
 
   /** The remembered voice a voiceprint (or a total of them) is most like, and how alike (cosine). */
@@ -436,19 +516,24 @@ export class VoiceBook {
     return out
   }
 
-  /** Adds what a voice sounds like to a name (a total of `heard` unit voiceprints). */
-  learn(name: string, sum: Float32Array, heard: number) {
+  /**
+   * Adds what a voice sounds like to a name (a total of `heard` unit voiceprints). `how`: named by
+   * a person (the name is then checked), worked out by the assistant (a new name is unchecked; one
+   * already remembered stays as it was), or more of a voice already known (as it was).
+   */
+  learn(name: string, sum: Float32Array, heard: number, how: Taught = 'hand') {
     const clean = cleanName(name)
     if (!clean || heard <= 0) return
     const key = clean.toLowerCase()
     const p = this.people.get(key)
     if (p && p.sum.length !== sum.length) return
     const now = (this.o.now ?? Date.now)()
-    if (!p) this.people.set(key, { name: clean, sum: Float32Array.from(sum), heard, updated: now })
+    if (!p) this.people.set(key, { name: clean, sum: Float32Array.from(sum), heard, updated: now, ...(how === 'guess' ? { guessed: true } : {}) })
     else {
       for (let i = 0; i < sum.length; i++) p.sum[i] += sum[i]
       p.heard += heard
       p.updated = now
+      if (how === 'hand') p.guessed = undefined
     }
     this.changed()
   }
@@ -484,24 +569,26 @@ export class VoiceBook {
     if (!p || !name) return false
     const into = this.people.get(name.toLowerCase())
     this.people.delete(key)
+    // A person put the name right: it's checked.
     if (into && into !== p && into.sum.length === p.sum.length) {
       for (let i = 0; i < p.sum.length; i++) into.sum[i] += p.sum[i]
       into.heard += p.heard
       into.updated = (this.o.now ?? Date.now)()
-    } else this.people.set(name.toLowerCase(), { ...p, name, updated: (this.o.now ?? Date.now)() })
+      into.guessed = undefined
+    } else this.people.set(name.toLowerCase(), { name, sum: p.sum, heard: p.heard, updated: (this.o.now ?? Date.now)() })
     this.changed()
     return true
   }
 
-  list(): { name: string; heard: number; updated: number }[] {
-    return [...this.people.values()].map((p) => ({ name: p.name, heard: p.heard, updated: p.updated })).sort((a, b) => a.name.localeCompare(b.name))
+  list(): { name: string; heard: number; updated: number; guessed?: boolean }[] {
+    return [...this.people.values()].map((p) => ({ name: p.name, heard: p.heard, updated: p.updated, ...(p.guessed ? { guessed: true } : {}) })).sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /** Writes it all down now (and stops waiting to). */
   flush() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    this.o.save?.([...this.people.values()].map((p) => ({ name: p.name, sum: Array.from(p.sum, (x) => Math.round(x * 1e5) / 1e5), heard: p.heard, updated: p.updated })))
+    this.o.save?.([...this.people.values()].map((p) => ({ name: p.name, sum: Array.from(p.sum, (x) => Math.round(x * 1e5) / 1e5), heard: p.heard, updated: p.updated, ...(p.guessed ? { guessed: true } : {}) })))
   }
 
   private changed() {

@@ -12264,6 +12264,17 @@ button.inbox-entry:focus-visible {
   border-radius: 50%;
 }
 
+/* A name worked out from what was said, not yet checked by anyone. */
+.voice-name.guessed {
+  border-style: dashed;
+}
+
+.voice-guess {
+  margin-left: -2px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 .voice-name-input {
   width: 160px;
   padding: 3px 10px;

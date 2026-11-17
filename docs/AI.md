@@ -492,21 +492,36 @@ each person's ideas down as theirs.
   voice to name it ("Sam"). The assistant hears the name, uses it from then on,
   and changes the voice to the name on what it already made. Giving a voice a
   name another voice has makes them one person.
-- **A named voice is remembered.** The server keeps what it sounds like under
-  that name, and from then on knows that voice in every meeting, named from
-  the start: the voice is who someone is. It learns them better each time
-  they're heard. Naming a voice again with another name takes back what was
-  taught to the old one. The assistant's settings list the voices the server
-  knows, each with **Forget**.
+- **A voice with a name is remembered.** The server keeps what it sounds like
+  under that name, and from then on knows that voice in every meeting, named
+  from the start: the voice is who someone is. It learns them better each
+  time they're heard. Naming a voice again with another name takes back what
+  was taught to the old one. The assistant's settings list the voices the
+  server knows, each with **Forget**.
 - The assistant gets each line with who said it ("[Sam] let's move it to
   May"), and puts the person on the idea, shown as the people an idea is
   assigned to. It goes by who said the line.
 - **Worked out from what's said.** When the conversation makes it clear who a
   voice is (someone says "thanks, Sam" and Voice 2 answers, or someone
-  introduces themselves), the assistant names that voice for the meeting. It
-  isn't remembered by the server, as nobody named it. At the end, the review
-  reads the whole transcript and names voices and lines it can tell from
-  what's around them, everywhere in the meeting.
+  introduces themselves), the assistant names that voice. At the end, the
+  review reads the whole transcript and names voices and lines it can tell
+  from what's around them, everywhere in the meeting.
+- **A name it works out is remembered too**, so the next meeting starts out
+  knowing who's who and there's nothing to work out again. It's kept as a
+  name nobody has checked:
+  - In the Voices strip it has a dashed outline and a **?**. Click it and
+    press Enter to say it's right, or type the right name.
+  - It never replaces a name a person gave, or one the voice already had
+    from an earlier meeting.
+  - Where the name is already someone's remembered voice, it's only added to
+    it when the two sound like one person, so a wrong guess can't spoil what
+    the server knows of them.
+  - If it was wrong and the voice turns up as that name in a later meeting,
+    naming the voice by hand moves everything remembered under the wrong
+    name to the right one.
+  - The assistant's settings mark these "worked out, not checked".
+  - To remember only voices people name, set
+    `BRAINCRAFT_SPEAKER_REMEMBER=named` on the server.
 - **One correction, everywhere.** **People** on a meeting's frame (or Ctrl K
   → People in this meeting) lists who spoke; renaming one changes the name
   on everything in the frame, in the transcript and in the meeting's record,

@@ -52,6 +52,8 @@ export interface TalkOptions {
 export interface HeardVoice {
   n: number
   name: string
+  /** The name was worked out from what was said, and nobody has checked it. */
+  guessed?: boolean
 }
 
 /** What was heard so far in a conversation, and what was left out of it. */
@@ -201,6 +203,17 @@ export function useTalk(o: TalkOptions) {
   const guessed = useRef(new Set<number>())
   /** The conversation the server knows this talk's voices by. */
   const conversationRef = useRef('')
+  /** Tells the server a voice's name, so it remembers the voice by it: given by hand, or worked out (`guess`). */
+  const remember = (n: number, name: string, guess: boolean) => {
+    const { server, password, serverVoices } = latest.current
+    if (!server || !serverVoices || !conversationRef.current) return
+    void fetch(serverUrl(server, `api/ai/voices?voices=${conversationRef.current}`), {
+      method: 'POST',
+      body: JSON.stringify({ voice: n, name, ...(guess ? { guess: true } : {}) }),
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
+    }).catch(() => {})
+  }
   /** A voice's name: the assistant hears it, and changes it on what it made. A name another voice has makes them one. */
   const callVoice = (n: number, name: string) => {
     n = whose(n)
@@ -522,8 +535,8 @@ export function useTalk(o: TalkOptions) {
       await (e?.stop() ?? Promise.resolve()).catch(() => {})
       await u?.stop(true)
     },
-    /** The voices heard in this conversation (two or more: a meeting). */
-    voices,
+    /** The voices heard in this conversation (two or more: a meeting); `guessed`: its name was worked out, and nobody has checked it. */
+    voices: voices.map((v) => (guessed.current.has(v.n) ? { ...v, guessed: true } : v)) as readonly HeardVoice[],
     /** What's been heard, and what was left out: the call through the microphone, lines said over and over. */
     heard: heard.current,
     /** The server tells voices apart here. */
@@ -535,30 +548,27 @@ export function useTalk(o: TalkOptions) {
     nameVoice: (n: number, name: string) => {
       const clean = name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40)
       if (!clean) return
-      // Named by hand: it stays, whatever is worked out later.
-      guessed.current.delete(whose(n))
+      // Named by hand: it stays, whatever is worked out later. (The same name as was worked out: now it's checked.)
+      if (guessed.current.delete(whose(n))) setTick((t) => t + 1)
       callVoice(n, clean)
-      const { server, password, serverVoices } = latest.current
-      if (server && serverVoices && conversationRef.current)
-        void fetch(serverUrl(server, `api/ai/voices?voices=${conversationRef.current}`), {
-          method: 'POST',
-          body: JSON.stringify({ voice: n, name: clean }),
-          credentials: 'include',
-          headers: { 'content-type': 'application/json', 'x-braincraft': '1', ...(password ? { 'x-braincraft-ai-password': password } : {}) },
-        }).catch(() => {})
+      remember(n, clean, false)
     },
     /**
      * A voice worked out from what was said ("Voice 2" is Sam, from "thanks, Sam" and the answer;
      * or "The call" is Sam, when the person says who they're talking to): named for this meeting,
      * unless someone gave it a name (by hand, or the server knew the voice). What was worked out
-     * before can be put right the same way. The server isn't taught it, as nobody named it.
+     * before can be put right the same way. The server remembers the voice by that name too, as one
+     * nobody has checked, so the next meeting starts out knowing who it is.
      */
     guessVoice: (label: string, name: string) => {
       const v = voicesRef.current.find((x) => x.name.toLowerCase() === label.trim().toLowerCase())
+      const clean = name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40)
       // Never the person here: the microphone is theirs.
-      if (!v || v.n === 0 || !(!named(v) || guessed.current.has(v.n))) return
+      if (!v || v.n === 0 || !clean || !(!named(v) || guessed.current.has(v.n))) return
       guessed.current.add(v.n)
-      callVoice(v.n, name)
+      callVoice(v.n, clean)
+      // Unless the name was another voice's here (the two were one person): that one keeps what's known of it.
+      if (voicesRef.current.some((x) => x.n === v.n)) remember(v.n, clean, true)
     },
     /** Where the call's sound is heard from, while it is: "a shared tab or screen", or an input's name. */
     call: call?.label ?? null,

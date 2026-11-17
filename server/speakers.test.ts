@@ -568,4 +568,165 @@ describe('voices remembered by name', () => {
     expect(v.nameOf('m', 1)).toBe('Brian')
     expect(v.nameOf('m', 2)).toBeNull()
   })
+
+  /** Someone heard twice in a meeting, so they count as a voice: its number. */
+  const heard = (v: Voices, meeting: string, sound: Float32Array) => {
+    v.place(meeting, sound, 2)
+    return v.place(meeting, sound, 2)!
+  }
+  const known = (book: VoiceBook) => book.list().map((x) => `${x.name} ${x.heard}${x.guessed ? ' (worked out)' : ''}`)
+
+  it('knows a voice the assistant worked out in the next meeting too, as a name nobody has checked', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book })
+    expect(v.name('m1', heard(v, 'm1', at(1, 0)), 'Sam', true)).toBe(true)
+    expect(v.nameOf('m1', 1)).toBe('Sam')
+    expect(known(book)).toEqual(['Sam 2 (worked out)'])
+    // Another day: Sam from the start, with nothing to work out.
+    expect(v.nameOf('m2', heard(v, 'm2', at(1, 0)))).toBe('Sam')
+    // More of the voice is more of what's remembered, but doesn't make the name checked.
+    v.place('m2', at(1, 0), 2)
+    expect(known(book)).toEqual(['Sam 5 (worked out)'])
+    // A person names the voice Sam: now it is.
+    expect(v.name('m2', 1, 'Sam')).toBe(true)
+    expect(known(book)).toEqual(['Sam 5'])
+  })
+
+  it('never puts a worked-out name in place of one a person gave, or the voice’s own from another meeting', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book })
+    v.name('m1', heard(v, 'm1', at(1, 0)), 'Priya')
+    expect(v.name('m1', 1, 'Sam', true)).toBe(true)
+    expect(v.nameOf('m1', 1)).toBe('Priya')
+    expect(known(book)).toEqual(['Priya 2'])
+    // Known from another meeting: hers too.
+    heard(v, 'm2', at(1, 0))
+    v.name('m2', 1, 'Sam', true)
+    expect(v.nameOf('m2', 1)).toBe('Priya')
+    expect(known(book)).toEqual(['Priya 4'])
+  })
+
+  it('lets a better guess replace an earlier one, taking back what that taught', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book })
+    v.name('m', heard(v, 'm', at(1, 0)), 'Sam', true)
+    v.place('m', at(1, 0), 2)
+    expect(known(book)).toEqual(['Sam 3 (worked out)'])
+    v.name('m', 1, 'Priya', true)
+    expect(v.nameOf('m', 1)).toBe('Priya')
+    expect(known(book)).toEqual(['Priya 3 (worked out)'])
+    // And a person's word replaces a guess for good.
+    v.name('m', 1, 'Brian')
+    v.name('m', 1, 'Sam', true)
+    expect(v.nameOf('m', 1)).toBe('Brian')
+    expect(known(book)).toEqual(['Brian 3'])
+  })
+
+  it('doesn’t teach a worked-out name to a remembered voice that sounds like someone else', () => {
+    const book = new VoiceBook()
+    book.learn('Sam', at(1, 0), 4)
+    const v = new Voices({ book })
+    // Not like Sam at all (0.6): called Sam for this meeting, but Sam's voice is left as it was.
+    const other = heard(v, 'm1', at(0.6, 0.8))
+    expect(v.nameOf('m1', other)).toBeNull()
+    expect(v.name('m1', other, 'Sam', true)).toBe(true)
+    expect(v.nameOf('m1', other)).toBe('Sam')
+    v.place('m1', at(0.6, 0.8), 2)
+    expect(known(book)).toEqual(['Sam 4'])
+    expect(book.alike('Sam', at(1, 0))).toBeCloseTo(1)
+    // Like enough to be the same person (0.87: under what recalls a name by itself, over what makes two voices one): taught, and Sam stays checked.
+    const same = heard(v, 'm2', at(0.87, 0.493))
+    expect(v.nameOf('m2', same)).toBeNull()
+    v.name('m2', same, 'Sam', true)
+    expect(known(book)).toEqual(['Sam 6'])
+    // A person naming them is taken at their word, however unlike.
+    v.name('m1', other, 'Sam')
+    expect(known(book)).toEqual(['Sam 9'])
+  })
+
+  it('moves all that’s remembered under a wrong name nobody checked, once a person names the voice', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book })
+    // Worked out wrongly in one meeting…
+    v.name('m1', heard(v, 'm1', at(1, 0)), 'Sam', true)
+    // …so she's "Sam" in the next, until someone says who she is.
+    expect(v.nameOf('m2', heard(v, 'm2', at(1, 0)))).toBe('Sam')
+    expect(v.name('m2', 1, 'Priya')).toBe(true)
+    expect(v.nameOf('m2', 1)).toBe('Priya')
+    // Both meetings' worth is hers, and there's no Sam.
+    expect(known(book)).toEqual(['Priya 4'])
+    v.place('m2', at(1, 0), 2)
+    expect(known(book)).toEqual(['Priya 5'])
+    expect(v.nameOf('m3', heard(v, 'm3', at(1, 0)))).toBe('Priya')
+  })
+
+  it('leaves a name a person gave where it is when the voice is named again', () => {
+    const book = new VoiceBook()
+    book.learn('Sam', at(1, 0), 4)
+    const v = new Voices({ book })
+    expect(v.nameOf('m', heard(v, 'm', at(1, 0)))).toBe('Sam')
+    v.name('m', 1, 'Priya')
+    // What this meeting added to Sam is taken back and is Priya's; what was Sam's before stays his.
+    expect(known(book)).toEqual(['Priya 2', 'Sam 4'])
+  })
+
+  it('takes a person’s word for a name that was only worked out, whichever voice they say it of', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book })
+    v.name('m1', heard(v, 'm1', at(1, 0)), 'Sam', true)
+    expect(known(book)).toEqual(['Sam 2 (worked out)'])
+    // In another meeting someone names a voice Sam by hand (one not recognised as him): Sam is checked.
+    v.name('m2', heard(v, 'm2', at(0.87, 0.493)), 'Sam')
+    expect(known(book)).toEqual(['Sam 4'])
+  })
+
+  it('remembers only voices people named, when that’s what’s wanted', () => {
+    const book = new VoiceBook()
+    const v = new Voices({ book, remember: 'named' })
+    v.name('m', heard(v, 'm', at(1, 0)), 'Sam', true)
+    expect(v.nameOf('m', 1)).toBe('Sam')
+    v.place('m', at(1, 0), 2)
+    expect(known(book)).toEqual([])
+    // Said by a person: remembered.
+    v.name('m', 1, 'Sam')
+    expect(known(book)).toEqual(['Sam 3'])
+  })
+
+  it('takes a worked-out name over the wire, and says what the voice is called', async () => {
+    const { say, call, book } = setup()
+    await say('meeting1', 3)
+    await say('meeting1', 3)
+    const guess = (name: string) => call('POST', '/api/ai/voices?voices=meeting1', Buffer.from(JSON.stringify({ voice: 1, name, guess: true })))
+    expect(await guess('Sam')).toEqual({ status: 200, body: { voice: 1, name: 'Sam' } })
+    expect((await call('GET', '/api/ai/voices')).body.voices).toEqual([expect.objectContaining({ name: 'Sam', guessed: true })])
+    // Only "true" is a guess: anything else is a person's word.
+    await call('POST', '/api/ai/voices?voices=meeting1', Buffer.from(JSON.stringify({ voice: 1, name: 'Brian', guess: 'yes' })))
+    expect(book.list()).toEqual([expect.not.objectContaining({ guessed: true })])
+    // A guess after that changes nothing, and the reply says who the voice still is.
+    expect(await guess('Sam')).toEqual({ status: 200, body: { voice: 1, name: 'Brian' } })
+    expect(book.list().map((x) => x.name)).toEqual(['Brian'])
+  })
+
+  it('keeps which names nobody has checked in its file, and a corrected name is a checked one', () => {
+    let saved: unknown
+    const a = new VoiceBook({ save: (list) => (saved = list) })
+    a.learn('Sam', at(1, 0), 2, 'guess')
+    a.learn('Priya', at(0, 1), 2)
+    a.flush()
+    const b = new VoiceBook({ load: () => [...(saved as unknown[]), { name: 'Odd', sum: [1, 0, 0, 0], heard: 1, guessed: 'yes' }] })
+    expect(known(b)).toEqual(['Odd 1', 'Priya 2', 'Sam 2 (worked out)'])
+    expect([b.unchecked('Sam'), b.unchecked('Priya'), b.unchecked('Nobody')]).toEqual([true, false, false])
+    // Its name put right after a meeting: a person did that.
+    expect(b.rename('Sam', 'Samira')).toBe(true)
+    expect(known(b)).toEqual(['Odd 1', 'Priya 2', 'Samira 2'])
+    // Put right to a name already remembered: one voice, and checked.
+    const c = new VoiceBook()
+    c.learn('Sam', at(1, 0), 2, 'guess')
+    c.learn('Samira', at(1, 0), 3, 'guess')
+    c.rename('Sam', 'Samira')
+    expect(known(c)).toEqual(['Samira 5'])
+    // Checking a name that isn't there does nothing.
+    expect(c.check('Nobody')).toBe(false)
+    expect(c.alike('Nobody', at(1, 0))).toBeNull()
+  })
 })

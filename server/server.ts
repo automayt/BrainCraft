@@ -426,7 +426,12 @@ const voiceBook = embedder
     })
   : null
 /** Who said what: how alike is alike starts from BRAINCRAFT_SPEAKER_THRESHOLD, and admins can change it (Admin → Meetings). */
-const voices = new Voices({ threshold: Number(process.env.BRAINCRAFT_SPEAKER_THRESHOLD) || undefined, book: voiceBook })
+const voices = new Voices({
+  threshold: Number(process.env.BRAINCRAFT_SPEAKER_THRESHOLD) || undefined,
+  book: voiceBook,
+  // Voices the assistant works out are remembered too, unless only named ones are wanted.
+  remember: /^named$/i.test(process.env.BRAINCRAFT_SPEAKER_REMEMBER?.trim() ?? '') ? 'named' : 'all',
+})
 accounts?.useVoices({ on: !!embedder && !!TRANSCRIBE_URL, defaults: voices.defaults(), use: (s) => voices.use(s) })
 const transcriber = TRANSCRIBE_URL
   ? new Transcriber({

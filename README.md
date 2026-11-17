@@ -787,8 +787,10 @@ shares live exactly like a board.
   up) goes back to it once to tidy. See
   [AI.md](docs/AI.md#building-things-properly).
 - **Who said what:** with a speaker-recognition model on the server, talking
-  in a meeting tells voices apart. Name each voice once ("Voice 2" is Sam) and
-  the assistant puts each person's ideas down as theirs. See
+  in a meeting tells voices apart. Name each voice once ("Voice 2" is Sam), or
+  let the assistant work out who it is from what's said, and the assistant
+  puts each person's ideas down as theirs. Either way the server remembers
+  the voice, so the next meeting knows who's who from the start. See
   [docs/AI.md](docs/AI.md#who-said-what-in-a-meeting).
 - **Flowstate** (Ctrl Shift F): talking with nothing else on screen. The
   bars and panels fade away (it stays in the window; full screen is a button in it), the assistant's few words float at the top as it
@@ -813,8 +815,9 @@ shares live exactly like a board.
   what, at the level of detail you choose. It can work from a recording, and
   be played back to see how it grew. A meeting that ended can be carried on
   from its frame (**Continue**): the same notes, transcript and frame go on,
-  and the whole is reviewed again. Voices, once named, are known in every
-  meeting after, and a name corrected once changes everywhere. On a call,
+  and the whole is reviewed again. Voices, once they have a name (given, or
+  worked out by the assistant), are known in every meeting after, and a name
+  corrected once changes everywhere. On a call,
   **Hear the call too** takes the call's own sound as well: you and the call
   are two people from the first line, and what your speakers play isn't
   written down a second time as yours. Each thing is heard once: a line

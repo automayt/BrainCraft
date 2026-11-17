@@ -17,7 +17,10 @@
  * is, once it's been named, here or in an earlier meeting (VoiceBook remembers voices by name):
  *
  *   POST /api/ai/voices?voices=ID   {"voice": 2, "name": "Sam"}   names a voice, and remembers it
- *   GET /api/ai/voices                                            the voices remembered: [{name, heard, updated}]
+ *                                   (with "guess": true, as a name worked out from what was said:
+ *                                   remembered too, as one nobody has checked, and never in place of
+ *                                   a name a person gave)
+ *   GET /api/ai/voices                                            the voices remembered: [{name, heard, updated, guessed?}]
  *   DELETE /api/ai/voices?name=Sam                                forgets one
  *   PATCH /api/ai/voices?name=Sam   {"name": "Samira"}            corrects a remembered name
  *
@@ -265,7 +268,7 @@ export class Transcriber {
     if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' })
     const talk = url.searchParams.get('voices') ?? ''
     if (!/^[\w-]{6,40}$/.test(talk)) return json(res, 400, { error: 'Say which conversation (?voices=)' })
-    let body: { voice?: unknown; name?: unknown }
+    let body: { voice?: unknown; name?: unknown; guess?: unknown }
     try {
       body = JSON.parse((await readRaw(req, 2048)).toString('utf8') || '{}') as typeof body
     } catch {
@@ -274,8 +277,10 @@ export class Transcriber {
     const n = Number(body.voice)
     const name = typeof body.name === 'string' ? cleanName(body.name) : ''
     if (!Number.isInteger(n) || n < 1 || !name) return json(res, 400, { error: 'Send {"voice": 2, "name": "Sam"}' })
-    if (!v.voices.name(`${v.who(req)} ${talk}`, n, name)) return json(res, 404, { error: 'That voice isn’t in this conversation (any more)' })
-    return json(res, 200, { voice: n, name })
+    const conversation = `${v.who(req)} ${talk}`
+    if (!v.voices.name(conversation, n, name, body.guess === true)) return json(res, 404, { error: 'That voice isn’t in this conversation (any more)' })
+    // What it's called now: a name worked out doesn't replace one a person gave.
+    return json(res, 200, { voice: n, name: v.voices.nameOf(conversation, n) ?? name })
   }
 
   /** Which voice said a recording, in the conversation the app named (null when it can't tell), and voices since found to be one. */

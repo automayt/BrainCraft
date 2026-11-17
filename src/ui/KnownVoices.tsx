@@ -1,6 +1,6 @@
 /**
- * The voices this server knows by name: naming a voice in a meeting teaches it, so it's known in
- * every meeting after. Each can be forgotten here.
+ * The voices this server knows by name: naming a voice in a meeting teaches it (and so does the
+ * assistant working out whose it is), so it's known in every meeting after. Each can be forgotten here.
  */
 
 import { useEffect, useState } from 'react'
@@ -9,6 +9,8 @@ interface Known {
   name: string
   heard: number
   updated: number
+  /** Worked out by the assistant; nobody has checked it. */
+  guessed?: boolean
 }
 
 export function KnownVoices({ server, password }: { server: string; password?: string }) {
@@ -46,12 +48,20 @@ export function KnownVoices({ server, password }: { server: string; password?: s
       ) : !voices ? (
         <p className="muted">Looking…</p>
       ) : !voices.length ? (
-        <p className="muted">None yet. Name a voice in a meeting and it’s known in every meeting after.</p>
+        <p className="muted">None yet. Once a voice in a meeting has a name (you give it one, or the assistant works it out), it’s known in every meeting after.</p>
       ) : (
         <ul>
           {voices.map((v) => (
             <li key={v.name}>
-              <span>{v.name}</span>
+              <span>
+                {v.name}
+                {v.guessed && (
+                  <em className="muted" title="The assistant worked this name out from what was said, and nobody has checked it. Naming the voice in a meeting checks it.">
+                    {' '}
+                    worked out, not checked
+                  </em>
+                )}
+              </span>
               <button type="button" className="link" onClick={() => forget(v.name)} title={`Forget ${v.name}’s voice: they’re a new voice again in the next meeting`}>
                 Forget
               </button>

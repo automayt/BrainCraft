@@ -447,7 +447,8 @@ from trying it on an hour-long meeting: the review of the whole transcript
 in the background, one meeting record every view is made from (overview,
 decisions, actions, mind map, speaker timeline), Important / Normal /
 Verbose detail, ideas that lead back to when they were said, voices worked
-out from what's said and one correction for a whole meeting, edits and
+out from what's said (and remembered for the next meeting, as names
+nobody has checked) and one correction for a whole meeting, edits and
 locks left alone, a still view with a glow on what's new, speech to text
 given the board's names and terms, and the next agenda starting with what
 the last meeting left. Then, from a meeting whose transcript filled with one

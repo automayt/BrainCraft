@@ -37,9 +37,17 @@ export function VoiceNames({ voices, onName }: { voices: readonly HeardVoice[]; 
             }}
           />
         ) : (
-          <button key={v.n} type="button" className="voice-name" title={`Name ${v.name}`} onClick={() => setNaming(v.n)}>
+          <button
+            key={v.n}
+            type="button"
+            className={`voice-name${v.guessed ? ' guessed' : ''}`}
+            title={v.guessed ? `${v.name} was worked out from what was said. Click to put it right, or to say it is right (Enter).` : `Name ${v.name}`}
+            aria-label={v.guessed ? `${v.name}, worked out from what was said: name this voice` : `Name ${v.name}`}
+            onClick={() => setNaming(v.n)}
+          >
             <i style={{ background: personColor(v.name) }} aria-hidden="true" />
             {v.name}
+            {v.guessed && <span className="voice-guess" aria-hidden="true">?</span>}
           </button>
         ),
       )}
