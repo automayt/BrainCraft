@@ -117,6 +117,8 @@ describe('speech to text for talking to the assistant', () => {
     const url = `http://127.0.0.1:${typeof a === 'object' && a ? a.port : 0}/api/ai/transcribe`
     const TERMS = 'Sam, Brian, Kubernetes'
     const BEFORE = 'We move the launch to May. I’m talking about the venue.'
+    // What was said, then the terms: nearest the speech, where they do the most for spelling.
+    const BOTH = `${BEFORE} ${TERMS}.`
     const say = async (headers: Record<string, string> = { 'x-transcribe-terms': encodeURIComponent(TERMS), 'x-transcribe-context': encodeURIComponent(BEFORE) }) => {
       prompts.length = 0
       const r = await fetch(url, { method: 'POST', body: new Uint8Array(400).fill(1), headers: { 'content-type': 'audio/wav', ...headers } })
@@ -126,13 +128,13 @@ describe('speech to text for talking to the assistant', () => {
     // Something new: asked once, with the terms and what came before.
     hears = () => ({ text: 'And the caterer is booked.' })
     expect(await say()).toEqual({ text: 'And the caterer is booked.' })
-    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`])
+    expect(prompts).toEqual([BOTH])
 
     // Over a noise it says the last line again; given nothing, it hears nothing.
     hears = (prompt) => ({ text: prompt.includes('venue') ? ' I’m talking about the venue.' : '' })
     expect(await say()).toEqual({ text: '' })
     // The second time with nothing given at all.
-    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
+    expect(prompts).toEqual([BOTH, ''])
 
     // ...or a stock line: nothing was said either.
     hears = (prompt) => ({ text: prompt ? 'I’m talking about the venue.' : ' Thank you.' })
@@ -159,7 +161,7 @@ describe('speech to text for talking to the assistant', () => {
     // The terms recited back, all of them or one: heard again the same way.
     hears = (prompt) => ({ text: prompt ? 'Sam, Brian, Kubernetes.' : '' })
     expect(await say()).toEqual({ text: '' })
-    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
+    expect(prompts).toEqual([BOTH, ''])
     hears = (prompt) => ({ text: prompt ? 'Kubernetes.' : ' You' })
     expect(await say()).toEqual({ text: '' })
     // One term someone really said is heard both times.
@@ -177,7 +179,7 @@ describe('speech to text for talking to the assistant', () => {
     // The same both times: someone mumbled it.
     hears = () => stretch('See about the deposit.', -0.75)
     expect(await say()).toEqual({ text: 'See about the deposit.' })
-    expect(prompts).toEqual([`${TERMS}. ${BEFORE}`, ''])
+    expect(prompts).toEqual([BOTH, ''])
     // A stock line the second time: it was a noise.
     hears = (prompt) => (prompt ? stretch('See about the deposit.', -0.75) : stretch('Thank you.', -0.3))
     expect(await say()).toEqual({ text: '' })
@@ -199,9 +201,16 @@ describe('speech to text for talking to the assistant', () => {
     // The prompt stays short: the terms first, then as much of what was said as fits.
     hears = () => ({ text: 'fine' })
     await say({ 'x-transcribe-terms': encodeURIComponent(`${'A'.repeat(300)}${'B'.repeat(100)}`), 'x-transcribe-context': encodeURIComponent(`${'old '.repeat(300)}the last words`) })
-    expect(prompts[0].length).toBeLessThanOrEqual(802)
-    expect(prompts[0].startsWith(`${'A'.repeat(300)}. `)).toBe(true)
-    expect(prompts[0].endsWith('the last words')).toBe(true)
+    expect(prompts[0].length).toBeLessThanOrEqual(803)
+    expect(prompts[0].endsWith(`the last words. ${'A'.repeat(300)}.`)).toBe(true)
+    // The latest of what was said, and the first of the terms.
+    expect(prompts[0]).toContain('old old')
+    expect(prompts[0]).not.toContain('B')
+    // Terms alone, and what was said alone, as they are.
+    await say({ 'x-transcribe-terms': encodeURIComponent(TERMS) })
+    expect(prompts[0]).toBe(`${TERMS}.`)
+    await say({ 'x-transcribe-context': encodeURIComponent('We were saying') })
+    expect(prompts[0]).toBe('We were saying')
     s3.close()
   })
 })

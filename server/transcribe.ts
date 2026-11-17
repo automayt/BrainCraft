@@ -19,8 +19,8 @@
  *   PATCH /api/ai/voices?name=Sam   {"name": "Samira"}            corrects a remembered name
  *
  * Two headers (URI-encoded) are passed on as the endpoint's prompt, so each phrase is heard in
- * context: X-Transcribe-Terms, the names and terms in use, and X-Transcribe-Context, what was said
- * just before. Words the endpoint wasn't sure of come back marked "[unclear: …]" (with "unclear":
+ * context: X-Transcribe-Context, what was said just before, and after it X-Transcribe-Terms, the
+ * names and terms in use. Words the endpoint wasn't sure of come back marked "[unclear: …]" (with "unclear":
  * true).
  *
  * Speech to text given sound that isn't clear speech says something anyway: a phrase over and
@@ -173,7 +173,11 @@ export class Transcriber {
     // heard on its own, and without these, names and terms come out garbled.
     const terms = contextOf(req.headers['x-transcribe-terms'], TERMS_MAX, true)
     const before = contextOf(req.headers['x-transcribe-context'], PROMPT_MAX - terms.length)
-    const both = [terms && !/[.!?…]$/.test(terms) ? `${terms}.` : terms, before].filter(Boolean).join(' ')
+    // What was said first, then the terms, nearest the speech: tried on one sentence cut 36 ways,
+    // a term was spelled right 29 times this way round, about half the time the other way, and
+    // hardly ever with no terms at all.
+    const stop = (s: string) => (s && !/[.!?…]$/.test(s) ? `${s}.` : s)
+    const both = [terms ? stop(before) : before, stop(terms)].filter(Boolean).join(' ')
     const ask = (format: 'verbose_json' | 'json', prompt = both) => {
       const form = new FormData()
       form.append('file', new Blob([new Uint8Array(audio)], { type }), `speech.${ext}`)

@@ -356,10 +356,11 @@ export function useTalk(o: TalkOptions) {
       const { server, password, serverPreviews } = latest.current
       const transcribe = async (audio: Blob, preview?: boolean, from?: HeardFrom): Promise<Heard> => {
         const { people } = latest.current
-        // A phrase still being said is heard on its own.
-        const context = preview ? undefined : latest.current.context?.()
+        // A phrase still being said is heard without what came before (that's what it would say
+        // again over a noise), but with the terms, so the words shown are spelled right too.
+        const context = latest.current.context?.()
         const terms = (context?.terms ?? '').slice(0, 300)
-        const before = (context?.said ?? '').slice(-500)
+        const before = preview ? '' : (context?.said ?? '').slice(-500)
         // The microphone's phrases are the person's own once the call is heard on its own: only the
         // call's voices are told apart (one fewer person among them).
         const others = from === 'call' && people ? Math.max(1, people - 1) : people

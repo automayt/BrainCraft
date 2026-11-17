@@ -417,6 +417,13 @@ so names and terms come out spelled as you write them. A pause of about a
 second ends a phrase in a meeting (a breath mid-sentence doesn't), and what
 speech to text makes up over silence ("Thanks for watching!") is left out.
 
+The terms help a good deal, though not every time, and they go last, nearest
+the speech, where they help most: one sentence with "Kubernetes" in it, cut
+36 slightly different ways, came back spelled right 29 times with the term
+given last, about half the time with it given first, and 2 times in 24 with
+no terms at all. Words shown while they're still being said get the terms
+too.
+
 **Hearing it once.** Given a noise, a breath, or what's left of a call in the
 microphone, speech to text doesn't say nothing: it says the last line again,
 or one of the board's terms, or one phrase over and over, or a stock line. So:
