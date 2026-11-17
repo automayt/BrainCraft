@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as RPointerEvent } from 'react'
 import { addDrawingFiles, isDrawingFile } from './excalidraw/addDrawing'
 import { newWheelMemo, wheelHow } from './wheelHow'
+import { pressMovesBoard, wheelIsBoards } from './canvasTakes'
 import { type Corner, type Edge, type Editor, type Handle, cornerOf } from '../editor/Editor'
 import * as F from '../model/flowchart'
 import * as M from '../model/mindmap'
@@ -94,7 +95,10 @@ export function Canvas() {
     const el = ref.current!
     const memo = newWheelMemo()
     const onWheel = (e: WheelEvent) => {
-      if ((e.target as Element).closest('.no-canvas')) return
+      // Over a selected table, Kanban or timeline (and the like) the wheel is still the board's,
+      // unless what's under it scrolls itself: otherwise there's no moving off a large one.
+      const kept = (e.target as Element).closest('.no-canvas')
+      if (kept && !wheelIsBoards(e, e.target as Element, kept)) return
       e.preventDefault()
       const r = el.getBoundingClientRect()
       const scale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1
@@ -119,7 +123,8 @@ export function Canvas() {
   }
 
   const onPointerDown = (e: RPointerEvent) => {
-    if ((e.target as Element).closest('.no-canvas')) return
+    // The buttons that move the board move it over a selected object too (see canvasTakes.ts).
+    if ((e.target as Element).closest('.no-canvas') && !pressMovesBoard(e, e.target as Element, { space: editor.spaceDown, hand: editor.tool === 'hand' })) return
     const p = local(e)
     if (e.pointerType === 'touch') {
       touches.current.set(e.pointerId, p)
