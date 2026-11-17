@@ -415,18 +415,32 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       return out
     }
     /** Kanban columns as given, keeping the details of columns and cards that are already there. */
+    /**
+     * What a rewritten row, card or span was before, each old one taken only once: two that are
+     * alike are still two. (Once, every row beginning "Action" was taken for the first such row,
+     * and they all became one: sorting showed doubles, and changing one changed them all.)
+     */
+    const taker = <T extends { id: string }>(old: readonly T[] | undefined) => {
+      const taken = new Set<string>()
+      return (is: (x: T) => boolean): T | undefined => {
+        const hit = old?.find((x) => !taken.has(x.id) && is(x))
+        if (hit) taken.add(hit.id)
+        return hit
+      }
+    }
     const kanbanOf = (columns: KanbanColumnIn[] | undefined, prev?: KanbanData): KanbanData => {
-      const oldCards = prev?.columns.flatMap((c) => c.cards) ?? []
+      const oldColumn = taker(prev?.columns)
+      const oldCard = taker(prev?.columns.flatMap((c) => c.cards))
       return {
         columns: list(columns, 'columns').map((c, k) => {
           const title = text(obj(c, `columns[${k}]`).title, `columns[${k}].title`)
           return {
-            id: prev?.columns.find((x) => same(x.title, title))?.id ?? uid(),
+            id: oldColumn((x) => same(x.title, title))?.id ?? uid(),
             title,
             cards: list(c.cards, `columns[${k}].cards`).map((card, j) => {
               const f = `columns[${k}].cards[${j}]`
               const t = typeof card === 'string' ? card : text(obj(card, f).title, `${f}.title`)
-              const old = oldCards.find((x) => same(x.title, t))
+              const old = oldCard((x) => same(x.title, t))
               if (typeof card === 'string') return old ? { ...old, title: t } : { id: uid(), title: t }
               return {
                 ...(old ?? { id: uid() }),
@@ -443,17 +457,27 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     /** A table as given, keeping the details of columns and rows already there (rows match by their first cell). */
     const tableOf = (columnsIn: unknown, rowsIn: unknown, prev?: TableData): TableData => {
       if (!Array.isArray(columnsIn) || !columnsIn.length) fail(index, op, '"columns" should be a list of column names')
+      const oldColumn = taker(prev?.columns)
       const columns = columnsIn.map((name, k) => {
         const n = text(name, `columns[${k}]`)
-        const old = prev?.columns.find((c) => same(c.name, n))
+        const old = oldColumn((c) => same(c.name, n))
         return old ? { ...old, name: n } : { id: uid(), name: n, width: COL_W }
       })
       const firstOld = prev?.columns[0]?.id
-      const rows = list(rowsIn as unknown[] | undefined, 'rows').map((row, k) => {
+      const oldRow = taker(prev?.rows)
+      // What an old row said, in its columns' order, to know a row that hasn't changed.
+      const said = (r: TableData['rows'][number]) => prev!.columns.map((c) => (r.cells[c.id] ?? '').trim().toLowerCase()).join('\u0001')
+      const given = list(rowsIn as unknown[] | undefined, 'rows').map((row, k) => {
         if (!Array.isArray(row)) fail(index, op, `rows[${k}] should be a list of cell values`)
-        const old = firstOld !== undefined && row[0] !== undefined ? prev?.rows.find((r) => same(r.cells[firstOld] ?? '', String(row[0]))) : undefined
-        return { ...old, id: old?.id ?? uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, row[j] === undefined ? '' : String(row[j])])) }
+        return (row as unknown[]).map((v) => (v === undefined ? '' : String(v)))
       })
+      // Rows that say just what an old row said are that row; then, of the rest, ones that begin as an old row did.
+      const matchable = firstOld !== undefined
+      const was = given.map((cells) => (matchable && cells.length ? oldRow((r) => said(r) === prev!.columns.map((_, j) => (cells[j] ?? '').trim().toLowerCase()).join('\u0001')) : undefined))
+      given.forEach((cells, k) => {
+        if (matchable && !was[k] && cells.length) was[k] = oldRow((r) => same(r.cells[firstOld!] ?? '', cells[0]))
+      })
+      const rows = given.map((cells, k) => ({ ...was[k], id: was[k]?.id ?? uid(), cells: Object.fromEntries(columns.map((c, j) => [c.id, cells[j] ?? ''])) }))
       const ids = new Set(columns.map((c) => c.id))
       return fitColumns(
         {
@@ -486,9 +510,16 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
     const timelineOf = (lanesIn: TimelineLaneIn[] | undefined, prev?: TimelineData): Pick<TimelineData, 'lanes' | 'entries'> => {
       const lanes: TimelineData['lanes'] = []
       const entries: TimelineData['entries'] = []
-      list(lanesIn, 'lanes').forEach((lane, k) => {
-        const name = text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`)
-        const was = prev?.lanes.find((l) => same(l.name, name))
+      const oldLane = taker(prev?.lanes)
+      const oldEntry = taker(prev?.entries)
+      const given = list(lanesIn, 'lanes')
+      const names = given.map((lane, k) => text(obj(lane, `lanes[${k}]`).name, `lanes[${k}].name`))
+      const lanesWere = names.map((name) => oldLane((l) => same(l.name, name)))
+      // Spans still in their own lane are themselves; only then is one of the same name from another lane the one that was moved.
+      const stayed = given.map((lane, k) => list(lane.entries, `lanes[${k}].entries`).map((e) => (lanesWere[k] && typeof e?.title === 'string' ? oldEntry((x) => x.lane === lanesWere[k]!.id && same(x.title, e.title as string)) : undefined)))
+      given.forEach((lane, k) => {
+        const name = names[k]
+        const was = lanesWere[k]
         const id = was?.id ?? uid()
         // What the lane has: given here, or as it was (a lane sent again by name keeps its hours).
         const has = (key: 'capacity' | 'budget' | 'rate', most: number) => {
@@ -504,7 +535,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           const end = date(e.end, `${f}.end`)
           if (end && end < start) fail(index, op, `"${f}.end" is before its start`)
           const title = text(e.title, `${f}.title`)
-          const old = prev?.entries.find((x) => same(x.title, title))
+          const old = stayed[k][j] ?? oldEntry((x) => same(x.title, title))
           const entry: TimelineData['entries'][number] = { ...old, id: old?.id ?? uid(), lane: id, title, start, color: color(e.color, `${f}.color`).color ?? old?.color ?? BRANCHES[entries.length % BRANCHES.length][1] }
           // Hours planned (in all, or a day or a week) and spent: as given, or as they were.
           if (e.hours !== undefined) {

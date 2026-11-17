@@ -85,17 +85,42 @@ function cleanNotes(v: unknown): Note[] | undefined {
   return notes.length ? notes : undefined
 }
 
+/**
+ * Ids, each made its own: one that's already taken gets a number after it (the same one every
+ * time it's read, so everyone reading the same board agrees). Rows, cards and spans are told
+ * apart by their ids: two sharing one would show double when sorted, and change as one.
+ */
+function ownIds(): (id: string) => string {
+  const taken = new Set<string>()
+  return (id) => {
+    let own = id.slice(0, 64)
+    for (let n = 2; taken.has(own); n++) own = `${id.slice(0, 56)}~${n}`
+    taken.add(own)
+    return own
+  }
+}
+
 function cleanTable(v: unknown): TableData | undefined {
   if (!isObj(v)) return undefined
+  const columnId = ownIds()
+  // Columns that shared an id showed the same cells: each keeps them, under its own id.
+  const shared: [string, string][] = []
+  const own = (id: string) => {
+    const mine = columnId(id)
+    if (mine !== id.slice(0, 64)) shared.push([id.slice(0, 64), mine])
+    return mine
+  }
+  const rowId = ownIds()
   const columns = arr(v.columns).flatMap((c) =>
-    isObj(c) && typeof c.id === 'string' ? [{ id: c.id.slice(0, 64), name: str(c.name, NAME_MAX) ?? '', width: Math.max(COL_MIN, Math.min(COL_MAX, Math.round(num(c.width) ?? 160))), ...(c.hidden === true ? { hidden: true } : {}), ...(c.sized === true ? { sized: true as const } : {}) }] : [],
+    isObj(c) && typeof c.id === 'string' ? [{ id: own(c.id), name: str(c.name, NAME_MAX) ?? '', width: Math.max(COL_MIN, Math.min(COL_MAX, Math.round(num(c.width) ?? 160))), ...(c.hidden === true ? { hidden: true } : {}), ...(c.sized === true ? { sized: true as const } : {}) }] : [],
   )
   if (!columns.length) return undefined
   const rows = arr(v.rows).flatMap((r) => {
     if (!isObj(r) || typeof r.id !== 'string') return []
     const cells: Record<string, string> = {}
     if (isObj(r.cells)) for (const [k, val] of Object.entries(r.cells)) if (typeof val === 'string' || typeof val === 'number') cells[k] = String(val).slice(0, TEXT_MAX)
-    return [{ id: r.id.slice(0, 64), cells, ...(r.hidden === true ? { hidden: true } : {}) }]
+    for (const [was, mine] of shared) if (cells[was] !== undefined && cells[mine] === undefined) cells[mine] = cells[was]
+    return [{ id: rowId(r.id), cells, ...(r.hidden === true ? { hidden: true } : {}) }]
   })
   const out: TableData = { columns, rows }
   if (isObj(v.sort) && typeof v.sort.column === 'string' && (v.sort.dir === 'asc' || v.sort.dir === 'desc')) out.sort = { column: v.sort.column, dir: v.sort.dir }
@@ -111,13 +136,15 @@ function cleanTable(v: unknown): TableData | undefined {
 
 function cleanKanban(v: unknown): KanbanData | undefined {
   if (!isObj(v)) return undefined
+  const columnId = ownIds()
+  const cardId = ownIds()
   const columns = arr(v.columns).flatMap((c) => {
     if (!isObj(c) || typeof c.id !== 'string') return []
     const cards = arr(c.cards).flatMap((k) => {
       if (!isObj(k) || typeof k.id !== 'string') return []
       return [
         {
-          id: k.id.slice(0, 64),
+          id: cardId(k.id),
           title: str(k.title, TEXT_MAX) ?? '',
           ...(str(k.color, 32) ? { color: str(k.color, 32) } : {}),
           ...(day(k.start) ? { start: day(k.start) } : {}),
@@ -125,7 +152,7 @@ function cleanKanban(v: unknown): KanbanData | undefined {
         },
       ]
     })
-    return [{ id: c.id.slice(0, 64), title: str(c.title, NAME_MAX) ?? '', cards }]
+    return [{ id: columnId(c.id), title: str(c.title, NAME_MAX) ?? '', cards }]
   })
   return columns.length ? { columns } : undefined
 }
@@ -134,12 +161,14 @@ function cleanTimeline(v: unknown): TimelineData | undefined {
   if (!isObj(v)) return undefined
   // Hours: a number that makes sense (none below nothing, none beyond what could ever be worked).
   const hours = (x: unknown, most: number) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.min(x, most) : undefined)
+  const laneId = ownIds()
+  const entryId = ownIds()
   const lanes = arr(v.lanes).flatMap((l) => {
     if (!isObj(l) || typeof l.id !== 'string') return []
     const capacity = hours(l.capacity, WEEK_MAX)
     const budget = hours(l.budget, HOURS_MAX)
     const rate = hours(l.rate, 1_000_000)
-    return [{ id: l.id.slice(0, 64), name: str(l.name, NAME_MAX) ?? '', ...(capacity !== undefined ? { capacity } : {}), ...(budget !== undefined ? { budget } : {}), ...(rate !== undefined ? { rate } : {}) }]
+    return [{ id: laneId(l.id), name: str(l.name, NAME_MAX) ?? '', ...(capacity !== undefined ? { capacity } : {}), ...(budget !== undefined ? { budget } : {}), ...(rate !== undefined ? { rate } : {}) }]
   })
   const entries = arr(v.entries).flatMap((e) => {
     if (!isObj(e) || typeof e.id !== 'string' || typeof e.lane !== 'string' || !day(e.start)) return []
@@ -147,7 +176,7 @@ function cleanTimeline(v: unknown): TimelineData | undefined {
     const after = arr(e.after).filter((x): x is string => typeof x === 'string').slice(0, 50).map((x) => x.slice(0, 64))
     return [
       {
-        id: e.id.slice(0, 64),
+        id: entryId(e.id),
         lane: e.lane,
         title: str(e.title, TEXT_MAX) ?? '',
         start: day(e.start)!,
