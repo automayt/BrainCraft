@@ -4,13 +4,16 @@
  * compatible transcription endpoint, such as Whisper served by vLLM on your own machines, or a
  * hosted one.
  *
- *   POST /api/ai/transcribe?lang=en-US&voices=ID&people=3   body: the recording (audio/webm, audio/ogg, audio/mp4…)
- *   → { "text": "what was said", "voice": 2, "name": "Sam", "merged": [[3, 1]] }
+ *   POST /api/ai/transcribe?lang=en-US&voices=ID&people=3&phrase=17   body: the recording (audio/webm, audio/ogg, audio/mp4…)
+ *   → { "text": "what was said", "voice": 2, "name": "Sam", "merged": [[3, 1]], "was": [["15", 2]] }
  *
  * With a speaker-recognition model (speakers.ts) and `voices` naming the conversation, a WAV
  * recording also says which voice said it, as heard so far in that conversation; `people`, when
  * the app knows how many are in it, keeps it to that many voices. "merged" lists voices found to
- * be one person since the last reply: each later one went into the earlier. "name" is who the voice
+ * be one person since the last reply: each later one went into the earlier. Someone new only counts
+ * as a voice once they've been heard again, so their first phrase comes back with no voice; with
+ * `phrase` (the app's own name for each phrase), "was" then says which earlier phrases that voice
+ * had said, once it counts. "name" is who the voice
  * is, once it's been named, here or in an earlier meeting (VoiceBook remembers voices by name):
  *
  *   POST /api/ai/voices?voices=ID   {"voice": 2, "name": "Sam"}   names a voice, and remembers it
@@ -230,6 +233,7 @@ export class Transcriber {
       ...(heard?.voice ? { voice: heard.voice } : {}),
       ...(heard?.name ? { name: heard.name } : {}),
       ...(heard?.merged.length ? { merged: heard.merged } : {}),
+      ...(heard?.placed.length ? { was: heard.placed } : {}),
     })
   }
 
@@ -275,7 +279,7 @@ export class Transcriber {
   }
 
   /** Which voice said a recording, in the conversation the app named (null when it can't tell), and voices since found to be one. */
-  private voiceOf(req: IncomingMessage, url: URL, audio: Buffer): { voice: number | null; name: string | null; merged: [number, number][] } | null {
+  private voiceOf(req: IncomingMessage, url: URL, audio: Buffer): { voice: number | null; name: string | null; merged: [number, number][]; placed: [string, number][] } | null {
     const v = this.o.voices
     const talk = url.searchParams.get('voices')
     if (!v || !talk || !/^[\w-]{6,40}$/.test(talk)) return null
@@ -283,10 +287,11 @@ export class Transcriber {
     if (!sound) return null
     const conversation = `${v.who(req)} ${talk}`
     const people = /^\d{1,2}$/.test(url.searchParams.get('people') ?? '') ? Number(url.searchParams.get('people')) : null
+    const phrase = /^[\w-]{1,24}$/.test(url.searchParams.get('phrase') ?? '') ? url.searchParams.get('phrase')! : undefined
     try {
       const print = v.embedder.embed(sound.samples, sound.rate)
-      const voice = print ? v.voices.place(conversation, print, sound.samples.length / sound.rate, people) : null
-      return { voice, name: voice ? v.voices.nameOf(conversation, voice) : null, merged: v.voices.merged(conversation) }
+      const voice = print ? v.voices.place(conversation, print, sound.samples.length / sound.rate, people, phrase) : null
+      return { voice, name: voice ? v.voices.nameOf(conversation, voice) : null, merged: v.voices.merged(conversation), placed: v.voices.placed(conversation) }
     } catch {
       return null
     }

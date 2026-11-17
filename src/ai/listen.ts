@@ -78,6 +78,17 @@ export class Utterances {
     return true
   }
 
+  /**
+   * Says a phrase that hasn't gone yet another way (the last one that reads so), where it stands:
+   * true when it was still waiting, false when the assistant already has it.
+   */
+  reword(from: string, to: string): boolean {
+    const at = this.pending.lastIndexOf(from.trim())
+    if (at < 0 || !to.trim()) return false
+    this.pending[at] = to.trim()
+    return true
+  }
+
   /** The speaker is still talking (an unfinished phrase): wait for the pause. */
   speaking() {
     if (this.pending.length && !this.busy) this.schedule()

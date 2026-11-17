@@ -135,6 +135,8 @@ interface Voice {
   name?: string
   /** What of it was taught to that name, to take back if the name turns out wrong. */
   taught?: { sum: Float32Array; heard: number }
+  /** While it's only a maybe: the phrases heard as it so far, by the names the app gave them. */
+  phrases?: string[]
 }
 
 interface Talk {
@@ -145,6 +147,8 @@ interface Talk {
   people: number | null
   /** Voices found to be one person since the app last asked: [the later one, the one it went into]. */
   merged: [number, number][]
+  /** Earlier phrases whose voice has become known since the app last asked: [the phrase, its voice]. */
+  placed: [string, number][]
 }
 
 /** Maybes kept per conversation, and how long one waits to be heard again. */
@@ -253,14 +257,16 @@ export class Voices {
 
   /**
    * Which voice said a phrase (1, 2…), or null when it can't be known yet. `people`: how many
-   * are in the conversation, when the app knows.
+   * are in the conversation, when the app knows. `phrase`: the app's name for this phrase, so that
+   * if its voice only becomes known later (someone new, once they're heard again), the app can be
+   * told which phrase that was (see `placed`).
    */
-  place(conversation: string, print: Float32Array, seconds: number, people?: number | null): number | null {
+  place(conversation: string, print: Float32Array, seconds: number, people?: number | null, phrase?: string): number | null {
     const now = this.o.now()
     this.forget(now)
     let talk = this.talks.get(conversation)
     if (!talk) {
-      talk = { at: now, voices: [], next: 1, people: null, merged: [] }
+      talk = { at: now, voices: [], next: 1, people: null, merged: [], placed: [] }
       this.talks.set(conversation, talk)
     }
     talk.at = now
@@ -289,17 +295,17 @@ export class Voices {
       const { best, score } = nearest(known)
       if (!best) return null
       // Only a phrase that sounds like them shapes what they sound like.
-      return score >= this.o.threshold ? this.join(talk, best, p, now) : best.n
+      return score >= this.o.threshold ? this.join(talk, best, p, now, phrase) : best.n
     }
     // Whichever voice, or maybe, it's most like takes it, when it's like enough. (Once, a voice
     // already known came first: someone new who sounded a little like them went to them, and
     // the voice grew to sound like everyone.)
     const { best, score } = nearest(fits)
-    if (best && score >= this.o.threshold) return this.join(talk, best, p, now)
+    if (best && score >= this.o.threshold) return this.join(talk, best, p, now, phrase)
     // Too short to be sure it's someone new: the nearest voice already known, left as it was.
     if (seconds < this.o.shortest) return nearest(known).best?.n ?? null
     // Maybe someone new: a voice once heard again.
-    talk.voices.push({ n: 0, sum: Float32Array.from(p), heard: 1, at: now })
+    talk.voices.push({ n: 0, sum: Float32Array.from(p), heard: 1, at: now, phrases: phrase ? [phrase] : [] })
     const maybes = talk.voices.filter((v) => !v.n)
     if (maybes.length > MAYBES) talk.voices.splice(talk.voices.indexOf(maybes[0]), 1)
     return null
@@ -314,7 +320,19 @@ export class Voices {
     return out
   }
 
-  private join(talk: Talk, v: Voice, p: Float32Array, now: number): number | null {
+  /**
+   * Earlier phrases whose voice has become known since last asked, as [the phrase, its voice]: the
+   * first words of someone new, heard before they'd been heard again.
+   */
+  placed(conversation: string): [string, number][] {
+    const talk = this.talks.get(conversation)
+    if (!talk?.placed.length) return []
+    const out = talk.placed
+    talk.placed = []
+    return out
+  }
+
+  private join(talk: Talk, v: Voice, p: Float32Array, now: number, phrase?: string): number | null {
     for (let i = 0; i < p.length; i++) v.sum[i] += p[i]
     v.heard++
     v.at = now
@@ -325,8 +343,14 @@ export class Voices {
       v.taught.heard++
     }
     if (!v.n) {
-      if (v.heard < this.o.heardTimes) return null
+      if (v.heard < this.o.heardTimes) {
+        if (phrase) v.phrases?.push(phrase)
+        return null
+      }
       v.n = talk.next++
+      // What was heard of them before they counted was theirs too.
+      for (const said of v.phrases ?? []) talk.placed.push([said, v.n])
+      v.phrases = undefined
     }
     this.recognise(talk, v)
     // Grown like another voice: they were one person all along, and the earlier number stays.

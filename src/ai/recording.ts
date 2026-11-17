@@ -134,7 +134,8 @@ export async function fileEar(file: Blob, o: FileEarOptions, on: Hearing): Promi
       if (stopped || !heard) break
       if (heard.merged?.length) on.merged?.(heard.merged)
       if (heard.voice !== undefined && heard.name) on.named?.(heard.voice, heard.name)
-      if (/[\p{L}\p{N}]/u.test(heard.text)) on.final(heard.text.trim(), heard.voice, Math.round((spans[k].start / RATE) * 1000), heard.unclear)
+      if (heard.was?.length) on.placed?.(heard.was)
+      if (/[\p{L}\p{N}]/u.test(heard.text)) on.final(heard.text.trim(), heard.voice, Math.round((spans[k].start / RATE) * 1000), heard.unclear, undefined, undefined, heard.phrase)
       o.progress?.(Math.round((spans[k].end / RATE) * 1000), length)
       while (!stopped && (paused || o.backlog?.())) await sleep(300)
     }

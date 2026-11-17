@@ -30,7 +30,12 @@ export interface Hearing {
    * once the call is heard too, whether it came from the microphone or the call, and when it was
    * said (so the call heard through the microphone can be told from the person here).
    */
-  final(text: string, voice?: number, at?: number, unclear?: boolean, from?: HeardFrom, said?: Span): void
+  final(text: string, voice?: number, at?: number, unclear?: boolean, from?: HeardFrom, said?: Span, phrase?: string): void
+  /**
+   * Earlier phrases whose voice has become known: someone new only counts as a voice once they've
+   * been heard again, and these were their first words. Each is [the phrase's name, its voice].
+   */
+  placed?(pairs: [string, number][]): void
   /** A microphone phrase left out: it was the call, coming out of the speakers. */
   echoed?(): void
   /** The server knows who a voice is: named here, or in an earlier meeting. */
@@ -209,6 +214,10 @@ export interface Heard {
   merged?: [number, number][]
   /** Some of it wasn't heard clearly (marked "[unclear: …]" in the text). */
   unclear?: boolean
+  /** The name the server knows this phrase by, when voices are told apart. */
+  phrase?: string
+  /** Earlier phrases whose voice has become known since: [the phrase's name, its voice]. */
+  was?: [string, number][]
 }
 
 export interface ServerEarOptions {
@@ -342,9 +351,10 @@ export async function serverEar(o: ServerEarOptions, on: Hearing): Promise<Ear> 
                   on.interim?.('')
                   if (t.merged?.length) on.merged?.(t.merged)
                   if (t.voice !== undefined && t.name) on.named?.(t.voice, t.name)
+                  if (t.was?.length) on.placed?.(t.was)
                   // What was left of the call in it, too faint to make out: heard from the call itself.
                   if (mine.echoed >= 300 && onlyUnclear(t.text)) return on.echoed?.()
-                  if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear, from, from ? said : undefined)
+                  if (words(t.text)) on.final(t.text.trim(), t.voice, undefined, t.unclear, from, from ? said : undefined, t.phrase)
                 },
                 (err: Error) => {
                   if (!stopped) on.error(err.message)

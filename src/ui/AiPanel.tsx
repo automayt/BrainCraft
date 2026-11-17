@@ -512,6 +512,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       heardLines.current.set(l.id, line)
       if (heardLines.current.size > 200) heardLines.current.delete(heardLines.current.keys().next().value!)
     },
+    // Someone new's first words, once they're known as a voice: the transcript has them as theirs.
+    relabel: (id, voice) => {
+      const line = heardLines.current.get(id)
+      if (line) line.voice = voice
+    },
     // It was the call, heard through the microphone: the call's own line is the one kept.
     unline: (id) => {
       const line = heardLines.current.get(id)

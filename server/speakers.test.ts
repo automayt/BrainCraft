@@ -153,6 +153,40 @@ describe('telling voices apart', () => {
     expect(v.place('m', print(2, 0.06), 2)).toBe(3)
   })
 
+  it('says, once someone new counts as a voice, which earlier phrases were theirs', () => {
+    const v = new Voices()
+    // Two people taking turns: each one's first phrase is no one yet.
+    expect(v.place('m', print(0, 0.05), 3, null, 'p1')).toBeNull()
+    expect(v.place('m', print(1, 0.05), 3, null, 'p2')).toBeNull()
+    expect(v.placed('m')).toEqual([])
+    expect(v.place('m', print(0, 0.08), 3, null, 'p3')).toBe(1)
+    expect(v.placed('m')).toEqual([['p1', 1]])
+    // Said once.
+    expect(v.placed('m')).toEqual([])
+    expect(v.place('m', print(1, 0.07), 3, null, 'p4')).toBe(2)
+    expect(v.placed('m')).toEqual([['p2', 2]])
+    // Someone already a voice: nothing more to say.
+    expect(v.place('m', print(0, 0.1), 3, null, 'p5')).toBe(1)
+    expect(v.placed('m')).toEqual([])
+    // Phrases the app gave no name to can't be pointed back at; nor another conversation's.
+    expect(v.place('m', print(2, 0.05), 3)).toBeNull()
+    expect(v.place('m', print(2, 0.06), 3, null, 'p7')).toBe(3)
+    expect(v.placed('m')).toEqual([])
+    expect(v.placed('elsewhere')).toEqual([])
+  })
+
+  it('names every phrase heard of them before they counted, when that takes more than two', () => {
+    const v = new Voices({ heardTimes: 3 })
+    expect(v.place('m', print(0, 0.05), 3, null, 'a')).toBeNull()
+    expect(v.place('m', print(0, 0.06), 3, null, 'b')).toBeNull()
+    expect(v.placed('m')).toEqual([])
+    expect(v.place('m', print(0, 0.07), 3, null, 'c')).toBe(1)
+    expect(v.placed('m')).toEqual([
+      ['a', 1],
+      ['b', 1],
+    ])
+  })
+
   it('keeps its settings when they’re given as nothing (an unset environment variable)', () => {
     // An undefined threshold once meant nothing was ever like enough: every phrase a new voice.
     const v = new Voices({ threshold: undefined, same: Number('not a number') })
@@ -329,8 +363,25 @@ describe('transcribing with voices', () => {
       },
     }) as unknown as IncomingMessage
     await t.handle(request, r, new URL(`http://localhost${path}`))
-    return (await r.reply).body as { text?: string; voice?: number; merged?: [number, number][] }
+    return (await r.reply).body as { text?: string; voice?: number; merged?: [number, number][]; was?: [string, number][] }
   }
+
+  it('says whose an earlier phrase was, by the name the app gave it', async () => {
+    let who = 0
+    const { t } = transcriber(() => print(who, 0.05))
+    const say = (person: number, phrase: string) => {
+      who = person
+      return post(t, `/api/ai/transcribe?lang=en&voices=meeting7&phrase=${phrase}`, wav(2))
+    }
+    expect(await say(0, '1')).toEqual({ text: 'hello' })
+    expect(await say(1, '2')).toEqual({ text: 'hello' })
+    expect(await say(0, '3')).toEqual({ text: 'hello', voice: 1, was: [['1', 1]] })
+    expect(await say(1, '4')).toEqual({ text: 'hello', voice: 2, was: [['2', 2]] })
+    expect(await say(0, '5')).toEqual({ text: 'hello', voice: 1 })
+    // A name that isn't one is no name: the phrase is still placed, and never pointed back at.
+    expect(await say(2, 'not a name!')).toEqual({ text: 'hello' })
+    expect(await say(2, '7')).toEqual({ text: 'hello', voice: 3 })
+  })
 
   it('says which voice, when the app asks', async () => {
     const { t, sent } = transcriber(() => print(0))

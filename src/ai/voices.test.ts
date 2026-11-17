@@ -3,7 +3,7 @@ import { applyOps, type Op } from '../api/ops'
 import { emptyBoard } from '../model/board'
 import { fakeMeasure } from '../model/test-helpers'
 import { CALL_NAME, glossaryOf, unnamedVoice } from '../model/meeting'
-import { heardSummary, heardWarning, sameVoice, voiceLine } from '../ui/useTalk'
+import { heardSummary, heardWarning, sameVoice, untilNow, voiceLine } from '../ui/useTalk'
 import { Utterances, joined } from './listen'
 
 describe('who said what, as the assistant reads it', () => {
@@ -25,6 +25,38 @@ describe('who said what, as the assistant reads it', () => {
   it('says when it isn’t sure who, rather than letting the line run on as the last person’s', () => {
     expect(voiceLine('and the budget', undefined, two)).toBe('[Not sure who] and the budget')
     expect(joined(['[Sam] we could', '[Not sure who] and the budget'])).toBe('[Sam] we could\n[Not sure who] and the budget')
+  })
+})
+
+describe('whose the lines were before a second voice was heard', () => {
+  it('were all the first voice’s, when that’s so', () => {
+    expect(untilNow('Voice 1', [])).toBe('[Until now, everything was said by Voice 1.]')
+    expect(untilNow('Sam', [{ text: 'We move it to May', who: 'Sam' }, { text: 'I’ll book it', who: 'Sam' }])).toBe('[Until now, everything was said by Sam.]')
+  })
+
+  it('says which were someone else’s first words, and which nobody’s for certain', () => {
+    expect(
+      untilNow('Voice 1', [
+        { text: 'We should move the launch to May.', who: 'Voice 1' },
+        { text: 'That works for me.', who: 'Voice 2' },
+        { text: 'I will book the venue.', who: 'Voice 1' },
+      ]),
+    ).toBe('[Until now, everything was said by Voice 1, except: “That works for me.” (Voice 2).]')
+    expect(untilNow('Voice 1', [{ text: 'mm hm' }, { text: 'That works for me.', who: 'Voice 2' }])).toBe('[Until now, everything was said by Voice 1, except: “mm hm” (not known who); “That works for me.” (Voice 2).]')
+  })
+
+  it('quotes them briefly, without marks of their own, and only the latest few', () => {
+    const long = `That works for me, as long as the press release goes out the week before and [unclear: nobody minds].`
+    const one = untilNow('Voice 1', [{ text: long, who: 'Voice 2' }])
+    expect(one).toBe('[Until now, everything was said by Voice 1, except: “That works for me, as long as the press release goes out the week b…” (Voice 2).]')
+    expect(one.match(/\[/g)).toHaveLength(1)
+    const marked = untilNow('Voice 1', [{ text: '[unclear: That works] for   me.', who: 'Voice 2' }])
+    expect(marked).toBe('[Until now, everything was said by Voice 1, except: “unclear: That works for me.” (Voice 2).]')
+    const many = untilNow('Voice 1', Array.from({ length: 11 }, (_, k) => ({ text: `Line ${k + 1}` })))
+    expect(many).toContain('“Line 4” (not known who)')
+    expect(many).not.toContain('“Line 3”')
+    expect(many.endsWith('; and 3 earlier lines (not known who).]')).toBe(true)
+    expect(untilNow('Voice 1', Array.from({ length: 9 }, (_, k) => ({ text: `Line ${k + 1}` }))).endsWith('; and 1 earlier line (not known who).]')).toBe(true)
   })
 })
 

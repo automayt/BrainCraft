@@ -151,6 +151,29 @@ describe('waiting for a phrase still being heard', () => {
     expect(sent).toEqual(['a timeline'])
   })
 
+  it('says a waiting phrase another way where it stands, and says when it has already gone', async () => {
+    const c = clock()
+    const sent: string[] = []
+    const u = new Utterances(async (t) => void sent.push(t), { pauseMs: 1000, ...c })
+    u.heard('[Sam] we move to May')
+    u.heard('[Not sure who] that works for me')
+    u.heard('[Sam] good')
+    expect(u.reword(' [Not sure who] that works for me ', '[Lee] that works for me')).toBe(true)
+    expect(u.waiting).toBe('[Sam] we move to May\n[Lee] that works for me\n[Sam] good')
+    // Not there, or nothing to say instead.
+    expect(u.reword('[Not sure who] that works for me', '[Lee] that works for me')).toBe(false)
+    expect(u.reword('[Sam] good', '  ')).toBe(false)
+    await c.tick(1000)
+    expect(sent).toEqual(['[Sam] we move to May\n[Lee] that works for me\n[Sam] good'])
+    // Already with the assistant.
+    expect(u.reword('[Sam] good', '[Lee] good')).toBe(false)
+    // The last of two that read the same.
+    u.heard('okay')
+    u.heard('okay')
+    expect(u.reword('okay', '[Lee] okay')).toBe(true)
+    expect(u.waiting).toBe('okay\n[Lee] okay')
+  })
+
   it('takes back a phrase that hasn’t gone yet, and says when it already has', async () => {
     const c = clock()
     const sent: string[] = []

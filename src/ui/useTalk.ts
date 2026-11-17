@@ -35,6 +35,8 @@ export interface TalkOptions {
   line?(l: { id: number; text: string; voice?: number; at?: number; unclear?: boolean }): void
   /** A line heard earlier wasn't said here after all: it was the call, coming through the microphone. */
   unline?(id: number): void
+  /** Who said a line heard earlier has become known (someone new, since heard again): its voice. */
+  relabel?(id: number, voice: number): void
   /**
    * What speech to text should know before each phrase: the names and terms in use, and what was
    * said just before (each phrase is heard on its own, and without this names come out garbled).
@@ -101,6 +103,26 @@ export function voiceLine(text: string, voice: number | undefined, voices: reado
   if (voice === undefined) return `[${from === 'call' ? 'Someone on the call' : 'Not sure who'}] ${text}`
   const name = voices.find((v) => v.n === voice)?.name ?? `Voice ${voice}`
   return `[${name}] ${text}`
+}
+
+/** A line as it's quoted back to the assistant: short, and without marks of its own. */
+const quoted = (text: string) => {
+  const t = text.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim()
+  return t.length > 70 ? `${t.slice(0, 67).trimEnd()}…` : t
+}
+
+/**
+ * What the assistant is told when a second voice is first heard: whose the lines before it were.
+ * They went without names (one voice needs none), and were the first voice's, except any now known
+ * to be someone else's (a new voice's first words are heard before it counts as a voice) and any
+ * whose voice was never made out. `early`: those lines, each with who said it where that's known.
+ */
+export function untilNow(first: string, early: readonly { text: string; who?: string }[]): string {
+  const others = early.filter((l) => l.who !== first)
+  if (!others.length) return `[Until now, everything was said by ${first}.]`
+  const shown = others.slice(-8).map((l) => `“${quoted(l.text)}” (${l.who ?? 'not known who'})`)
+  const more = others.length - shown.length
+  return `[Until now, everything was said by ${first}, except: ${shown.join('; ')}${more > 0 ? `; and ${more} earlier ${more === 1 ? 'line' : 'lines'} (not known who)` : ''}.]`
 }
 
 /** A voice's own name, rather than the number it was given (or "The call"). */
@@ -264,8 +286,16 @@ export function useTalk(o: TalkOptions) {
     heard.current = { ...NOTHING_HEARD }
     /** Each thing is heard once: see ai/heardOnce.ts. */
     const once = new HeardOnce()
+    /** Phrases sent to have their voice told, counted: each one's number is its name to the server. */
+    let phrases = 0
     /** The microphone's lines heard lately, as the assistant was given them, should one turn out to have been the call. */
     const given = new Map<number, { line: string; text: string; who: string }>()
+    /** Lines heard before there were two voices (so given without names), and whose each turned out to be. */
+    const early: { id: number; text: string; voice?: number }[] = []
+    /** Lines whose voice wasn't known when they were heard, by the name the server knows each phrase by. */
+    const unplaced = new Map<string, { id: number; text: string; line: string }>()
+    /** A voice's name, whether or not it has been heard as a voice here yet. */
+    const calledNow = (n: number) => voicesRef.current.find((v) => v.n === n)?.name ?? known.current.get(n) ?? `Voice ${n}`
     const takeBack = (id: number) => {
       const was = given.get(id)
       if (!was) return
@@ -292,7 +322,26 @@ export function useTalk(o: TalkOptions) {
         heard.current.echo++
         setTick((t) => t + 1)
       },
-      final: (text: string, heardAs?: number, at?: number, unclear?: boolean, from?: HeardFrom, said?: Span) => {
+      // Someone new counts as a voice once they've been heard again: what they said first was theirs too.
+      placed: (pairs: [string, number][]) => {
+        for (const [phrase, n] of pairs) {
+          const was = unplaced.get(phrase)
+          if (!was) continue
+          unplaced.delete(phrase)
+          const voice = whose(n)
+          const before = early.find((l) => l.id === was.id)
+          if (before) before.voice = voice
+          latest.current.relabel?.(was.id, voice)
+          // Before a second voice, lines go without names: whose this was is said when one is
+          // first heard (see untilNow). After, the line gets its name where it waits, or the
+          // assistant is told whose it was.
+          if (voicesRef.current.length < 2 && was.line === was.text) continue
+          const name = calledNow(voice)
+          if (!u.reword(was.line, `[${name}] ${was.text}`)) u.heard(`[“${quoted(was.text)}” was said by ${name}.]`)
+        }
+        setTick((t) => t + 1)
+      },
+      final: (text: string, heardAs?: number, at?: number, unclear?: boolean, from?: HeardFrom, said?: Span, phrase?: string) => {
         setInterim('')
         // Each thing once: not a line said a third time running, nor the call heard through the microphone.
         const taken = once.take(text, { now: at ?? Date.now(), ...(from ? { from } : {}), ...(said ? { said } : {}) })
@@ -327,11 +376,21 @@ export function useTalk(o: TalkOptions) {
             // A second voice: what was said before it was all the first one's. Not with the
             // microphone and the call heard apart: each line has said whose it was from the start,
             // and what came before that was everyone at once.
-            if (first && !from) u.heard(`[Until now, everything was said by ${first.name}.]`)
+            if (first && !from) u.heard(untilNow(first.name, early.map((l) => ({ text: l.text, ...(l.voice !== undefined ? { who: calledNow(whose(l.voice)) } : {}) }))))
           }
         }
         const who = voice === undefined ? undefined : whose(voice)
         line = voiceLine(line, who, voicesRef.current, from)
+        // Lines given without names, for when a second voice is heard; and a line whose voice
+        // isn't known yet, for when it is.
+        if (!from && voicesRef.current.length < 2) {
+          early.push({ id: taken.id, text, ...(who !== undefined ? { voice: who } : {}) })
+          if (early.length > 60) early.shift()
+        }
+        if (who === undefined && phrase) {
+          unplaced.set(phrase, { id: taken.id, text, line })
+          if (unplaced.size > 40) unplaced.delete(unplaced.keys().next().value!)
+        }
         if (from === 'me') {
           given.set(taken.id, { line, text, who: voicesRef.current.find((v) => v.n === who)?.name ?? 'the person here' })
           if (given.size > 80) given.delete(given.keys().next().value!)
@@ -364,7 +423,9 @@ export function useTalk(o: TalkOptions) {
         // The microphone's phrases are the person's own once the call is heard on its own: only the
         // call's voices are told apart (one fewer person among them).
         const others = from === 'call' && people ? Math.max(1, people - 1) : people
-        const voicesToo = latest.current.serverVoices && !preview && from !== 'me' ? `&voices=${conversation}${others ? `&people=${others}` : ''}` : ''
+        // Each phrase has a name the server keeps with it, so it can say later whose it was.
+        const phrase = latest.current.serverVoices && !preview && from !== 'me' ? String(++phrases) : undefined
+        const voicesToo = phrase ? `&voices=${conversation}${others ? `&people=${others}` : ''}&phrase=${phrase}` : ''
         const res = await fetch(serverUrl(server!, `api/ai/transcribe?lang=${encodeURIComponent(lang)}${voicesToo}`), {
           method: 'POST',
           body: audio,
@@ -377,11 +438,12 @@ export function useTalk(o: TalkOptions) {
             ...(before ? { 'x-transcribe-context': encodeURIComponent(before) } : {}),
           },
         })
-        const out = (await res.json().catch(() => ({}))) as { text?: string; voice?: number; name?: unknown; merged?: unknown; unclear?: unknown; error?: string }
+        const out = (await res.json().catch(() => ({}))) as { text?: string; voice?: number; name?: unknown; merged?: unknown; was?: unknown; unclear?: unknown; error?: string }
         if (!res.ok) throw new Error(out.error ?? `Speech to text failed (${res.status})`)
         const merged = Array.isArray(out.merged) ? out.merged.filter((m): m is [number, number] => Array.isArray(m) && m.length === 2 && m.every((x) => Number.isInteger(x) && x > 0)) : []
         const name = typeof out.name === 'string' ? out.name.replace(/[[\]\n]+/g, ' ').trim().slice(0, 40) : ''
-        return { text: out.text ?? '', ...(typeof out.voice === 'number' ? { voice: out.voice } : {}), ...(name ? { name } : {}), ...(merged.length ? { merged } : {}), ...(out.unclear === true ? { unclear: true } : {}) }
+        const was = Array.isArray(out.was) ? out.was.filter((m): m is [string, number] => Array.isArray(m) && m.length === 2 && typeof m[0] === 'string' && Number.isInteger(m[1]) && m[1] > 0) : []
+        return { text: out.text ?? '', ...(phrase ? { phrase } : {}), ...(was.length ? { was } : {}), ...(typeof out.voice === 'number' ? { voice: out.voice } : {}), ...(name ? { name } : {}), ...(merged.length ? { merged } : {}), ...(out.unclear === true ? { unclear: true } : {}) }
       }
       if (recording)
         ear.current = await fileEar(

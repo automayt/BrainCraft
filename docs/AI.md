@@ -479,6 +479,12 @@ each person's ideas down as theirs.
   Voice 1, Voice 2 and so on, in the order people first speak. A new voice
   counts once it's been heard twice, so a cough or two people at once don't
   make one; until then the phrase is "not sure who".
+- Once a new voice counts, what they said first is theirs too: the
+  transcript has it under their name, and the assistant is told whose it was
+  ("“That works for me” was said by Voice 2"), so a point noted from
+  someone's first words gets their name. When a second voice is first
+  heard, the assistant is told whose the lines before it were, each new
+  speaker's first words included.
 - Voices that turn out to sound alike are put together, keeping the earlier
   number (and any name either was given), and the assistant is told.
 - Once a second voice is heard, a **Voices** strip appears (in Flowstate,
