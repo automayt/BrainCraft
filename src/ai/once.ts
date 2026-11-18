@@ -2,7 +2,8 @@
 
 import { makeBackend } from './assistant'
 import type { Backend, Message } from './backends'
-import { connectionFor, loadSettings, reviewSettings, serverAi } from './settings'
+import { connectionFor, reviewSettings, serverAi } from './settings'
+import { settingsHere } from './settingsStore'
 
 /** How often an answer that ran out of room is carried on before what there is has to do. */
 const CARRY_ON = 4
@@ -50,7 +51,7 @@ export async function askWhole(backend: Backend, system: string, question: strin
  */
 export async function askOnce(server: string | null, system: string, question: string, signal?: AbortSignal, o: { use?: 'review'; cut?: () => void } = {}): Promise<string> {
   const ai = await serverAi(server)
-  const saved = loadSettings()
+  const saved = await settingsHere(server)
   const settings = o.use === 'review' ? reviewSettings(saved, ai) : saved
   const connection = connectionFor(settings, server, ai)
   if (!connection) throw new Error('Set up the assistant first: open Ask AI (Ctrl J) and choose where it runs')

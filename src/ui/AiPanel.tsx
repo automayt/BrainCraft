@@ -3,7 +3,8 @@
 import { AssistantIcon, MicIcon } from './icons'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { AI_MODELS, type AiImage, type AiModel, Assistant, type Callbacks, type Live, type Proposal, TOO_LONG, describeError, makeBackend, quietTimer } from '../ai/assistant'
-import { type AiSettings, type ServerAi, type ServerProvider, connectionFor, listModels, loadSettings, saveSettings, serverAi, serverProvider } from '../ai/settings'
+import { type AiSettings, type ServerAi, type ServerProvider, choiceName, connectionFor, listModels, loadSettings, notOffered, saveSettings, savedChoice, serverAi, serverProvider } from '../ai/settings'
+import { keepSettings, syncSettings } from '../ai/settingsStore'
 import { type Keeper, type SavedThread, type Turn, type Where, forgetThread, loadThread, ownerOf, saveThread, toSaved } from '../ai/threadStore'
 import * as B from '../model/board'
 import { type LinkTarget, objectLabel, parseNote, resolveName } from '../model/notes'
@@ -274,6 +275,25 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
     }
   }, [ws.server])
 
+  /** Asks the server again what it offers: after its settings were put right, say. */
+  const recheck = () => {
+    setChecked(false)
+    void serverAi(ws.server).then((s) => {
+      setServer(s)
+      setChecked(true)
+    })
+  }
+  // The settings kept with the account, when they're newer than this browser's (or it has none).
+  const signedIn = ws.account?.user?.id ?? null
+  useEffect(() => {
+    if (!ws.server || !signedIn) return
+    let live = true
+    void syncSettings(ws.server).then((s) => live && setSettings(s))
+    return () => {
+      live = false
+    }
+  }, [ws.server, signedIn])
+
   const connection = connectionFor(settings, ws.server, server)
   const keeper: Keeper = { server: ws.server, account: ws.account?.user?.id ?? null }
   const owner = ownerOf(keeper)
@@ -306,8 +326,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   useEffect(() => () => editor.previewAi(null), [editor, boardKey])
 
   const update = (s: AiSettings) => {
-    setSettings(s)
-    saveSettings(s)
+    const next = { ...s, at: Date.now() }
+    setSettings(next)
+    saveSettings(next)
+    // With an account they're kept there too, so they aren't this browser's alone.
+    if (ws.server && signedIn) keepSettings(ws.server, next)
     // Stay on the settings until Done, so the panel doesn't switch away mid-typing.
     setSetup(true)
   }
@@ -352,6 +375,13 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
   ]
   const agent = server.agents.find((a) => a.id === settings.agent) ?? server.agents[0]
   const serverChoice = provider === 'anthropic' ? `anthropic:${settings.model}` : provider === 'openai' ? `openai:${settings.serverModel && server.openaiModels.includes(settings.serverModel) ? settings.serverModel : (server.openaiModels[0] ?? '')}` : `command:${agent?.id ?? ''}`
+  // What was chosen but the server isn't offering just now: kept, said, and never written over by showing something else.
+  const gone = checked ? notOffered(settings, server) : {}
+  const chosen = savedChoice(settings)
+  /** A choice of the server's was made, and the server has no AI to offer just now. */
+  const serverDown = checked && settings.mode === 'server' && !server.available && (!!chosen || !!settings.review)
+  /** The key's boxes are open: it's what's used, or nothing has been set up and the server has nothing to offer. */
+  const keyOpen = settings.mode === 'key' || (settings.mode === 'server' && !server.available && !serverDown)
   const pickServer = (value: string) => {
     const [p, rest] = [value.slice(0, value.indexOf(':')) as ServerProvider, value.slice(value.indexOf(':') + 1)]
     update({ ...settings, mode: 'server', provider: p, ...(p === 'anthropic' ? { model: rest as AiModel } : p === 'openai' ? { serverModel: rest } : { agent: rest }) })
@@ -821,6 +851,18 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       {showSetup && (
         <section className="ai-setup">
           <h3>Connect the assistant</h3>
+          {serverDown && (
+            <div className="ai-kept" role="status">
+              <strong>{server.unreachable || !ws.server ? 'This server can’t be reached right now.' : 'This server isn’t offering the assistant right now.'}</strong>
+              <p>
+                Your choice is kept{chosen ? ` (${choiceName(chosen)})` : ''} and is used again as soon as the server offers it. Nothing here has been changed. Whoever runs the server can check its AI settings and
+                its log.
+              </p>
+              <button type="button" onClick={recheck}>
+                Check again
+              </button>
+            </div>
+          )}
           {ws.server && server.available && (
             <label className="ai-choice">
               <input type="radio" checked={settings.mode === 'server'} onChange={() => update({ ...settings, mode: 'server' })} />
@@ -848,29 +890,40 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                     </option>
                   ))}
                 </select>
+                {gone.own && (
+                  <small className="ai-kept-note">
+                    Your choice, {choiceName(gone.own)}, isn’t offered by the server right now, so the one shown is used meanwhile. Yours is kept and comes back when the server offers it again; pick another only if you
+                    mean to change it.
+                  </small>
+                )}
               </label>
+              {gone.review && serverChoices.length <= 1 && (
+                <small className="ai-kept-note">Your choice for reviewing meetings, {choiceName(gone.review)}, isn’t offered by the server right now. It’s kept, and the one above reviews them meanwhile.</small>
+              )}
               {serverChoices.length > 1 && (
                 <label className="ai-model">
                   Review meetings with
                   <select
                     aria-label="Review meetings with"
-                    value={settings.review && serverChoices.some((c) => c.value === settings.review) ? settings.review : ''}
+                    value={settings.review ?? ''}
                     onChange={(e) => update({ ...settings, review: e.target.value || undefined })}
                   >
                     <option value="">The same as above</option>
+                    {gone.review && <option value={gone.review}>{choiceName(gone.review)} (not offered right now)</option>}
                     {serverChoices.map((c) => (
                       <option key={c.value} value={c.value}>
                         {c.label}
                       </option>
                     ))}
                   </select>
+                  {gone.review && <small className="ai-kept-note">Your choice, {choiceName(gone.review)}, isn’t offered by the server right now. It’s kept, and the one above reviews meetings meanwhile.</small>}
                   <small>A meeting is reviewed once, when it ends, against its whole transcript. That’s worth the most capable choice here, even a slow one: the notes taken during it stay on the one above.</small>
                 </label>
               )}
             </>
           )}
           <label className="ai-choice">
-            <input type="radio" checked={settings.mode === 'key' || (settings.mode === 'server' && !server.available)} onChange={() => update({ ...settings, mode: 'key' })} />
+            <input type="radio" checked={keyOpen} onChange={() => update({ ...settings, mode: 'key' })} />
             <span>
               <strong>Use my own Anthropic API key</strong>
               <small>
@@ -882,7 +935,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
               </small>
             </span>
           </label>
-          {(settings.mode === 'key' || (settings.mode === 'server' && !server.available)) && (
+          {keyOpen && (
             <>
               <input
                 type="password"
@@ -965,6 +1018,11 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
           )}
           {ws.server && server.voices && <KnownVoices server={ws.server} password={settings.password} />}
           {!checked && <p className="muted">Checking for a server…</p>}
+          <p className="muted ai-saved">
+            {signedIn && ws.server
+              ? 'Saved as you change them, with your account: they’re the same in another browser, and when this server is at another address. Keys and passwords stay in this browser only.'
+              : 'Saved as you change them, in this browser.'}
+          </p>
           {editor.pendingAiPrompt && <p className="ai-waiting">“{editor.pendingAiPrompt.label ?? 'Your question'}” will be sent as soon as the assistant is connected.</p>}
           {connection && setup && (
             <button className="primary" onClick={() => setSetup(false)}>
@@ -977,6 +1035,14 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       {!showSetup && tab === 'chat' && (
         <>
           <div className="ai-scroll" ref={scroller}>
+            {(gone.own || gone.review) && (
+              <p className="ai-kept ai-kept-line" role="status">
+                {gone.own
+                  ? `Your model, ${choiceName(gone.own)}, isn’t offered by the server right now, so another of its choices is answering meanwhile.`
+                  : `Your choice for reviewing meetings, ${choiceName(gone.review!)}, isn’t offered by the server right now, so the assistant’s own reviews them meanwhile.`}{' '}
+                Yours is kept and comes back by itself.
+              </p>
+            )}
             {!turns.length && (
               <div className="ai-empty">
                 {editor.readOnly ? (

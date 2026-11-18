@@ -54,3 +54,52 @@ describe('conversations kept with your account', () => {
     expect((await s.call('GET', '/api/assistant/thread', s.sam)).status).toBe(403)
   })
 })
+
+describe('assistant settings kept with your account', () => {
+  const mine = { mode: 'openai', model: 'claude-opus-5-5', openaiBase: 'http://models.example:8000/v1', openaiModel: 'big-model', textTools: true, review: 'command:codex', at: 7 }
+
+  it('keeps each person’s own, and gives them back', async () => {
+    const s = await server()
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).body).toEqual({ settings: null })
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, mine)).status).toBe(200)
+    expect((await s.call('PUT', '/api/assistant/settings', s.ann, { mode: 'server', provider: 'command', agent: 'claude', at: 3 })).status).toBe(200)
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).body).toEqual({ settings: mine })
+    // Private: Ann (an admin) gets her own, never Sam's.
+    expect((await s.call('GET', '/api/assistant/settings', s.ann)).body).toEqual({ settings: { mode: 'server', provider: 'command', agent: 'claude', at: 3 } })
+    // Changed again: the newer is what's kept.
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, { ...mine, openaiModel: 'bigger-model', at: 9 })).status).toBe(200)
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).body.settings).toMatchObject({ openaiModel: 'bigger-model', at: 9 })
+  })
+
+  it('never keeps a key or a password, even when sent one', async () => {
+    const s = await server()
+    await s.call('PUT', '/api/assistant/settings', s.sam, { ...mine, apiKey: 'sk-ant-secret', openaiKey: 'sk-secret', password: 'server-secret', extra: { anything: 'else' }, openaiBase: 'x'.repeat(500) })
+    const got = (await s.call('GET', '/api/assistant/settings', s.sam)).body
+    expect(JSON.stringify(got)).not.toMatch(/secret|anything/)
+    // What's too long to be an address isn't kept either; the rest is.
+    expect(got.settings).toEqual({ mode: 'openai', model: 'claude-opus-5-5', openaiModel: 'big-model', textTools: true, review: 'command:codex', at: 7 })
+  })
+
+  it('takes only settings, from the app, from someone signed in who may use the assistant', async () => {
+    const s = await server()
+    expect((await s.call('GET', '/api/assistant/settings', '')).status).toBe(401)
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, mine, { 'x-braincraft': '' })).status).toBe(403)
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, 'not json')).status).toBe(400)
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, [1, 2])).status).toBe(400)
+    expect((await s.call('PUT', '/api/assistant/settings', s.sam, { ...mine, review: 'x'.repeat(20_000) })).status).toBe(400)
+    expect((await s.call('DELETE', '/api/assistant/settings', s.sam)).status).toBe(405)
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).body).toEqual({ settings: null })
+    await s.call('PATCH', '/api/admin/groups/everyone', s.ann, { permissions: ['boards.create'] })
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).status).toBe(403)
+  })
+
+  it('is kept apart from the conversation', async () => {
+    const s = await server()
+    await s.call('PUT', '/api/assistant/thread', s.sam, thread('plan the launch'))
+    await s.call('PUT', '/api/assistant/settings', s.sam, mine)
+    // New chat forgets the conversation, not the settings.
+    await s.call('DELETE', '/api/assistant/thread', s.sam)
+    expect((await s.call('GET', '/api/assistant/thread', s.sam)).body).toEqual({ thread: null })
+    expect((await s.call('GET', '/api/assistant/settings', s.sam)).body).toEqual({ settings: mine })
+  })
+})

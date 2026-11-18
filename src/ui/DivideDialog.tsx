@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { askOnce } from '../ai/once'
-import { connectionFor, loadSettings, serverAi } from '../ai/settings'
+import { connectionFor, serverAi } from '../ai/settings'
+import { settingsHere } from '../ai/settingsStore'
 import { type Plan, parseTopics, planByFrame, planByKind, TOPIC_SYSTEM, topicPrompt, topicUnits, unitsOf } from '../model/divide'
 import { Dialog } from './Boards'
 import { useEditor } from './useEditor'
@@ -67,7 +68,7 @@ export function DivideDialog({ onClose }: { onClose: () => void }) {
   const [ai, setAi] = useState<boolean | null>(null)
   useEffect(() => {
     let live = true
-    void serverAi(ws.server).then((s) => live && setAi(!!connectionFor(loadSettings(), ws.server, s)))
+    void Promise.all([serverAi(ws.server), settingsHere(ws.server)]).then(([s, mine]) => live && setAi(!!connectionFor(mine, ws.server, s)))
     return () => {
       live = false
     }

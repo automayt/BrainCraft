@@ -692,6 +692,25 @@ Open the panel's settings (the gear icon). There are three ways:
    `--allowed-origins '["https://automayt.github.io"]'` (or your BrainCraft
    server's address).
 
+### Where the settings are kept
+
+Settings are saved as you change them. On a server with accounts they're
+kept **with your account** as well as in the browser, so they're the same in
+another browser, and when the server is reached at another address (a
+browser keeps its own settings for each address, so moving a server from
+`http` to `https`, or to another name or port, used to start them again from
+nothing). Whichever was changed last is the one used. **Keys and passwords
+are never kept with the account**: your Anthropic key, your model server's
+key and the server's AI password stay in the browser they were typed in, and
+are typed again in a new one.
+
+A choice of the server's that it isn't offering right now is kept too. When
+the server's AI is switched off or set up wrongly, or the model you chose is
+missing from its model server, the settings say so (with **Check again**)
+rather than showing an empty setup, and nothing is changed. If the server
+offers something else meanwhile, that answers, the panel says which choice of
+yours is missing, and yours is used again by itself when it's back.
+
 ### Models without tool calling
 
 The assistant reads and changes the board through tools. vLLM serves tool

@@ -1,4 +1,8 @@
-/** AI settings, kept in this browser: where the assistant's model runs, and which model. */
+/**
+ * AI settings: where the assistant's model runs, and which model. Kept in this browser, and with
+ * your account on a server with accounts (see settingsStore.ts), except keys and passwords, which
+ * never leave this browser.
+ */
 
 import { type AiConnection, type AiModel, AI_MODELS, DEFAULT_MODEL } from './assistant'
 
@@ -34,31 +38,48 @@ export interface AiSettings {
    * and waited for, so it can go to something slower and more capable than the live notes use.
    */
   review?: string
+  /** When these were last changed (ms): the newer of this browser's and the account's is the one used. */
+  at?: number
 }
 
 const PROVIDERS: ServerProvider[] = ['anthropic', 'openai', 'command']
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
 
+/** Settings as kept (in this browser, or with the account), checked: anything that isn't one is left out. */
+export function readSettings(given: unknown): AiSettings {
+  const raw = given && typeof given === 'object' ? (given as Partial<AiSettings>) : null
+  const model = AI_MODELS.some((m) => m.id === raw?.model) ? (raw!.model as AiModel) : DEFAULT_MODEL
+  return {
+    mode: raw?.mode === 'key' || raw?.mode === 'openai' ? raw.mode : 'server',
+    ...(PROVIDERS.includes(raw?.provider as ServerProvider) ? { provider: raw!.provider } : {}),
+    ...(typeof raw?.agent === 'string' ? { agent: raw.agent } : {}),
+    apiKey: str(raw?.apiKey),
+    password: str(raw?.password),
+    model,
+    serverModel: str(raw?.serverModel),
+    openaiBase: str(raw?.openaiBase),
+    openaiKey: str(raw?.openaiKey),
+    openaiModel: str(raw?.openaiModel),
+    textTools: raw?.textTools === true,
+    ...(typeof raw?.review === 'string' && raw.review ? { review: raw.review } : {}),
+    ...(typeof raw?.at === 'number' && Number.isFinite(raw.at) && raw.at > 0 ? { at: raw.at } : {}),
+  }
+}
+
 export function loadSettings(): AiSettings {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<AiSettings> | null
-    const model = AI_MODELS.some((m) => m.id === raw?.model) ? (raw!.model as AiModel) : DEFAULT_MODEL
-    return {
-      mode: raw?.mode === 'key' || raw?.mode === 'openai' ? raw.mode : 'server',
-      ...(PROVIDERS.includes(raw?.provider as ServerProvider) ? { provider: raw!.provider } : {}),
-      ...(typeof raw?.agent === 'string' ? { agent: raw.agent } : {}),
-      apiKey: str(raw?.apiKey),
-      password: str(raw?.password),
-      model,
-      serverModel: str(raw?.serverModel),
-      openaiBase: str(raw?.openaiBase),
-      openaiKey: str(raw?.openaiKey),
-      openaiModel: str(raw?.openaiModel),
-      textTools: raw?.textTools === true,
-      ...(typeof raw?.review === 'string' && raw.review ? { review: raw.review } : {}),
-    }
+    return readSettings(JSON.parse(localStorage.getItem(KEY) ?? 'null'))
   } catch {
     return { mode: 'server', model: DEFAULT_MODEL }
+  }
+}
+
+/** Whether this browser has any settings of its own yet. */
+export function hasSettings(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null
+  } catch {
+    return false
   }
 }
 
@@ -93,6 +114,8 @@ export interface ServerAi {
   transcribePreview?: boolean
   /** It tells voices apart, so each phrase says who said it. */
   voices?: boolean
+  /** It didn't answer at all (as against answering that it offers no AI). */
+  unreachable?: boolean
 }
 
 const NO_AI: ServerAi = { available: false, password: false, providers: [], openaiModels: [], textTools: false, agents: [], agentsLocal: false }
@@ -124,7 +147,7 @@ export async function serverAi(server: string | null): Promise<ServerAi> {
       voices: h.voices === true,
     }
   } catch {
-    return NO_AI
+    return { ...NO_AI, unreachable: true }
   }
 }
 
@@ -142,8 +165,39 @@ export function withServerChoice(s: AiSettings, ai: ServerAi, choice: string | u
   const rest = choice.slice(cut + 1)
   if (!ai.providers.includes(provider)) return null
   if (provider === 'anthropic') return AI_MODELS.some((m) => m.id === rest) ? { ...s, mode: 'server', provider, model: rest as AiModel } : null
-  if (provider === 'openai') return (ai.openaiModels.length ? ai.openaiModels.includes(rest) : rest === '') ? { ...s, mode: 'server', provider, serverModel: rest } : null
+  // No model named: whichever the server's model server has.
+  if (provider === 'openai') return rest === '' || ai.openaiModels.includes(rest) ? { ...s, mode: 'server', provider, serverModel: rest || undefined } : null
   return ai.agents.some((a) => a.id === rest) ? { ...s, mode: 'server', provider, agent: rest } : null
+}
+
+/** The server's choice these settings were set to, as the Model list names it; nothing when none was ever picked. */
+export function savedChoice(s: AiSettings): string | undefined {
+  if (s.provider === 'anthropic') return `anthropic:${s.model}`
+  if (s.provider === 'openai') return `openai:${s.serverModel ?? ''}`
+  if (s.provider === 'command') return `command:${s.agent ?? ''}`
+  return undefined
+}
+
+/** A choice in a few words, for saying which one is kept while the server doesn't offer it. */
+export function choiceName(choice: string): string {
+  const cut = choice.indexOf(':')
+  const [provider, rest] = [choice.slice(0, cut), choice.slice(cut + 1)]
+  if (provider === 'anthropic') return AI_MODELS.find((m) => m.id === rest)?.label ?? rest
+  if (provider === 'openai') return rest ? `${rest} on the server’s model server` : 'the server’s model server'
+  return rest === 'claude' ? 'Claude Code' : rest === 'codex' ? 'Codex' : rest || 'the server’s agent'
+}
+
+/**
+ * What the server isn't offering just now of what these settings were set to: the assistant's own
+ * choice, the one for reviews, or both. They're kept all the same, and used again when it does.
+ */
+export function notOffered(s: AiSettings, ai: ServerAi): { own?: string; review?: string } {
+  if (s.mode !== 'server') return {}
+  const own = savedChoice(s)
+  return {
+    ...(own && !withServerChoice(s, ai, own) ? { own } : {}),
+    ...(s.review && !withServerChoice(s, ai, s.review) ? { review: s.review } : {}),
+  }
 }
 
 /** The settings a meeting's review runs with: the choice made for reviews, while the server offers it; otherwise the assistant's own. */
