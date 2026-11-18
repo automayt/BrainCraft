@@ -32,9 +32,9 @@ function shortDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-/** Where a card dragged to (x, y) on screen would land. */
-function dropTarget(x: number, y: number, dragged: string): { column: string; index: number } | null {
-  const col = document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.dataset.col) as HTMLElement | undefined
+/** Where a card dragged to (x, y) on screen would land, among the columns of its own board (`within`). */
+function dropTarget(x: number, y: number, dragged: string, within: Element | null): { column: string; index: number } | null {
+  const col = document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.dataset.col && (!within || within.contains(el))) as HTMLElement | undefined
   if (!col) return null
   const cards = Array.from(col.querySelectorAll<HTMLElement>('[data-card]')).filter((c) => c.dataset.card !== dragged)
   let index = cards.length
@@ -106,7 +106,7 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
       }
       lifted.current?.move(ev.clientX, ev.clientY)
       // Between two columns the gap stays where it was; off the board altogether, it goes back home.
-      const over = dropTarget(ev.clientX, ev.clientY, d.card)
+      const over = dropTarget(ev.clientX, ev.clientY, d.card, board)
       const onBoard = !!board && document.elementsFromPoint(ev.clientX, ev.clientY).includes(board)
       setDragState({ ...d, moved: true, target: over ?? (onBoard ? (d.target ?? d.from) : d.from) })
     }
@@ -230,7 +230,9 @@ export function KanbanView({ item, live, editingTitle }: { item: Item; live: boo
                           const to = k.columns[ci + dx]
                           if (!to) return
                           update((x) => K.moveCard(x, card.id, to.id, dx ? to.cards.length : Math.max(0, index + dy)))
-                          requestAnimationFrame(() => (document.querySelector(`[data-card="${card.id}"]`) as HTMLElement | null)?.focus())
+                          // The card on this board: a copy of the board has cards of the same ids.
+                          const here = (e.currentTarget as HTMLElement).closest('.kanban-columns') ?? document
+                          requestAnimationFrame(() => (here.querySelector(`[data-card="${card.id}"]`) as HTMLElement | null)?.focus())
                         } else if (e.key === 'Enter') {
                           e.preventDefault()
                           e.stopPropagation()

@@ -50,6 +50,15 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
   const t = item.table!
   const [menu, setMenu] = useState<OpenMenu>(null)
   const update = (f: (t: TableData) => TableData) => editor.updateTable(item.id, f)
+  /** Adds a row. Filters would hide a new, empty row the moment it's made, so they're cleared to show it. */
+  const addRow = (after?: string, before = false) => {
+    const filtered = T.activeFilters(t) > 0
+    update((x) => {
+      const next = T.addRow(x, after, before)[0]
+      return filtered ? { ...next, filters: {} } : next
+    })
+    if (filtered) editor.setStatus('Filters cleared, to show the new row')
+  }
   const cols = T.viewColumns(t)
   const rows = T.viewRows(t)
   const hidden = T.hiddenCount(t)
@@ -71,7 +80,7 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
       el.blur()
       if (e.key === 'Enter' && r === rows.length - 1 && !e.shiftKey) {
         // Enter on the last row adds a new one, like a spreadsheet.
-        update((x) => T.addRow(x, rowId)[0])
+        addRow(rowId)
         requestAnimationFrame(() => focusCell(root, r + 1, c))
       } else focusCell(root, e.shiftKey ? r - 1 : r + 1, c)
     } else if (e.key === 'ArrowUp' && atStart) {
@@ -106,7 +115,7 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
 
   const actions = (
     <>
-      <button title="Add a row" onClick={() => update((x) => T.addRow(x)[0])}>
+      <button title="Add a row" onClick={() => addRow()}>
         + Row
       </button>
       <button title="Add a column" onClick={() => update((x) => T.addColumn(x)[0])}>
@@ -169,7 +178,11 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
                 defaultValue={c.name}
                 key={c.name}
                 aria-label="Column name"
-                onBlur={(e) => e.target.value !== c.name && update((x) => T.renameColumn(x, c.id, e.target.value || c.name))}
+                onBlur={(e) => {
+                  // Left empty, it keeps its name: the box says so too.
+                  if (!e.target.value.trim()) e.target.value = c.name
+                  else if (e.target.value !== c.name) update((x) => T.renameColumn(x, c.id, e.target.value))
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
             ) : (
@@ -261,8 +274,8 @@ export function TableView({ item, live, editingTitle }: { item: Item; live: bool
                 <Menu
                   onClose={() => setMenu(null)}
                   items={[
-                    ['Insert row above', () => update((x) => T.addRow(x, row.id, true)[0])],
-                    ['Insert row below', () => update((x) => T.addRow(x, row.id)[0])],
+                    ['Insert row above', () => addRow(row.id, true)],
+                    ['Insert row below', () => addRow(row.id)],
                     null,
                     row.hidden ? ['Unhide row', () => update((x) => T.setRowHidden(x, row.id, false))] : ['Hide row', () => update((x) => T.setRowHidden(x, row.id, true))],
                     ['Delete row', () => update((x) => T.deleteRow(x, row.id))],

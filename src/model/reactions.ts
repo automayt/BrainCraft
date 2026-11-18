@@ -113,7 +113,7 @@ export function results(b: Board, poll: Id): { item: Item; votes: number }[] {
 
 /** Starts a vote on `options`: a card just above them saying how it works. */
 export function startPoll(b: Board, options: Id[], opts: { question?: string; each?: number } = {}): [Board, Id] {
-  const ids = options.filter((id) => getItem(b, id) && !getItem(b, id)!.poll)
+  const ids = [...new Set(options)].filter((id) => getItem(b, id) && !getItem(b, id)!.poll)
   const box = bounds(b, new Set(ids)) ?? { x: 0, y: 0, w: 0, h: 0 }
   const each = Math.max(1, Math.min(10, opts.each ?? Math.max(1, Math.min(5, Math.ceil(ids.length / 3)))))
   const card = newItem('comment', { x: box.x, y: box.y - 170, w: 320, h: 140 }, {

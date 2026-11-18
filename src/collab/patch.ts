@@ -4,6 +4,7 @@
  * applies them in reverse so undoing your own change never undoes someone else's.
  */
 
+import { healMinds, reIdItem } from '../model/board'
 import type { Automation, Board, BoardFile, Connector, DataRecord, Dataset, Field, Id, Item, Page, PageBody, PageRev, Snap, TimeEntry } from '../model/types'
 
 export interface DatasetMeta {
@@ -259,6 +260,21 @@ class ListChanges<T extends { id: Id }> {
 }
 
 /** Applies patches in order. Lines whose ends are gone are dropped, the same way everywhere. */
+/**
+ * Changes that make new objects, with those objects (`ids`) given new ids from `from` on, and
+ * everything in the changes that points at them pointing at the new ones.
+ */
+export function renumbered(patches: Patch[], ids: readonly Id[], from: Id): Patch[] {
+  const map = new Map(ids.map((id, k) => [id, from + k]))
+  const to = (id: Id) => map.get(id) ?? id
+  return patches.map((p) => {
+    if (p.k === 'item') return { ...p, id: to(p.id), v: p.v && reIdItem(p.v, to) }
+    if (p.k === 'conn') return { ...p, id: to(p.id), v: p.v && { ...p.v, id: to(p.v.id), from: to(p.v.from), to: to(p.v.to) } }
+    if (p.k === 'order') return { ...p, v: p.v.map(to) }
+    return p
+  })
+}
+
 export function applyPatches(b: Board, patches: Patch[]): Board {
   if (!patches.length) return b
   // Changes are gathered by id and the lists rebuilt once, so a big patch stays linear.
@@ -378,7 +394,10 @@ export function applyPatches(b: Board, patches: Patch[]): Board {
       }
     }
   }
-  const items = itemList.result() as Item[]
+  // An idea whose parent these changes took away (one person adds under an idea as another undoes it)
+  // is a central idea now, not one hanging from nothing.
+  const minds = patches.some((p) => p.k === 'item' && (p.v === null || p.v.kind === 'mind'))
+  const items = minds ? healMinds(itemList.result() as Item[]) : (itemList.result() as Item[])
   let connectors = connList.result() as Connector[]
   const ids = new Set(items.map((i) => i.id))
   if (connectors.some((c) => !ids.has(c.from) || !ids.has(c.to))) connectors = connectors.filter((c) => ids.has(c.from) && ids.has(c.to))

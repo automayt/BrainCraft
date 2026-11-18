@@ -406,7 +406,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
             refresh()
           },
           // Talking: changes go on the board as they come (each one in History, to undo).
-          ...(live ? { apply: (p: Proposal) => !editor.readOnly && editor.applyAi(p.id, p.summary, p.patches, p.bases) } : {}),
+          ...(live ? { apply: (p: Proposal) => !editor.readOnly && editor.applyAi(p.id, p.summary, p.patches, p.bases, p.made) } : {}),
         },
         ctrl.signal,
       )
@@ -579,7 +579,7 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
       return
     }
     if (editor.readOnly) return editor.setStatus('This board is read-only')
-    if (editor.applyAi(p.id, p.summary, p.patches, p.bases)) {
+    if (editor.applyAi(p.id, p.summary, p.patches, p.bases, p.made)) {
       p.status = 'applied'
       // Embeds it wrote into pages get the wiki's copy, as if picked.
       saveMissingCopies(ws, editor)

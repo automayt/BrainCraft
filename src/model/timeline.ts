@@ -447,7 +447,17 @@ export function zoomAbout(range: { start: number; end: number }, day: number, fa
 export const rangeDays = (r: { start: number; end: number }): { start: string; end: string } => ({ start: fromDay(r.start), end: fromDay(r.end) })
 
 export function deleteLane(t: TimelineData, id: string): TimelineData {
-  return { ...t, lanes: t.lanes.filter((l) => l.id !== id), entries: t.entries.filter((e) => e.lane !== id) }
+  const gone = new Set(t.entries.filter((e) => e.lane === id).map((e) => e.id))
+  // What waited for a span that went with the lane waits for it no more.
+  const entries = t.entries
+    .filter((e) => e.lane !== id)
+    .map((e) => {
+      if (!e.after?.some((a) => gone.has(a))) return e
+      const after = e.after.filter((a) => !gone.has(a))
+      const { after: _was, ...rest } = e
+      return after.length ? { ...rest, after } : rest
+    })
+  return { ...t, lanes: t.lanes.filter((l) => l.id !== id), entries }
 }
 
 export function toggleSource(t: TimelineData, kanban: Id): TimelineData {

@@ -774,6 +774,12 @@ export function withComputed(b: Board, ds: Dataset, now = new Date()): Dataset {
     return others.get(id)
   }
   const fields: ShownField[] = ds.fields.map((f) => {
+    // A formula's field is a copy, started afresh: what's wrong with it is found each time, and
+    // never written on the field as it's kept (where it stayed after the formula was put right).
+    if (f.type === 'formula') {
+      const { problem: _was, ...fresh } = f as ShownField
+      return fresh
+    }
     if (f.type !== 'relation') return f
     const target = other(f.relation?.dataset)
     return { ...f, titles: Object.fromEntries((target?.records ?? []).map((r) => [r.id, recordTitle(target!, r)])) }

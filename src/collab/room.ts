@@ -76,6 +76,18 @@ export interface RoomData {
 
 const MAX_PATCHES = 5000
 
+/**
+ * The first block of ids a board's next editor can have: past every id already on it. (Once, every
+ * new room began at the first block, so on a board that had been live before, each new object took
+ * the id of an old one and replaced it for everyone.)
+ */
+export function slotAfter(board: Board): number {
+  let most = Math.max(0, (board.nextId || 1) - 1)
+  for (const i of board.items) if (i.id > most) most = i.id
+  for (const c of board.connectors) if (c.id > most) most = c.id
+  return Math.floor(most / ID_BLOCK) + 1
+}
+
 export class Room {
   data: RoomData
   readonly members = new Map<string, Member>()
@@ -85,6 +97,10 @@ export class Room {
   private measure: Measure
 
   constructor(data: RoomData, measure: Measure) {
+    // A board that's been live before (shared again, or split off a live one) has objects in the
+    // blocks its editors had then: the next editor's block is past them all.
+    const first = slotAfter(data.board)
+    if (!(data.nextSlot >= first)) data.nextSlot = first
     this.data = data
     this.measure = measure
   }

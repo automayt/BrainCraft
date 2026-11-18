@@ -170,7 +170,8 @@ function RelationCell({ c, f, r }: { c: Ctx; f: Field; r: DataRecord }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const titles = (f as D.ShownField).titles ?? {}
-  const ids = D.relIds(r.values[f.id])
+  // Links to records that have since been deleted lead nowhere: not shown, and gone the next time the links are changed.
+  const ids = D.relIds(r.values[f.id]).filter((id) => !f.relation || id in titles)
   const set = (next: string[]) => c.edit((d) => D.setValue(d, r.id, f.id, D.relValue(next) || null))
   const choices = Object.entries(titles)
     .filter(([id, t]) => id !== r.id && t.toLowerCase().includes(q.trim().toLowerCase()))
@@ -326,7 +327,9 @@ function RuleValue({ f, value, onChange, anything }: { f: Field; value: FieldVal
       </select>
     )
   }
-  return <input aria-label="Value" placeholder={anything ? 'anything' : 'empty'} defaultValue={value === undefined || value === null || value === 'today' ? '' : String(value)} onBlur={(e) => onChange(e.target.value === '' ? (anything ? undefined : null) : f.type === 'number' ? Number(e.target.value) : e.target.value)} />
+  const shown = value === undefined || value === null || value === 'today' ? '' : String(value)
+  // Kept only when it's been changed: leaving the box untouched writes nothing.
+  return <input key={shown} aria-label="Value" placeholder={anything ? 'anything' : 'empty'} defaultValue={shown} onBlur={(e) => e.target.value !== shown && onChange(e.target.value === '' ? (anything ? undefined : null) : f.type === 'number' ? Number(e.target.value) : e.target.value)} />
 }
 
 /** A database's automations, each as a sentence to edit: when this happens, set that. */
@@ -388,7 +391,7 @@ function AutomationsDialog({ c, onClose }: { c: Ctx; onClose: () => void }) {
                 {a.set.map((s, k) => {
                   const sf = D.fieldById(c.ds, s.field)
                   return (
-                    <div key={k} className="rule-line then">
+                    <div key={`${k} ${s.field} ${String(s.value)}`} className="rule-line then">
                       <span>{k ? 'and set' : 'set'}</span>
                       <select aria-label="Field to set" value={s.field} onChange={(e) => change(a.id, (x) => ({ ...x, set: x.set.map((y, j) => (j === k ? { field: e.target.value, value: null } : y)) }))}>
                         {settable.map((f) => (
@@ -625,14 +628,17 @@ function TableBody({ c }: { c: Ctx }) {
   const rows = D.viewRecords(c.ds, c.view)
   const [menu, setMenu] = useState<string | null>(null)
   const [focusNew, setFocusNew] = useState<string | null>(null)
-  const addRecord = (after?: string) =>
+  const addRecord = (after?: string) => {
+    // A search would hide the new, empty record the moment it's made: it's cleared, to show it.
+    if (c.view.query) c.setView((v) => ({ ...v, query: undefined }))
     c.edit((d) => {
       const [next, id] = D.addRecord(d, {}, after)
       setFocusNew(id)
       return next
     })
+  }
   return (
-    <div className="dv-table" role="table" style={{ gridTemplateColumns: `${ROWNUM}px ${fields.map((f) => `${WIDTH[f.type]}px`).join(' ')}${c.live ? ' 40px' : ''}` }}>
+    <div className="dv-table" role="table" onFocusCapture={() => focusNew && setFocusNew(null)} style={{ gridTemplateColumns: `${ROWNUM}px ${fields.map((f) => `${WIDTH[f.type]}px`).join(' ')}${c.live ? ' 40px' : ''}` }}>
       <div className="dv-th corner" />
       {fields.map((f) => (
         <div key={f.id} className="dv-th" role="columnheader">
@@ -743,8 +749,9 @@ interface CardDrag {
   target: { key: string | null; before: string | null } | null
 }
 
-function dropTarget(x: number, y: number, dragged: string): CardDrag['target'] {
-  const col = document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.dataset.group !== undefined) as HTMLElement | undefined
+/** Where a card dragged to (x, y) would land, among the columns of its own view (`within`): another view's columns mean something else. */
+function dropTarget(x: number, y: number, dragged: string, within: Element | null): CardDrag['target'] {
+  const col = document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.dataset.group !== undefined && (!within || within.contains(el))) as HTMLElement | undefined
   if (!col) return null
   const cards = Array.from(col.querySelectorAll<HTMLElement>('[data-record]')).filter((el) => el.dataset.record !== dragged)
   const next = cards.find((el) => {
@@ -760,6 +767,8 @@ function BoardBody({ c }: { c: Ctx }) {
   const meta = D.shownFields(c.ds, c.view).filter((f, k) => k > 0 && f.id !== group?.id)
   const [drag, setDrag] = useState<CardDrag | null>(null)
   const dragRef = useRef<CardDrag | null>(null)
+  /** The view the card being dragged belongs to. */
+  const within = useRef<Element | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
 
   if (!group)
@@ -780,6 +789,7 @@ function BoardBody({ c }: { c: Ctx }) {
     e.stopPropagation()
     if (!c.live) c.select()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    within.current = (e.currentTarget as Element).closest('.widget')
     dragRef.current = { id: r.id, fresh: !c.live, pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false, target: null }
     setDrag(dragRef.current)
   }
@@ -787,7 +797,7 @@ function BoardBody({ c }: { c: Ctx }) {
     const d = dragRef.current
     if (!d || d.pointer !== e.pointerId) return
     const moved = d.moved || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4
-    dragRef.current = { ...d, moved, target: moved ? dropTarget(e.clientX, e.clientY, d.id) : null }
+    dragRef.current = { ...d, moved, target: moved ? dropTarget(e.clientX, e.clientY, d.id, within.current) : null }
     setDrag(dragRef.current)
   }
   const up = (e: PointerEvent) => {

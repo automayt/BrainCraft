@@ -69,7 +69,8 @@ export function deleteCard(k: KanbanData, id: string): KanbanData {
 /** Moves a card into `column` at `index` (counted without the card itself). */
 export function moveCard(k: KanbanData, id: string, column: string, index: number): KanbanData {
   const found = findCard(k, id)
-  if (!found) return k
+  // Nowhere to put it (a column of another board, or one that's just been deleted): it stays where it is.
+  if (!found || !k.columns.some((c) => c.id === column)) return k
   const without = deleteCard(k, id)
   return {
     ...without,

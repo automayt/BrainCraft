@@ -1,4 +1,4 @@
-import { addItem, connect, emptyBoard, newItem, type Clip } from './board'
+import { addItem, connect, emptyBoard, healMinds, newItem, type Clip } from './board'
 import { addStep, flowItem } from './flowchart'
 import { addChild, createMap } from './mindmap'
 import { MAX_ID, cleanBody, cleanBrief, cleanConnector, cleanDataset, cleanIcon, cleanItem, cleanPage, cleanRev, cleanSnap } from './sanitize'
@@ -26,8 +26,13 @@ export function fromJson(json: string): Board {
       delete i.side
     }
   }
-  const connectors = raw.connectors.map(cleanConnector).filter((c): c is Connector => !!c && ids.has(c.from) && ids.has(c.to))
-  const datasets = Array.isArray(raw.datasets) ? raw.datasets.map(cleanDataset).filter((d): d is Dataset => !!d) : []
+  const lineIds = new Set<number>()
+  // And ideas whose parents go round in a ring are cut out of it.
+  const healed = healMinds(items)
+  if (healed !== items) items.splice(0, items.length, ...healed)
+  const connectors = raw.connectors.map(cleanConnector).filter((c): c is Connector => !!c && ids.has(c.from) && ids.has(c.to) && !lineIds.has(c.id) && !!lineIds.add(c.id))
+  const datasetIds = new Set<string>()
+  const datasets = (Array.isArray(raw.datasets) ? raw.datasets.map(cleanDataset).filter((d): d is Dataset => !!d) : []).filter((d) => !datasetIds.has(d.id) && !!datasetIds.add(d.id))
   // A view whose dataset is missing has nothing to show.
   const known = new Set(datasets.map((d) => d.id))
   const kept = items.filter((i) => i.kind !== 'data' || (i.view && known.has(i.view.dataset)))

@@ -54,7 +54,8 @@ function kids(b: Board, id: Id): Item[] {
 /** Which side of its root a node grows on (`undefined` for a root). */
 export function sideOf(b: Board, id: Id): Side | undefined {
   let node = getItem(b, id)
-  while (node && node.parent !== undefined) {
+  // (Counted, so ideas whose parents go round in a ring end the walk.)
+  for (let steps = 0; node && node.parent !== undefined && steps < 10_000; steps++) {
     const parent = getItem(b, node.parent)
     if (parent && parent.parent === undefined) return node.side ?? 'right'
     node = parent

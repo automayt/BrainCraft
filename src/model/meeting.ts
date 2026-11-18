@@ -196,10 +196,17 @@ export function keepTicks(now: Item, next: Item): Item {
   const was = listColumns(now.table)
   const will = listColumns(next.table)
   if (!was.item || !was.done || !will.item || !will.done) return next
-  const marks = new Map(now.table.rows.filter((r) => ticked(r.cells[was.done!.id])).map((r) => [same(r.cells[was.item!.id] ?? ''), r.cells[was.done!.id]]))
+  // Each tick goes to one row. Rows that say the same are taken in order: the first "Break" then is
+  // the first "Break" now, so two rows saying "Break", one covered, aren't both covered.
+  const marks = new Map<string, string[]>()
+  for (const r of now.table.rows) {
+    const key = same(r.cells[was.item!.id] ?? '')
+    const mark = r.cells[was.done!.id]
+    marks.set(key, [...(marks.get(key) ?? []), ticked(mark) ? mark : ''])
+  }
   let changed = false
   const rows = next.table.rows.map((r) => {
-    const mark = marks.get(same(r.cells[will.item!.id] ?? ''))
+    const mark = marks.get(same(r.cells[will.item!.id] ?? ''))?.shift()
     if (!mark || ticked(r.cells[will.done!.id])) return r
     changed = true
     return { ...r, cells: { ...r.cells, [will.done!.id]: mark } }

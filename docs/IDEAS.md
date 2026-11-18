@@ -515,6 +515,45 @@ frame. Next:
 - [ ] **Review with a picture of the board.** Give the review what was drawn
   (flowcharts, sequences) as well as the words, so it can tidy those too.
 
+## From the review of the objects (November 2026)
+
+After a table drew rows twice when sorted, every kind of object was gone
+through for the same family of fault: two things sharing an identity, or
+something done to one thing landing on another. Fixed then: rows, cards and
+spans matched once when rewritten; ids repaired on reading; new live rooms
+and assistant proposals no longer taking ids that are in use; copies of
+groups, votes and followed Kanban boards being their own; cards dropped on
+another board; hours typed for one span going to another; and the smaller
+ones in tables and databases. `src/model/parts.test.ts` now puts every kind
+of object through being made, rewritten and copied with names that repeat.
+
+Found and left for later (none loses work):
+
+- [ ] **A name that matches more than one thing takes the first.** Records
+  by title, pages by title, databases by name, and a `ref` used twice in one
+  batch. Changing or deleting by a name that isn't unique should say how
+  many it matches and ask for the id.
+- [ ] **A database moved out with its frame leaves an unseen copy behind**,
+  under the same id, on the board it left. Drop databases nothing shows, and
+  give the moved one an id of its own.
+- [ ] **Fields and choices that share a name.** Two fields of one name in
+  `createDatabase` make a second that's never filled; a choice renamed to
+  another's name makes two alike; a rule that sets a deleted choice clears
+  the field instead.
+- [ ] **Boxes that keep showing what wasn't kept**: a Kanban column or lane
+  name left empty, a field renamed to a name that's taken, letters typed
+  into a number. (A table's column name is put right.)
+- [ ] **Editing while someone else does.** A rename box left open while
+  another person renames writes the old words back; a sequence message
+  deleted by someone else while your pen is on it comes back at the bottom.
+- [ ] **A Kanban card's bar dragged past the timeline's edge** moves the
+  card's dates but the view jumps back, leaving the bar out of sight.
+- [ ] **`setMindMap` reads ideas as an outline**, so "1. Plan" comes back
+  as "Plan"; and an actions Kanban remembers which column a card was in by
+  its title, so two actions of one title both land in the later column.
+- [ ] **Two tabs of one browser on one board** may hand out the same id
+  before their changes cross. Not confirmed.
+
 ## From the design review (November 2026)
 
 Done this round: Your boards rebuilt (Recent, one list, New, a bigger window),

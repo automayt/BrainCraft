@@ -190,12 +190,15 @@ function cleanTimeline(v: unknown): TimelineData | undefined {
       },
     ]
   })
-  const out: TimelineData = { lanes, entries }
+  // A span in a lane that isn't there would never be drawn, yet still count: it goes in the first lane, to be seen and put right.
+  const laneIds = new Set(lanes.map((l) => l.id))
+  for (const e of entries) if (!laneIds.has(e.lane) && lanes.length) e.lane = lanes[0].id
+  const out: TimelineData = { lanes, entries: lanes.length ? entries : [] }
   if (typeof v.time === 'boolean') out.time = v.time
   if (isObj(v.budget) && hours(v.budget.hours, HOURS_MAX) !== undefined) out.budget = { hours: hours(v.budget.hours, HOURS_MAX)!, ...(v.budget.per === 'week' || v.budget.per === 'month' ? { per: v.budget.per } : {}) }
   const currency = typeof v.currency === 'string' ? v.currency.replace(/\s+/g, ' ').trim().slice(0, 4).trim() : ''
   if (currency) out.currency = currency
-  const sources = arr(v.sources).filter((s): s is number => num(s) !== undefined)
+  const sources = [...new Set(arr(v.sources).filter((s): s is number => num(s) !== undefined))]
   if (sources.length) out.sources = sources
   if (isObj(v.range) && day(v.range.start) && day(v.range.end)) out.range = { start: day(v.range.start)!, end: day(v.range.end)! }
   return out
@@ -267,7 +270,7 @@ function cleanVotes(v: unknown): Record<string, Record<string, number>> | undefi
 
 function cleanPoll(v: unknown): Poll | undefined {
   if (!isObj(v)) return undefined
-  const options = arr(v.options).filter((o): o is number => num(o) !== undefined)
+  const options = [...new Set(arr(v.options).filter((o): o is number => num(o) !== undefined))]
   return { options, each: Math.max(1, Math.min(10, Math.floor(num(v.each) ?? 1))), revealed: v.revealed === true, ...(v.ended === true ? { ended: true } : {}) }
 }
 
@@ -450,10 +453,26 @@ const RECORD_BODY_MAX = 200_000
 /** A dataset with typed fields and plain values, or null if it has no usable fields. */
 export function cleanDataset(v: unknown): Dataset | null {
   if (!isObj(v) || typeof v.id !== 'string') return null
-  const fields = arr(v.fields).map(cleanField).filter((f): f is Field => !!f)
+  // Fields, their choices, records and rules are each told apart by an id: any that arrive sharing one get their own.
+  const fieldId = ownIds()
+  const fields = arr(v.fields)
+    .map(cleanField)
+    .filter((f): f is Field => !!f)
+    .map((f) => {
+      const optionId = ownIds()
+      const own = { ...f, id: fieldId(f.id) }
+      if (f.options) own.options = f.options.map((o) => ({ ...o, id: optionId(o.id) }))
+      return own
+    })
   if (!fields.length) return null
-  const automations = cleanAutomations(v.automations, fields)
-  return { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', fields, records: arr(v.records).map(cleanRecord).filter((r): r is DataRecord => !!r), ...(automations.length ? { automations } : {}) }
+  const ruleId = ownIds()
+  const automations = cleanAutomations(v.automations, fields).map((a) => ({ ...a, id: ruleId(a.id) }))
+  const recordId = ownIds()
+  const records = arr(v.records)
+    .map(cleanRecord)
+    .filter((r): r is DataRecord => !!r)
+    .map((r) => ({ ...r, id: recordId(r.id) }))
+  return { id: v.id.slice(0, 64), name: str(v.name, NAME_MAX) ?? '', fields, records, ...(automations.length ? { automations } : {}) }
 }
 
 /** A database's rules, kept only where they name fields it has (at most 50, 10 steps each). */

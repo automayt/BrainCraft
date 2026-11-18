@@ -79,6 +79,8 @@ export interface Proposal {
   ops: Op[]
   /** The changes it makes to the board as it was when proposed. */
   patches: Patch[]
+  /** The objects and lines it adds, by the ids they were given: taken by something else by the time it's applied, they get new ones. */
+  made?: Id[]
   /** Each changed page's words when proposed, so typing done since is merged in rather than lost. */
   bases?: Record<string, string>
   counts: { added: number; changed: number; removed: number }
@@ -417,7 +419,9 @@ export class Assistant {
         return `Not applied yet: tidy these first, then propose again.\n- ${problems.join('\n- ')}`
       }
       const bases = Object.fromEntries(patches.flatMap((p) => (p.k === 'body' ? [[p.id, pageText(before, p.id)]] : [])))
-      return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, ...(Object.keys(bases).length ? { bases } : {}), counts: countChanges(before, patches), status: 'pending' }
+      const had = new Set([...before.items, ...before.connectors].map((o) => o.id))
+      const made = patches.flatMap((p) => ((p.k === 'item' || p.k === 'conn') && p.v && !had.has(p.id) ? [p.id] : []))
+      return { id: uid(), summary: x.summary, ops: x.ops as Op[], patches, ...(made.length ? { made } : {}), ...(Object.keys(bases).length ? { bases } : {}), counts: countChanges(before, patches), status: 'pending' }
     } catch (err) {
       // Anything an op trips over goes back to the model to fix, never out of the conversation.
       if (err instanceof OpError) return err.message

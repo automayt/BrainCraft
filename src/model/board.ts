@@ -22,6 +22,7 @@ import {
   unionAll,
 } from './geom'
 import { type Route, between, goesAround, route, shiftRoute } from './routes'
+import { uid } from './uid'
 import { type Taken, take } from './orthoRoute'
 import { flowHit } from './shapes'
 import {
@@ -632,6 +633,52 @@ export function copy(b: Board, ids: ReadonlySet<Id>): Clip {
   }
 }
 
+/** An object with its own id, and every other object's id inside it, passed through `to`. */
+export function reIdItem(i: Item, to: (id: Id) => Id): Item {
+  const out: Item = { ...i, id: to(i.id) }
+  if (i.parent !== undefined) out.parent = to(i.parent)
+  if (i.poll) out.poll = { ...i.poll, options: i.poll.options.map(to) }
+  if (i.timeline?.sources) out.timeline = { ...i.timeline, sources: i.timeline.sources.map(to) }
+  if (i.linkTo?.item !== undefined && i.linkTo.board === undefined) out.linkTo = { ...i.linkTo, item: to(i.linkTo.item) }
+  return out
+}
+
+/**
+ * Mind-map ideas whose parent isn't there, or whose parents go round in a ring, made central ideas
+ * of their own: nothing that walks up a map can then get lost or go round for ever. The same list
+ * when there's nothing to put right.
+ */
+export function healMinds(items: Item[]): Item[] {
+  const byId = new Map<Id, Item>()
+  for (const i of items) if (i.kind === 'mind') byId.set(i.id, i)
+  const bad = new Set<Id>()
+  for (const i of byId.values()) {
+    if (i.parent === undefined) continue
+    if (!byId.has(i.parent)) {
+      bad.add(i.id)
+      continue
+    }
+    // Up from here: coming back to where it began is a ring, and this idea is cut out of it.
+    const seen = new Set<Id>([i.id])
+    for (let p: Item | undefined = byId.get(i.parent); p && p.parent !== undefined && !bad.has(p.id); p = byId.get(p.parent)) {
+      if (p.parent === i.id) {
+        bad.add(i.id)
+        break
+      }
+      if (seen.has(p.id)) break
+      seen.add(p.id)
+    }
+  }
+  if (!bad.size) return items
+  return items.map((i) => {
+    if (!bad.has(i.id)) return i
+    const root = { ...i }
+    delete root.parent
+    delete root.side
+    return root
+  })
+}
+
 /**
  * Inserts copies of `clip` shifted by `(dx, dy)`. Mind-map nodes whose parent
  * was not copied become the roots of new maps. Returns the new item ids.
@@ -640,8 +687,31 @@ export function paste(b: Board, clip: Clip, dx: number, dy: number): [Board, Set
   const mapping = new Map<Id, Id>()
   let next = b.nextId
   for (const i of clip.items) mapping.set(i.id, next++)
+  // Copies that were grouped are a group of their own, not more of the original's.
+  const groups = new Map<string, string>()
+  const groupOf = (g: string) => groups.get(g) ?? (groups.set(g, uid()), groups.get(g)!)
+  const here = (id: Id) => b.items.find((x) => x.id === id)
   const items: Item[] = clip.items.map((i) => {
     const copyItem: Item = { ...translateItem(i, dx, dy), id: mapping.get(i.id)! }
+    if (i.group) copyItem.group = groupOf(i.group)
+    // A vote is on the copies of what it was on; one copied without them is no vote.
+    if (i.poll) {
+      const options = i.poll.options.flatMap((o) => (mapping.has(o) ? [mapping.get(o)!] : []))
+      if (options.length >= 2) copyItem.poll = { ...i.poll, options }
+      else delete copyItem.poll
+    }
+    delete copyItem.votes
+    // A timeline shows the cards of the Kanban boards copied with it; of one left behind, only where it still is (this board).
+    if (i.timeline?.sources) {
+      const sources = i.timeline.sources.flatMap((s) => (mapping.has(s) ? [mapping.get(s)!] : here(s)?.kind === 'kanban' ? [s] : []))
+      const { sources: _were, ...rest } = i.timeline
+      copyItem.timeline = sources.length ? { ...rest, sources } : rest
+    }
+    // A link to an object leads to its copy, or to the object itself where it's still on this board.
+    if (i.linkTo?.item !== undefined && i.linkTo.board === undefined) {
+      if (mapping.has(i.linkTo.item)) copyItem.linkTo = { ...i.linkTo, item: mapping.get(i.linkTo.item)! }
+      else if (!here(i.linkTo.item)) delete copyItem.linkTo
+    }
     // A copied flowchart starts with no run history: those runs happened on the original.
     delete copyItem.runs
     // A copy is a new note by whoever pasted it: in a private brainstorm it is hidden as theirs.

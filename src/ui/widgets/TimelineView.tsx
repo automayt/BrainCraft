@@ -65,8 +65,24 @@ const typedHours = (s: string): number | undefined => {
   return s.trim() && Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
-/** A small box for a number of hours, kept when it's left or Enter is pressed. */
+/**
+ * A small box for a number of hours, kept when it's left or Enter is pressed; Escape puts back what
+ * it said. What's typed is kept even if the box goes away first (another span picked, its menu
+ * closed): it belongs to what it was typed for, so give each thing's box its own `key`.
+ */
 function HoursBox({ value, label, onSet, placeholder, wide }: { value: number | undefined; label: string; onSet: (v: number | undefined) => void; placeholder?: string; wide?: boolean }) {
+  /** What's been typed and not yet kept. */
+  const typed = useRef<string | null>(null)
+  const latest = useRef({ value, onSet })
+  latest.current = { value, onSet }
+  const keep = () => {
+    const text = typed.current
+    typed.current = null
+    if (text === null) return
+    const next = typedHours(text)
+    if (next !== latest.current.value) latest.current.onSet(next)
+  }
+  useEffect(() => keep, [])
   return (
     <input
       className={`tl-num${wide ? ' wide' : ''}`}
@@ -76,13 +92,23 @@ function HoursBox({ value, label, onSet, placeholder, wide }: { value: number | 
       placeholder={placeholder ?? '–'}
       defaultValue={value === undefined ? '' : String(value)}
       key={String(value)}
-      onBlur={(e) => {
-        const next = typedHours(e.target.value)
-        if (next !== value) onSet(next)
+      onChange={(e) => (typed.current = e.target.value)}
+      onBlur={keep}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          typed.current = null
+          ;(e.target as HTMLInputElement).value = value === undefined ? '' : String(value)
+        }
+        if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
       }}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
     />
   )
+}
+
+/** Leaves whatever box is being typed in, so what's in it is kept before the thing it's about changes or its menu closes. */
+const leaveBox = () => {
+  const a = document.activeElement
+  if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) a.blur()
 }
 
 export function TimelineView({ item, live, editingTitle }: { item: Item; live: boolean; editingTitle: boolean }) {
@@ -115,6 +141,8 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
   const drawRef = useRef<Draw | null>(null)
   const [draw, setDraw] = useState<Draw | null>(null)
   const kanbans = TL.kanbanBoards(editor.board)
+  /** The Kanban boards it shows the cards of that are still on the board. */
+  const following = (t.sources ?? []).filter((s) => kanbans.some((k) => k.id === s)).length
   const body = useRef<HTMLDivElement>(null)
   const axis = useRef<HTMLDivElement>(null)
   /** Where the pointer last was, for carrying the view along while it's held at the edge. */
@@ -166,6 +194,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
     // Bars drag on the first press, even before the timeline is selected.
     e.stopPropagation()
     if (!live) editor.select([item.id])
+    leaveBox()
     setSelected(entry.id)
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     last.current = { x: e.clientX, y: e.clientY }
@@ -228,6 +257,7 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
     setDraw(next)
   }
   const startDraw = (e: PointerEvent, lane: string) => {
+    leaveBox()
     setSelected(null)
     if (!live || editor.readOnly || e.button !== 0 || (e.target as Element).closest('.tl-entry, .tl-rename')) return
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -407,7 +437,13 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
       </button>
       {budgetOpen && (
         <>
-          <div className="menu-scrim" onPointerDown={() => setBudgetOpen(false)} />
+          <div
+            className="menu-scrim"
+            onPointerDown={() => {
+              leaveBox()
+              setBudgetOpen(false)
+            }}
+          />
           <div className="widget-menu tl-budget">
             <label>
               Budget
@@ -450,8 +486,8 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
           </div>
         </>
       )}
-      <button className={t.sources?.length ? 'on' : ''} title="Show the dated cards of this board’s Kanban boards here, each board in a lane of its own" onClick={() => setSourcesOpen(!sourcesOpen)}>
-        Kanban cards{t.sources?.length ? ` (${t.sources.length})` : ''}
+      <button className={following ? 'on' : ''} title="Show the dated cards of this board’s Kanban boards here, each board in a lane of its own" onClick={() => setSourcesOpen(!sourcesOpen)}>
+        Kanban cards{following ? ` (${following})` : ''}
       </button>
       {sourcesOpen && (
         <>
@@ -643,7 +679,13 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
                   )}
                   {laneHours === lane.id && (
                     <>
-                      <div className="menu-scrim" onPointerDown={() => setLaneHours(null)} />
+                      <div
+                        className="menu-scrim"
+                        onPointerDown={() => {
+                          leaveBox()
+                          setLaneHours(null)
+                        }}
+                      />
                       <div className="widget-menu tl-lane-hours">
                         <strong>{lane.name}</strong>
                         <label>
@@ -721,7 +763,11 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
                               setRenaming(null)
                               if (e.target.value !== entry.title) update((x) => TL.updateEntry(x, entry.id, { title: e.target.value || entry.title }))
                             }}
-                            onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
+                            onKeyDown={(e) => {
+                              // Escape leaves the name as it was.
+                              if (e.key === 'Escape') (e.target as HTMLInputElement).value = entry.title
+                              if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
+                            }}
                           />
                         )
                       return (
@@ -782,13 +828,13 @@ export function TimelineView({ item, live, editingTitle }: { item: Item; live: b
               </span>
               {hours && own && (
                 <span className="tl-entry-hours">
-                  <HoursBox value={own.hours} label="Hours planned" onSet={(v) => patch(v === undefined ? { hours: undefined, per: undefined } : { hours: v })} />
+                  <HoursBox key={`planned ${own.id}`} value={own.hours} label="Hours planned" onSet={(v) => patch(v === undefined ? { hours: undefined, per: undefined } : { hours: v })} />
                   <select aria-label="How the hours are meant" value={own.per ?? ''} disabled={own.hours === undefined} onChange={(e) => patch({ per: (e.target.value || undefined) as TimelineEntry['per'] })}>
                     <option value="">h in all</option>
                     <option value="day">h a day</option>
                     <option value="week">h a week</option>
                   </select>
-                  <HoursBox value={own.spent} label="Hours spent so far" onSet={(v) => patch({ spent: v })} />
+                  <HoursBox key={`spent ${own.id}`} value={own.spent} label="Hours spent so far" onSet={(v) => patch({ spent: v })} />
                   <span className="muted">spent</span>
                   <label title="Not settled yet: drawn lighter, and counted apart from what’s planned">
                     <input type="checkbox" checked={!!own.tentative} onChange={(e) => patch({ tentative: e.target.checked ? true : undefined })} />

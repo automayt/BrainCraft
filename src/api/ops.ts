@@ -711,8 +711,14 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       case 'setMindMap': {
         const it = B.getItem(b, resolve(op.id, 'id'))!
         if (it.kind !== 'mind') fail(index, op, '"id" should be an idea in the mind map to replace')
+        // The central idea of its map: as far up as there are ideas (one whose parent has gone is the top of what's left).
         let root = it
-        while (root.parent !== undefined) root = B.getItem(b, root.parent) ?? root
+        for (const seen = new Set<Id>([it.id]); root.parent !== undefined; ) {
+          const up = B.getItem(b, root.parent)
+          if (!up || seen.has(up.id)) break
+          seen.add(up.id)
+          root = up
+        }
         // Changed in place: ideas whose words stay keep their identity, colour and comments.
         const tree = treeOf(op)
         const lines: string[] = []
@@ -883,7 +889,7 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
           const id = resolve(r, `followKanban[${k}]`)
           if (B.getItem(b, id)?.kind !== 'kanban') fail(index, op, `followKanban[${k}] isn't a Kanban board`)
           return id
-        })
+        }).filter((id, k, all) => all.indexOf(id) === k)
         const budget = budgetOf(op.budget)
         const currency = op.currency !== undefined ? text(op.currency, 'currency', false).slice(0, 4) : ''
         const timeline: TimelineData = { lanes, entries, ...(sources.length ? { sources } : {}), ...(budget ? { budget } : {}), ...(currency ? { currency } : {}) }
@@ -1293,7 +1299,9 @@ export function applyOps(board: Board, ops: Op[], ctx: ApplyContext): { board: B
       }
       case 'createVote': {
         if (!Array.isArray(op.options) || op.options.length < 2) fail(index, op, '"options" should list two or more objects to vote on')
-        const options = op.options.map((r, k) => resolve(r, `options[${k}]`))
+        // Each object once, however it was named.
+        const options = [...new Set(op.options.map((r, k) => resolve(r, `options[${k}]`)))]
+        if (options.length < 2) fail(index, op, '"options" should list two or more different objects to vote on')
         let id: Id
         ;[b, id] = startPoll(b, options, { question: op.question, each: op.each })
         done({ id })

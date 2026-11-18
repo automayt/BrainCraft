@@ -57,8 +57,8 @@ import * as WH from '../model/wheel'
 import * as FL from '../model/flip'
 import { listLines, stickyGrid } from '../model/stickyGrid'
 import { codeSize, fencedCode, langId } from '../model/code'
-import { type Patch, applyPatches, diff } from '../collab/patch'
-import type { PeerInfo, Signal } from '../collab/protocol'
+import { type Patch, applyPatches, diff, renumbered } from '../collab/patch'
+import { ID_BLOCK, type PeerInfo, type Signal } from '../collab/protocol'
 import {
   type Arrowheads,
   type Board,
@@ -1169,7 +1169,10 @@ export class Editor {
   resetFromRemote(board: Board, opts: { readOnly: boolean; idBase: number }) {
     const first = !this.board.items.length
     const next = M.layoutAll(widenUnsized(board, this.measure), this.measure)
-    this.board = Number.isSafeInteger(opts.idBase) && opts.idBase > 0 ? { ...next, nextId: opts.idBase } : next
+    // New ids come from this connection's block, past anything already in it.
+    let from = opts.idBase
+    if (Number.isSafeInteger(from) && from > 0) for (const o of [...next.items, ...next.connectors]) if (o.id >= from && o.id < opts.idBase + ID_BLOCK) from = o.id + 1
+    this.board = Number.isSafeInteger(opts.idBase) && opts.idBase > 0 ? { ...next, nextId: from } : next
     this.readOnly = opts.readOnly
     this.scrubbed = null
     this.selection = new Set([...this.selection].filter((id) => B.getItem(this.board, id)))
@@ -1216,7 +1219,9 @@ export class Editor {
    * Applies an AI proposal as one undoable step and records it in the AI history.
    * The patches were made against the board when proposed; edits since then are kept.
    */
-  applyAi(id: string, summary: string, patches: Patch[], bases?: Record<string, string>): boolean {
+  applyAi(id: string, summary: string, patches: Patch[], bases?: Record<string, string>, made?: readonly Id[]): boolean {
+    // Objects made since it was proposed may have taken the ids its new objects were given: those get fresh ones.
+    if (made?.some((x) => B.getItem(this.board, x) || B.getConnector(this.board, x))) patches = renumbered(patches, made, this.board.nextId)
     if (this.readOnly) return false
     const before = this.board
     // A page someone typed on since the proposal keeps both their words and the proposal's.
@@ -1433,6 +1438,9 @@ export class Editor {
 
   private afterJump(b: Board) {
     if (this.readOnly) return
+    // Going back never hands out again an id that's been used: what was made and undone keeps its
+    // id (History can still put it back), and what's made next gets a new one.
+    if (b.nextId < this.board.nextId) b = { ...b, nextId: this.board.nextId }
     this.board = b
     this.onBoardChange?.(b)
     this.selection = new Set([...this.selection].filter((id) => B.getItem(b, id)))
