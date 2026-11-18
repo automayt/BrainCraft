@@ -44,6 +44,8 @@ export interface Outcome {
 
 export interface Review {
   title?: string
+  /** The meeting made sense of, in a few sentences, for someone who wasn't there. */
+  summary?: string
   ideas: Idea[]
   outcomes: Outcome[]
   /** People found to be someone else: a voice named from what was said ("Voice 2" is "Sam"). */
@@ -51,6 +53,9 @@ export interface Review {
   /** Lines whose speaker wasn't known, now worked out: the line at `at` ms was said by `who`. */
   lineWho: { at: number; who: string }[]
 }
+
+/** The longest a summary is kept (a few sentences come to far less). */
+const SUMMARY_MAX = 1500
 
 const KINDS: [RegExp, OutcomeKind][] = [
   [/^(updates?|news|status|progress)$/i, 'update'],
@@ -101,10 +106,13 @@ const clean = (s: string) =>
  *     Speakers:
  *     - Voice 2 = Sam
  *     - 12:30 = Brian
+ *     Summary:
+ *     The launch moved to May, which leaves the budget two thousand over…
  */
 export function parseReview(text: string): Review {
   const out: Review = { ideas: [], outcomes: [], renames: [], lineWho: [] }
-  let part: 'outcomes' | 'ideas' | 'speakers' | null = null
+  let part: 'outcomes' | 'ideas' | 'speakers' | 'summary' | null = null
+  const summary: string[] = []
   for (const raw of text.split('\n')) {
     const line = raw.trim()
     if (!line) continue
@@ -113,10 +121,22 @@ export function parseReview(text: string): Review {
       out.title = clean(title[1]).replace(/^["“]|["”]$/g, '').replace(/[.。]$/, '').slice(0, 80) || undefined
       continue
     }
+    // The summary: on its heading's line, on the lines after it, or both; the next heading ends it.
+    const sum = /^[#>*_\s]*(?:summary|in short)[*_\s]*[:：][*_\s]*(.*)$/i.exec(line)
+    if (sum) {
+      part = 'summary'
+      if (clean(sum[1])) summary.push(clean(sum[1]))
+      continue
+    }
     const head = /^[#*_\s]*(outcomes?|results?|ideas?|speakers?|people)\s*[:：]?[*_\s]*$/i.exec(line)
     if (head) {
       const h = head[1].toLowerCase()
       part = h.startsWith('outcome') || h.startsWith('result') ? 'outcomes' : h.startsWith('idea') ? 'ideas' : 'speakers'
+      continue
+    }
+    if (part === 'summary') {
+      const said = clean(line.replace(/^(?:[-*•]|\d+[.)])\s+/, ''))
+      if (said) summary.push(said)
       continue
     }
     const item = /^(?:[-*•]|\d+[.)])\s+(.+)$/.exec(line)?.[1]
@@ -157,6 +177,8 @@ export function parseReview(text: string): Review {
     }
   }
   out.ideas.sort((a, b) => a.at - b.at)
+  const whole = summary.join(' ').slice(0, SUMMARY_MAX).trim()
+  if (whole) out.summary = whole
   return out
 }
 
@@ -283,10 +305,15 @@ export function speakerTimeline(r: Review, detail: Detail, length: number, title
   return { parts, w: Math.max(w, kx), h: keyY + (topics.length ? 40 : 0) }
 }
 
-/** The overview: what the meeting came to, in a few lines, proposals kept apart from what was agreed. */
-export function overviewText(o: { title: string; length: string; people: readonly string[]; outcomes: readonly Outcome[] }): string {
+/**
+ * The overview: the meeting summed up in a few sentences, then what it came to in a few lines,
+ * proposals kept apart from what was agreed.
+ */
+export function overviewText(o: { title: string; length: string; people: readonly string[]; outcomes: readonly Outcome[]; summary?: string }): string {
   const by = (k: OutcomeKind) => o.outcomes.filter((x) => x.kind === k)
   const lines: string[] = [`Overview: ${o.title}`, `${o.length}${o.people.length ? `, ${o.people.join(', ')}` : ''}`]
+  if (o.summary) lines.push('', o.summary)
+  const head = lines.length
   const section = (name: string, list: Outcome[], line: (x: Outcome) => string) => {
     if (!list.length) return
     lines.push('', name, ...list.map((x) => `• ${line(x)}`))
@@ -298,7 +325,7 @@ export function overviewText(o: { title: string; length: string; people: readonl
   section('Actions', by('action'), (x) => `${x.text} — ${x.who ?? 'owner not agreed'}${x.when ? `, by ${x.when}` : ''}`)
   section('Blockers', by('blocker'), said)
   section('Open questions', by('question'), said)
-  if (lines.length === 2) lines.push('', 'Nothing was decided or set to do.')
+  if (lines.length === head) lines.push('', 'Nothing was decided or set to do.')
   return lines.join('\n')
 }
 
@@ -365,6 +392,7 @@ export function renameInReview(r: Review, from: string, to: string): Review {
   const same = (w: string | undefined) => (w && w.toLowerCase() === from.toLowerCase() ? to : w)
   return {
     ...r,
+    ...(r.summary ? { summary: swapName(r.summary, from, to) } : {}),
     ideas: r.ideas.map((i) => ({ ...i, who: same(i.who), text: swapName(i.text, from, to) })),
     outcomes: r.outcomes.map((o) => ({ ...o, who: same(o.who), text: swapName(o.text, from, to) })),
   }
@@ -451,7 +479,8 @@ export function cleanReview(raw: unknown): Review | null {
     outcomes.push({ kind: o.kind as OutcomeKind, text, ...(who ? { who } : {}), ...(when ? { when } : {}) })
   }
   const title = str(r.title, 80)
-  return { ...(title ? { title } : {}), ideas, outcomes, renames: [], lineWho: [] }
+  const summary = str(r.summary, SUMMARY_MAX)
+  return { ...(title ? { title } : {}), ...(summary ? { summary } : {}), ideas, outcomes, renames: [], lineWho: [] }
 }
 
 /** "Voice 2" or the call as a whole: a voice not yet known by name. */

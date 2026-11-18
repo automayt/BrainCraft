@@ -849,6 +849,24 @@ export function AiPanel({ onClose, flow = false, onFlow }: { onClose: () => void
                   ))}
                 </select>
               </label>
+              {serverChoices.length > 1 && (
+                <label className="ai-model">
+                  Review meetings with
+                  <select
+                    aria-label="Review meetings with"
+                    value={settings.review && serverChoices.some((c) => c.value === settings.review) ? settings.review : ''}
+                    onChange={(e) => update({ ...settings, review: e.target.value || undefined })}
+                  >
+                    <option value="">The same as above</option>
+                    {serverChoices.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small>A meeting is reviewed once, when it ends, against its whole transcript. That’s worth the most capable choice here, even a slow one: the notes taken during it stay on the one above.</small>
+                </label>
+              )}
             </>
           )}
           <label className="ai-choice">

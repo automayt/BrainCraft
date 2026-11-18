@@ -127,7 +127,9 @@ export async function reviewMeeting(ws: Workspace, editor: Editor, frame: Id, o:
   editor.setStatus('Reviewing the meeting against its whole transcript…')
   try {
     // The board's brief says what the meeting was about, so the record keeps to it as the notes did.
-    const reply = await askOnce(ws.server, withBrief(MEETING_REVIEW, editor.board.brief), reviewText(got))
+    // Asked of what's chosen for reviews (the assistant's own, unless another was picked): it's read once and waited for.
+    let cut = false
+    const reply = await askOnce(ws.server, withBrief(MEETING_REVIEW, editor.board.brief), reviewText(got), undefined, { use: 'review', cut: () => (cut = true) })
     const review = parseReview(reply)
     if (!review.ideas.length && !review.outcomes.length) return editor.setStatus('The review came back empty, so the notes are as they were')
     // Who spoke, corrected once for everything.
@@ -154,7 +156,9 @@ export async function reviewMeeting(ws: Workspace, editor: Editor, frame: Id, o:
     })
     if (kept === null) return editor.setStatus('The meeting’s frame is gone, so its review wasn’t used')
     await saveRecord(ws, editor, frame, { ...got, v: 2, title, lines, review, picks })
-    editor.setStatus(`Reviewed “${title}”${kept.length ? `; left ${kept.join(' and ')} as you changed ${kept.length > 1 ? 'them' : 'it'}` : ''}`)
+    const left = kept.length ? `; left ${kept.join(' and ')} as you changed ${kept.length > 1 ? 'them' : 'it'}` : ''
+    // An answer that still ran out of room may be missing the end of the meeting: said, not passed over.
+    editor.setStatus(cut ? `Reviewed “${title}”, but the model’s answer ran out of room, so the end of the meeting may be missing${left}` : `Reviewed “${title}”${left}`)
   } catch (err) {
     editor.setStatus(`Couldn’t review the meeting (${(err as Error).message}); its notes are as they were`)
   } finally {

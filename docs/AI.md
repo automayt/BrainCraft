@@ -337,9 +337,12 @@ the notes on the board as the meeting goes.
   spoke, every complete idea (with when, who, what it's about and how much it
   matters), and what the meeting came to. Every view in the frame is made
   from that one record, so they agree:
-  - **Overview:** a note with the key updates, what was decided, what was
-    proposed but not agreed, each action with its owner ("owner not agreed"
-    when nobody took it) and due date, blockers and open questions;
+  - **Overview:** a note that opens with a **summary**, a few sentences
+    making sense of the whole meeting for someone who wasn't there (what it
+    set out to settle, where it got to and why, what's still disputed or
+    open), then the key updates, what was decided, what was proposed but not
+    agreed, each action with its owner ("owner not agreed" when nobody took
+    it) and due date, blockers and open questions;
   - the **Decisions and actions** table and the **Actions** board, from the
     same outcomes;
   - the **mind map**, rebuilt from the complete ideas, grouped by concept
@@ -352,7 +355,17 @@ the notes on the board as the meeting goes.
   timeline, the mind map, and everything else the meeting made. Anything you
   changed by hand or locked (during the meeting or since) is left as it is,
   and the status says which views were kept. **Review again** on the frame
-  does it all again, updating the same objects rather than adding copies.
+  does it all again, updating the same objects rather than adding copies
+  (a meeting reviewed before summaries gets its summary this way).
+
+  The review is one question, read once and waited for, so it's worth the
+  most capable model you have even when the notes during the meeting run on a
+  fast one. When the server offers more than one choice, the assistant's
+  settings have **Review meetings with**: pick another of the server's models
+  or agents there, and only reviews go to it. A long meeting's review that
+  runs past the model's answer limit is carried on from where it stopped,
+  rather than losing the end of the meeting; if it still can't finish, the
+  status says so.
 - **Detail.** The frame's **Detail** menu shows the mind map and the speaker
   timeline at **Important** (only what matters most), **Normal** or
   **Verbose** (every idea). A long meeting starts at Important. The
@@ -779,8 +792,15 @@ BrainCraft's assistant runs the loop around it (asking it, running the board
 tool it asks for, asking again), with board tools only. For your model inside
 a full agent with its own tools, configure Codex to use it as its model
 provider (a provider in `~/.codex/config.toml` with `base_url` set to your
-vLLM server's `/v1` and `wire_api = "chat"`), then run that Codex as the
-agent command above.
+vLLM server's `/v1` and `wire_api = "responses"`; Codex no longer takes
+`"chat"`, and vLLM answers the Responses API in recent versions), then run
+that Codex as the agent command above. That gives the same model an agent's
+tools; it doesn't make its answers better, so for a meeting's review it's
+the model that matters, not what runs it.
+
+To compare what you have on the same meeting, `src/ai/review.eval.test.ts`
+reviews a meeting that changes its mind halfway and prints what came back
+(its header says how to point it at an agent or at a model server).
 
 ### What the server allows
 

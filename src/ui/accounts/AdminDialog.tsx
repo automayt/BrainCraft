@@ -5,6 +5,7 @@ import { copyText } from '../copyText'
 import { useWorkspace } from '../useWorkspace'
 import { appName } from '../../store/brand'
 import { UsagePanel } from './UsagePanel'
+import { type VoiceKey, VOICE_TIPS, voiceStep } from './voiceTips'
 import { type BackupStatus, backupNow, backupStatus, sizeLabel } from '../../store/serverBackups'
 
 type Tab = 'people' | 'groups' | 'boards' | 'usage' | 'activity' | 'backups' | 'notice' | 'meetings' | 'signin' | 'branding'
@@ -238,7 +239,6 @@ function Announcement() {
   )
 }
 
-type VoiceKey = 'threshold' | 'same' | 'recall'
 type VoiceSettings = Record<VoiceKey, number>
 interface VoicesShown extends VoiceSettings {
   on: boolean
@@ -315,6 +315,26 @@ function MeetingVoices() {
           </p>
         </div>
       ))}
+      <div className="admin-voice-tips">
+        <p className="muted">Which to change, by what you see in a meeting. Move one a little, save, and try a meeting before moving it again.</p>
+        <ul>
+          {VOICE_TIPS.map((t) => {
+            const control = VOICE_CONTROLS.find((c) => c.key === t.key)!
+            const now = draft[t.key]
+            const to = voiceStep(now, t.by, saved.min, saved.max)
+            return (
+              <li key={t.see}>
+                <span>
+                  <strong>{t.see}:</strong> {t.by > 0 ? 'raise' : 'lower'} “{control.label}”, for example from {now.toFixed(2)} to {to.toFixed(2)}.
+                </span>
+                <button type="button" disabled={busy || to === now} aria-label={`Set “${control.label}” to ${to.toFixed(2)}`} onClick={() => setDraft({ ...draft, [t.key]: to })}>
+                  Try {to.toFixed(2)}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
       {msg && <p className="signin-error">{msg}</p>}
       <div className="account-actions">
         {!own && (

@@ -28,6 +28,12 @@ export interface AiSettings {
   openaiModel?: string
   /** Describe the tools in the text, for a model served without tool calling. */
   textTools?: boolean
+  /**
+   * What reviews a meeting once it's over, when not what the assistant runs on: one of the
+   * server's choices ("anthropic:MODEL", "openai:MODEL" or "command:AGENT"). A review is read once
+   * and waited for, so it can go to something slower and more capable than the live notes use.
+   */
+  review?: string
 }
 
 const PROVIDERS: ServerProvider[] = ['anthropic', 'openai', 'command']
@@ -49,6 +55,7 @@ export function loadSettings(): AiSettings {
       openaiKey: str(raw?.openaiKey),
       openaiModel: str(raw?.openaiModel),
       textTools: raw?.textTools === true,
+      ...(typeof raw?.review === 'string' && raw.review ? { review: raw.review } : {}),
     }
   } catch {
     return { mode: 'server', model: DEFAULT_MODEL }
@@ -123,6 +130,24 @@ export async function serverAi(server: string | null): Promise<ServerAi> {
 
 /** Which of the server's providers these settings use. */
 export const serverProvider = (s: AiSettings, ai: ServerAi): ServerProvider | undefined => (s.provider && ai.providers.includes(s.provider) ? s.provider : ai.providers[0])
+
+/**
+ * These settings with one of the server's choices picked ("anthropic:MODEL", "openai:MODEL",
+ * "command:AGENT", as the Model list names them), or null when the server doesn't offer it (any more).
+ */
+export function withServerChoice(s: AiSettings, ai: ServerAi, choice: string | undefined): AiSettings | null {
+  const cut = choice?.indexOf(':') ?? -1
+  if (!choice || cut < 0) return null
+  const provider = choice.slice(0, cut) as ServerProvider
+  const rest = choice.slice(cut + 1)
+  if (!ai.providers.includes(provider)) return null
+  if (provider === 'anthropic') return AI_MODELS.some((m) => m.id === rest) ? { ...s, mode: 'server', provider, model: rest as AiModel } : null
+  if (provider === 'openai') return (ai.openaiModels.length ? ai.openaiModels.includes(rest) : rest === '') ? { ...s, mode: 'server', provider, serverModel: rest } : null
+  return ai.agents.some((a) => a.id === rest) ? { ...s, mode: 'server', provider, agent: rest } : null
+}
+
+/** The settings a meeting's review runs with: the choice made for reviews, while the server offers it; otherwise the assistant's own. */
+export const reviewSettings = (s: AiSettings, ai: ServerAi): AiSettings => (s.mode === 'server' ? (withServerChoice(s, ai, s.review) ?? s) : s)
 
 /** The connection to use with these settings, or null when not set up yet. */
 export function connectionFor(s: AiSettings, server: string | null, ai: ServerAi): AiConnection | null {

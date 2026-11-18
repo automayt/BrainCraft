@@ -101,7 +101,7 @@ export function polishMeeting(board: Board, o: Polish, measure: Measure): { boar
 
   // The overview: what the meeting came to.
   if (o.picks.notes && wants('overview')) {
-    const text = overviewText({ title: o.title, length: o.howLong, people: o.people, outcomes: o.review.outcomes })
+    const text = overviewText({ title: o.title, length: o.howLong, people: o.people, outcomes: o.review.outcomes, summary: o.review.summary })
     // Tall enough for its lines as they wrap (about 40 characters a line, 560 wide).
     const h = Math.min(1600, 80 + text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 40)), 0) * 32)
     const was = ofView('overview')[0]

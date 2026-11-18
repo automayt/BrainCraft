@@ -12,6 +12,7 @@ import {
   parseReview,
   readClock,
   renameIn,
+  renameInReview,
   speakerTimeline,
   swapName,
   unfinished,
@@ -51,6 +52,36 @@ describe('reading a meeting’s review', () => {
     expect(r.outcomes).toHaveLength(7)
     expect(r.outcomes[3]).toEqual({ kind: 'action', text: 'Book the venue', who: 'Brian', when: '2026-11-20' })
     expect(r.outcomes[4]).toEqual({ kind: 'action', text: 'Send the invites', when: 'next week' })
+  })
+
+  it('takes the summary: after its heading or on its line, as prose, up to the next heading', () => {
+    // After the lists, as it's asked for.
+    const last = parseReview(`${REVIEW}Summary:\nThe launch moved to **June**, because legal needs three weeks.\nThe venue is still open.\n`)
+    expect(last.summary).toBe('The launch moved to June, because legal needs three weeks. The venue is still open.')
+    expect(last.ideas).toHaveLength(parseReview(REVIEW).ideas.length)
+    // On the heading's own line, dressed up, with the lists after it: they're still read.
+    const first = parseReview('Title: Launch\n**Summary:** It moved to June.\n- And the venue is open.\n\nOutcomes:\n- Decision: Launch moves to June\nIdeas:\n- 0:45 | Sam | Launch | 1 | June works\n')
+    expect(first.summary).toBe('It moved to June. And the venue is open.')
+    expect(first.outcomes).toEqual([{ kind: 'decision', text: 'Launch moves to June' }])
+    expect(first.ideas).toHaveLength(1)
+    // None written: none kept.
+    expect(parseReview(REVIEW).summary).toBeUndefined()
+    expect(parseReview('Summary:\nOutcomes:\n- Decision: Go').summary).toBeUndefined()
+    // An outcome that happens to be called a summary isn't one, and what follows it is still read.
+    const within = parseReview('Outcomes:\n- Summary: all fine\n- Decision: Go\n')
+    expect(within.summary).toBeUndefined()
+    expect(within.outcomes).toEqual([{ kind: 'decision', text: 'Go' }])
+    // A model that goes on and on is cut short.
+    expect(parseReview(`Summary:\n${'word '.repeat(600)}`).summary!.length).toBeLessThanOrEqual(1500)
+  })
+
+  it('keeps the summary through a name corrected and a file read back', () => {
+    const r = parseReview(`${REVIEW}Summary:\nBrian will book the venue once Sam hears from finance.\n`)
+    expect(renameInReview(r, 'Brian', 'Bryan').summary).toBe('Bryan will book the venue once Sam hears from finance.')
+    expect(renameInReview(parseReview(REVIEW), 'Brian', 'Bryan').summary).toBeUndefined()
+    expect(cleanReview(JSON.parse(JSON.stringify(r)))!.summary).toBe(r.summary)
+    expect(cleanReview({ ideas: [], outcomes: [], summary: 42 })!.summary).toBeUndefined()
+    expect(cleanReview({ ideas: [], outcomes: [], summary: 'x'.repeat(5000) })!.summary).toHaveLength(1500)
   })
 
   it('keeps ideas in the order said, with their topic path and weight (normal when it can’t tell)', () => {
@@ -120,6 +151,18 @@ describe('views made from the review', () => {
     expect(overviewText({ title: 'T', length: '1 min', people: [], outcomes: [] })).toContain('Nothing was decided or set to do.')
     expect(outcomeRows(r.outcomes)[0]).toEqual(['Decision', 'Launch moves to May', '', ''])
     expect(outcomeRows(r.outcomes).find((x) => x[1] === 'Send the invites')![2]).toBe('Not agreed')
+  })
+
+  it('opens the overview with the summary, when the review wrote one', () => {
+    const r = parseReview(REVIEW)
+    const o = { title: 'Q3 launch planning', length: '25 min', people: ['Sam', 'Brian'], outcomes: r.outcomes }
+    const lines = overviewText({ ...o, summary: 'The launch moved to June. The venue is still open.' }).split('\n')
+    expect(lines.slice(0, 5)).toEqual(['Overview: Q3 launch planning', '25 min, Sam, Brian', '', 'The launch moved to June. The venue is still open.', ''])
+    // The rest is as it was without one.
+    expect(lines.slice(5)).toEqual(overviewText(o).split('\n').slice(3))
+    // With nothing decided, the summary is still there, and it still says so.
+    expect(overviewText({ ...o, outcomes: [], summary: 'They only caught up.' }).split('\n')).toEqual(['Overview: Q3 launch planning', '25 min, Sam, Brian', '', 'They only caught up.', '', 'Nothing was decided or set to do.'])
+    expect(overviewText({ ...o, outcomes: [] }).split('\n')).toEqual(['Overview: Q3 launch planning', '25 min, Sam, Brian', '', 'Nothing was decided or set to do.'])
   })
 
   it('leaves for the next meeting what wasn’t settled', () => {
