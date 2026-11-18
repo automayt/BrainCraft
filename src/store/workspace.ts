@@ -9,7 +9,7 @@ import { blankBoard, getBody, getPage, pageText } from '../model/wiki'
 import { wikiFromTemplate } from '../model/wikiTemplates'
 import { GUIDE_TITLE, guideWiki, tourBoard } from './guide'
 import { headings, parseMarkdown } from '../model/markdown'
-import { type Place, openFromHash, openHash, placeFromParams, placeParams } from './deepLink'
+import { type Place, openFromHash, openHash, placeFromParams, placeParams, resetTokenOf } from './deepLink'
 import { fromJson, toJson, welcomeBoard } from '../model/serialize'
 import type { Board, Id } from '../model/types'
 import { boardOfFrame, frameMembers, withoutFrame } from '../model/subBoard'
@@ -153,6 +153,12 @@ export class Workspace {
   atHome = false
   /** Opened without an address to go to: start on Your boards, not the last board. */
   startHome = false
+  /**
+   * A choose-a-password link that was followed here (`#reset=…`): its one-time token. It's kept
+   * here, not read from the address each time, and the address is left alone while it's set; the
+   * address following the open board used to take the link away before a password could be typed.
+   */
+  resetToken: string | null = null
   /** Your categories for boards only in this browser, by their ids here. */
   categories: Record<string, string> = {}
   /** Who can open the open server board, to @mention (and which board, and when it was asked). */
@@ -278,6 +284,7 @@ export class Workspace {
   /** Opens the library and loads the right board: a shared link, the last board, or the welcome board. */
   static async start(editor: Editor, kv?: KV, hash = typeof location === 'undefined' ? '' : location.hash): Promise<Workspace> {
     const ws = new Workspace(editor, new Library(kv ?? (await openKV())))
+    ws.resetToken = resetTokenOf(hash)
     await ws.recover()
     ws.server = await findServer()
     // What the app is called on this server.
@@ -1295,6 +1302,23 @@ export class Workspace {
     }
   }
 
+  /** A choose-a-password link followed in a tab that's already open. Returns whether the hash was one. */
+  followReset(hash: string): boolean {
+    const token = resetTokenOf(hash)
+    if (!token) return false
+    this.resetToken = token
+    this.emit()
+    return true
+  }
+
+  /** The choose-a-password link is used up, or put aside: out of the address, which follows the board again. */
+  endReset() {
+    if (!this.resetToken) return
+    this.resetToken = null
+    if (typeof location !== 'undefined' && typeof history !== 'undefined' && resetTokenOf(location.hash)) history.replaceState(null, '', location.pathname + location.search)
+    this.emit()
+  }
+
   // ----- the inbox -------------------------------------------------------------------
 
   /** What needs the signed-in person, newest first. */
@@ -1723,6 +1747,8 @@ export class Workspace {
    */
   syncAddress(replace = false) {
     if (typeof location === 'undefined' || typeof history === 'undefined' || this.atHome) return
+    // A choose-a-password link stays in the address until it's used: a reload gets back to it.
+    if (this.resetToken) return
     const key = this.linkKey
     if (!key || sharedFromHash(location.hash) || liveFromHash(location.hash)) return
     if (this.openingAddress) return

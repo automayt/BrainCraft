@@ -11590,6 +11590,25 @@ button.inbox-entry:focus-visible {
   white-space: nowrap;
 }
 
+/* Setting someone's password, in a row of its own under theirs. */
+.admin-setpw td {
+  padding-top: 10px;
+  background: var(--accent-soft);
+}
+
+.admin-setpw .admin-add {
+  margin: 0;
+}
+
+.admin-setpw input:not([type='checkbox']) {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.admin-setpw small {
+  flex-basis: 100%;
+}
+
 .admin-row-actions .link {
   margin-right: 8px;
 }

@@ -120,6 +120,48 @@ describe('admins', () => {
     expect((await call(a, 'POST', '/api/auth/login', { email: 'sam@x.org', password: 'sams long password' })).status).toBe(403)
   })
 
+  it('set a password for someone: they’re signed out, their links stop working, and it’s never logged', async () => {
+    const { a, cookie } = await admin()
+    const added = await call(a, 'POST', '/api/admin/users', { email: 'sam@x.org', name: 'Sam' }, { cookie })
+    const samId = (added.body.user as { id: string }).id
+    const first = String(added.body.link).split('#reset=')[1]
+    const sam = cookieOf(await call(a, 'POST', '/api/auth/reset', { token: first, password: 'sams long password' }))
+    // A link made for Sam, not yet used.
+    const waiting = String((await call(a, 'POST', `/api/admin/users/${samId}/reset`, undefined, { cookie })).body.link).split('#reset=')[1]
+    // Too short is refused, and changes nothing.
+    expect((await call(a, 'POST', `/api/admin/users/${samId}/password`, { password: 'short' }, { cookie })).status).toBe(400)
+    expect((await call(a, 'POST', `/api/admin/users/${samId}/password`, {}, { cookie })).status).toBe(400)
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie: sam })).body).toMatchObject({ user: { name: 'Sam' } })
+    // Only admins.
+    expect((await call(a, 'POST', `/api/admin/users/${samId}/password`, { password: 'sam sets his own way' }, { cookie: sam })).status).toBe(403)
+    expect((await call(a, 'POST', `/api/admin/users/${samId}/password`, { password: 'nobody signed in here' })).status).toBe(401)
+    // Set: the list comes back, saying Sam has a password.
+    const set = await call(a, 'POST', `/api/admin/users/${samId}/password`, { password: 'given by the admin 1' }, { cookie })
+    expect(set.status).toBe(200)
+    expect((set.body.users as { id: string; password: boolean }[]).find((u) => u.id === samId)).toMatchObject({ password: true })
+    expect(JSON.stringify(set.body)).not.toContain('given by the admin 1')
+    // Sam is signed out; the old password and the waiting link no longer work; the new password does.
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie: sam })).body).toMatchObject({ user: null })
+    expect((await call(a, 'POST', '/api/auth/login', { email: 'sam@x.org', password: 'sams long password' })).status).toBe(401)
+    expect((await call(a, 'POST', '/api/auth/reset', { token: waiting, password: 'from the old link 123' })).status).toBe(400)
+    expect((await call(a, 'POST', '/api/auth/login', { email: 'sam@x.org', password: 'given by the admin 1' })).status).toBe(200)
+    // Someone who isn't there.
+    expect((await call(a, 'POST', '/api/admin/users/nobody/password', { password: 'given by the admin 1' }, { cookie })).status).toBe(404)
+    // The log says who set whose, and never the password.
+    const log = (await call(a, 'GET', '/api/admin/audit', undefined, { cookie })).body.entries as { action: string; text: string }[]
+    expect(log.find((e) => e.action === 'password.set')?.text).toBe('Ann set a password for Sam')
+    expect(JSON.stringify(log)).not.toContain('given by the admin 1')
+  })
+
+  it('set their own password from the admin screen and stay signed in', async () => {
+    const { a, cookie } = await admin()
+    const me = (await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.user as { id: string }
+    expect((await call(a, 'POST', `/api/admin/users/${me.id}/password`, { password: 'anns new long password' }, { cookie })).status).toBe(200)
+    expect((await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body).toMatchObject({ user: { name: 'Ann' } })
+    expect((await call(a, 'POST', '/api/auth/login', { email: 'ann@x.org', password: 'a long password' })).status).toBe(401)
+    expect((await call(a, 'POST', '/api/auth/login', { email: 'ann@x.org', password: 'anns new long password' })).status).toBe(200)
+  })
+
   it('keep at least one admin, and can’t remove themselves', async () => {
     const { a, cookie } = await admin()
     const me = (await call(a, 'GET', '/api/auth/me', undefined, { cookie })).body.user as { id: string }

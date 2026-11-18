@@ -60,6 +60,12 @@ for a week, which you send them; no mail server needed), set roles, put people
 in groups, turn accounts off, and make groups with checkboxes for their
 permissions.
 
+When a link won't do (someone on the phone, or who can't open it), **Set
+password** on their row gives them one yourself, of at least 10 characters.
+They're signed out everywhere, links made for them to choose a password stop
+working, and it's for you to tell them: nothing is sent. They can change it
+afterwards from their account menu. Only admins can do this, not group admins.
+
 ### Group admins
 
 Make someone a group admin when they should add people to their own team
@@ -225,8 +231,8 @@ first, with who did it, when, and from which address:
 - **Board access:** who has a board (people and groups added, removed or
   given another level), boards handed over or deleted, and **an admin opening
   a board that isn't shared with them** (noted once an hour per board).
-- **Passwords and API tokens:** passwords changed or chosen from a link, API
-  tokens made or revoked.
+- **Passwords and API tokens:** passwords changed, chosen from a link or set
+  by an admin (who set whose, never the password), API tokens made or revoked.
 - **Settings:** the app renamed (see below).
 
 Changes show what they were before and after. Filter by kind, by "only what

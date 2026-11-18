@@ -3,8 +3,6 @@ import { type AccountInfo, call } from '../../store/account'
 import { useWorkspace } from '../useWorkspace'
 import { appName } from '../../store/brand'
 
-/** A one-time link to choose a password (`#reset=…`), as an admin hands out. */
-export const resetTokenOf = (hash: string) => /(?:^#|&)reset=([\w-]{20,})/.exec(hash)?.[1] ?? null
 /** Why a single sign-on came back without signing in (`#signin-error=…`). */
 const signInErrorOf = (hash: string) => {
   const m = /(?:^#|&)signin-error=([^&]*)/.exec(hash)
@@ -18,7 +16,8 @@ const signInErrorOf = (hash: string) => {
 export function SignIn() {
   const ws = useWorkspace()
   const account = ws.account!
-  const reset = typeof location === 'undefined' ? null : resetTokenOf(location.hash)
+  // A choose-a-password link's token is the workspace's to keep: the address bar moves on.
+  const reset = ws.resetToken
   const [error, setError] = useState<string | null>(() => (typeof location === 'undefined' ? null : signInErrorOf(location.hash)))
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
@@ -41,7 +40,10 @@ export function SignIn() {
       // A link followed before signing in (to a board, page or object) opens once signed in.
       const link = typeof location !== 'undefined' && mode !== 'reset' ? location.hash : ''
       if (typeof location !== 'undefined' && location.hash) history.replaceState(null, '', location.pathname + location.search)
+      // With a password chosen there's no address to go to: Your boards, as for anyone signing in.
+      if (mode === 'reset') ws.startHome = true
       await ws.signedIn(info)
+      ws.endReset()
       if (link) await ws.openHash(link)
     } catch (err) {
       setError((err as Error).message)
@@ -104,6 +106,22 @@ export function SignIn() {
           {busy ? 'One moment…' : mode === 'setup' ? 'Create the admin account' : mode === 'reset' ? 'Save and sign in' : 'Sign in'}
         </button>
         {mode === 'login' && <p className="muted signin-note">No account? Ask whoever runs this server to add you.</p>}
+        {mode === 'reset' && (
+          <p className="muted signin-note">
+            {/* A link that's been used or has run out leaves a way on. */}
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setError(null)
+                setPassword('')
+                ws.endReset()
+              }}
+            >
+              {account.user ? 'Not now' : 'Sign in instead'}
+            </button>
+          </p>
+        )}
       </form>
     </div>
   )

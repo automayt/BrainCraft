@@ -38,6 +38,9 @@ export function openFromHash(hash: string): LinkTarget | null {
   return { board, ...placeFromParams(params) }
 }
 
+/** A one-time link to choose a password (`#reset=…`), as an admin hands out: its token, or null. */
+export const resetTokenOf = (hash: string) => /(?:^#|&)reset=([\w-]{20,})/.exec(hash)?.[1] ?? null
+
 /** The hash (without `#`) for a place. */
 export function placeParams(p: Place): string {
   return [p.page !== undefined ? `page=${p.page}` : '', p.heading ? `h=${encodeURIComponent(p.heading)}` : '', p.item !== undefined ? `item=${p.item}` : ''].filter(Boolean).join('&')

@@ -8,7 +8,7 @@
  *   POST /api/auth/reset              set a password from a one-time link
  *   GET|POST /api/auth/tokens, DELETE /api/auth/tokens/:id     your API tokens (for scripts, MCP)
  *   GET  /api/people?q=               people and groups to share with
- *   /api/admin/users[/:id[/reset]], /api/admin/groups[/:id]    admins: people and groups
+ *   /api/admin/users[/:id[/reset|/password]], /api/admin/groups[/:id]    admins: people and groups
  *   /api/team[/people[/:id[/reset]]]  group admins: the people in the groups they run
  *   GET  /api/admin/audit[/verify|/download]                    admins: the activity log (audit.ts)
  *
@@ -732,6 +732,19 @@ export class Accounts {
         this.log(req, me, { action: 'user.reset-link', target: this.userTarget(u), text: `${me.name} made a set-your-password link for ${u.name}` })
         return json(res, 200, { link: link(u) })
       }
+      if (p[2] === 'password' && m === 'POST') {
+        // An admin sets it, for when a link won't do (someone on the phone, a link that won't open).
+        const b = await read()
+        const weak = weakPassword(b.password)
+        if (weak) return json(res, 400, { error: weak })
+        s.updateUser(u.id, { password: await hashPassword(String(b.password)) })
+        // Whoever was signed in as them is signed out, and links made for them to choose a password
+        // stop working. An admin setting their own stays signed in.
+        s.revokeAll(u.id, u.id === me.id ? ['reset'] : ['session', 'reset'])
+        this.log(req, me, { action: 'password.set', target: this.userTarget(u), text: u.id === me.id ? `${me.name} set their own password from the admin screen` : `${me.name} set a password for ${u.name}` })
+        return json(res, 200, all())
+      }
+      if (p[2]) return json(res, 404, { error: 'Not found' })
       if (m === 'PATCH') {
         const b = await read()
         const patch: Partial<User> = {}

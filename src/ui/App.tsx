@@ -6,7 +6,7 @@ import { looksLikeSequence } from '../model/sequence'
 import { CreditsDialog } from './Credits'
 import { AccessDialog } from './accounts/AccessDialog'
 import { AdminDialog } from './accounts/AdminDialog'
-import { SignIn, resetTokenOf } from './accounts/SignIn'
+import { SignIn } from './accounts/SignIn'
 import { BrainCraftAPI } from '../api/api'
 import { Bridge, pairingFromHash } from '../api/bridge'
 import { AiDialog } from './AiConnect'
@@ -265,6 +265,8 @@ function App({ ws }: { ws: Workspace }) {
     document.addEventListener('fullscreenchange', onFullscreen)
     // A BrainCraft link pasted into the address bar of an open tab opens too.
     const onHash = () => {
+      // A choose-a-password link pasted into this tab.
+      if (ws.followReset(location.hash)) return
       // Back to Your boards, or away from it.
       if (location.hash === HOME_HASH) return setDialog('boards')
       setDialog((d) => (d === 'boards' ? null : d))
@@ -511,7 +513,7 @@ function App({ ws }: { ws: Workspace }) {
           }}
         >
           {/* A server with accounts: nothing until signed in (or choosing a password from a link). */}
-          {ws.account && (!ws.account.user || (typeof location !== 'undefined' && resetTokenOf(location.hash))) && <SignIn />}
+          {ws.account && (!ws.account.user || ws.resetToken) && <SignIn />}
           <BoardErrorBoundary key={ws.boardId ?? 'shared'} onUndo={() => editor.undo()} onBoards={ui.openBoards}>
             {wiki ? <WikiView /> : <Canvas />}
           </BoardErrorBoundary>

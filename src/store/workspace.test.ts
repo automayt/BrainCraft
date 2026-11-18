@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '../editor/Editor'
 import { addItem, emptyBoard, newItem } from '../model/board'
 import { diff } from '../collab/patch'
@@ -313,6 +313,65 @@ describe('autosave races', () => {
     ws.rescue()
     await ws.flush()
     expect((await ws.library.load(keep))!.title).toBe('Keep')
+    ws.dispose()
+  })
+})
+
+describe('a choose-a-password link', () => {
+  const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123'
+  /** A stand-in for the browser's address bar, put in place once the workspace has started. */
+  function address(hash: string) {
+    const at = { hash, pathname: '/', search: '' }
+    const set = (_s: unknown, _t: string, url: string) => void (at.hash = url.includes('#') ? url.slice(url.indexOf('#')) : '')
+    vi.stubGlobal('location', at)
+    vi.stubGlobal('history', { replaceState: set, pushState: set })
+    return at
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('stays, with its address, while the address would follow the open board', async () => {
+    const { ws, editor } = await workspace(`#reset=${TOKEN}`)
+    const at = address(`#reset=${TOKEN}`)
+    expect(ws.resetToken).toBe(TOKEN)
+    // A board is open behind the page, and the address follows what's open: not while the link is here.
+    expect(ws.linkKey).toBeTruthy()
+    ws.syncAddress()
+    editor.setTitle('Something changes')
+    ws.syncAddress()
+    expect(at.hash).toBe(`#reset=${TOKEN}`)
+    expect(ws.resetToken).toBe(TOKEN)
+    ws.dispose()
+  })
+
+  it('goes from the address once used or put aside, and the address follows the board again', async () => {
+    const { ws } = await workspace(`#reset=${TOKEN}`)
+    const at = address(`#reset=${TOKEN}`)
+    let told = 0
+    ws.subscribe(() => told++)
+    ws.endReset()
+    expect(ws.resetToken).toBeNull()
+    expect(at.hash).toBe('')
+    expect(told).toBe(1)
+    ws.syncAddress()
+    expect(at.hash).toBe(`#open=${ws.linkKey}`)
+    // Nothing to end twice.
+    ws.endReset()
+    expect(told).toBe(1)
+    ws.dispose()
+  })
+
+  it('is picked up when pasted into an open tab, and nothing else is', async () => {
+    const { ws } = await workspace('')
+    const at = address('')
+    expect(ws.resetToken).toBeNull()
+    expect(ws.followReset('#open=abc')).toBe(false)
+    expect(ws.followReset('#reset=short')).toBe(false)
+    expect(ws.resetToken).toBeNull()
+    at.hash = `#reset=${TOKEN}`
+    expect(ws.followReset(at.hash)).toBe(true)
+    expect(ws.resetToken).toBe(TOKEN)
+    ws.syncAddress()
+    expect(at.hash).toBe(`#reset=${TOKEN}`)
     ws.dispose()
   })
 })

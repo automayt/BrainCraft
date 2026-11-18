@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { Fragment, type FormEvent, useEffect, useState } from 'react'
 import { type AccountUser, type AdminData, type AuditEntry, type AuditKind, call, type Group, type Permission, type ServerBoard } from '../../store/account'
 import { Dialog, timeAgo } from '../Boards'
 import { copyText } from '../copyText'
@@ -428,6 +428,15 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
     })
   }
   const me = ws.account?.user?.id
+  // Setting someone's password here: whose, and what's typed so far.
+  const [setting, setSetting] = useState<string | null>(null)
+  const [password, setPassword] = useState('')
+  const [shown, setShown] = useState(false)
+  const setFor = (id: string | null) => {
+    setSetting(id)
+    setPassword('')
+    setShown(false)
+  }
   return (
     <>
       <form className="admin-add" onSubmit={add}>
@@ -439,7 +448,7 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
         </label>
         <button className="primary">Add</button>
       </form>
-      <p className="muted admin-hint">New people get a link to choose a password. With single sign-on they can just sign in: their account is made then, and joins the groups their provider says.</p>
+      <p className="muted admin-hint">New people get a link to choose a password; Set password gives them one yourself. With single sign-on they can just sign in: their account is made then, and joins the groups their provider says.</p>
       <table className="admin-table">
         <thead>
           <tr>
@@ -453,7 +462,8 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
         </thead>
         <tbody>
           {data.users.map((u: AccountUser) => (
-            <tr key={u.id} className={u.disabled ? 'off' : ''}>
+            <Fragment key={u.id}>
+            <tr className={u.disabled ? 'off' : ''}>
               <td>
                 <strong>{u.name}</strong>
                 <br />
@@ -492,6 +502,9 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
                 >
                   Password link
                 </button>
+                <button className="link" aria-expanded={setting === u.id} onClick={() => setFor(setting === u.id ? null : u.id)}>
+                  Set password
+                </button>
                 {u.id !== me && (
                   <button className="link" onClick={() => void run(() => api(`api/admin/users/${u.id}`, 'PATCH', { disabled: !u.disabled }))}>
                     {u.disabled ? 'Turn on' : 'Turn off'}
@@ -507,6 +520,49 @@ function People({ data, run, api, onLink }: Props & { onLink: (l: { who: string;
                 )}
               </td>
             </tr>
+            {setting === u.id && (
+              <tr className="admin-setpw">
+                <td colSpan={6}>
+                  <form
+                    className="admin-add"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void run(async () => {
+                        const r = await api(`api/admin/users/${u.id}/password`, 'POST', { password })
+                        setFor(null)
+                        ws.editor.setStatus(`Password set for ${u.name}`)
+                        return r
+                      })
+                    }}
+                  >
+                    <input
+                      type={shown ? 'text' : 'password'}
+                      aria-label={`New password for ${u.name}`}
+                      placeholder={`New password for ${u.name}`}
+                      autoComplete="new-password"
+                      required
+                      minLength={10}
+                      maxLength={200}
+                      autoFocus
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <label className="ai-check">
+                      <input type="checkbox" checked={shown} onChange={(e) => setShown(e.target.checked)} /> Show
+                    </label>
+                    <button className="primary">Set password</button>
+                    <button type="button" onClick={() => setFor(null)}>
+                      Cancel
+                    </button>
+                    <small className="muted">
+                      At least 10 characters. {u.id === me ? 'Any' : `${u.name} is signed out everywhere, and any`} password link made for {u.id === me ? 'you' : 'them'} stops working. It isn’t sent
+                      {u.id === me ? ' anywhere.' : ' to them: tell them yourself.'}
+                    </small>
+                  </form>
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>

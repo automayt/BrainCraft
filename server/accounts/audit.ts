@@ -41,6 +41,7 @@ export const AUDIT_ACTIONS = {
   'token.revoke': 'security',
   'password.change': 'security',
   'password.reset': 'security',
+  'password.set': 'security',
   'settings.change': 'settings',
 } as const
 
